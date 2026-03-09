@@ -55,6 +55,18 @@ fn check_command_for_session(command_string: &str, session_id: &str) -> HookOutp
     // Parse the command into individual commands
     let commands = extract_commands(command_string);
 
+    check_command_for_session_with_commands(command_string, session_id, &commands)
+}
+
+/// Core gate analysis on pre-parsed commands with session-scoped hint dedup.
+///
+/// Separated from `check_command_for_session` so callers that already have
+/// parsed commands (and already ran raw string checks) can skip the duplicate work.
+fn check_command_for_session_with_commands(
+    _command_string: &str,
+    session_id: &str,
+    commands: &[CommandInfo],
+) -> HookOutput {
     if commands.is_empty() {
         return HookOutput::approve();
     }
@@ -65,7 +77,7 @@ fn check_command_for_session(command_string: &str, session_id: &str) -> HookOutp
     let mut allow_reasons: Vec<String> = Vec::new();
     let mut hints: Vec<ModernHint> = Vec::new();
 
-    for cmd in &commands {
+    for cmd in commands {
         let result = check_single_command(cmd);
 
         // Collect hints for modern alternatives (only for allowed commands)
@@ -251,14 +263,60 @@ pub fn check_command_with_settings_and_session(
         return HookOutput::approve();
     }
 
-    // Check for mise task invocation and expand to underlying commands
-    if let Some(task_name) = parse_mise_invocation(command_string) {
-        return check_mise_task(&task_name, cwd, permission_mode);
+    // Check for raw string security patterns BEFORE any expansion.
+    // This catches dangerous patterns (pipe-to-shell, rm -rf /, eval, etc.)
+    // that could be appended to mise/package.json commands via compound operators.
+    if let Some(result) = check_raw_string_patterns(command_string) {
+        return result;
     }
 
-    // Check for package.json script invocation (npm run, pnpm run, etc.)
-    if let Some((pm, script_name)) = parse_script_invocation(command_string) {
-        return check_package_script(pm, &script_name, cwd, permission_mode);
+    // Load settings.json early - needed for task expansion, deny check, acceptEdits, and rule matching
+    let settings = Settings::load(cwd);
+
+    // Parse command to detect compound commands (&&, ||, |, ;).
+    // Task expansion (mise/package.json) only applies to simple commands --
+    // compound commands fall through to normal gate analysis where each
+    // sub-command is checked individually.
+    let commands = extract_commands(command_string);
+    let is_simple_command = commands.len() <= 1;
+
+    // Check for mise task invocation and expand to underlying commands.
+    // Settings are checked FIRST against the original command so that explicit
+    // allow/deny rules (e.g. Bash(mise run *)) take priority over expansion.
+    if is_simple_command {
+        if let Some(task_name) = parse_mise_invocation(command_string) {
+            if settings.is_denied(command_string) {
+                return HookOutput::deny("Matched settings.json deny rule");
+            }
+            match check_settings_with_subcommands(&settings, command_string) {
+                SettingsDecision::Allow => {
+                    return HookOutput::allow(Some("Matched settings.json allow rule"));
+                }
+                SettingsDecision::Ask => {
+                    return HookOutput::ask("Matched settings.json ask rule");
+                }
+                _ => {}
+            }
+            return check_mise_task(&task_name, cwd, permission_mode);
+        }
+
+        // Check for package.json script invocation (npm run, pnpm run, etc.)
+        // Same settings-first logic as mise.
+        if let Some((pm, script_name)) = parse_script_invocation(command_string) {
+            if settings.is_denied(command_string) {
+                return HookOutput::deny("Matched settings.json deny rule");
+            }
+            match check_settings_with_subcommands(&settings, command_string) {
+                SettingsDecision::Allow => {
+                    return HookOutput::allow(Some("Matched settings.json allow rule"));
+                }
+                SettingsDecision::Ask => {
+                    return HookOutput::ask("Matched settings.json ask rule");
+                }
+                _ => {}
+            }
+            return check_package_script(pm, &script_name, cwd, permission_mode);
+        }
     }
 
     // Check for mcp-cli commands with settings-aware handling
@@ -266,8 +324,10 @@ pub fn check_command_with_settings_and_session(
         return output;
     }
 
-    // Run gate analysis first - blocks take priority
-    let gate_result = check_command_for_session(command_string, session_id);
+    // Run gate analysis - blocks take priority.
+    // Reuse already-parsed commands to avoid double tree-sitter parsing.
+    let gate_result =
+        check_command_for_session_with_commands(command_string, session_id, &commands);
     let gate_context = gate_result
         .hook_specific_output
         .as_ref()
@@ -279,9 +339,6 @@ pub fn check_command_with_settings_and_session(
             return gate_result;
         }
     }
-
-    // Load settings.json (user + project) - needed for deny check, acceptEdits check, and rule matching
-    let settings = Settings::load(cwd);
 
     // Check settings.json deny rules FIRST - user's explicit deny rules always respected
     // This must happen before acceptEdits to prevent acceptEdits from bypassing deny rules
@@ -3373,6 +3430,130 @@ run = "pnpm dev"
 
             assert_eq!(commands.len(), 1);
             assert!(commands[0].starts_with("cd frontend &&"));
+        }
+
+        #[test]
+        fn test_mise_settings_allow_bypasses_expansion() {
+            // Create temp dir with mise.toml containing a task that would normally ask
+            let tmp = std::env::temp_dir().join("bash-gates-test-mise-settings");
+            let _ = std::fs::remove_dir_all(&tmp);
+            std::fs::create_dir_all(tmp.join(".claude")).unwrap();
+
+            // mise task that expands to an ask-worthy command
+            std::fs::write(
+                tmp.join("mise.toml"),
+                r#"
+[tasks.ci]
+run = "npm publish"
+"#,
+            )
+            .unwrap();
+
+            // Settings that allow mise run *
+            std::fs::write(
+                tmp.join(".claude/settings.local.json"),
+                r#"{"permissions": {"allow": ["Bash(mise run *)"]}}"#,
+            )
+            .unwrap();
+
+            let cwd = tmp.to_string_lossy();
+            let result = check_command_with_settings("mise run ci", &cwd, "default");
+            assert_eq!(
+                get_decision(&result),
+                "allow",
+                "mise run ci should be allowed when Bash(mise run *) is in settings allow"
+            );
+
+            // Also test with redirections (the original bug trigger)
+            let result = check_command_with_settings("mise run ci 2>&1", &cwd, "default");
+            assert_eq!(
+                get_decision(&result),
+                "allow",
+                "mise run ci 2>&1 should be allowed when Bash(mise run *) is in settings allow"
+            );
+
+            let _ = std::fs::remove_dir_all(&tmp);
+        }
+
+        #[test]
+        fn test_mise_settings_deny_overrides_expansion() {
+            let tmp = std::env::temp_dir().join("bash-gates-test-mise-deny");
+            let _ = std::fs::remove_dir_all(&tmp);
+            std::fs::create_dir_all(tmp.join(".claude")).unwrap();
+
+            // mise task that expands to a safe command
+            std::fs::write(
+                tmp.join("mise.toml"),
+                r#"
+[tasks.status]
+run = "git status"
+"#,
+            )
+            .unwrap();
+
+            // Settings that deny mise run status
+            std::fs::write(
+                tmp.join(".claude/settings.local.json"),
+                r#"{"permissions": {"deny": ["Bash(mise run status)"]}}"#,
+            )
+            .unwrap();
+
+            let cwd = tmp.to_string_lossy();
+            let result = check_command_with_settings("mise run status", &cwd, "default");
+            assert_eq!(
+                get_decision(&result),
+                "deny",
+                "mise run status should be denied when in settings deny"
+            );
+
+            let _ = std::fs::remove_dir_all(&tmp);
+        }
+
+        #[test]
+        fn test_mise_compound_command_not_expanded() {
+            // Compound commands with mise should NOT expand the task --
+            // each sub-command should be checked individually by gates.
+            let tmp = std::env::temp_dir().join("bash-gates-test-mise-compound");
+            let _ = std::fs::remove_dir_all(&tmp);
+            std::fs::create_dir_all(&tmp).unwrap();
+
+            // Safe mise task
+            std::fs::write(
+                tmp.join("mise.toml"),
+                r#"
+[tasks.ci]
+run = "echo hello"
+"#,
+            )
+            .unwrap();
+
+            let cwd = tmp.to_string_lossy();
+
+            // Simple mise run should still expand and allow
+            let result = check_command_with_settings("mise run ci", &cwd, "default");
+            assert_eq!(
+                get_decision(&result),
+                "allow",
+                "simple mise run ci should allow"
+            );
+
+            // Compound with dangerous command should deny (caught by raw string patterns)
+            let result = check_command_with_settings("mise run ci && rm -rf /", &cwd, "default");
+            assert_eq!(
+                get_decision(&result),
+                "deny",
+                "mise run ci && rm -rf / should deny"
+            );
+
+            // Compound with ask-worthy command should ask (not silently allow)
+            let result = check_command_with_settings("mise run ci && npm install", &cwd, "default");
+            assert_eq!(
+                get_decision(&result),
+                "ask",
+                "mise run ci && npm install should ask, not silently allow"
+            );
+
+            let _ = std::fs::remove_dir_all(&tmp);
         }
     }
 
