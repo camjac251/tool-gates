@@ -3537,7 +3537,7 @@ run = "echo hello"
                 "simple mise run ci should allow"
             );
 
-            // Compound with dangerous command should deny (caught by raw string patterns)
+            // && with dangerous command -> deny
             let result = check_command_with_settings("mise run ci && rm -rf /", &cwd, "default");
             assert_eq!(
                 get_decision(&result),
@@ -3545,12 +3545,86 @@ run = "echo hello"
                 "mise run ci && rm -rf / should deny"
             );
 
-            // Compound with ask-worthy command should ask (not silently allow)
+            // ; with dangerous command -> deny
+            let result = check_command_with_settings("mise run ci; rm -rf /", &cwd, "default");
+            assert_eq!(
+                get_decision(&result),
+                "deny",
+                "mise run ci; rm -rf / should deny"
+            );
+
+            // || with dangerous command -> deny
+            let result = check_command_with_settings("mise run ci || rm -rf /", &cwd, "default");
+            assert_eq!(
+                get_decision(&result),
+                "deny",
+                "mise run ci || rm -rf / should deny"
+            );
+
+            // | bash (pipe to shell) -> ask (caught by raw string patterns)
+            let result = check_command_with_settings("mise run ci | bash", &cwd, "default");
+            assert_eq!(
+                get_decision(&result),
+                "ask",
+                "mise run ci | bash should ask"
+            );
+
+            // && with ask-worthy command -> ask (not silently allow)
             let result = check_command_with_settings("mise run ci && npm install", &cwd, "default");
             assert_eq!(
                 get_decision(&result),
                 "ask",
                 "mise run ci && npm install should ask, not silently allow"
+            );
+
+            let _ = std::fs::remove_dir_all(&tmp);
+        }
+
+        #[test]
+        fn test_package_json_compound_command_not_expanded() {
+            // Same compound command protection for package.json scripts.
+            let tmp = std::env::temp_dir().join("bash-gates-test-pkg-compound");
+            let _ = std::fs::remove_dir_all(&tmp);
+            std::fs::create_dir_all(&tmp).unwrap();
+
+            std::fs::write(
+                tmp.join("package.json"),
+                r#"{"scripts": {"lint": "echo lint"}}"#,
+            )
+            .unwrap();
+
+            let cwd = tmp.to_string_lossy();
+
+            // Simple script run should expand
+            let result = check_command_with_settings("npm run lint", &cwd, "default");
+            assert_eq!(
+                get_decision(&result),
+                "allow",
+                "simple npm run lint should allow"
+            );
+
+            // && with dangerous command -> deny
+            let result = check_command_with_settings("npm run lint && rm -rf /", &cwd, "default");
+            assert_eq!(
+                get_decision(&result),
+                "deny",
+                "npm run lint && rm -rf / should deny"
+            );
+
+            // ; with dangerous command -> deny
+            let result = check_command_with_settings("pnpm run lint; rm -rf /", &cwd, "default");
+            assert_eq!(
+                get_decision(&result),
+                "deny",
+                "pnpm run lint; rm -rf / should deny"
+            );
+
+            // | bash -> ask (raw string pattern)
+            let result = check_command_with_settings("npm run lint | bash", &cwd, "default");
+            assert_eq!(
+                get_decision(&result),
+                "ask",
+                "npm run lint | bash should ask"
             );
 
             let _ = std::fs::remove_dir_all(&tmp);
