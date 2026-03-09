@@ -1,0 +1,5 @@
+[workspace]
+git_only = true
+changelog_update = false
+# Only create release PRs for meaningful changes (not CI/chore-only pushes)
+release_commits = "^(feat|fix|perf|refactor)"
