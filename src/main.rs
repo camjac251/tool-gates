@@ -1,37 +1,26 @@
 //! Tool Gates - Intelligent tool permission gate for AI coding assistants.
 //!
-//! Formerly `bash-gates`. Supports three hook types:
-//! - `PreToolUse`: Block dangerous commands, allow safe ones, provide hints
-//! - `PermissionRequest`: Approve safe commands for subagents
-//! - `PostToolUse`: Track successful execution for approval learning
+//! Formerly `bash-gates`. Single binary that handles all tool types:
+//! - **Bash**: AST-parsed command gating (13 ordered gates, settings.json integration)
+//! - **Read/Write/Edit/MultiEdit**: Symlink guard for AI config files
+//! - **Glob/Grep/MCP tools**: Configurable tool blocking
+//!
+//! Supports three Claude Code hook events:
+//! - `PreToolUse`: Routes all tool types through the appropriate handler
+//! - `PermissionRequest`: Approve safe Bash commands for subagents
+//! - `PostToolUse`: Track successful Bash execution for approval learning
+//!
+//! Configuration: `~/.config/tool-gates/config.toml`
 //!
 //! Usage:
 //!   `echo '{"tool_name": "Bash", "tool_input": {"command": "gh pr list"}}' | tool-gates`
-//!
-//! Or in Claude Code settings.json:
-//!   {
-//!     "hooks": {
-//!       "PreToolUse": [{
-//!         "matcher": "Bash",
-//!         "hooks": [{
-//!           "type": "command",
-//!           "command": "/path/to/tool-gates",
-//!           "timeout": 10
-//!         }]
-//!       }],
-//!       "PermissionRequest": [{
-//!         "matcher": "Bash",
-//!         "hooks": [{
-//!           "type": "command",
-//!           "command": "/path/to/tool-gates",
-//!           "timeout": 10
-//!         }]
-//!       }]
-//!     }
-//!   }
+//!   `echo '{"tool_name": "Read", "tool_input": {"file_path": "/project/CLAUDE.md"}}' | tool-gates`
+//!   `echo '{"tool_name": "Glob", "tool_input": {"pattern": "*.rs"}}' | tool-gates`
 
 use std::env;
 use std::io::{self, Read};
+use tool_gates::config;
+use tool_gates::file_guards::check_file_guard;
 use tool_gates::models::{HookInput, HookOutput, PermissionRequestInput, PostToolUseInput};
 use tool_gates::patterns::suggest_patterns;
 use tool_gates::pending::{clear_pending, pending_count, read_pending};
@@ -42,6 +31,7 @@ use tool_gates::settings_writer::{
     RuleType, Scope, add_rule, list_all_rules, list_rules, remove_rule,
 };
 use tool_gates::toml_export;
+use tool_gates::tool_blocks::check_tool_block;
 use tool_gates::tool_cache;
 use tool_gates::tracking::{CommandPart, track_ask_command};
 use tool_gates::tui::run_review;
@@ -159,7 +149,7 @@ fn main() {
     }
 }
 
-/// Handle PreToolUse hook (existing behavior)
+/// Handle PreToolUse hook -- routes all tool types
 fn handle_pre_tool_use_hook(input: &str) {
     let hook_input: HookInput = match serde_json::from_str(input) {
         Ok(hi) => hi,
@@ -170,13 +160,100 @@ fn handle_pre_tool_use_hook(input: &str) {
         }
     };
 
-    // Only process Bash tools (Claude Code)
-    if hook_input.tool_name != "Bash" {
-        print_approve();
+    let config = config::load();
+
+    // Check configurable block rules first (applies to ALL tool types)
+    // Re-extract tool_input as raw map since Structured variant
+    // drops unknown fields (url, pattern, etc.)
+    let tool_input_map = serde_json::from_str::<serde_json::Value>(input)
+        .ok()
+        .and_then(|v| v.get("tool_input").cloned())
+        .and_then(|v| match v {
+            serde_json::Value::Object(m) => Some(m),
+            _ => None,
+        })
+        .unwrap_or_default();
+    if let Some(output) =
+        check_tool_block(&hook_input.tool_name, &tool_input_map, config.block_rules())
+    {
+        if let Ok(json) = serde_json::to_string(&output) {
+            println!("{json}");
+        } else {
+            println!(
+                r#"{{"hookSpecificOutput":{{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Internal error serializing block deny"}}}}"#
+            );
+        }
         return;
     }
 
-    // Get command string
+    // Route by tool type
+    match hook_input.tool_name.as_str() {
+        // Bash tools: full gate engine
+        "Bash" => {
+            if !config.features.bash_gates {
+                print_approve();
+                return;
+            }
+            handle_bash_pre_tool_use(&hook_input);
+        }
+        // File tools: symlink guard
+        "Read" | "Write" | "Edit" | "MultiEdit" => {
+            if !config.features.file_guards {
+                return; // silent pass-through
+            }
+            // Extract file paths from raw JSON to avoid ToolInputVariant::Structured
+            // dropping unknown fields (MultiEdit uses files[].file_path, not file_path)
+            let file_paths = extract_file_paths_from_map(&tool_input_map);
+            for file_path in &file_paths {
+                if let Some(output) =
+                    check_file_guard(file_path, &hook_input.tool_name, &config.file_guards)
+                {
+                    if let Ok(json) = serde_json::to_string(&output) {
+                        println!("{json}");
+                    } else {
+                        // Fallback: hardcoded deny to avoid silent pass-through
+                        println!(
+                            r#"{{"hookSpecificOutput":{{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Internal error serializing file guard deny"}}}}"#
+                        );
+                    }
+                    return; // deny on first guarded symlink found
+                }
+            }
+            // No output = allow
+        }
+        // All other tools: pass through (blocks already checked above)
+        _ => {}
+    }
+}
+
+/// Extract all file paths from a raw tool_input map.
+/// Handles both single-file tools (file_path) and MultiEdit (files[].file_path).
+fn extract_file_paths_from_map(map: &serde_json::Map<String, serde_json::Value>) -> Vec<String> {
+    let mut paths = Vec::new();
+
+    // Single file_path (Read/Write/Edit)
+    if let Some(fp) = map.get("file_path").and_then(|v| v.as_str()) {
+        if !fp.is_empty() {
+            paths.push(fp.to_string());
+        }
+    }
+
+    // MultiEdit: files[].file_path
+    if let Some(files) = map.get("files").and_then(|v| v.as_array()) {
+        for file in files {
+            if let Some(fp) = file.get("file_path").and_then(|v| v.as_str()) {
+                if !fp.is_empty() {
+                    paths.push(fp.to_string());
+                }
+            }
+        }
+    }
+
+    paths
+}
+
+/// Handle Bash-specific PreToolUse logic (gate engine + tracking)
+fn handle_bash_pre_tool_use(hook_input: &HookInput) {
     let command = hook_input.get_command();
     if command.is_empty() {
         print_approve();
@@ -194,12 +271,10 @@ fn handle_pre_tool_use_hook(input: &str) {
     // If the result is "ask", track it for PostToolUse correlation
     if let Some(ref hso) = output.hook_specific_output {
         if hso.permission_decision == "ask" && !hook_input.tool_use_id.is_empty() {
-            // Generate suggested patterns for this command
             let commands = tool_gates::parser::extract_commands(&command);
             let suggested_patterns: Vec<String> =
                 commands.iter().flat_map(suggest_patterns).collect();
 
-            // Create a simple breakdown (could be enhanced later)
             let breakdown: Vec<CommandPart> = commands
                 .iter()
                 .map(|cmd| {
@@ -300,18 +375,24 @@ fn get_binary_path() -> String {
         .unwrap_or_else(|| "tool-gates".to_string())
 }
 
-fn generate_hook_entry(binary_path: &str) -> serde_json::Value {
+/// PreToolUse matcher: all tool types that tool-gates handles.
+/// Bash (gate engine), Read/Write/Edit/MultiEdit (file guards),
+/// Glob/Grep (tool blocks). MCP tool blocks require additional
+/// matcher entries configured by the user.
+const PRE_TOOL_USE_MATCHER: &str = "Bash|Read|Write|Edit|MultiEdit|Glob|Grep";
+
+fn generate_hook_entry(binary_path: &str, matcher: &str) -> serde_json::Value {
     serde_json::json!({
-        "matcher": "Bash",
+        "matcher": matcher,
         "hooks": [{"type": "command", "command": binary_path, "timeout": 10}]
     })
 }
 
 fn generate_hooks_json(binary_path: &str) -> serde_json::Value {
     serde_json::json!({
-        "PreToolUse": [generate_hook_entry(binary_path)],
-        "PermissionRequest": [generate_hook_entry(binary_path)],
-        "PostToolUse": [generate_hook_entry(binary_path)]
+        "PreToolUse": [generate_hook_entry(binary_path, PRE_TOOL_USE_MATCHER)],
+        "PermissionRequest": [generate_hook_entry(binary_path, "Bash")],
+        "PostToolUse": [generate_hook_entry(binary_path, "Bash")]
     })
 }
 
@@ -345,11 +426,13 @@ fn get_settings_path(scope: &str) -> std::path::PathBuf {
 }
 
 /// Check if tool-gates hook already exists in a hook array.
-/// Also detects the old `bash-gates` name for migration.
+/// Detects any matcher pattern that includes "Bash" and points to tool-gates/bash-gates.
 fn has_tool_gates_hook(hooks_array: &serde_json::Value) -> bool {
     if let Some(arr) = hooks_array.as_array() {
         for entry in arr {
-            if entry.get("matcher").and_then(|m| m.as_str()) == Some("Bash") {
+            let matcher = entry.get("matcher").and_then(|m| m.as_str()).unwrap_or("");
+            // Match both old "Bash" and new broader patterns containing "Bash"
+            if matcher.contains("Bash") {
                 if let Some(hooks) = entry.get("hooks").and_then(|h| h.as_array()) {
                     for hook in hooks {
                         if let Some(cmd) = hook.get("command").and_then(|c| c.as_str()) {
@@ -400,10 +483,11 @@ fn install_hooks(scope: &str, dry_run: bool) {
     }
 
     let hooks = settings.get_mut("hooks").unwrap();
-    let hook_entry = generate_hook_entry(&binary_path);
+    let pre_tool_use_entry = generate_hook_entry(&binary_path, PRE_TOOL_USE_MATCHER);
+    let bash_entry = generate_hook_entry(&binary_path, "Bash");
     let mut changes = Vec::new();
 
-    // Check and add PreToolUse
+    // Check and add PreToolUse (broad matcher: Bash + file tools + blocked tools)
     if hooks.get("PreToolUse").is_none() {
         hooks["PreToolUse"] = serde_json::json!([]);
     }
@@ -413,12 +497,12 @@ fn install_hooks(scope: &str, dry_run: bool) {
         hooks["PreToolUse"]
             .as_array_mut()
             .unwrap()
-            .push(hook_entry.clone());
+            .push(pre_tool_use_entry);
         changes.push("PreToolUse");
         eprintln!("+ Adding PreToolUse hook");
     }
 
-    // Check and add PermissionRequest
+    // Check and add PermissionRequest (Bash only)
     if hooks.get("PermissionRequest").is_none() {
         hooks["PermissionRequest"] = serde_json::json!([]);
     }
@@ -428,12 +512,12 @@ fn install_hooks(scope: &str, dry_run: bool) {
         hooks["PermissionRequest"]
             .as_array_mut()
             .unwrap()
-            .push(hook_entry.clone());
+            .push(bash_entry.clone());
         changes.push("PermissionRequest");
         eprintln!("+ Adding PermissionRequest hook");
     }
 
-    // Check and add PostToolUse
+    // Check and add PostToolUse (Bash only)
     if hooks.get("PostToolUse").is_none() {
         hooks["PostToolUse"] = serde_json::json!([]);
     }
@@ -443,7 +527,7 @@ fn install_hooks(scope: &str, dry_run: bool) {
         hooks["PostToolUse"]
             .as_array_mut()
             .unwrap()
-            .push(hook_entry);
+            .push(bash_entry);
         changes.push("PostToolUse");
         eprintln!("+ Adding PostToolUse hook");
     }

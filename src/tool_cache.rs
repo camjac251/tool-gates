@@ -10,8 +10,11 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::SystemTime;
 
-/// Cache TTL - refresh after 7 days
-const CACHE_TTL_SECS: u64 = 7 * 24 * 60 * 60;
+/// Get the effective cache TTL in seconds (from config or default of 7 days).
+fn cache_ttl_secs() -> u64 {
+    let days = crate::config::get().cache.ttl_days;
+    u64::from(days) * 24 * 60 * 60
+}
 
 /// All modern tools we might hint about (focused on code reading/understanding)
 const MODERN_TOOLS: &[&str] = &[
@@ -86,7 +89,11 @@ impl ToolCache {
                 self.tools.get("tldr").copied().unwrap_or(false)
                     || self.tools.get("tealdeer").copied().unwrap_or(false)
             }
-            _ => self.tools.get(tool).copied().unwrap_or(false),
+            _ => self.tools.get(tool).copied().unwrap_or_else(|| {
+                // Tool not in cache (not a modern tool hint target).
+                // Fall back to live `which` check for requires_tool and similar.
+                check_tool_available(tool)
+            }),
         }
     }
 
@@ -101,7 +108,7 @@ impl ToolCache {
             .map(|d| d.as_secs())
             .unwrap_or(0);
 
-        now.saturating_sub(self.checked_at) < CACHE_TTL_SECS
+        now.saturating_sub(self.checked_at) < cache_ttl_secs()
     }
 
     /// Check if the cache contains entries for all known modern tools.

@@ -97,6 +97,9 @@ pub struct ToolInput {
     pub command: String,
     pub description: Option<String>,
     pub timeout: Option<u32>,
+    /// File path for Read/Write/Edit/MultiEdit tools
+    #[serde(default)]
+    pub file_path: Option<String>,
 }
 
 /// Input received by `PreToolUse` hook
@@ -143,6 +146,55 @@ impl HookInput {
                 .to_string(),
             ToolInputVariant::Empty => String::new(),
         }
+    }
+
+    /// Extract file_path from `tool_input` (for Read/Write/Edit tools)
+    pub fn get_file_path(&self) -> String {
+        match &self.tool_input {
+            ToolInputVariant::Structured(ti) => ti.file_path.clone().unwrap_or_default(),
+            ToolInputVariant::Map(m) => m
+                .get("file_path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            ToolInputVariant::Empty => String::new(),
+        }
+    }
+
+    /// Extract all file paths from `tool_input`.
+    ///
+    /// Handles both single-file tools (Read/Write/Edit with `file_path`)
+    /// and multi-file tools (MultiEdit with `files[].file_path`).
+    pub fn get_file_paths(&self) -> Vec<String> {
+        let mut paths = Vec::new();
+
+        // Single file_path (Read/Write/Edit)
+        let fp = self.get_file_path();
+        if !fp.is_empty() {
+            paths.push(fp);
+        }
+
+        // MultiEdit: files[].file_path
+        match &self.tool_input {
+            ToolInputVariant::Map(m) => {
+                if let Some(files) = m.get("files").and_then(|v| v.as_array()) {
+                    for file in files {
+                        if let Some(fp) = file.get("file_path").and_then(|v| v.as_str()) {
+                            if !fp.is_empty() {
+                                paths.push(fp.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+            ToolInputVariant::Structured(ti) => {
+                // Structured won't have files array, but file_path already handled above
+                let _ = ti;
+            }
+            ToolInputVariant::Empty => {}
+        }
+
+        paths
     }
 
     /// Extract stable project identifier from `transcript_path`.

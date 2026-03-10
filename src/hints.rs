@@ -27,7 +27,20 @@ pub struct ModernHint {
 
 /// Check if a command could benefit from a modern alternative and return a hint.
 /// Only returns hints for tools that are actually installed.
+/// Respects `features.hints` toggle and `hints.disable` list from config.
 pub fn get_modern_hint(cmd: &CommandInfo) -> Option<ModernHint> {
+    let config = crate::config::get();
+
+    // Global hints toggle
+    if !config.features.hints {
+        return None;
+    }
+
+    // Per-command disable list
+    if config.hints.disable.iter().any(|d| d == &cmd.program) {
+        return None;
+    }
+
     let hint = match cmd.program.as_str() {
         // File viewing
         "cat" => Some(hint_cat(cmd)),

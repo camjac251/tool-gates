@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "tool-gates",
-  "description": "Permission gates for Claude Code -- intelligent command safety using tree-sitter AST parsing",
+  "description": "Permission gates for all Claude Code tools -- intelligent command safety, file read/write guards, and tool blocking",
   "owner": {
     "name": "camjac251",
     "email": "camjac251@users.noreply.github.com"
@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "tool-gates",
-      "description": "Intelligent command permission gate. Auto-allows safe operations, asks for writes, blocks dangerous patterns. Tracks manually approved commands for permanent rules.",
+      "description": "Intelligent permission gate for all tool types. AST-parses Bash commands, guards file reads/writes, and blocks dangerous tool invocations. Tracks manually approved commands for permanent rules.",
       "version": "0.2.0",
       "source": "./",
       "author": {

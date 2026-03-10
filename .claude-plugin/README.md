@@ -6,7 +6,9 @@ Companion plugin for [tool-gates](https://github.com/camjac251/tool-gates) -- re
 
 ## Overview
 
-When you use tool-gates, commands that aren't recognized as safe require manual approval. Over time, these approvals accumulate. This plugin provides the `/tool-gates:review` skill to batch-review those pending approvals and save patterns to your `settings.json` so you don't get prompted again.
+tool-gates handles ALL Claude Code tool types, not just Bash. It AST-parses shell commands, guards file reads and writes (e.g., denying symlink reads of sensitive files), and can block entire tool invocations (e.g., Glob). The hooks use broad matchers (`*` or tool-specific patterns) so every tool invocation passes through the gate engine.
+
+When you use tool-gates, operations that aren't recognized as safe require manual approval. Over time, these approvals accumulate. This plugin provides the `/tool-gates:review` skill to batch-review those pending approvals and save patterns to your `settings.json` so you don't get prompted again.
 
 ## Prerequisites
 

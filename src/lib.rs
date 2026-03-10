@@ -23,6 +23,8 @@
 //! ```
 
 pub mod cache;
+pub mod config;
+pub mod file_guards;
 pub mod gates;
 pub mod generated;
 pub mod hint_tracker;
@@ -39,6 +41,7 @@ pub mod router;
 pub mod settings;
 pub mod settings_writer;
 pub mod toml_export;
+pub mod tool_blocks;
 pub mod tool_cache;
 pub mod tracking;
 pub mod tui;
