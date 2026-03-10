@@ -2,7 +2,7 @@
 //!
 //! Stores successfully executed commands that the user may want to permanently approve.
 //! Uses JSONL format (one JSON object per line) for efficient append-only operations.
-//! All entries go to `~/.cache/bash-gates/pending.jsonl` with project directory tracked in `cwd`.
+//! All entries go to `~/.cache/tool-gates/pending.jsonl` with project directory tracked in `cwd`.
 
 use chrono::{DateTime, Utc};
 use fs2::FileExt;
@@ -67,10 +67,7 @@ impl PendingApproval {
 
 /// Get the path to the global pending queue
 pub fn pending_path() -> PathBuf {
-    dirs::cache_dir()
-        .unwrap_or_else(|| PathBuf::from("/tmp"))
-        .join("bash-gates")
-        .join("pending.jsonl")
+    crate::cache::cache_dir().join("pending.jsonl")
 }
 
 /// Read all pending approvals from the global JSONL file.
@@ -366,7 +363,7 @@ mod tests {
     #[test]
     fn test_pending_path() {
         let path = pending_path();
-        assert!(path.ends_with("bash-gates/pending.jsonl"));
+        assert!(path.ends_with("tool-gates/pending.jsonl"));
     }
 
     // Integration tests for file I/O are in tests/pending_integration.rs

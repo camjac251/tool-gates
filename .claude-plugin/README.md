@@ -1,31 +1,33 @@
-# bash-gates Plugin
+# tool-gates Plugin
 
-Companion plugin for [bash-gates](https://github.com/camjac251/bash-gates) -- review manually approved commands and promote them to permanent permission rules.
+> Formerly known as bash-gates.
+
+Companion plugin for [tool-gates](https://github.com/camjac251/tool-gates) -- review manually approved commands and promote them to permanent permission rules.
 
 ## Overview
 
-When you use bash-gates, commands that aren't recognized as safe require manual approval. Over time, these approvals accumulate. This plugin provides the `/bash-gates:review` skill to batch-review those pending approvals and save patterns to your `settings.json` so you don't get prompted again.
+When you use tool-gates, commands that aren't recognized as safe require manual approval. Over time, these approvals accumulate. This plugin provides the `/tool-gates:review` skill to batch-review those pending approvals and save patterns to your `settings.json` so you don't get prompted again.
 
 ## Prerequisites
 
-The `bash-gates` binary must be installed and hooks configured before using this plugin:
+The `tool-gates` binary must be installed and hooks configured before using this plugin:
 
 ```bash
 # Install binary
-cargo install --git https://github.com/camjac251/bash-gates
+cargo install --git https://github.com/camjac251/tool-gates
 
 # Or download from releases
-curl -Lo ~/.local/bin/bash-gates \
-  https://github.com/camjac251/bash-gates/releases/latest/download/bash-gates-linux-amd64
-chmod +x ~/.local/bin/bash-gates
+curl -Lo ~/.local/bin/tool-gates \
+  https://github.com/camjac251/tool-gates/releases/latest/download/tool-gates-linux-amd64
+chmod +x ~/.local/bin/tool-gates
 
 # Configure hooks
-bash-gates hooks add -s user
+tool-gates hooks add -s user
 ```
 
 ## Skills
 
-### `/bash-gates:review`
+### `/tool-gates:review`
 
 Review commands you've been manually approving and optionally promote them to permanent rules.
 
@@ -37,13 +39,13 @@ Review commands you've been manually approving and optionally promote them to pe
 4. Writes selected patterns to `settings.json`
 5. Shows final rules summary
 
-For an interactive TUI alternative, run `bash-gates review` directly in your terminal.
+For an interactive TUI alternative, run `tool-gates review` directly in your terminal.
 
 **Usage:**
 
 ```bash
-/bash-gates:review              # current project pending approvals
-/bash-gates:review --all        # all projects
+/tool-gates:review              # current project pending approvals
+/tool-gates:review --all        # all projects
 ```
 
 **Scopes:**
@@ -57,21 +59,21 @@ For an interactive TUI alternative, run `bash-gates review` directly in your ter
 
 | Command                                     | Permission                |
 | ------------------------------------------- | ------------------------- |
-| `bash-gates pending list`                   | Auto-approved (read-only) |
-| `bash-gates rules list`                     | Auto-approved (read-only) |
-| `bash-gates approve '<pattern>' -s <scope>` | Requires confirmation     |
+| `tool-gates pending list`                   | Auto-approved (read-only) |
+| `tool-gates rules list`                     | Auto-approved (read-only) |
+| `tool-gates approve '<pattern>' -s <scope>` | Requires confirmation     |
 
-### `/bash-gates:test-gate`
+### `/tool-gates:test-gate`
 
-Test how bash-gates handles a specific command. Useful for verifying rules or debugging unexpected decisions.
+Test how tool-gates handles a specific command. Useful for verifying rules or debugging unexpected decisions.
 
 **Usage:**
 
 ```bash
-/bash-gates:test-gate git status                     # -> allow (read-only)
-/bash-gates:test-gate npm install                    # -> ask (installing packages)
-/bash-gates:test-gate rm -rf /                       # -> deny (dangerous)
-/bash-gates:test-gate sd old new f.txt --mode=acceptEdits  # -> allow (auto-approved)
+/tool-gates:test-gate git status                     # -> allow (read-only)
+/tool-gates:test-gate npm install                    # -> ask (installing packages)
+/tool-gates:test-gate rm -rf /                       # -> deny (dangerous)
+/tool-gates:test-gate sd old new f.txt --mode=acceptEdits  # -> allow (auto-approved)
 ```
 
 Shows the decision, reason, and any hints or approval commands.
@@ -81,16 +83,16 @@ Shows the decision, reason, and any hints or approval commands.
 **From marketplace:**
 
 ```bash
-/plugin marketplace add camjac251/bash-gates
-/plugin install bash-gates@camjac251-bash-gates
+/plugin marketplace add camjac251/tool-gates
+/plugin install tool-gates@camjac251-tool-gates
 ```
 
 **From local clone:**
 
 ```bash
-claude --plugin-dir /path/to/bash-gates
+claude --plugin-dir /path/to/tool-gates
 ```
 
 ## Note on hooks
 
-This plugin does not ship hooks. The `bash-gates` binary handles hook installation via `bash-gates hooks add`, which registers PreToolUse, PermissionRequest, and PostToolUse hooks in your Claude Code settings. See the [main README](https://github.com/camjac251/bash-gates#configure-claude-code) for details.
+This plugin does not ship hooks. The `tool-gates` binary handles hook installation via `tool-gates hooks add`, which registers PreToolUse, PermissionRequest, and PostToolUse hooks in your Claude Code settings. See the [main README](https://github.com/camjac251/tool-gates#configure-claude-code) for details.

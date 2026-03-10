@@ -114,13 +114,7 @@ impl ToolCache {
 
 /// Get the cache file path
 fn cache_path() -> Option<PathBuf> {
-    // Try XDG cache dir first, fall back to ~/.cache
-    let cache_dir = std::env::var("XDG_CACHE_HOME")
-        .map(PathBuf::from)
-        .ok()
-        .or_else(|| dirs::home_dir().map(|h| h.join(".cache")))?;
-
-    Some(cache_dir.join("bash-gates").join("available-tools.json"))
+    Some(crate::cache::cache_dir().join("available-tools.json"))
 }
 
 /// Load cache from disk

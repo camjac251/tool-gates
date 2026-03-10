@@ -1,4 +1,4 @@
-//! Core types for the bash gates permission system.
+//! Core types for the tool gates permission system.
 //!
 //! Supports two hook types:
 //! - `PreToolUse`: Runs before tool execution, can allow/deny/ask

@@ -107,7 +107,7 @@ pub fn handle_permission_request(
         Decision::Block => {
             // Our gates say it's dangerous - deny it
             Some(PermissionRequestOutput::deny(
-                &reason.unwrap_or_else(|| "Blocked by bash-gates".to_string()),
+                &reason.unwrap_or_else(|| "Blocked by tool-gates".to_string()),
             ))
         }
         Decision::Ask => {

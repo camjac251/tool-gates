@@ -1,6 +1,6 @@
-# Bash Gates Self-Permission Gate
+# Tool Gates Self-Permission Gate
 #
-# Handles the `bash-gates` CLI itself:
+# Handles the `tool-gates` CLI itself:
 # - Read-only queries (pending list, rules list, status, help, version)
 # - Write operations (approve, rules remove, pending clear, hooks add)
 # - Interactive TUI (review)
@@ -8,16 +8,17 @@
 # Pattern: Read-only operations are safe, writes need approval
 
 [meta]
-name = "bash_gates"
-description = "Bash Gates CLI permission gate"
+name = "tool_gates"
+description = "Tool Gates CLI permission gate"
 priority = 23
 
 # =============================================================================
-# BASH-GATES (main CLI)
+# TOOL-GATES (main CLI)
 # =============================================================================
 
 [[programs]]
-name = "bash-gates"
+name = "tool-gates"
+aliases = ["bash-gates"]
 unknown_action = "ask"  # Unknown subcommands need approval
 
 # =============================================================================

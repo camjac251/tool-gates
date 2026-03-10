@@ -103,10 +103,7 @@ pub struct TrackingStore {
 impl TrackingStore {
     /// Get the path to the tracking file
     pub fn path() -> PathBuf {
-        dirs::cache_dir()
-            .unwrap_or_else(|| PathBuf::from("/tmp"))
-            .join("bash-gates")
-            .join("tracking.json")
+        crate::cache::cache_dir().join("tracking.json")
     }
 
     /// Execute a function with exclusive lock on the tracking file.

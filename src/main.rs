@@ -1,11 +1,12 @@
-//! Bash Gates - Intelligent bash command permission gate for Claude Code.
+//! Tool Gates - Intelligent tool permission gate for AI coding assistants.
 //!
-//! Supports two hook types:
+//! Formerly `bash-gates`. Supports three hook types:
 //! - `PreToolUse`: Block dangerous commands, allow safe ones, provide hints
 //! - `PermissionRequest`: Approve safe commands for subagents
+//! - `PostToolUse`: Track successful execution for approval learning
 //!
 //! Usage:
-//!   `echo '{"tool_name": "Bash", "tool_input": {"command": "gh pr list"}}' | bash-gates`
+//!   `echo '{"tool_name": "Bash", "tool_input": {"command": "gh pr list"}}' | tool-gates`
 //!
 //! Or in Claude Code settings.json:
 //!   {
@@ -14,7 +15,7 @@
 //!         "matcher": "Bash",
 //!         "hooks": [{
 //!           "type": "command",
-//!           "command": "/path/to/bash-gates",
+//!           "command": "/path/to/tool-gates",
 //!           "timeout": 10
 //!         }]
 //!       }],
@@ -22,30 +23,33 @@
 //!         "matcher": "Bash",
 //!         "hooks": [{
 //!           "type": "command",
-//!           "command": "/path/to/bash-gates",
+//!           "command": "/path/to/tool-gates",
 //!           "timeout": 10
 //!         }]
 //!       }]
 //!     }
 //!   }
 
-use bash_gates::models::{HookInput, HookOutput, PermissionRequestInput, PostToolUseInput};
-use bash_gates::patterns::suggest_patterns;
-use bash_gates::pending::{clear_pending, pending_count, read_pending};
-use bash_gates::permission_request::handle_permission_request;
-use bash_gates::post_tool_use::handle_post_tool_use;
-use bash_gates::router::check_command_with_settings_and_session;
-use bash_gates::settings_writer::{
-    RuleType, Scope, add_rule, list_all_rules, list_rules, remove_rule,
-};
-use bash_gates::toml_export;
-use bash_gates::tool_cache;
-use bash_gates::tracking::{CommandPart, track_ask_command};
-use bash_gates::tui::run_review;
 use std::env;
 use std::io::{self, Read};
+use tool_gates::models::{HookInput, HookOutput, PermissionRequestInput, PostToolUseInput};
+use tool_gates::patterns::suggest_patterns;
+use tool_gates::pending::{clear_pending, pending_count, read_pending};
+use tool_gates::permission_request::handle_permission_request;
+use tool_gates::post_tool_use::handle_post_tool_use;
+use tool_gates::router::check_command_with_settings_and_session;
+use tool_gates::settings_writer::{
+    RuleType, Scope, add_rule, list_all_rules, list_rules, remove_rule,
+};
+use tool_gates::toml_export;
+use tool_gates::tool_cache;
+use tool_gates::tracking::{CommandPart, track_ask_command};
+use tool_gates::tui::run_review;
 
 fn main() {
+    // One-time migration from ~/.cache/bash-gates/ to ~/.cache/tool-gates/
+    tool_gates::cache::ensure_cache_migrated();
+
     let args: Vec<String> = env::args().collect();
 
     // Handle subcommands first
@@ -110,7 +114,7 @@ fn main() {
     }
 
     if args.iter().any(|a| a == "--version" || a == "-V") {
-        println!("bash-gates {}", env!("GIT_VERSION"));
+        println!("tool-gates {}", env!("GIT_VERSION"));
         return;
     }
 
@@ -191,7 +195,7 @@ fn handle_pre_tool_use_hook(input: &str) {
     if let Some(ref hso) = output.hook_specific_output {
         if hso.permission_decision == "ask" && !hook_input.tool_use_id.is_empty() {
             // Generate suggested patterns for this command
-            let commands = bash_gates::parser::extract_commands(&command);
+            let commands = tool_gates::parser::extract_commands(&command);
             let suggested_patterns: Vec<String> =
                 commands.iter().flat_map(suggest_patterns).collect();
 
@@ -202,7 +206,7 @@ fn handle_pre_tool_use_hook(input: &str) {
                     CommandPart::new(
                         &cmd.program,
                         &cmd.args,
-                        bash_gates::Decision::Ask,
+                        tool_gates::Decision::Ask,
                         hso.permission_decision_reason
                             .as_deref()
                             .unwrap_or("Requires approval"),
@@ -293,7 +297,7 @@ fn get_binary_path() -> String {
         .ok()
         .and_then(|p| p.canonicalize().ok())
         .map(|p| p.display().to_string())
-        .unwrap_or_else(|| "bash-gates".to_string())
+        .unwrap_or_else(|| "tool-gates".to_string())
 }
 
 fn generate_hook_entry(binary_path: &str) -> serde_json::Value {
@@ -340,15 +344,16 @@ fn get_settings_path(scope: &str) -> std::path::PathBuf {
     }
 }
 
-/// Check if bash-gates hook already exists in a hook array
-fn has_bash_gates_hook(hooks_array: &serde_json::Value) -> bool {
+/// Check if tool-gates hook already exists in a hook array.
+/// Also detects the old `bash-gates` name for migration.
+fn has_tool_gates_hook(hooks_array: &serde_json::Value) -> bool {
     if let Some(arr) = hooks_array.as_array() {
         for entry in arr {
             if entry.get("matcher").and_then(|m| m.as_str()) == Some("Bash") {
                 if let Some(hooks) = entry.get("hooks").and_then(|h| h.as_array()) {
                     for hook in hooks {
                         if let Some(cmd) = hook.get("command").and_then(|c| c.as_str()) {
-                            if cmd.contains("bash-gates") {
+                            if cmd.contains("tool-gates") || cmd.contains("bash-gates") {
                                 return true;
                             }
                         }
@@ -365,7 +370,7 @@ fn install_hooks(scope: &str, dry_run: bool) {
     let binary_path = get_binary_path();
     let settings_path = get_settings_path(scope);
 
-    eprintln!("bash-gates installer");
+    eprintln!("tool-gates installer");
     eprintln!("Binary: {}", binary_path);
     eprintln!("Target: {} ({})", settings_path.display(), scope);
     eprintln!();
@@ -402,7 +407,7 @@ fn install_hooks(scope: &str, dry_run: bool) {
     if hooks.get("PreToolUse").is_none() {
         hooks["PreToolUse"] = serde_json::json!([]);
     }
-    if has_bash_gates_hook(&hooks["PreToolUse"]) {
+    if has_tool_gates_hook(&hooks["PreToolUse"]) {
         eprintln!("✓ PreToolUse hook already configured");
     } else {
         hooks["PreToolUse"]
@@ -417,7 +422,7 @@ fn install_hooks(scope: &str, dry_run: bool) {
     if hooks.get("PermissionRequest").is_none() {
         hooks["PermissionRequest"] = serde_json::json!([]);
     }
-    if has_bash_gates_hook(&hooks["PermissionRequest"]) {
+    if has_tool_gates_hook(&hooks["PermissionRequest"]) {
         eprintln!("✓ PermissionRequest hook already configured");
     } else {
         hooks["PermissionRequest"]
@@ -432,7 +437,7 @@ fn install_hooks(scope: &str, dry_run: bool) {
     if hooks.get("PostToolUse").is_none() {
         hooks["PostToolUse"] = serde_json::json!([]);
     }
-    if has_bash_gates_hook(&hooks["PostToolUse"]) {
+    if has_tool_gates_hook(&hooks["PostToolUse"]) {
         eprintln!("✓ PostToolUse hook already configured");
     } else {
         hooks["PostToolUse"]
@@ -444,7 +449,7 @@ fn install_hooks(scope: &str, dry_run: bool) {
     }
 
     if changes.is_empty() {
-        eprintln!("\nNo changes needed - bash-gates already installed.");
+        eprintln!("\nNo changes needed - tool-gates already installed.");
         return;
     }
 
@@ -488,7 +493,7 @@ fn install_hooks(scope: &str, dry_run: bool) {
     }
 }
 
-/// Handle `bash-gates hooks` subcommand
+/// Handle `tool-gates hooks` subcommand
 fn handle_hooks_subcommand(args: &[String]) {
     if args.is_empty() || args.iter().any(|a| a == "--help" || a == "-h") {
         print_hooks_help();
@@ -504,13 +509,13 @@ fn handle_hooks_subcommand(args: &[String]) {
         "json" => print_hooks_json(),
         _ => {
             eprintln!("Unknown hooks subcommand: {}", subcommand);
-            eprintln!("Run 'bash-gates hooks --help' for usage.");
+            eprintln!("Run 'tool-gates hooks --help' for usage.");
             std::process::exit(1);
         }
     }
 }
 
-/// Handle `bash-gates hooks add`
+/// Handle `tool-gates hooks add`
 fn handle_hooks_add(args: &[String]) {
     let dry_run = args.iter().any(|a| a == "--dry-run" || a == "-n");
 
@@ -532,7 +537,7 @@ fn handle_hooks_add(args: &[String]) {
     install_hooks(scope, dry_run);
 }
 
-/// Handle `bash-gates hooks status`
+/// Handle `tool-gates hooks status`
 fn handle_hooks_status() {
     let scopes = [
         ("user", get_settings_path("user")),
@@ -540,7 +545,7 @@ fn handle_hooks_status() {
         ("local", get_settings_path("local")),
     ];
 
-    eprintln!("bash-gates hook status\n");
+    eprintln!("tool-gates hook status\n");
 
     for (scope, path) in &scopes {
         eprint!("{:8} {} ", scope, path.display());
@@ -556,15 +561,15 @@ fn handle_hooks_status() {
                     let hooks = settings.get("hooks");
                     let has_pre = hooks
                         .and_then(|h| h.get("PreToolUse"))
-                        .map(has_bash_gates_hook)
+                        .map(has_tool_gates_hook)
                         .unwrap_or(false);
                     let has_perm = hooks
                         .and_then(|h| h.get("PermissionRequest"))
-                        .map(has_bash_gates_hook)
+                        .map(has_tool_gates_hook)
                         .unwrap_or(false);
                     let has_post = hooks
                         .and_then(|h| h.get("PostToolUse"))
-                        .map(has_bash_gates_hook)
+                        .map(has_tool_gates_hook)
                         .unwrap_or(false);
 
                     let installed_count =
@@ -603,20 +608,20 @@ fn print_hooks_json() {
 }
 
 fn print_main_help() {
-    eprintln!("bash-gates - Intelligent bash command permission gate");
+    eprintln!("tool-gates - Intelligent tool permission gate for AI coding assistants");
     eprintln!();
     eprintln!("USAGE:");
-    eprintln!("  bash-gates                   Read hook input from stdin (default)");
-    eprintln!("  bash-gates hooks <command>   Manage Claude Code hooks");
-    eprintln!("  bash-gates approve <pattern> Add permission rule to settings");
-    eprintln!("  bash-gates rules <command>   List/remove permission rules");
-    eprintln!("  bash-gates pending <command> Manage pending approval queue");
-    eprintln!("  bash-gates review            Interactive TUI for pending approvals");
-    eprintln!("  bash-gates --export-toml     Export Gemini CLI policy rules");
-    eprintln!("  bash-gates --refresh-tools   Refresh modern CLI tool detection");
-    eprintln!("  bash-gates --tools-status    Show detected modern tools");
-    eprintln!("  bash-gates --help            Show this help");
-    eprintln!("  bash-gates --version         Show version");
+    eprintln!("  tool-gates                   Read hook input from stdin (default)");
+    eprintln!("  tool-gates hooks <command>   Manage Claude Code hooks");
+    eprintln!("  tool-gates approve <pattern> Add permission rule to settings");
+    eprintln!("  tool-gates rules <command>   List/remove permission rules");
+    eprintln!("  tool-gates pending <command> Manage pending approval queue");
+    eprintln!("  tool-gates review            Interactive TUI for pending approvals");
+    eprintln!("  tool-gates --export-toml     Export Gemini CLI policy rules");
+    eprintln!("  tool-gates --refresh-tools   Refresh modern CLI tool detection");
+    eprintln!("  tool-gates --tools-status    Show detected modern tools");
+    eprintln!("  tool-gates --help            Show this help");
+    eprintln!("  tool-gates --version         Show version");
     eprintln!();
     eprintln!("COMMANDS:");
     eprintln!("  hooks add -s <scope>         Add hooks to Claude Code settings");
@@ -634,21 +639,21 @@ fn print_main_help() {
     eprintln!("  local    .claude/settings.local.json (personal, not committed)");
     eprintln!();
     eprintln!("EXAMPLES:");
-    eprintln!("  bash-gates hooks add -s user          # Install hooks");
-    eprintln!("  bash-gates approve 'npm:*' -s local   # Allow npm commands");
-    eprintln!("  bash-gates rules list                 # Show all rules");
-    eprintln!("  bash-gates pending list               # Show pending approvals");
+    eprintln!("  tool-gates hooks add -s user          # Install hooks");
+    eprintln!("  tool-gates approve 'npm:*' -s local   # Allow npm commands");
+    eprintln!("  tool-gates rules list                 # Show all rules");
+    eprintln!("  tool-gates pending list               # Show pending approvals");
     eprintln!();
-    eprintln!("  bash-gates --export-toml > ~/.gemini/policies/bash-gates.toml");
+    eprintln!("  tool-gates --export-toml > ~/.gemini/policies/tool-gates.toml");
 }
 
 fn print_hooks_help() {
-    eprintln!("bash-gates hooks - Manage Claude Code hooks");
+    eprintln!("tool-gates hooks - Manage Claude Code hooks");
     eprintln!();
     eprintln!("USAGE:");
-    eprintln!("  bash-gates hooks add -s <scope>   Add hooks to settings file");
-    eprintln!("  bash-gates hooks status           Show hook installation status");
-    eprintln!("  bash-gates hooks json             Output hooks JSON only");
+    eprintln!("  tool-gates hooks add -s <scope>   Add hooks to settings file");
+    eprintln!("  tool-gates hooks status           Show hook installation status");
+    eprintln!("  tool-gates hooks json             Output hooks JSON only");
     eprintln!();
     eprintln!("SCOPES:");
     eprintln!("  user     ~/.claude/settings.json (global user settings)");
@@ -656,14 +661,14 @@ fn print_hooks_help() {
     eprintln!("  local    .claude/settings.local.json (not committed)");
     eprintln!();
     eprintln!("EXAMPLES:");
-    eprintln!("  bash-gates hooks add -s user         # Recommended for personal use");
-    eprintln!("  bash-gates hooks add -s project      # Share hooks with team");
-    eprintln!("  bash-gates hooks add -s user --dry-run  # Preview changes");
+    eprintln!("  tool-gates hooks add -s user         # Recommended for personal use");
+    eprintln!("  tool-gates hooks add -s project      # Share hooks with team");
+    eprintln!("  tool-gates hooks add -s user --dry-run  # Preview changes");
 }
 
 fn print_hooks_add_help() {
     eprintln!("USAGE:");
-    eprintln!("  bash-gates hooks add -s <scope> [--dry-run]");
+    eprintln!("  tool-gates hooks add -s <scope> [--dry-run]");
     eprintln!();
     eprintln!("SCOPES:");
     eprintln!("  user     ~/.claude/settings.json");
@@ -746,7 +751,7 @@ fn handle_approve_subcommand(args: &[String]) {
     // Check for --dry-run
     let dry_run = args.iter().any(|a| a == "--dry-run" || a == "-n");
 
-    let formatted = bash_gates::settings_writer::format_pattern(pattern);
+    let formatted = tool_gates::settings_writer::format_pattern(pattern);
 
     if dry_run {
         eprintln!(
@@ -772,10 +777,10 @@ fn handle_approve_subcommand(args: &[String]) {
 }
 
 fn print_approve_help() {
-    eprintln!("bash-gates approve - Add a command pattern to settings.json");
+    eprintln!("tool-gates approve - Add a command pattern to settings.json");
     eprintln!();
     eprintln!("USAGE:");
-    eprintln!("  bash-gates approve <pattern> -s <scope> [--type <type>] [--dry-run]");
+    eprintln!("  tool-gates approve <pattern> -s <scope> [--type <type>] [--dry-run]");
     eprintln!();
     eprintln!("ARGUMENTS:");
     eprintln!("  <pattern>   Command pattern to approve (e.g., 'npm install:*', 'git:*')");
@@ -786,10 +791,10 @@ fn print_approve_help() {
     eprintln!("  -n, --dry-run         Preview changes without writing");
     eprintln!();
     eprintln!("EXAMPLES:");
-    eprintln!("  bash-gates approve 'npm install:*' -s local");
-    eprintln!("  bash-gates approve 'biome:*' -s user");
-    eprintln!("  bash-gates approve 'rm -rf*' -s user -t deny");
-    eprintln!("  bash-gates approve 'cargo:*' -s local --dry-run");
+    eprintln!("  tool-gates approve 'npm install:*' -s local");
+    eprintln!("  tool-gates approve 'biome:*' -s user");
+    eprintln!("  tool-gates approve 'rm -rf*' -s user -t deny");
+    eprintln!("  tool-gates approve 'cargo:*' -s local --dry-run");
 }
 
 // === Rules subcommand ===
@@ -808,7 +813,7 @@ fn handle_rules_subcommand(args: &[String]) {
         "remove" => handle_rules_remove(sub_args),
         _ => {
             eprintln!("Unknown rules subcommand: {}", subcommand);
-            eprintln!("Run 'bash-gates rules --help' for usage.");
+            eprintln!("Run 'tool-gates rules --help' for usage.");
             std::process::exit(1);
         }
     }
@@ -873,7 +878,7 @@ fn handle_rules_remove(args: &[String]) {
 
     let Some(pattern) = pattern else {
         eprintln!("Error: Pattern is required");
-        eprintln!("Usage: bash-gates rules remove <pattern> -s <scope>");
+        eprintln!("Usage: tool-gates rules remove <pattern> -s <scope>");
         std::process::exit(1);
     };
 
@@ -886,7 +891,7 @@ fn handle_rules_remove(args: &[String]) {
 
     let Some(scope_str) = scope_str else {
         eprintln!("Error: --scope (-s) is required");
-        eprintln!("Usage: bash-gates rules remove <pattern> -s <scope>");
+        eprintln!("Usage: tool-gates rules remove <pattern> -s <scope>");
         std::process::exit(1);
     };
 
@@ -900,7 +905,7 @@ fn handle_rules_remove(args: &[String]) {
 
     match remove_rule(scope, pattern) {
         Ok(true) => {
-            let formatted = bash_gates::settings_writer::format_pattern(pattern);
+            let formatted = tool_gates::settings_writer::format_pattern(pattern);
             eprintln!("✓ Removed rule: {}", formatted);
         }
         Ok(false) => {
@@ -915,11 +920,11 @@ fn handle_rules_remove(args: &[String]) {
 }
 
 fn print_rules_help() {
-    eprintln!("bash-gates rules - Manage permission rules in settings.json");
+    eprintln!("tool-gates rules - Manage permission rules in settings.json");
     eprintln!();
     eprintln!("USAGE:");
-    eprintln!("  bash-gates rules list [--scope <scope>]");
-    eprintln!("  bash-gates rules remove <pattern> -s <scope>");
+    eprintln!("  tool-gates rules list [--scope <scope>]");
+    eprintln!("  tool-gates rules remove <pattern> -s <scope>");
     eprintln!();
     eprintln!("COMMANDS:");
     eprintln!("  list     List all permission rules");
@@ -945,7 +950,7 @@ fn handle_pending_subcommand(args: &[String]) {
         "clear" => handle_pending_clear(sub_args),
         _ => {
             eprintln!("Unknown pending subcommand: {}", subcommand);
-            eprintln!("Run 'bash-gates pending --help' for usage.");
+            eprintln!("Run 'tool-gates pending --help' for usage.");
             std::process::exit(1);
         }
     }
@@ -1007,8 +1012,8 @@ fn handle_pending_list(args: &[String]) {
         eprintln!();
     }
 
-    eprintln!("To approve a pattern: bash-gates approve '<pattern>' -s <scope>");
-    eprintln!("To review interactively: bash-gates review");
+    eprintln!("To approve a pattern: tool-gates approve '<pattern>' -s <scope>");
+    eprintln!("To review interactively: tool-gates review");
 }
 
 fn handle_pending_clear(args: &[String]) {
@@ -1022,7 +1027,7 @@ fn handle_pending_clear(args: &[String]) {
 
     if !is_project && !is_all {
         eprintln!("Error: Specify --project or --all");
-        eprintln!("Usage: bash-gates pending clear [--project | --all] --force");
+        eprintln!("Usage: tool-gates pending clear [--project | --all] --force");
         std::process::exit(1);
     }
 
@@ -1057,11 +1062,11 @@ fn handle_pending_clear(args: &[String]) {
 }
 
 fn print_pending_help() {
-    eprintln!("bash-gates pending - Manage pending approval queue");
+    eprintln!("tool-gates pending - Manage pending approval queue");
     eprintln!();
     eprintln!("USAGE:");
-    eprintln!("  bash-gates pending list [--project]");
-    eprintln!("  bash-gates pending clear [--project | --all] --force");
+    eprintln!("  tool-gates pending list [--project]");
+    eprintln!("  tool-gates pending clear [--project | --all] --force");
     eprintln!();
     eprintln!("COMMANDS:");
     eprintln!("  list    List pending approvals");
@@ -1094,7 +1099,7 @@ fn print_approve() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bash_gates::check_command;
+    use tool_gates::check_command;
 
     #[test]
     fn test_hook_input_parsing() {

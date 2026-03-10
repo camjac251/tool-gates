@@ -1,4 +1,4 @@
-//! Build script for bash-gates.
+//! Build script for tool-gates.
 //!
 //! Reads all rules/*.toml files and generates:
 //! - src/generated/rules.rs - Rust code for declarative gates
@@ -1717,7 +1717,7 @@ fn generate_toml_policy(rule_files: &[(String, RuleFile)]) -> String {
     output.push_str("# Bash Gates - Generated Policy for Gemini CLI\n");
     output.push_str("#\n");
     output.push_str("# This file was auto-generated from declarative TOML rules.\n");
-    output.push_str("# Save to: ~/.gemini/policies/bash-gates.toml\n");
+    output.push_str("# Save to: ~/.gemini/policies/tool-gates.toml\n");
     output.push_str("#\n");
     output.push_str("# Only allow and deny rules are generated.\n");
     output.push_str("# Everything else inherits Gemini CLI's default: ask_user\n");

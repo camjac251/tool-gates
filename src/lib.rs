@@ -1,7 +1,7 @@
-//! Bash Gates - Intelligent bash command permission gate.
+//! Tool Gates - Intelligent tool permission gate for AI coding assistants.
 //!
-//! This library provides command parsing and permission checking for bash commands,
-//! designed for use as Claude Code hooks:
+//! Formerly `bash-gates`. This library provides command parsing and permission
+//! checking for bash commands, designed for use as Claude Code hooks:
 //! - `PreToolUse`: Block dangerous commands, allow safe ones, provide hints
 //! - `PermissionRequest`: Approve safe commands for subagents (where PreToolUse allow is ignored)
 //! - `PostToolUse`: Track successful execution of approved commands
@@ -9,7 +9,7 @@
 //! # Example
 //!
 //! ```
-//! use bash_gates::check_command;
+//! use tool_gates::check_command;
 //!
 //! // Safe command - allowed
 //! let output = check_command("git status");
@@ -22,6 +22,7 @@
 //! assert_eq!(decision, "deny");
 //! ```
 
+pub mod cache;
 pub mod gates;
 pub mod generated;
 pub mod hint_tracker;

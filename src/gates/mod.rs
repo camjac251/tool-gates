@@ -4,7 +4,6 @@
 //! 1. Try declarative rules first (from generated code)
 //! 2. Fall back to custom handlers for complex logic
 
-pub mod bash_gates;
 pub mod basics;
 pub mod beads;
 pub mod cloud;
@@ -18,11 +17,11 @@ pub mod network;
 pub mod package_managers;
 pub mod shortcut;
 pub mod system;
+pub mod tool_gates;
 
 #[cfg(test)]
 pub mod test_utils;
 
-pub use bash_gates::check_bash_gates;
 pub use basics::check_basics;
 pub use beads::check_beads;
 pub use cloud::check_cloud;
@@ -35,6 +34,7 @@ pub use network::check_network;
 pub use package_managers::check_package_managers;
 pub use shortcut::check_shortcut;
 pub use system::check_system;
+pub use tool_gates::check_tool_gates;
 
 use crate::models::{CommandInfo, GateResult};
 
@@ -47,7 +47,7 @@ pub static GATES: &[(&str, GateCheckFn)] = &[
     ("mcp", check_mcp),
     ("gh", check_gh),
     ("beads", check_beads),
-    ("bash_gates", check_bash_gates),
+    ("tool_gates", check_tool_gates),
     ("shortcut", check_shortcut),
     ("cloud", check_cloud),
     ("network", check_network),

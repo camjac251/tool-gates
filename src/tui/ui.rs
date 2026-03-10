@@ -62,7 +62,7 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
     };
 
     let text = format!(
-        " bash-gates review -- {visible} commands ({project_name}) -- {total} total across {projects} project(s)"
+        " tool-gates review --{visible} commands ({project_name}) -- {total} total across {projects} project(s)"
     );
 
     let header = Paragraph::new(Line::from(Span::styled(

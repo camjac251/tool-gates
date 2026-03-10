@@ -4,7 +4,7 @@
 //! Claude Code session. Each hint fires at most once per session, reducing the
 //! context tax from repeated `<system-reminder>` injections.
 //!
-//! File: `~/.cache/bash-gates/hint-tracker.json`
+//! File: `~/.cache/tool-gates/hint-tracker.json`
 //! Single-session scope: resets when session_id changes.
 
 use serde::{Deserialize, Serialize};
@@ -80,11 +80,7 @@ impl HintTracker {
 
 /// Get the cache file path.
 fn tracker_path() -> Option<PathBuf> {
-    let cache_dir = std::env::var("XDG_CACHE_HOME")
-        .map(PathBuf::from)
-        .ok()
-        .or_else(|| dirs::home_dir().map(|h| h.join(".cache")))?;
-    Some(cache_dir.join("bash-gates").join("hint-tracker.json"))
+    Some(crate::cache::cache_dir().join("hint-tracker.json"))
 }
 
 /// Load tracker from disk.

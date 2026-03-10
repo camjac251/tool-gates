@@ -11,7 +11,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  BINARY_NAME: bash-gates
+  BINARY_NAME: tool-gates
 
 jobs:
   release-please:

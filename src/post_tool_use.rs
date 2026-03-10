@@ -43,7 +43,7 @@ pub fn handle_post_tool_use(input: &PostToolUseInput) -> Option<PostToolUseOutpu
 
     // Silent — Claude already saw the permission prompt and user's approval
     // in the conversation flow. The pending queue accumulates data for the
-    // /bash-gates:review skill to use when the user asks for it.
+    // /tool-gates:review skill to use when the user asks for it.
     None
 }
 

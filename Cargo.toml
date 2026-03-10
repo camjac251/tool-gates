@@ -1,18 +1,18 @@
 [package]
-name = "bash-gates"
+name = "tool-gates"
 version = "1.0.0"
 edition = "2024"
 rust-version = "1.86"
-description = "Robust bash command permission gates for Claude Code"
+description = "Intelligent tool permission gates for AI coding assistants"
 license = "MIT"
 publish = false
 
 [lib]
-name = "bash_gates"
+name = "tool_gates"
 path = "src/lib.rs"
 
 [[bin]]
-name = "bash-gates"
+name = "tool-gates"
 path = "src/main.rs"
 
 [dependencies]

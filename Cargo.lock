@@ -54,26 +54,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
-name = "bash-gates"
-version = "0.2.0"
-dependencies = [
- "chrono",
- "crossterm",
- "dirs",
- "fs2",
- "proptest",
- "ratatui",
- "regex",
- "serde",
- "serde_json",
- "tempfile",
- "toml",
- "tree-sitter",
- "tree-sitter-bash",
- "uuid",
-]
-
-[[package]]
 name = "bit-set"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1665,6 +1645,26 @@ name = "toml_writer"
 version = "1.0.6+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab16f14aed21ee8bfd8ec22513f7287cd4a91aa92e44edfe2c17ddd004e92607"
+
+[[package]]
+name = "tool-gates"
+version = "1.0.0"
+dependencies = [
+ "chrono",
+ "crossterm",
+ "dirs",
+ "fs2",
+ "proptest",
+ "ratatui",
+ "regex",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "toml",
+ "tree-sitter",
+ "tree-sitter-bash",
+ "uuid",
+]
 
 [[package]]
 name = "tree-sitter"

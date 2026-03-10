@@ -64,11 +64,11 @@ fd -e jsonl . ~/.claude/projects/<encoded-path>/ | rg -c subagents
 wc -l /tmp/gate-audit-commands.txt
 ```
 
-### 3. Classify every command through bash-gates
+### 3. Classify every command through tool-gates
 
 Use the release binary (musl target):
 ```bash
-BIN=$(fd bash-gates target/x86_64-unknown-linux-musl/release/ --type f --max-depth 1 \
+BIN=$(fd tool-gates target/x86_64-unknown-linux-musl/release/ --type f --max-depth 1 \
   -E '*.d' | head -1)
 ```
 
@@ -160,7 +160,7 @@ Present before/after comparison.
 | Tool use counts | Group by `.name` on `tool_use` type blocks |
 | Session title | `select(.type == "summary") \| .summary` |
 
-## Reference: bash-gates Hook Input Format
+## Reference: tool-gates Hook Input Format
 
 ```json
 {

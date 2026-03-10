@@ -1,4 +1,4 @@
-# Bash Gates - Claude Code Permission Hook (Rust)
+# Tool Gates (formerly `bash-gates`) - Claude Code Permission Hook (Rust)
 
 Intelligent bash command permission gate using tree-sitter AST parsing. Auto-allows known safe operations, asks for writes and unknown commands, blocks dangerous patterns.
 
@@ -15,12 +15,12 @@ cargo build --release                   # Static musl binary by default
 cargo clippy -- -D warnings             # Lint
 
 # Manual test
-echo '{"tool_name": "Bash", "tool_input": {"command": "git status"}}' | bash-gates
+echo '{"tool_name": "Bash", "tool_input": {"command": "git status"}}' | tool-gates
 ```
 
 ## Hook Types
 
-bash-gates supports three Claude Code hooks:
+tool-gates supports three Claude Code hooks:
 
 | Hook | Purpose | When it runs |
 |------|---------|--------------|
@@ -45,7 +45,7 @@ bash-gates supports three Claude Code hooks:
 │   └── README.md         # Plugin documentation
 ├── skills/          # Plugin skills (review, test-gate)
 ├── rules/           # Declarative gate definitions (13 TOML files)
-│   ├── basics.toml, bash_gates.toml, beads.toml, cloud.toml, devtools.toml, ...
+│   ├── basics.toml, tool_gates.toml, beads.toml, cloud.toml, devtools.toml, ...
 ├── tests/fixtures/  # Test fixtures
 ├── lefthook.yml     # Git hooks
 └── mise.toml        # Mise task runner config
@@ -84,7 +84,7 @@ src/
     ├── mod.rs           # Gate registry (ordered: mcp first, basics last)
     ├── helpers.rs       # Common gate helper functions (flag extraction, etc.)
     ├── test_utils.rs    # Test utilities (cfg(test) only)
-    ├── bash_gates.rs    # bash-gates CLI itself (read-only: allow, mutations: ask)
+    ├── tool_gates.rs    # tool-gates CLI itself (read-only: allow, mutations: ask)
     ├── basics.rs        # Safe shell commands (echo, cat, ls, grep, etc.)
     ├── beads.rs         # Beads issue tracker CLI (bd)
     ├── mcp.rs           # MCP CLI (mcp-cli)
@@ -140,7 +140,7 @@ Input fields: `tool_input`, `decision_reason` (optional), `blocked_path` (option
 Runs after a command completes. Detects successful execution and queues for permanent approval.
 
 1. Check if `tool_use_id` was tracked as an "ask" decision from PreToolUse
-2. If tracked and exit code is 0 -> append to `~/.cache/bash-gates/pending.jsonl`
+2. If tracked and exit code is 0 -> append to `~/.cache/tool-gates/pending.jsonl`
 3. Output is silent (empty) to avoid cluttering Claude's context
 
 ## Decision Priority
@@ -208,7 +208,7 @@ Gate rules are defined declaratively in `rules/*.toml`. Each rule has a `reason`
 
 ### Hints
 
-When allowed commands use legacy tools (cat, grep, find, etc.), bash-gates adds hints suggesting modern alternatives (bat, rg, fd) via `additionalContext` -- only if the modern tool is installed (checked via `tool_cache.rs`, 7-day TTL at `~/.cache/bash-gates/available-tools.json`). Hint definitions are in `hints.rs`.
+When allowed commands use legacy tools (cat, grep, find, etc.), tool-gates adds hints suggesting modern alternatives (bat, rg, fd) via `additionalContext` -- only if the modern tool is installed (checked via `tool_cache.rs`, 7-day TTL at `~/.cache/tool-gates/available-tools.json`). Hint definitions are in `hints.rs`.
 
 ### Task Expansion
 
@@ -380,12 +380,12 @@ cargo test -- --ignored                 # Slow tests only
 
 ## Runtime Files
 
-All under `~/.cache/bash-gates/`:
+All under `~/.cache/tool-gates/`:
 
 | File | Purpose |
 |------|---------|
 | `tracking.json` | PreToolUse->PostToolUse correlation (15min TTL, auto-cleaned) |
-| `pending.jsonl` | Approval queue -- commands awaiting `bash-gates review` |
+| `pending.jsonl` | Approval queue -- commands awaiting `tool-gates review` |
 | `available-tools.json` | Tool cache for hints (7-day TTL) |
 
 ## Gotchas

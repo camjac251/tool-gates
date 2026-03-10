@@ -1,13 +1,13 @@
-//! Bash Gates CLI permission gate.
+//! Tool Gates CLI permission gate.
 //!
-//! Fully declarative - add commands to rules/bash_gates.toml.
+//! Fully declarative - add commands to rules/tool_gates.toml.
 
-use crate::generated::rules::check_bash_gates_gate;
+use crate::generated::rules::check_tool_gates_gate;
 use crate::models::{CommandInfo, GateResult};
 
-/// Check bash-gates CLI commands.
-pub fn check_bash_gates(cmd: &CommandInfo) -> GateResult {
-    check_bash_gates_gate(cmd)
+/// Check tool-gates CLI commands.
+pub fn check_tool_gates(cmd: &CommandInfo) -> GateResult {
+    check_tool_gates_gate(cmd)
 }
 
 #[cfg(test)]
@@ -20,55 +20,55 @@ mod tests {
 
     #[test]
     fn test_pending_list_allows() {
-        let result = check_bash_gates(&cmd("bash-gates", &["pending", "list"]));
+        let result = check_tool_gates(&cmd("tool-gates", &["pending", "list"]));
         assert_eq!(result.decision, Decision::Allow);
     }
 
     #[test]
     fn test_pending_list_with_flags_allows() {
-        let result = check_bash_gates(&cmd("bash-gates", &["pending", "list", "--project"]));
+        let result = check_tool_gates(&cmd("tool-gates", &["pending", "list", "--project"]));
         assert_eq!(result.decision, Decision::Allow);
     }
 
     #[test]
     fn test_pending_count_allows() {
-        let result = check_bash_gates(&cmd("bash-gates", &["pending", "count"]));
+        let result = check_tool_gates(&cmd("tool-gates", &["pending", "count"]));
         assert_eq!(result.decision, Decision::Allow);
     }
 
     #[test]
     fn test_rules_list_allows() {
-        let result = check_bash_gates(&cmd("bash-gates", &["rules", "list"]));
+        let result = check_tool_gates(&cmd("tool-gates", &["rules", "list"]));
         assert_eq!(result.decision, Decision::Allow);
     }
 
     #[test]
     fn test_hooks_status_allows() {
-        let result = check_bash_gates(&cmd("bash-gates", &["hooks", "status"]));
+        let result = check_tool_gates(&cmd("tool-gates", &["hooks", "status"]));
         assert_eq!(result.decision, Decision::Allow);
     }
 
     #[test]
     fn test_help_flag_allows() {
-        let result = check_bash_gates(&cmd("bash-gates", &["--help"]));
+        let result = check_tool_gates(&cmd("tool-gates", &["--help"]));
         assert_eq!(result.decision, Decision::Allow);
     }
 
     #[test]
     fn test_version_flag_allows() {
-        let result = check_bash_gates(&cmd("bash-gates", &["--version"]));
+        let result = check_tool_gates(&cmd("tool-gates", &["--version"]));
         assert_eq!(result.decision, Decision::Allow);
     }
 
     #[test]
     fn test_tools_status_allows() {
-        let result = check_bash_gates(&cmd("bash-gates", &["--tools-status"]));
+        let result = check_tool_gates(&cmd("tool-gates", &["--tools-status"]));
         assert_eq!(result.decision, Decision::Allow);
     }
 
     #[test]
     fn test_export_toml_allows() {
-        let result = check_bash_gates(&cmd("bash-gates", &["--export-toml"]));
+        let result = check_tool_gates(&cmd("tool-gates", &["--export-toml"]));
         assert_eq!(result.decision, Decision::Allow);
     }
 
@@ -76,42 +76,42 @@ mod tests {
 
     #[test]
     fn test_approve_asks() {
-        let result = check_bash_gates(&cmd("bash-gates", &["approve", "npm:*", "-s", "local"]));
+        let result = check_tool_gates(&cmd("tool-gates", &["approve", "npm:*", "-s", "local"]));
         assert_eq!(result.decision, Decision::Ask);
         assert!(result.reason.as_ref().unwrap().contains("permission rule"));
     }
 
     #[test]
     fn test_rules_remove_asks() {
-        let result = check_bash_gates(&cmd("bash-gates", &["rules", "remove", "npm:*"]));
+        let result = check_tool_gates(&cmd("tool-gates", &["rules", "remove", "npm:*"]));
         assert_eq!(result.decision, Decision::Ask);
         assert!(result.reason.as_ref().unwrap().contains("Removing"));
     }
 
     #[test]
     fn test_pending_clear_asks() {
-        let result = check_bash_gates(&cmd("bash-gates", &["pending", "clear"]));
+        let result = check_tool_gates(&cmd("tool-gates", &["pending", "clear"]));
         assert_eq!(result.decision, Decision::Ask);
         assert!(result.reason.as_ref().unwrap().contains("Clearing"));
     }
 
     #[test]
     fn test_hooks_add_asks() {
-        let result = check_bash_gates(&cmd("bash-gates", &["hooks", "add", "-s", "user"]));
+        let result = check_tool_gates(&cmd("tool-gates", &["hooks", "add", "-s", "user"]));
         assert_eq!(result.decision, Decision::Ask);
         assert!(result.reason.as_ref().unwrap().contains("Installing"));
     }
 
     #[test]
     fn test_review_asks() {
-        let result = check_bash_gates(&cmd("bash-gates", &["review"]));
+        let result = check_tool_gates(&cmd("tool-gates", &["review"]));
         assert_eq!(result.decision, Decision::Ask);
         assert!(result.reason.as_ref().unwrap().contains("TUI"));
     }
 
     #[test]
     fn test_refresh_tools_asks() {
-        let result = check_bash_gates(&cmd("bash-gates", &["--refresh-tools"]));
+        let result = check_tool_gates(&cmd("tool-gates", &["--refresh-tools"]));
         assert_eq!(result.decision, Decision::Ask);
         assert!(result.reason.as_ref().unwrap().contains("Refreshing"));
     }
@@ -120,7 +120,21 @@ mod tests {
 
     #[test]
     fn test_unknown_subcommand_asks() {
-        let result = check_bash_gates(&cmd("bash-gates", &["something-new"]));
+        let result = check_tool_gates(&cmd("tool-gates", &["something-new"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    // === Backward compat: bash-gates alias ===
+
+    #[test]
+    fn test_bash_gates_alias_allows() {
+        let result = check_tool_gates(&cmd("bash-gates", &["pending", "list"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_bash_gates_alias_asks() {
+        let result = check_tool_gates(&cmd("bash-gates", &["approve", "npm:*", "-s", "local"]));
         assert_eq!(result.decision, Decision::Ask);
     }
 }

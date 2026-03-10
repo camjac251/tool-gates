@@ -1,11 +1,13 @@
 <div align="center">
 
-# bash-gates
+# Tool Gates
 
-**Intelligent permission gates for bash commands in Claude Code**
+*formerly `bash-gates`*
 
-[![CI](https://github.com/camjac251/bash-gates/actions/workflows/ci.yml/badge.svg)](https://github.com/camjac251/bash-gates/actions/workflows/ci.yml)
-[![Release](https://github.com/camjac251/bash-gates/actions/workflows/release.yml/badge.svg)](https://github.com/camjac251/bash-gates/actions/workflows/release.yml)
+**Intelligent tool permission gate for AI coding assistants**
+
+[![CI](https://github.com/camjac251/tool-gates/actions/workflows/ci.yml/badge.svg)](https://github.com/camjac251/tool-gates/actions/workflows/ci.yml)
+[![Release](https://github.com/camjac251/tool-gates/actions/workflows/release.yml/badge.svg)](https://github.com/camjac251/tool-gates/actions/workflows/release.yml)
 [![Rust](https://img.shields.io/badge/rust-1.85+-orange.svg)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -29,7 +31,7 @@ A Claude Code [PreToolUse hook](https://code.claude.com/docs/en/hooks#pretooluse
 | **Compound Commands**    | Handles `&&`, `\|\|`, `\|`, `;` chains correctly                                                       |
 | **Security First**       | Catches pipe-to-shell, eval, command injection patterns                                                |
 | **Unknown Protection**   | Unrecognized commands require approval                                                                 |
-| **Claude Code Plugin**   | Install as a plugin with the `/bash-gates:review` skill for interactive approval management            |
+| **Claude Code Plugin**   | Install as a plugin with the `/tool-gates:review` skill for interactive approval management            |
 | **300+ Commands**        | 13 specialized gates with comprehensive coverage                                                       |
 | **Fast**                 | Static native binary, no interpreter overhead                                                          |
 
@@ -43,7 +45,7 @@ flowchart TD
 
     subgraph PTU [PreToolUse Hook]
         direction TB
-        PTU_CHECK[bash-gates check] --> PTU_DEC{Decision}
+        PTU_CHECK[tool-gates check] --> PTU_DEC{Decision}
         PTU_DEC -->|dangerous| PTU_DENY[deny]
         PTU_DEC -->|risky| PTU_ASK[ask + track]
         PTU_DEC -->|safe| PTU_CTX{Context?}
@@ -57,7 +59,7 @@ flowchart TD
 
     subgraph PR_HOOK [PermissionRequest Hook]
         direction TB
-        PR_CHECK[bash-gates re-check] --> PR_DEC{Decision}
+        PR_CHECK[tool-gates re-check] --> PR_DEC{Decision}
         PR_DEC -->|safe| PR_ALLOW[allow ✓]
         PR_DEC -->|dangerous| PR_DENY[deny]
         PR_DEC -->|risky| PR_PROMPT[show prompt]
@@ -74,7 +76,7 @@ flowchart TD
     end
 
     EXEC --> POST
-    PENDING --> REVIEW[bash-gates review]
+    PENDING --> REVIEW[tool-gates review]
     REVIEW --> SETTINGS[settings.json]
 ```
 
@@ -84,7 +86,7 @@ flowchart TD
 - **PermissionRequest**: Gates commands for subagents (where PreToolUse's `allow` is ignored)
 - **PostToolUse**: Detects successful execution, queues for permanent approval
 
-> `PermissionRequest` metadata like `blocked_path` and `decision_reason` is optional in Claude Code payloads. bash-gates treats those fields as best-effort context, not required inputs.
+> `PermissionRequest` metadata like `blocked_path` and `decision_reason` is optional in Claude Code payloads. tool-gates treats those fields as best-effort context, not required inputs.
 
 **Decision Priority:** `BLOCK > ASK > ALLOW > SKIP`
 
@@ -98,17 +100,17 @@ flowchart TD
 
 ### Settings.json Integration
 
-bash-gates reads your Claude Code settings from `~/.claude/settings.json` and `.claude/settings.json` (project) to respect your explicit permission rules:
+tool-gates reads your Claude Code settings from `~/.claude/settings.json` and `.claude/settings.json` (project) to respect your explicit permission rules:
 
-| settings.json | bash-gates | Result                                       |
+| settings.json | tool-gates | Result                                       |
 | ------------- | ---------- | -------------------------------------------- |
 | `deny` rule   | (any)      | Defers to Claude Code (respects your deny)   |
 | `ask` rule    | (any)      | Defers to Claude Code (respects your ask)    |
-| `allow` rule  | dangerous  | **deny** (bash-gates still blocks dangerous) |
+| `allow` rule  | dangerous  | **deny** (tool-gates still blocks dangerous) |
 | `allow`/none  | safe       | **allow**                                    |
 | none          | unknown    | **ask**                                      |
 
-This ensures bash-gates won't accidentally bypass your explicit deny rules while still providing security against dangerous commands.
+This ensures tool-gates won't accidentally bypass your explicit deny rules while still providing security against dangerous commands.
 
 **Settings file priority** (highest wins):
 
@@ -121,7 +123,7 @@ This ensures bash-gates won't accidentally bypass your explicit deny rules while
 
 ### Accept Edits Mode
 
-When Claude Code is in `acceptEdits` mode, bash-gates auto-allows file-editing commands:
+When Claude Code is in `acceptEdits` mode, tool-gates auto-allows file-editing commands:
 
 ```bash
 # In acceptEdits mode - auto-allowed
@@ -144,11 +146,11 @@ eslint --fix src/                 # Linting with fix
 
 _Requires Claude Code 1.0.20+_
 
-When Claude uses legacy commands, bash-gates suggests modern alternatives via `additionalContext`. This helps Claude learn better patterns over time without modifying the command.
+When Claude uses legacy commands, tool-gates suggests modern alternatives via `additionalContext`. This helps Claude learn better patterns over time without modifying the command.
 
 ```bash
 # Claude runs: cat README.md
-# bash-gates returns:
+# tool-gates returns:
 {
   "hookSpecificOutput": {
     "permissionDecision": "allow",
@@ -180,31 +182,31 @@ When Claude uses legacy commands, bash-gates suggests modern alternatives via `a
 
 ```bash
 # Refresh tool detection cache
-bash-gates --refresh-tools
+tool-gates --refresh-tools
 
 # Check which tools are detected
-bash-gates --tools-status
+tool-gates --tools-status
 ```
 
 ### Approval Learning
 
-When you approve commands (via Claude Code's permission prompt), bash-gates tracks them and lets you permanently save patterns to settings.json.
+When you approve commands (via Claude Code's permission prompt), tool-gates tracks them and lets you permanently save patterns to settings.json.
 
 ```bash
 # After approving some commands, review pending approvals
-bash-gates pending list
+tool-gates pending list
 
 # Interactive TUI dashboard
-bash-gates review          # current project only
-bash-gates review --all    # all projects
+tool-gates review          # current project only
+tool-gates review --all    # all projects
 
 # Or approve directly via CLI
-bash-gates approve 'npm install*' -s local
-bash-gates approve 'cargo*' -s user
+tool-gates approve 'npm install*' -s local
+tool-gates approve 'cargo*' -s user
 
 # Manage existing rules
-bash-gates rules list
-bash-gates rules remove 'pattern' -s local
+tool-gates rules list
+tool-gates rules remove 'pattern' -s local
 ```
 
 **Scopes:**
@@ -214,7 +216,7 @@ bash-gates rules remove 'pattern' -s local
 | `user` | `~/.claude/settings.json` | Global personal use |
 | `project` | `.claude/settings.json` | Share with team |
 
-**Review TUI** (`bash-gates review`):
+**Review TUI** (`tool-gates review`):
 
 Three-panel dashboard -- project sidebar, command list, and detail panel.
 
@@ -243,24 +245,24 @@ Compound commands (`&&`, `||`, `|`) show per-segment patterns so you can approve
 
 ```bash
 # Linux x64
-curl -Lo ~/.local/bin/bash-gates \
-  https://github.com/camjac251/bash-gates/releases/latest/download/bash-gates-linux-amd64
-chmod +x ~/.local/bin/bash-gates
+curl -Lo ~/.local/bin/tool-gates \
+  https://github.com/camjac251/tool-gates/releases/latest/download/tool-gates-linux-amd64
+chmod +x ~/.local/bin/tool-gates
 
 # Linux ARM64
-curl -Lo ~/.local/bin/bash-gates \
-  https://github.com/camjac251/bash-gates/releases/latest/download/bash-gates-linux-arm64
-chmod +x ~/.local/bin/bash-gates
+curl -Lo ~/.local/bin/tool-gates \
+  https://github.com/camjac251/tool-gates/releases/latest/download/tool-gates-linux-arm64
+chmod +x ~/.local/bin/tool-gates
 
 # macOS Apple Silicon
-curl -Lo ~/.local/bin/bash-gates \
-  https://github.com/camjac251/bash-gates/releases/latest/download/bash-gates-darwin-arm64
-chmod +x ~/.local/bin/bash-gates
+curl -Lo ~/.local/bin/tool-gates \
+  https://github.com/camjac251/tool-gates/releases/latest/download/tool-gates-darwin-arm64
+chmod +x ~/.local/bin/tool-gates
 
 # macOS Intel
-curl -Lo ~/.local/bin/bash-gates \
-  https://github.com/camjac251/bash-gates/releases/latest/download/bash-gates-darwin-amd64
-chmod +x ~/.local/bin/bash-gates
+curl -Lo ~/.local/bin/tool-gates \
+  https://github.com/camjac251/tool-gates/releases/latest/download/tool-gates-darwin-amd64
+chmod +x ~/.local/bin/tool-gates
 ```
 
 ### Build from Source
@@ -268,7 +270,7 @@ chmod +x ~/.local/bin/bash-gates
 ```bash
 # Requires Rust 1.85+
 cargo build --release
-# Binary: ./target/x86_64-unknown-linux-musl/release/bash-gates
+# Binary: ./target/x86_64-unknown-linux-musl/release/tool-gates
 ```
 
 ### Configure Claude Code
@@ -277,22 +279,22 @@ Use the `hooks` subcommand to configure Claude Code:
 
 ```bash
 # Install to user settings (recommended)
-bash-gates hooks add -s user
+tool-gates hooks add -s user
 
 # Install to project settings (shared with team)
-bash-gates hooks add -s project
+tool-gates hooks add -s project
 
 # Install to local project settings (not committed)
-bash-gates hooks add -s local
+tool-gates hooks add -s local
 
 # Preview changes without writing
-bash-gates hooks add -s user --dry-run
+tool-gates hooks add -s user --dry-run
 
 # Check installation status
-bash-gates hooks status
+tool-gates hooks status
 
 # Output hooks JSON for manual config
-bash-gates hooks json
+tool-gates hooks json
 ```
 
 **Scopes:**
@@ -322,7 +324,7 @@ Add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "~/.local/bin/bash-gates",
+            "command": "~/.local/bin/tool-gates",
             "timeout": 10
           }
         ]
@@ -334,7 +336,7 @@ Add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "~/.local/bin/bash-gates",
+            "command": "~/.local/bin/tool-gates",
             "timeout": 10
           }
         ]
@@ -346,7 +348,7 @@ Add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "~/.local/bin/bash-gates",
+            "command": "~/.local/bin/tool-gates",
             "timeout": 10
           }
         ]
@@ -360,52 +362,52 @@ Add to `~/.claude/settings.json`:
 
 ### Claude Code Plugin (Optional)
 
-bash-gates ships as a [Claude Code plugin](https://code.claude.com/docs/en/plugins) with the `/bash-gates:review` skill for interactive approval management. The plugin provides the skill only -- hook installation is handled by the binary (see [Configure Claude Code](#configure-claude-code) above).
+tool-gates ships as a [Claude Code plugin](https://code.claude.com/docs/en/plugins) with the `/tool-gates:review` skill for interactive approval management. The plugin provides the skill only -- hook installation is handled by the binary (see [Configure Claude Code](#configure-claude-code) above).
 
-**Prerequisites:** The `bash-gates` binary must be installed and hooks configured before using the plugin.
+**Prerequisites:** The `tool-gates` binary must be installed and hooks configured before using the plugin.
 
 **Install from marketplace:**
 
 ```bash
 # In Claude Code, add the marketplace
-/plugin marketplace add camjac251/bash-gates
+/plugin marketplace add camjac251/tool-gates
 
 # Install the plugin
-/plugin install bash-gates@camjac251-bash-gates
+/plugin install tool-gates@camjac251-tool-gates
 ```
 
 **Install from local clone:**
 
 ```bash
 # Launch Claude Code with the plugin loaded
-claude --plugin-dir /path/to/bash-gates
+claude --plugin-dir /path/to/tool-gates
 ```
 
 **Using the review skill:**
 
 ```bash
 # Review all pending approvals
-/bash-gates:review
+/tool-gates:review
 
 # Review only current project
-/bash-gates:review --project
+/tool-gates:review --project
 ```
 
 The skill lists commands you've been manually approving, shows counts and suggested patterns, and lets you multi-select which to make permanent at your chosen scope (local, project, or user).
 
 | Step                   | What happens                                | Permission                 |
 | ---------------------- | ------------------------------------------- | -------------------------- |
-| List pending approvals | `bash-gates pending list`                   | Auto-approved (read-only)  |
-| Show current rules     | `bash-gates rules list`                     | Auto-approved (read-only)  |
-| Approve a pattern      | `bash-gates approve '<pattern>' -s <scope>` | Requires your confirmation |
+| List pending approvals | `tool-gates pending list`                   | Auto-approved (read-only)  |
+| Show current rules     | `tool-gates rules list`                     | Auto-approved (read-only)  |
+| Approve a pattern      | `tool-gates approve '<pattern>' -s <scope>` | Requires your confirmation |
 
 ---
 
 ## Permission Gates
 
-### Bash Gates (Self)
+### Tool Gates (Self)
 
-bash-gates recognizes its own CLI commands:
+tool-gates recognizes its own CLI commands:
 
 | Allow                                                                                                                   | Ask                                                                                  |
 | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
@@ -562,15 +564,15 @@ cargo test -- --nocapture         # With output
 
 ```bash
 # Allow
-echo '{"tool_name":"Bash","tool_input":{"command":"git status"}}' | bash-gates
+echo '{"tool_name":"Bash","tool_input":{"command":"git status"}}' | tool-gates
 # -> {"hookSpecificOutput":{"permissionDecision":"allow"}}
 
 # Ask
-echo '{"tool_name":"Bash","tool_input":{"command":"npm install"}}' | bash-gates
+echo '{"tool_name":"Bash","tool_input":{"command":"npm install"}}' | tool-gates
 # -> {"hookSpecificOutput":{"permissionDecision":"ask","permissionDecisionReason":"npm: Installing packages"}}
 
 # Deny
-echo '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}' | bash-gates
+echo '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}' | tool-gates
 # -> {"hookSpecificOutput":{"permissionDecision":"deny"}}
 ```
 
@@ -603,7 +605,7 @@ src/
 └── gates/               # 13 specialized permission gates
     ├── mod.rs           # Gate registry (ordered by priority)
     ├── helpers.rs       # Common gate helper functions
-    ├── bash_gates.rs    # bash-gates CLI itself
+    ├── tool_gates.rs    # tool-gates CLI itself
     ├── basics.rs        # Safe commands (~130+)
     ├── beads.rs         # Beads issue tracker (bd) - github.com/steveyegge/beads
     ├── mcp.rs           # MCP CLI (mcp-cli) - Model Context Protocol
@@ -625,7 +627,7 @@ src/
 Gemini CLI's hook system cannot prompt users (only allow/block). Use the policy engine instead:
 
 ```bash
-bash-gates --export-toml > ~/.gemini/policies/bash-gates.toml
+tool-gates --export-toml > ~/.gemini/policies/tool-gates.toml
 ```
 
 This exports 700+ policy rules derived from the gate definitions:

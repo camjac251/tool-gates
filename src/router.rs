@@ -17,12 +17,12 @@ use regex::Regex;
 /// Generate approval instruction context for "ask" responses.
 ///
 /// Shows a generic one-liner on the first "ask" of the session only.
-/// Points to `bash-gates pending list` for pattern discovery.
+/// Points to `tool-gates pending list` for pattern discovery.
 fn generate_approval_context(session_id: &str) -> String {
     if !hint_tracker::is_first_ask(session_id) {
         return String::new();
     }
-    "\n\nTo permanently allow commands, run `bash-gates pending list` for suggestions, then `bash-gates approve '<pattern>' -s <scope>`. Scopes: local (this project), project (team-shared), user (global).".to_string()
+    "\n\nTo permanently allow commands, run `tool-gates pending list` for suggestions, then `tool-gates approve '<pattern>' -s <scope>`. Scopes: local (this project), project (team-shared), user (global).".to_string()
 }
 
 /// Check a bash command string and return the appropriate hook output.
@@ -2342,12 +2342,12 @@ mod tests {
             let project_dir = temp_dir.path();
 
             // Create a symlink in home pointing outside project
-            let home_link = home.join(".bash_gates_test_symlink");
+            let home_link = home.join(".tool_gates_test_symlink");
             if home_link.exists() {
                 std::fs::remove_file(&home_link).ok();
             }
 
-            // Create symlink: ~/.bash_gates_test_symlink -> /tmp
+            // Create symlink: ~/.tool_gates_test_symlink -> /tmp
             if symlink("/tmp", &home_link).is_err() {
                 return; // Skip if we can't create symlink in home
             }
@@ -2365,7 +2365,7 @@ mod tests {
 
             // Tilde path through symlink should be detected
             let result = targets_outside_allowed_dirs(
-                &cmd("sd", &["old", "new", "~/.bash_gates_test_symlink/file.txt"]),
+                &cmd("sd", &["old", "new", "~/.tool_gates_test_symlink/file.txt"]),
                 &allowed,
             );
             assert!(
@@ -3435,7 +3435,7 @@ run = "pnpm dev"
         #[test]
         fn test_mise_settings_allow_bypasses_expansion() {
             // Create temp dir with mise.toml containing a task that would normally ask
-            let tmp = std::env::temp_dir().join("bash-gates-test-mise-settings");
+            let tmp = std::env::temp_dir().join("tool-gates-test-mise-settings");
             let _ = std::fs::remove_dir_all(&tmp);
             std::fs::create_dir_all(tmp.join(".claude")).unwrap();
 
@@ -3477,7 +3477,7 @@ run = "npm publish"
 
         #[test]
         fn test_mise_settings_deny_overrides_expansion() {
-            let tmp = std::env::temp_dir().join("bash-gates-test-mise-deny");
+            let tmp = std::env::temp_dir().join("tool-gates-test-mise-deny");
             let _ = std::fs::remove_dir_all(&tmp);
             std::fs::create_dir_all(tmp.join(".claude")).unwrap();
 
@@ -3513,7 +3513,7 @@ run = "git status"
         fn test_mise_compound_command_not_expanded() {
             // Compound commands with mise should NOT expand the task --
             // each sub-command should be checked individually by gates.
-            let tmp = std::env::temp_dir().join("bash-gates-test-mise-compound");
+            let tmp = std::env::temp_dir().join("tool-gates-test-mise-compound");
             let _ = std::fs::remove_dir_all(&tmp);
             std::fs::create_dir_all(&tmp).unwrap();
 
@@ -3583,7 +3583,7 @@ run = "echo hello"
         #[test]
         fn test_package_json_compound_command_not_expanded() {
             // Same compound command protection for package.json scripts.
-            let tmp = std::env::temp_dir().join("bash-gates-test-pkg-compound");
+            let tmp = std::env::temp_dir().join("tool-gates-test-pkg-compound");
             let _ = std::fs::remove_dir_all(&tmp);
             std::fs::create_dir_all(&tmp).unwrap();
 

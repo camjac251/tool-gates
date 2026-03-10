@@ -1,12 +1,12 @@
 ---
 name: test-gate
-description: Test bash-gates against a command to see the permission decision (allow/ask/deny). Use when debugging gate behavior, verifying a new rule, or checking how a command is handled.
+description: Test tool-gates against a command to see the permission decision (allow/ask/deny). Use when debugging gate behavior, verifying a new rule, or checking how a command is handled.
 argument-hint: [command] [--mode=acceptEdits]
 ---
 
-# Test a command against bash-gates
+# Test a command against tool-gates
 
-Test how bash-gates handles the given command. Pipe JSON to the binary and show the formatted result.
+Test how tool-gates handles the given command. Pipe JSON to the binary and show the formatted result.
 
 ## Instructions
 
@@ -15,21 +15,21 @@ Test how bash-gates handles the given command. Pipe JSON to the binary and show 
    - `--pr` or `--permission-request` -- test as a PermissionRequest hook
    - Everything else is the command to test
 
-2. Build the JSON input and pipe it to `bash-gates`:
+2. Build the JSON input and pipe it to `tool-gates`:
 
 **PreToolUse (default):**
 ```bash
-echo '{"tool_name": "Bash", "tool_input": {"command": "<COMMAND>"}}' | bash-gates
+echo '{"tool_name": "Bash", "tool_input": {"command": "<COMMAND>"}}' | tool-gates
 ```
 
 **With acceptEdits mode:**
 ```bash
-echo '{"tool_name": "Bash", "tool_input": {"command": "<COMMAND>"}, "permission_mode": "acceptEdits", "cwd": "'$(pwd)'"}' | bash-gates
+echo '{"tool_name": "Bash", "tool_input": {"command": "<COMMAND>"}, "permission_mode": "acceptEdits", "cwd": "'$(pwd)'"}' | tool-gates
 ```
 
 **PermissionRequest hook:**
 ```bash
-echo '{"tool_name": "Bash", "tool_input": {"command": "<COMMAND>"}, "hook_event_name": "PermissionRequest"}' | bash-gates
+echo '{"tool_name": "Bash", "tool_input": {"command": "<COMMAND>"}, "hook_event_name": "PermissionRequest"}' | tool-gates
 ```
 
 3. Format the output. Show:

@@ -1,7 +1,7 @@
 //! TOML policy export for Gemini CLI.
 //!
 //! Uses the pre-generated TOML policy from the build process.
-//! Output can be saved to ~/.gemini/policies/bash-gates.toml
+//! Output can be saved to ~/.gemini/policies/tool-gates.toml
 
 /// Generate the complete TOML policy file.
 ///

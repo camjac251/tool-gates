@@ -6,7 +6,7 @@ argument-hint: "[--all]"
 
 # Review Pending Approvals
 
-1. Run `bash-gates pending list $ARGUMENTS` to get pending approvals.
+1. Run `tool-gates pending list $ARGUMENTS` to get pending approvals.
    - Default: shows current project's pending approvals only
    - `--all`: shows all projects
 
@@ -25,8 +25,8 @@ argument-hint: "[--all]"
    - **project** -- shared with team via git
    - **user** -- all projects globally
 
-5. For each selection, run `bash-gates approve '<pattern>' -s <scope>`.
+5. For each selection, run `tool-gates approve '<pattern>' -s <scope>`.
 
-6. Show final rules with `bash-gates rules list`.
+6. Show final rules with `tool-gates rules list`.
 
 Warn about overly broad patterns (e.g., `git:*` allows force-push). Low-count commands (1-2x) may be one-offs worth skipping.
