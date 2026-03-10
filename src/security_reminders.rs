@@ -490,6 +490,9 @@ pub fn check_security_reminders(
 
             match m.tier {
                 Tier::Deny => {
+                    if !config.secrets {
+                        continue;
+                    }
                     return Some(HookOutput::deny_with_context(
                         &format!("Security: {}", m.rule_name),
                         m.message,
@@ -500,6 +503,9 @@ pub fn check_security_reminders(
                     continue;
                 }
                 Tier::Warn => {
+                    if !config.warnings {
+                        continue;
+                    }
                     let dedup_key = format!("warn-{}", m.rule_name);
                     if !crate::hint_tracker::is_security_warning_new(session_id, &dedup_key) {
                         continue;
@@ -527,7 +533,7 @@ pub fn check_security_reminders_post(
     config: &SecurityRemindersConfig,
     session_id: &str,
 ) -> Option<PostToolUseOutput> {
-    if tool_name == "Read" {
+    if tool_name == "Read" || !config.anti_patterns {
         return None;
     }
 
@@ -1043,6 +1049,7 @@ print(result.stdout)
         let map = make_map(r#"{"file_path": "/tmp/app.js", "content": "eval(input)"}"#);
         let config = SecurityRemindersConfig {
             disable_rules: vec!["eval_injection".to_string()],
+            ..Default::default()
         };
         let session = unique_session("post-disabled");
         let result = check_security_reminders_post("Write", &map, &config, &session);
@@ -1072,6 +1079,7 @@ print(result.stdout)
         );
         let config = SecurityRemindersConfig {
             disable_rules: vec!["hardcoded_aws_key".to_string()],
+            ..Default::default()
         };
         let session = unique_session("disabled");
         let result = check_security_reminders("Write", &map, &config, &session);

@@ -618,6 +618,107 @@ echo '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}' | tool-gates
 
 ---
 
+## Configuration
+
+All configuration is in `~/.config/tool-gates/config.toml`. The file is optional -- if missing, all features are enabled with sensible defaults.
+
+### Feature Toggles
+
+```toml
+[features]
+bash_gates = true          # AST-based Bash command gating (default: true)
+file_guards = true         # Symlink guard for AI config files (default: true)
+hints = true               # Modern CLI hints -- cat->bat, grep->rg, etc. (default: true)
+security_reminders = true  # Scan Write/Edit/MultiEdit for security anti-patterns (default: true)
+```
+
+### Security Reminders
+
+```toml
+[security_reminders]
+secrets = true         # Tier 1: hardcoded secrets -- always deny (default: true)
+anti_patterns = true   # Tier 2: eval, exec, innerHTML, etc. -- PostToolUse nudge (default: true)
+warnings = true        # Tier 3: SSL verify=False, chmod 777, etc. -- informational (default: true)
+disable_rules = ["eval_injection", "pickle_deserialization"]  # skip individual rules
+```
+
+<details>
+<summary>All 26 rule names (click to expand)</summary>
+
+| Tier | Rule Name | Detects |
+|:----:|-----------|---------|
+| 1 | `hardcoded_aws_key` | AWS access keys (`AKIA...`) |
+| 1 | `hardcoded_private_key` | RSA/EC/DSA/SSH private keys |
+| 1 | `hardcoded_github_token` | GitHub PATs (`ghp_`, `ghs_`, etc.) |
+| 1 | `hardcoded_generic_secret` | Stripe (`sk-`), Slack (`xoxb-`), Google (`AIza`) keys |
+| 1 | `github_actions_injection` | Untrusted input in GHA `run:` blocks |
+| 2 | `child_process_exec` | `child_process.exec` / `execSync` |
+| 2 | `new_function_injection` | `new Function()` code injection |
+| 2 | `eval_injection` | `eval()` arbitrary code execution |
+| 2 | `os_system_injection` | `os.system()` shell injection |
+| 2 | `pickle_deserialization` | `pickle.load` / `pickle.loads` |
+| 2 | `dangerous_inner_html` | React `dangerouslySetInnerHTML` |
+| 2 | `document_write_xss` | `document.write()` XSS |
+| 2 | `inner_html_assignment` | `.innerHTML =` XSS |
+| 2 | `unsafe_yaml_load` | `yaml.load()` without SafeLoader |
+| 2 | `sql_string_interpolation` | SQL via f-strings / `.execute(f"...")` |
+| 2 | `subprocess_shell_true` | `subprocess.run(..., shell=True)` |
+| 2 | `flask_ssti` | `render_template_string()` SSTI |
+| 2 | `marshal_deserialization` | `marshal.load` / `shelve.open` |
+| 2 | `python_dynamic_import` | `__import__()` injection |
+| 2 | `php_unserialize` | PHP `unserialize()` object injection |
+| 3 | `ssl_verification_disabled` | `verify=False` / `rejectUnauthorized: false` |
+| 3 | `chmod_777` | `chmod 777` / `0o777` overly permissive |
+| 3 | `weak_crypto_hash` | `hashlib.md5()` / `hashlib.sha1()` |
+| 3 | `cors_wildcard` | `Access-Control-Allow-Origin: *` |
+| 3 | `vue_v_html` | Vue `v-html=` XSS |
+| 3 | `template_autoescape_disabled` | Jinja2/Django `autoescape=False` |
+
+</details>
+
+### Tool Blocking
+
+```toml
+# Override built-in block rules (Glob, Grep, firecrawl+GitHub).
+# Omit entirely to use defaults. Set to [] to disable all blocking.
+[[block_tools]]
+tool = "Glob"
+message = "Use 'fd' instead of Glob."
+requires_tool = "fd"   # only block if fd is installed
+
+[[block_tools]]
+tool = "*firecrawl*"
+message = "Use 'gh api' for GitHub URLs."
+block_domains = ["github.com", "raw.githubusercontent.com"]
+requires_tool = "gh"
+```
+
+### File Guards
+
+```toml
+[file_guards]
+extra_names = [".teamrules"]       # additional filenames to protect from symlink attacks
+extra_dirs = [".myide"]            # additional directory names to protect
+extra_prefixes = [".myrules-"]     # additional filename prefixes
+extra_extensions = [".toml"]       # additional extensions in guarded dirs
+```
+
+### Hints
+
+```toml
+[hints]
+disable = ["man", "du"]  # suppress hints for specific legacy commands
+```
+
+### Cache
+
+```toml
+[cache]
+ttl_days = 14  # tool detection cache TTL in days (default: 7)
+```
+
+---
+
 ## Architecture
 
 ```

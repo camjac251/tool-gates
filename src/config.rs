@@ -138,11 +138,31 @@ impl Default for CacheConfig {
 }
 
 /// Security reminders configuration.
-#[derive(Debug, Deserialize, Default, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(default)]
 pub struct SecurityRemindersConfig {
+    /// Enable secret detection -- AWS keys, private keys, tokens (default: true).
+    /// These are Tier 1 (always denied, never deduped).
+    pub secrets: bool,
+    /// Enable anti-pattern detection -- eval, exec, innerHTML, pickle, etc. (default: true).
+    /// These are Tier 2 (PostToolUse nudge, deduped per file+rule per session).
+    pub anti_patterns: bool,
+    /// Enable informational warnings -- SSL verify=False, chmod 777, etc. (default: true).
+    /// These are Tier 3 (allow with additionalContext, deduped per session).
+    pub warnings: bool,
     /// Rule names to disable (e.g., ["eval_injection", "pickle_deserialization"]).
     pub disable_rules: Vec<String>,
+}
+
+impl Default for SecurityRemindersConfig {
+    fn default() -> Self {
+        Self {
+            secrets: true,
+            anti_patterns: true,
+            warnings: true,
+            disable_rules: Vec::new(),
+        }
+    }
 }
 
 /// File guard configuration for extending or replacing guarded paths.
@@ -547,9 +567,26 @@ disable_rules = ["eval_injection", "pickle_deserialization"]
     }
 
     #[test]
-    fn test_security_reminders_config_defaults_empty() {
+    fn test_security_reminders_config_defaults() {
         let config = Config::default();
+        assert!(config.security_reminders.secrets);
+        assert!(config.security_reminders.anti_patterns);
+        assert!(config.security_reminders.warnings);
         assert!(config.security_reminders.disable_rules.is_empty());
+    }
+
+    #[test]
+    fn test_security_reminders_per_tier_toggles() {
+        let toml = r#"
+[security_reminders]
+secrets = true
+anti_patterns = false
+warnings = false
+"#;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert!(config.security_reminders.secrets);
+        assert!(!config.security_reminders.anti_patterns);
+        assert!(!config.security_reminders.warnings);
     }
 
     #[test]
