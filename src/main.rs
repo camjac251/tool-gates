@@ -375,11 +375,13 @@ fn get_binary_path() -> String {
         .unwrap_or_else(|| "tool-gates".to_string())
 }
 
-/// PreToolUse matcher: all tool types that tool-gates handles.
-/// Bash (gate engine), Read/Write/Edit/MultiEdit (file guards),
-/// Glob/Grep (tool blocks). MCP tool blocks require additional
-/// matcher entries configured by the user.
+/// PreToolUse matcher for built-in tools (exact match mode).
+/// Bash (gate engine), Read/Write/Edit/MultiEdit (file guards), Glob/Grep (block rules).
 const PRE_TOOL_USE_MATCHER: &str = "Bash|Read|Write|Edit|MultiEdit|Glob|Grep";
+
+/// PreToolUse matcher for MCP tools (regex mode).
+/// Matches all MCP tool calls; block rules in config decide what to deny.
+const MCP_TOOL_USE_MATCHER: &str = "mcp__.*";
 
 fn generate_hook_entry(binary_path: &str, matcher: &str) -> serde_json::Value {
     serde_json::json!({
@@ -390,7 +392,10 @@ fn generate_hook_entry(binary_path: &str, matcher: &str) -> serde_json::Value {
 
 fn generate_hooks_json(binary_path: &str) -> serde_json::Value {
     serde_json::json!({
-        "PreToolUse": [generate_hook_entry(binary_path, PRE_TOOL_USE_MATCHER)],
+        "PreToolUse": [
+            generate_hook_entry(binary_path, PRE_TOOL_USE_MATCHER),
+            generate_hook_entry(binary_path, MCP_TOOL_USE_MATCHER),
+        ],
         "PermissionRequest": [generate_hook_entry(binary_path, "Bash")],
         "PostToolUse": [generate_hook_entry(binary_path, "Bash")]
     })
@@ -484,22 +489,22 @@ fn install_hooks(scope: &str, dry_run: bool) {
 
     let hooks = settings.get_mut("hooks").unwrap();
     let pre_tool_use_entry = generate_hook_entry(&binary_path, PRE_TOOL_USE_MATCHER);
+    let mcp_tool_use_entry = generate_hook_entry(&binary_path, MCP_TOOL_USE_MATCHER);
     let bash_entry = generate_hook_entry(&binary_path, "Bash");
     let mut changes = Vec::new();
 
-    // Check and add PreToolUse (broad matcher: Bash + file tools + blocked tools)
+    // Check and add PreToolUse (built-in tools + MCP tools as separate entries)
     if hooks.get("PreToolUse").is_none() {
         hooks["PreToolUse"] = serde_json::json!([]);
     }
     if has_tool_gates_hook(&hooks["PreToolUse"]) {
         eprintln!("✓ PreToolUse hook already configured");
     } else {
-        hooks["PreToolUse"]
-            .as_array_mut()
-            .unwrap()
-            .push(pre_tool_use_entry);
+        let arr = hooks["PreToolUse"].as_array_mut().unwrap();
+        arr.push(pre_tool_use_entry);
+        arr.push(mcp_tool_use_entry);
         changes.push("PreToolUse");
-        eprintln!("+ Adding PreToolUse hook");
+        eprintln!("+ Adding PreToolUse hooks (built-in tools + MCP)");
     }
 
     // Check and add PermissionRequest (Bash only)
