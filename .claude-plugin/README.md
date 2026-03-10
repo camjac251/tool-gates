@@ -6,7 +6,7 @@ Companion plugin for [tool-gates](https://github.com/camjac251/tool-gates) -- re
 
 ## Overview
 
-tool-gates handles ALL Claude Code tool types, not just Bash. It AST-parses shell commands, guards file reads and writes (e.g., denying symlink reads of sensitive files), and can block entire tool invocations (e.g., Glob). The hooks use broad matchers (`*` or tool-specific patterns) so every tool invocation passes through the gate engine.
+tool-gates handles ALL Claude Code tool types, not just Bash. It AST-parses shell commands, guards file reads and writes (e.g., denying symlink reads of sensitive files), scans Write/Edit content for 26 security anti-patterns (hardcoded secrets, XSS, injection, unsafe deserialization), and can block entire tool invocations (e.g., Glob). The hooks use broad matchers so every tool invocation passes through the gate engine.
 
 When you use tool-gates, operations that aren't recognized as safe require manual approval. Over time, these approvals accumulate. This plugin provides the `/tool-gates:review` skill to batch-review those pending approvals and save patterns to your `settings.json` so you don't get prompted again.
 
@@ -97,4 +97,4 @@ claude --plugin-dir /path/to/tool-gates
 
 ## Note on hooks
 
-This plugin does not ship hooks. The `tool-gates` binary handles hook installation via `tool-gates hooks add`, which registers PreToolUse, PermissionRequest, and PostToolUse hooks in your Claude Code settings. See the [main README](https://github.com/camjac251/tool-gates#configure-claude-code) for details.
+This plugin does not ship hooks. The `tool-gates` binary handles hook installation via `tool-gates hooks add`, which registers PreToolUse (Bash gates + file guards + security scanning + MCP tool blocking), PermissionRequest (subagent approval), and PostToolUse (Bash approval tracking + security anti-pattern reminders) hooks in your Claude Code settings. See the [main README](https://github.com/camjac251/tool-gates#configure-claude-code) for details.

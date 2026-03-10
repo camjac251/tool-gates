@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/camjac251/tool-gates/actions/workflows/ci.yml/badge.svg)](https://github.com/camjac251/tool-gates/actions/workflows/ci.yml)
 [![Release](https://github.com/camjac251/tool-gates/actions/workflows/release.yml/badge.svg)](https://github.com/camjac251/tool-gates/actions/workflows/release.yml)
-[![Rust](https://img.shields.io/badge/rust-1.85+-orange.svg)](https://www.rust-lang.org/)
+[![Rust](https://img.shields.io/badge/rust-1.86+-orange.svg)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 A Claude Code [hook](https://code.claude.com/docs/en/hooks) that gates Bash commands, file operations, and tool invocations using AST parsing -- determines whether to allow, ask, or block based on potential impact.
@@ -34,6 +34,7 @@ A Claude Code [hook](https://code.claude.com/docs/en/hooks) that gates Bash comm
 | **Claude Code Plugin**   | Install as a plugin with the `/tool-gates:review` skill for interactive approval management            |
 | **300+ Commands**        | 13 specialized gates with comprehensive coverage                                                       |
 | **File Guards**          | Blocks symlinked AI config files (CLAUDE.md, .cursorrules, etc.) to prevent confused reads/edits       |
+| **Security Reminders**   | Scans Write/Edit/MultiEdit content for 26 anti-patterns (secrets, XSS, injection, etc.) across 3 tiers |
 | **Tool Blocking**        | Configurable rules to block tools (Glob, Grep, firecrawl on GitHub) with domain filtering              |
 | **Configuration**        | `~/.config/tool-gates/config.toml` for feature toggles, custom block rules, and file guard extensions  |
 | **Fast**                 | Static native binary, no interpreter overhead                                                          |
@@ -44,7 +45,9 @@ A Claude Code [hook](https://code.claude.com/docs/en/hooks) that gates Bash comm
 
 ```mermaid
 flowchart TD
-    CC[Claude Code] --> CMD[Bash Command]
+    CC[Claude Code] --> TOOL{Tool Type}
+    TOOL -->|Bash| CMD[Bash Command]
+    TOOL -->|Write/Edit| FILE[File Operation]
 
     subgraph PTU [PreToolUse Hook]
         direction TB
@@ -56,7 +59,18 @@ flowchart TD
         PTU_CTX -->|subagent| PTU_IGNORED[ignored by Claude]
     end
 
+    subgraph PTU_FILE [PreToolUse - File Tools]
+        direction TB
+        FG[Symlink guard] --> FG_DEC{Symlink?}
+        FG_DEC -->|guarded symlink| FG_DENY[deny - use real path]
+        FG_DEC -->|ok| SEC{Content scan}
+        SEC -->|hardcoded secret| SEC_DENY[deny - Tier 1]
+        SEC -->|safe| SEC_PASS[pass through]
+    end
+
     CMD --> PTU
+    FILE --> PTU_FILE
+
     PTU_IGNORED --> INTERNAL[Claude internal checks]
     INTERNAL -->|path outside cwd| PR_HOOK
 
@@ -70,24 +84,29 @@ flowchart TD
 
     PTU_ASK --> EXEC[Command Executes]
     PR_PROMPT --> USER_APPROVE[User Approves] --> EXEC
+    SEC_PASS --> FILE_EXEC[Write Succeeds]
 
     subgraph POST [PostToolUse Hook]
         direction TB
         POST_CHECK[check tracking] --> POST_DEC{Tracked + Success?}
         POST_DEC -->|yes| PENDING[add to pending queue]
         POST_DEC -->|no| POST_SKIP[skip]
+        POST_SEC[Security scan] --> POST_SEC_DEC{Anti-pattern?}
+        POST_SEC_DEC -->|yes| NUDGE[inject reminder]
+        POST_SEC_DEC -->|no| POST_SKIP
     end
 
     EXEC --> POST
+    FILE_EXEC --> POST_SEC
     PENDING --> REVIEW[tool-gates review]
     REVIEW --> SETTINGS[settings.json]
 ```
 
 **Why three hooks?**
 
-- **PreToolUse**: Gates commands for main session, tracks "ask" decisions
+- **PreToolUse**: Gates Bash commands, blocks secrets in Write/Edit, provides CLI hints
 - **PermissionRequest**: Gates commands for subagents (where PreToolUse's `allow` is ignored)
-- **PostToolUse**: Detects successful execution, queues for permanent approval
+- **PostToolUse**: Tracks successful Bash execution for approval learning; scans Write/Edit content for security anti-patterns and nudges Claude via `additionalContext`
 
 > `PermissionRequest` metadata like `blocked_path` and `decision_reason` is optional in Claude Code payloads. tool-gates treats those fields as best-effort context, not required inputs.
 
@@ -189,6 +208,38 @@ tool-gates --refresh-tools
 
 # Check which tools are detected
 tool-gates --tools-status
+```
+
+### Security Reminders
+
+When Claude writes code via Write/Edit/MultiEdit, tool-gates scans the content for 26 security anti-patterns organized into three tiers:
+
+| Tier | Hook | Decision | Behavior |
+|------|------|----------|----------|
+| **Tier 1** | PreToolUse | `deny` | Hardcoded secrets always blocked before write |
+| **Tier 2** | PostToolUse | `additionalContext` | Anti-patterns flagged after write -- Claude gets a nudge to fix |
+| **Tier 3** | PreToolUse | `allow` + context | Informational warnings injected without blocking |
+
+**Tier 1 -- Secrets (always denied):**
+AWS access keys (`AKIA...`), private keys (`-----BEGIN * PRIVATE KEY`), GitHub tokens (`ghp_/ghs_/ghu_/gho_/ghr_`), Stripe/Slack/Google API keys, GitHub Actions workflow injection.
+
+**Tier 2 -- Anti-patterns (post-write nudge, once per file+rule per session):**
+`eval()`, `child_process.exec`, `new Function()`, `os.system()`, `pickle.load`, `dangerouslySetInnerHTML`, `document.write()`, `.innerHTML =`, `yaml.load()` without SafeLoader, SQL f-string interpolation, `subprocess` with `shell=True`, `render_template_string()` (Flask SSTI), `marshal.load`/`shelve.open`, `__import__()`, PHP `unserialize()`.
+
+**Tier 3 -- Informational (allow with warning, once per session):**
+SSL `verify=False`, `chmod 777`, MD5/SHA1 for security, CORS wildcard `*`, Vue `v-html=`, template `autoescape=False`.
+
+**Why Tier 2 uses PostToolUse:** The write lands without blocking. Claude sees a `<system-reminder>` with the security warning and can self-correct in its next action. No wasted edits from re-prompting. Deduped per (file, rule) per session so you only see each warning once.
+
+Skips documentation files (.md, .txt, .rst, etc.) for content checks. Tier 1 secret scans always fire.
+
+```toml
+# ~/.config/tool-gates/config.toml
+[features]
+security_reminders = true  # default
+
+[security_reminders]
+disable_rules = ["eval_injection"]  # skip specific rules
 ```
 
 ### Approval Learning
@@ -309,9 +360,9 @@ tool-gates hooks json
 
 **All three hooks are installed:**
 
-- `PreToolUse` - Gates commands for main session, tracks "ask" decisions
+- `PreToolUse` - Gates Bash commands, blocks secrets in Write/Edit, file guards, CLI hints, MCP tool blocking
 - `PermissionRequest` - Gates commands for subagents (where PreToolUse's allow is ignored)
-- `PostToolUse` - Detects successful execution, queues for permanent approval
+- `PostToolUse` - Tracks Bash execution for approval learning; scans Write/Edit for security anti-patterns
 
 <details>
 <summary>Manual installation</summary>
@@ -324,37 +375,23 @@ Add to `~/.claude/settings.json`:
     "PreToolUse": [
       {
         "matcher": "Bash|Read|Write|Edit|MultiEdit|Glob|Grep",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.local/bin/tool-gates",
-            "timeout": 10
-          }
-        ]
+        "hooks": [{ "type": "command", "command": "~/.local/bin/tool-gates", "timeout": 10 }]
+      },
+      {
+        "matcher": "mcp__.*",
+        "hooks": [{ "type": "command", "command": "~/.local/bin/tool-gates", "timeout": 10 }]
       }
     ],
     "PermissionRequest": [
       {
         "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.local/bin/tool-gates",
-            "timeout": 10
-          }
-        ]
+        "hooks": [{ "type": "command", "command": "~/.local/bin/tool-gates", "timeout": 10 }]
       }
     ],
     "PostToolUse": [
       {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.local/bin/tool-gates",
-            "timeout": 10
-          }
-        ]
+        "matcher": "Bash|Write|Edit|MultiEdit",
+        "hooks": [{ "type": "command", "command": "~/.local/bin/tool-gates", "timeout": 10 }]
       }
     ]
   }
@@ -589,8 +626,10 @@ src/
 ├── models.rs            # Types (HookInput, HookOutput, Decision)
 ├── parser.rs            # tree-sitter-bash AST parsing
 ├── router.rs            # Security checks + gate routing
+├── security_reminders.rs # Content scanning for security anti-patterns (Write/Edit/MultiEdit)
 ├── settings.rs          # settings.json parsing and pattern matching
 ├── hints.rs             # Modern CLI hints (cat→bat, grep→rg, etc.)
+├── hint_tracker.rs      # Session-scoped dedup for hints + security warnings (disk-backed)
 ├── tool_cache.rs        # Tool availability cache for hints
 ├── mise.rs              # Mise task file parsing and command extraction
 ├── package_json.rs      # package.json script parsing and command extraction
@@ -646,6 +685,17 @@ This exports 700+ policy rules derived from the gate definitions:
 | 1        | `ask_user` | Default fallback for unknown commands |
 
 ---
+
+## Credits
+
+Security reminder patterns were built on and informed by:
+
+- [Anthropic's security-guidance plugin](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/security-guidance) -- the official Claude Code security hook (9 base patterns we expanded to 26)
+- [Arcanum-Sec/sec-context](https://github.com/Arcanum-Sec/sec-context) -- curated security anti-pattern database synthesized from 150+ sources
+- [SecureCodeWarrior/ai-security-rules](https://github.com/SecureCodeWarrior/ai-security-rules) -- security rule files for AI coding tools
+- [OWASP Top 10](https://owasp.org/www-project-top-ten/) -- standard web application security risks
+- [dwarvesf/claude-guardrails](https://github.com/dwarvesf/claude-guardrails) -- multi-layer defense hooks for Claude Code
+- [GitHub Actions workflow injection research](https://github.blog/security/vulnerability-research/how-to-catch-github-actions-workflow-injections-before-attackers-do/) -- GHA injection patterns and remediation
 
 ## Links
 
