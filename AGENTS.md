@@ -232,11 +232,11 @@ When allowed commands use legacy tools (cat, grep, find, etc.), tool-gates adds 
 When Write/Edit/MultiEdit operations contain security anti-patterns (hardcoded secrets, command injection, XSS, unsafe deserialization, etc.), tool-gates denies or warns with remediation advice.
 
 **Tiers:**
-- **Tier 1 (deny):** Hardcoded secrets (AWS keys, private keys, GitHub tokens). Always blocked, never deduped.
-- **Tier 2 (ask-once):** Code anti-patterns (eval, exec, innerHTML, pickle, SQL injection). User prompted first time per (file, rule) per session; can approve to proceed.
-- **Tier 3 (warn):** Informational (SSL verify=False, chmod 777, weak crypto). Allowed with additionalContext hint, deduped per session.
+- **Tier 1 (deny):** Hardcoded secrets (AWS keys, private keys, GitHub tokens, Stripe/Slack/Google API keys). Blocked in source code (PreToolUse deny). Doc files (.md, .txt, .rst, etc.) get a PostToolUse nudge instead. Secret files (.env, .envrc) are skipped entirely. Template files (.env.example, .env.sample, .env.template, .env.dist) are still blocked since they get committed.
+- **Tier 2 (post-write warn):** Code anti-patterns (eval, exec, innerHTML, pickle, SQL injection, SSTI, marshal, dynamic import). Write lands, then PostToolUse injects a system-reminder nudge. Deduped per (file, rule) per session.
+- **Tier 3 (warn):** Informational (SSL verify=False, chmod 777, weak crypto, Math.random(), JS createHash md5/sha1, CORS wildcard, v-html, autoescape disabled). Allowed with additionalContext hint, deduped per session.
 
-Skips documentation files (.md, .txt, .rst, etc.) for content-based checks. Tier 1 secret checks always fire.
+Skips documentation files (.md, .txt, .rst, etc.) for Tier 2/3 content-based checks. Tier 1 fires on doc files via PostToolUse warn (not hard block).
 
 Configuration via `~/.config/tool-gates/config.toml`:
 
