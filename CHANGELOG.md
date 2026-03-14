@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.1](https://github.com/camjac251/tool-gates/compare/v1.5.0...v1.5.1) (2026-03-14)
+
+
+### Bug Fixes
+
+* **security:** remove patch from acceptEdits auto-allow, add 20 security tests ([1b5d30b](https://github.com/camjac251/tool-gates/commit/1b5d30bd25769027682ff3ee7cf9c3e322a62ce9))
+
 ## [1.5.0](https://github.com/camjac251/tool-gates/compare/v1.4.0...v1.5.0) (2026-03-13)
 
 
