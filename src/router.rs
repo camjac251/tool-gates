@@ -1220,7 +1220,7 @@ fn targets_outside_allowed_dirs(cmd: &CommandInfo, allowed_dirs: &[String]) -> b
                     home.join(&arg[2..]).to_string_lossy().to_string()
                 }
             } else {
-                continue; // Can't expand, skip
+                return true; // Can't expand -- fail closed
             };
             // Resolve symlinks in the expanded path
             let resolved = resolve_path(&expanded);
@@ -1643,6 +1643,182 @@ mod tests {
                 "acceptEdits",
             );
             assert_eq!(get_decision(&result), "allow");
+        }
+
+        // === Filesystem mutations must still ask in acceptEdits mode ===
+        // These commands modify filesystem structure (delete, move, copy, permissions, links)
+        // but are NOT file-editing operations. acceptEdits should only auto-allow
+        // programs that edit file *contents* (formatters, search-and-replace, etc.).
+
+        #[test]
+        fn test_rmdir_still_asks_in_accept_edits() {
+            let result = check_command_with_settings("rmdir old_dir", "/tmp", "acceptEdits");
+            assert_eq!(get_decision(&result), "ask");
+        }
+
+        #[test]
+        fn test_mv_still_asks_in_accept_edits() {
+            let result = check_command_with_settings("mv old.txt new.txt", "/tmp", "acceptEdits");
+            assert_eq!(get_decision(&result), "ask");
+        }
+
+        #[test]
+        fn test_cp_still_asks_in_accept_edits() {
+            let result = check_command_with_settings("cp src.txt dst.txt", "/tmp", "acceptEdits");
+            assert_eq!(get_decision(&result), "ask");
+        }
+
+        #[test]
+        fn test_chmod_still_asks_in_accept_edits() {
+            let result = check_command_with_settings("chmod 755 script.sh", "/tmp", "acceptEdits");
+            assert_eq!(get_decision(&result), "ask");
+        }
+
+        #[test]
+        fn test_ln_symlink_still_asks_in_accept_edits() {
+            let result = check_command_with_settings("ln -s target link", "/tmp", "acceptEdits");
+            assert_eq!(get_decision(&result), "ask");
+        }
+
+        #[test]
+        fn test_touch_still_asks_in_accept_edits() {
+            let result = check_command_with_settings("touch newfile.txt", "/tmp", "acceptEdits");
+            assert_eq!(get_decision(&result), "ask");
+        }
+
+        #[test]
+        fn test_rm_recursive_still_asks_in_accept_edits() {
+            let result = check_command_with_settings("rm -r ./src/old", "/tmp", "acceptEdits");
+            assert_eq!(get_decision(&result), "ask");
+        }
+
+        #[test]
+        fn test_rm_glob_still_asks_in_accept_edits() {
+            let result = check_command_with_settings("rm *.txt", "/tmp", "acceptEdits");
+            assert_eq!(get_decision(&result), "ask");
+        }
+
+        // === Compound commands with mixed file-edit and non-edit ===
+        // When a compound command mixes file-editing with non-editing operations,
+        // the entire command must ask. Only fully file-editing compounds auto-allow.
+
+        #[test]
+        fn test_compound_file_edit_then_rm_asks() {
+            // sd is file-editing, rm is not -- mixed compound must ask
+            let result = check_command_with_settings(
+                "sd 'old' 'new' file.txt && rm file.txt",
+                "/tmp",
+                "acceptEdits",
+            );
+            assert_eq!(get_decision(&result), "ask");
+        }
+
+        #[test]
+        fn test_compound_file_edit_then_git_push_asks() {
+            // prettier --write is file-editing, git push is not
+            let result = check_command_with_settings(
+                "prettier --write . && git push",
+                "/tmp",
+                "acceptEdits",
+            );
+            assert_eq!(get_decision(&result), "ask");
+        }
+
+        #[test]
+        fn test_compound_all_file_edits_allows() {
+            // Both parts are file-editing within cwd -- should auto-allow
+            let result = check_command_with_settings(
+                "sd 'old' 'new' file.txt && prettier --write file.txt",
+                "/tmp",
+                "acceptEdits",
+            );
+            assert_eq!(get_decision(&result), "allow");
+            assert!(get_reason(&result).contains("acceptEdits"));
+        }
+
+        // === patch command (IS a file-editor) ===
+        // patch applies diffs to files, making it a legitimate file-editing tool.
+
+        #[test]
+        // patch targets come from patch file content, not CLI args, so path
+        // boundary checks cannot verify write destinations. Must always ask.
+        fn test_patch_asks_in_accept_edits() {
+            let result = check_command_with_settings(
+                "patch < diff.patch",
+                "/home/user/project",
+                "acceptEdits",
+            );
+            assert_eq!(get_decision(&result), "ask");
+        }
+
+        #[test]
+        fn test_patch_outside_cwd_asks() {
+            let result = check_command_with_settings(
+                "patch /etc/config < diff.patch",
+                "/home/user/project",
+                "acceptEdits",
+            );
+            assert_eq!(get_decision(&result), "ask");
+        }
+
+        // === Mixed file args: one inside cwd, one outside ===
+        // If ANY argument targets outside the allowed directories, the command must ask.
+
+        #[test]
+        fn test_sd_mixed_inside_and_outside_asks() {
+            let result = check_command_with_settings(
+                "sd old new ./file.txt /etc/passwd",
+                "/home/user/project",
+                "acceptEdits",
+            );
+            assert_eq!(get_decision(&result), "ask");
+        }
+
+        #[test]
+        fn test_prettier_write_mixed_paths_asks() {
+            let result = check_command_with_settings(
+                "prettier --write ./src /etc/config",
+                "/home/user/project",
+                "acceptEdits",
+            );
+            assert_eq!(get_decision(&result), "ask");
+        }
+
+        // === Path traversal edge cases ===
+        // Verify that path normalization cannot be tricked by unusual path formats.
+
+        #[test]
+        fn test_deep_parent_traversal_asks() {
+            // ./../../ escape path
+            let result = check_command_with_settings(
+                "sd 'old' 'new' ./../../escape.txt",
+                "/home/user/project",
+                "acceptEdits",
+            );
+            assert_eq!(get_decision(&result), "ask");
+        }
+
+        #[test]
+        fn test_similar_prefix_directory_asks() {
+            // /home/user/projectX is NOT inside /home/user/project
+            // This tests that path comparison uses directory boundary, not string prefix
+            let result = check_command_with_settings(
+                "sd 'old' 'new' /home/user/projectX/file.txt",
+                "/home/user/project",
+                "acceptEdits",
+            );
+            assert_eq!(get_decision(&result), "ask");
+        }
+
+        #[test]
+        fn test_double_slash_path_asks() {
+            // //etc/passwd with double-slash should still be caught as outside cwd
+            let result = check_command_with_settings(
+                "sd 'old' 'new' //etc/passwd",
+                "/home/user/project",
+                "acceptEdits",
+            );
+            assert_eq!(get_decision(&result), "ask");
         }
     }
 

@@ -557,8 +557,7 @@ unknown_action = "ask"
 if_flags_any = ["--dry-run"]
 
 [[programs.ask]]
-reason = "Applying patch"
-accept_edits_auto_allow = true
+reason = "Applying patch (targets come from patch file content, not CLI args)"
 
 # =============================================================================
 # DOS2UNIX / UNIX2DOS (line ending converters - always modify files)
