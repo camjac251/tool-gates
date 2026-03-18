@@ -206,6 +206,7 @@ fn check_settings_with_subcommands(settings: &Settings, command_string: &str) ->
 
     let mut has_ask = false;
     let mut has_allow = false;
+    let mut has_no_match = false;
 
     for cmd in &commands {
         match settings.check_command_excluding_deny(&cmd.raw) {
@@ -214,14 +215,17 @@ fn check_settings_with_subcommands(settings: &Settings, command_string: &str) ->
             }
             SettingsDecision::Ask => has_ask = true,
             SettingsDecision::Allow => has_allow = true,
-            SettingsDecision::NoMatch => {}
+            SettingsDecision::NoMatch => has_no_match = true,
         }
     }
 
-    // Strictest wins: Ask > Allow > NoMatch
+    // Strictest wins: Ask > Allow > NoMatch.
+    // Only return Allow when ALL sub-commands matched a settings rule.
+    // A partial match (some Allow, some NoMatch) must fall through to gate results
+    // so unrecognized sub-commands aren't silently auto-approved.
     if has_ask {
         SettingsDecision::Ask
-    } else if has_allow {
+    } else if has_allow && !has_no_match {
         SettingsDecision::Allow
     } else {
         SettingsDecision::NoMatch
@@ -3357,20 +3361,42 @@ mod tests {
         // --- Allow checks ---
 
         #[test]
-        fn test_allow_matches_subcommand_in_compound() {
+        fn test_partial_match_returns_nomatch() {
+            // cd doesn't match any settings rule, so partial match falls through
+            // to gate result (gate allows cd, asks for npm install -> ask)
             let settings = make_settings(&["Bash(npm install:*)"], &[], &[]);
+            let result = check_settings_with_subcommands(&settings, "cd /tmp && npm install");
+            assert_eq!(result, SettingsDecision::NoMatch);
+        }
+
+        #[test]
+        fn test_all_subcommands_match_returns_allow() {
+            // When ALL sub-commands match settings rules, compound is allowed
+            let settings = make_settings(&["Bash(cd:*)", "Bash(npm install:*)"], &[], &[]);
             let result = check_settings_with_subcommands(&settings, "cd /tmp && npm install");
             assert_eq!(result, SettingsDecision::Allow);
         }
 
         #[test]
-        fn test_allow_matches_subcommand_after_cd() {
+        fn test_partial_match_after_cd_returns_nomatch() {
             let settings = make_settings(&["Bash(cargo build:*)"], &[], &[]);
             let result = check_settings_with_subcommands(
                 &settings,
                 "cd /home/user/project && cargo build --release",
             );
-            assert_eq!(result, SettingsDecision::Allow);
+            assert_eq!(result, SettingsDecision::NoMatch);
+        }
+
+        #[test]
+        fn test_incidental_match_does_not_allow_dangerous_commands() {
+            // Regression: awk matching a settings rule must NOT auto-approve
+            // curl POST commands in the same compound expression
+            let settings = make_settings(&["Bash(awk:*)"], &[], &[]);
+            let result = check_settings_with_subcommands(
+                &settings,
+                "curl -sk -X POST https://example.com && awk '{print $1}' file.txt",
+            );
+            assert_eq!(result, SettingsDecision::NoMatch);
         }
 
         #[test]
