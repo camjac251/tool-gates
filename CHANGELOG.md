@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.2](https://github.com/camjac251/tool-gates/compare/v1.5.1...v1.5.2) (2026-03-18)
+
+
+### Bug Fixes
+
+* **security:** require all sub-commands to match settings for compound allow ([529564a](https://github.com/camjac251/tool-gates/commit/529564a6e0704f92a6afae47c2bd5a435f15f293))
+
 ## [1.5.1](https://github.com/camjac251/tool-gates/compare/v1.5.0...v1.5.1) (2026-03-14)
 
 
