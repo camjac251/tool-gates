@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.3](https://github.com/camjac251/tool-gates/compare/v1.5.2...v1.5.3) (2026-03-19)
+
+
+### Bug Fixes
+
+* **plugin:** remove name field from skills so prefix shows in autocomplete ([d0fd1f7](https://github.com/camjac251/tool-gates/commit/d0fd1f79bbbb661fb30b3f425b6cb4521ff3408f))
+
 ## [1.5.2](https://github.com/camjac251/tool-gates/compare/v1.5.1...v1.5.2) (2026-03-18)
 
 
