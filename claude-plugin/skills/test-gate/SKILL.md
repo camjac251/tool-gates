@@ -1,5 +1,4 @@
 ---
-name: test-gate
 description: Test tool-gates against any tool invocation (Bash, Read, Glob, etc.) to see the permission decision (allow/ask/deny). Use when debugging gate behavior, verifying a new rule, or checking how a command or tool is handled.
 argument-hint: [tool_name] [command_or_input] [--mode=acceptEdits]
 ---

@@ -1,5 +1,4 @@
 ---
-name: review
 description: Review commands you've been manually approving and optionally make them permanent. Shows counts, suggests patterns, lets you multi-select which to always allow.
 argument-hint: "[--all]"
 ---
