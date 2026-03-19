@@ -39,11 +39,14 @@ tool-gates supports three Claude Code hooks:
 ├── AGENTS.md        # Shared project docs (CLAUDE.md and GEMINI.md are symlinks)
 ├── build.rs         # Code generation: rules/*.toml -> src/generated/
 ├── Cargo.toml
-├── .claude-plugin/  # Plugin manifest + marketplace catalog
-│   ├── marketplace.json  # Marketplace discovery
-│   ├── plugin.json       # Plugin manifest
-│   └── README.md         # Plugin documentation
-├── skills/          # Plugin skills (review, test-gate)
+├── .claude-plugin/  # Marketplace catalog (root-level pointer)
+│   └── marketplace.json  # Points to claude-plugin/ subdirectory
+├── claude-plugin/   # Plugin package (cached separately by Claude Code)
+│   ├── .claude-plugin/plugin.json  # Plugin manifest
+│   ├── README.md                   # Plugin documentation
+│   └── skills/                     # Plugin skills (review, test-gate)
+│       ├── review/SKILL.md
+│       └── test-gate/SKILL.md
 ├── rules/           # Declarative gate definitions (13 TOML files)
 │   ├── basics.toml, tool_gates.toml, beads.toml, cloud.toml, devtools.toml, ...
 ├── tests/fixtures/  # Test fixtures

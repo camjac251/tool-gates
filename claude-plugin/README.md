@@ -92,7 +92,7 @@ Shows the decision, reason, and any hints or approval commands.
 **From local clone:**
 
 ```bash
-claude --plugin-dir /path/to/tool-gates
+claude --plugin-dir /path/to/tool-gates/claude-plugin
 ```
 
 ## Note on hooks

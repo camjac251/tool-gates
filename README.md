@@ -422,7 +422,7 @@ tool-gates ships as a [Claude Code plugin](https://code.claude.com/docs/en/plugi
 
 ```bash
 # Launch Claude Code with the plugin loaded
-claude --plugin-dir /path/to/tool-gates
+claude --plugin-dir /path/to/tool-gates/claude-plugin
 ```
 
 **Using the review skill:**
