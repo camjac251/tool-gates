@@ -5,5 +5,5 @@ changelog_update = true
 release_commits = "^(feat|fix|perf|refactor)"
 # Binary-only crate, no crates.io consumers -- skip API compat checks
 semver_check = false
-# Skip cargo package --verify (needs musl target, not available in CI)
-cargo_package = false
+# Skip build verification during packaging (CI lacks musl target)
+publish_no_verify = true
