@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to build and upload binaries for (e.g. v0.2.0)"
+        description: "Tag to build and upload binaries for (e.g. v1.6.0)"
         required: true
 
 env:
@@ -14,27 +14,72 @@ env:
   BINARY_NAME: tool-gates
 
 jobs:
-  release-please:
-    name: Release Please
+  release-plz-pr:
+    name: Release PR
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: release-plz-pr
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: release-plz/action@v0.5
+        with:
+          command: release-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release:
+    name: Release
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: write
-      pull-requests: write
+      pull-requests: read
     outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
+      releases_created: ${{ steps.release-plz.outputs.releases_created }}
+      tag: ${{ steps.extract.outputs.tag }}
     steps:
-      - uses: googleapis/release-please-action@v4
-        id: release
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: release-plz/action@v0.5
+        id: release-plz
+        with:
+          command: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract tag
+        id: extract
+        if: steps.release-plz.outputs.releases_created == 'true'
+        env:
+          RELEASES: ${{ steps.release-plz.outputs.releases }}
+        run: |
+          TAG=$(echo "$RELEASES" | jq -r '.[0].tag')
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
   build:
     name: Build - ${{ matrix.arch }}
-    needs: release-please
+    needs: release
     if: >-
       always() &&
-      ((github.event_name == 'push' && needs.release-please.outputs.release_created == 'true') ||
+      ((github.event_name == 'push' && needs.release.outputs.releases_created == 'true') ||
       github.event_name == 'workflow_dispatch')
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
@@ -57,7 +102,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
+          ref: ${{ needs.release.outputs.tag || inputs.tag }}
 
       - name: Build with cross
         if: contains(matrix.target, 'linux')
@@ -65,14 +110,14 @@ jobs:
         with:
           command: build
           target: ${{ matrix.target }}
-          args: "--release"
+          args: "--locked --release"
           strip: true
 
       - name: Build native
         if: "!contains(matrix.target, 'linux')"
         run: |
           rustup target add ${{ matrix.target }}
-          cargo build --release --target ${{ matrix.target }}
+          cargo build --locked --release --target ${{ matrix.target }}
 
       - name: Package binary
         shell: bash
@@ -88,24 +133,74 @@ jobs:
 
   upload:
     name: Upload Binaries
-    needs: [release-please, build]
+    needs: [release, build]
     if: >-
       always() &&
       needs.build.result == 'success' &&
-      ((github.event_name == 'push' && needs.release-please.outputs.release_created == 'true') ||
+      ((github.event_name == 'push' && needs.release.outputs.releases_created == 'true') ||
       github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
 
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: 'artifacts/*'
+
       - name: Upload to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
+          TAG: ${{ needs.release.outputs.tag || inputs.tag }}
         run: gh release upload "$TAG" artifacts/* --repo "$GITHUB_REPOSITORY" --clobber
+
+  update-homebrew:
+    name: Update Homebrew Tap
+    needs: [release, build, upload]
+    if: needs.upload.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Generate token for homebrew-tap
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: camjac251
+          repositories: homebrew-tap
+
+      - name: Update formula
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          TAG: ${{ needs.release.outputs.tag || inputs.tag }}
+        run: |
+          VERSION="${TAG#v}"
+          SHA1=$(sha256sum artifacts/tool-gates-macos-arm64 | cut -d' ' -f1)
+          SHA2=$(sha256sum artifacts/tool-gates-macos-x86_64 | cut -d' ' -f1)
+          SHA3=$(sha256sum artifacts/tool-gates-linux-arm64 | cut -d' ' -f1)
+          SHA4=$(sha256sum artifacts/tool-gates-linux-x86_64 | cut -d' ' -f1)
+
+          gh repo clone camjac251/homebrew-tap /tmp/homebrew-tap
+          /tmp/homebrew-tap/scripts/update-formula.sh \
+            /tmp/homebrew-tap/Formula/tool-gates.rb \
+            "$VERSION" "$SHA1" "$SHA2" "$SHA3" "$SHA4"
+
+          cd /tmp/homebrew-tap
+          git config user.name "brew-bottler[bot]"
+          git config user.email "brew-bottler[bot]@users.noreply.github.com"
+          git add Formula/tool-gates.rb
+          git diff --cached --quiet || { git commit -m "tool-gates $VERSION" && git push; }

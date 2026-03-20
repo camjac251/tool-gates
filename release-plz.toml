@@ -1,0 +1,7 @@
+[workspace]
+git_only = true
+changelog_update = true
+# Only create release PRs for meaningful changes (not CI/chore-only pushes)
+release_commits = "^(feat|fix|perf|refactor)"
+# Binary-only crate, no crates.io consumers -- skip API compat checks
+semver_check = false
