@@ -522,9 +522,9 @@ fn generate_rust_code(rule_files: &[(String, RuleFile)]) -> String {
     output.push_str("#![allow(clippy::too_many_lines)]\n");
     output.push_str("#![allow(clippy::nonminimal_bool)]\n\n");
 
+    output.push_str("use crate::models::{CommandInfo, GateResult};\n");
     output.push_str("use std::collections::{HashMap, HashSet};\n");
-    output.push_str("use std::sync::LazyLock;\n");
-    output.push_str("use crate::models::{CommandInfo, GateResult};\n\n");
+    output.push_str("use std::sync::LazyLock;\n\n");
 
     // Collect all safe commands
     let mut all_safe_commands: Vec<&str> = Vec::new();
