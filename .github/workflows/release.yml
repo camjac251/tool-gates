@@ -183,9 +183,15 @@ jobs:
           owner: camjac251
           repositories: homebrew-tap
 
+      - uses: actions/checkout@v6
+        with:
+          repository: camjac251/homebrew-tap
+          token: ${{ steps.app-token.outputs.token }}
+          path: homebrew-tap
+          ref: main
+
       - name: Update formula
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           TAG: ${{ needs.release.outputs.tag || inputs.tag }}
         run: |
           VERSION="${TAG#v}"
@@ -194,12 +200,11 @@ jobs:
           SHA3=$(sha256sum artifacts/tool-gates-linux-arm64 | cut -d' ' -f1)
           SHA4=$(sha256sum artifacts/tool-gates-linux-x86_64 | cut -d' ' -f1)
 
-          gh repo clone camjac251/homebrew-tap /tmp/homebrew-tap
-          /tmp/homebrew-tap/scripts/update-formula.sh \
-            /tmp/homebrew-tap/Formula/tool-gates.rb \
+          homebrew-tap/scripts/update-formula.sh \
+            homebrew-tap/Formula/tool-gates.rb \
             "$VERSION" "$SHA1" "$SHA2" "$SHA3" "$SHA4"
 
-          cd /tmp/homebrew-tap
+          cd homebrew-tap
           git config user.name "brew-bottler[bot]"
           git config user.email "brew-bottler[bot]@users.noreply.github.com"
           git add Formula/tool-gates.rb
