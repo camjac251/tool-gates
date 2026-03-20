@@ -1,7 +1,4 @@
-# Build static musl binary by default for maximum portability
-[build]
-target = "x86_64-unknown-linux-musl"
-
+# Musl config for static binary builds (use --target x86_64-unknown-linux-musl)
 [target.x86_64-unknown-linux-musl]
 linker = "musl-gcc"
 rustflags = ["-C", "target-feature=+crt-static"]
