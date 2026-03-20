@@ -1,6 +1,6 @@
 # Build artifacts
 /target/
-/src/generated/
+# /src/generated/ is committed so cargo package includes it (required for release-plz)
 **/*.rs.bk
 
 # IDE
@@ -19,4 +19,4 @@ Thumbs.db
 *.profdata
 proptest-regressions/
 
-# Local config (keep .cargo/config.toml for musl default)
+# Local config
