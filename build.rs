@@ -34,6 +34,14 @@ fn main() {
         return;
     }
 
+    // Skip code generation during cargo package --verify to avoid
+    // "source directory was modified by build.rs" errors.
+    // The generated files are committed to git and included in the package.
+    let out_dir = std::env::var("OUT_DIR").unwrap_or_default();
+    if out_dir.contains("target/package/") {
+        return;
+    }
+
     // Watch each file individually for reliable rebuilds
     for entry in fs::read_dir(rules_dir)
         .expect("Failed to read rules directory")
