@@ -1,14 +1,17 @@
 # Changelog
 
-## Unreleased
+## [1.5.4] - 2026-03-20
 
 ### Bug Fixes
 
+- Use CARGO_MANIFEST_DIR to detect package verify context
+- Remove publish=false from Cargo.toml
 - Remove name field from skills so prefix shows in autocomplete
 
 ### Refactoring
 
 - Move plugin to subdirectory to prevent skill leakage
+
 ## [1.5.2] - 2026-03-18
 
 ### Bug Fixes
