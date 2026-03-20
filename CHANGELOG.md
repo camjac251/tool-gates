@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.5.5](https://github.com/camjac251/tool-gates/compare/v1.5.4...v1.5.5) - 2026-03-20
+
+### Fixed
+
+- *(ci)* use actions/checkout for homebrew-tap push auth
+
+### Other
+
+- Merge pull request #36 from camjac251/renovate/actions-attest-build-provenance-4.x
+
 ## [1.5.4] - 2026-03-20
 
 ### Bug Fixes
