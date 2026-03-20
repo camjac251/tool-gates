@@ -37,8 +37,12 @@ fn main() {
     // Skip code generation during cargo package --verify to avoid
     // "source directory was modified by build.rs" errors.
     // The generated files are committed to git and included in the package.
-    let out_dir = std::env::var("OUT_DIR").unwrap_or_default();
-    if out_dir.contains("target/package/") {
+    //
+    // During verify, CARGO_MANIFEST_DIR points to the extracted package
+    // inside target/package/<name>-<version>/. OUT_DIR is unreliable here
+    // because cargo reuses the workspace's target dir, not a nested one.
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default();
+    if manifest_dir.contains("target/package/") {
         return;
     }
 
