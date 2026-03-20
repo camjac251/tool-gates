@@ -8846,7 +8846,7 @@ pub fn check_git_gate(cmd: &CommandInfo) -> GateResult {
 pub static GIT_PROGRAMS: &[&str] = &["git"];
 
 /// Generated gate for cloud - handles: aws, gcloud, az, terraform, tofu, kubectl, k, docker, podman, docker-compose, podman-compose, helm, pulumi
-/// Custom handlers needed for: ["gcloud", "docker"]
+/// Custom handlers needed for: ["docker", "gcloud"]
 pub fn check_cloud_gate(cmd: &CommandInfo) -> GateResult {
     match cmd.program.as_str() {
         "aws" => check_aws_declarative(cmd).unwrap_or_else(GateResult::skip),
@@ -8883,7 +8883,7 @@ pub static CLOUD_PROGRAMS: &[&str] = &[
 ];
 
 /// Generated gate for package_managers - handles: npm, pnpm, yarn, pip, pip3, uv, cargo, rustc, rustup, go, bun, conda, mamba, micromamba, poetry, pipx, mise
-/// Custom handlers needed for: ["yarn", "pipx", "npm", "pip", "pnpm", "uv", "mise", "poetry"]
+/// Custom handlers needed for: ["mise", "npm", "pip", "pipx", "pnpm", "poetry", "uv", "yarn"]
 pub fn check_package_managers_gate(cmd: &CommandInfo) -> GateResult {
     match cmd.program.as_str() {
         "npm" => GateResult::skip(),          // custom handler: check_npm
@@ -9079,7 +9079,7 @@ pub static DEVTOOLS_PROGRAMS: &[&str] = &[
 ];
 
 /// Generated gate for filesystem - handles: rm, mv, cp, mkdir, rmdir, touch, chmod, chown, chgrp, ln, perl, tar, unzip, zip
-/// Custom handlers needed for: ["tar", "rm"]
+/// Custom handlers needed for: ["rm", "tar"]
 pub fn check_filesystem_gate(cmd: &CommandInfo) -> GateResult {
     match cmd.program.as_str() {
         "rm" => GateResult::skip(), // custom handler: check_rm
@@ -9107,7 +9107,7 @@ pub static FILESYSTEM_PROGRAMS: &[&str] = &[
 ];
 
 /// Generated gate for network - handles: curl, wget, ssh, scp, sftp, rsync, nc, ncat, netcat, http, https, xh
-/// Custom handlers needed for: ["wget", "rsync", "nc", "http", "curl"]
+/// Custom handlers needed for: ["curl", "http", "nc", "rsync", "wget"]
 pub fn check_network_gate(cmd: &CommandInfo) -> GateResult {
     match cmd.program.as_str() {
         "curl" => GateResult::skip(), // custom handler: check_curl
@@ -9128,7 +9128,7 @@ pub static NETWORK_PROGRAMS: &[&str] = &[
 ];
 
 /// Generated gate for system - handles: shutdown, reboot, poweroff, halt, init, mkfs, fdisk, parted, gdisk, dd, shred, wipe, mke2fs, mkswap, wipefs, hdparm, insmod, rmmod, modprobe, grub-install, update-grub, useradd, userdel, usermod, passwd, chsh, iptables, ufw, firewall-cmd, chattr, mount, umount, swapoff, swapon, lvremove, vgremove, pvremove, psql, createdb, dropdb, pg_dump, pg_restore, migrate, goose, dbmate, flyway, alembic, mysql, sqlite3, mongosh, mongo, redis-cli, kill, pkill, killall, xkill, make, cmake, ninja, just, task, gradle, gradlew, ./gradlew, mvn, maven, ./mvnw, mvnw, bazel, bazelisk, meson, ansible, ansible-playbook, ansible-galaxy, ansible-vault, vagrant, hyperfine, sudo, doas, systemctl, service, crontab, apt, apt-get, apt-cache, dnf, yum, pacman, yay, paru, brew, zypper, apk, nix, nix-env, nix-shell, flatpak, snap
-/// Custom handlers needed for: ["crontab", "brew", "make", "apt", "pkill", "mysql", "dnf", "sudo", "systemctl", "pacman", "psql", "kill"]
+/// Custom handlers needed for: ["apt", "brew", "crontab", "dnf", "kill", "make", "mysql", "pacman", "pkill", "psql", "sudo", "systemctl"]
 pub fn check_system_gate(cmd: &CommandInfo) -> GateResult {
     match cmd.program.as_str() {
         "shutdown" => check_shutdown_declarative(cmd).unwrap_or_else(GateResult::skip),

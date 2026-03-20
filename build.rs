@@ -1422,10 +1422,11 @@ fn generate_gate_functions(rule_files: &[(String, RuleFile)]) -> String {
             name,
             all_names.join(", ")
         ));
-        output.push_str(&format!(
-            "/// Custom handlers needed for: {:?}\n",
-            custom_programs.iter().collect::<Vec<_>>()
-        ));
+        output.push_str(&format!("/// Custom handlers needed for: {:?}\n", {
+            let mut sorted: Vec<_> = custom_programs.iter().collect();
+            sorted.sort();
+            sorted
+        }));
         output.push_str(&format!(
             "pub fn check_{}_gate(cmd: &CommandInfo) -> GateResult {{\n",
             gate_name
