@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.5.6](https://github.com/camjac251/tool-gates/compare/v1.5.5...v1.5.6) - 2026-03-21
+
+### Fixed
+
+- *(hooks)* stage build-generated files in pre-commit
+
+### Other
+
+- add Homebrew as recommended install method
+
 ## [1.5.5](https://github.com/camjac251/tool-gates/compare/v1.5.4...v1.5.5) - 2026-03-20
 
 ### Fixed
