@@ -83,3 +83,24 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - run: cargo check
+
+  auto-merge-release:
+    name: Auto-merge release PR
+    needs: [test, msrv]
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'release-plz-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - name: Merge release PR
+        run: gh pr merge ${{ github.event.pull_request.number }} --merge --repo ${{ github.repository }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Trigger release workflow
+        run: gh workflow run release.yml --repo ${{ github.repository }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
