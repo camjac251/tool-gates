@@ -146,7 +146,9 @@ fn save_cache(cache: &ToolCache) -> Result<(), std::io::Error> {
     }
 
     let content = serde_json::to_string_pretty(cache)?;
-    fs::write(&path, content)?;
+    let tmp = path.with_extension("tmp");
+    fs::write(&tmp, &content)?;
+    fs::rename(&tmp, &path)?;
     Ok(())
 }
 

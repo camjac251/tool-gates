@@ -116,7 +116,9 @@ fn save_to_disk(tracker: &HintTracker) -> Result<(), std::io::Error> {
         fs::create_dir_all(parent)?;
     }
     let content = serde_json::to_string(tracker)?;
-    fs::write(&path, content)?;
+    let tmp = path.with_extension("tmp");
+    fs::write(&tmp, &content)?;
+    fs::rename(&tmp, &path)?;
     Ok(())
 }
 
