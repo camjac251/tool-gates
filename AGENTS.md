@@ -442,6 +442,16 @@ cargo test -- --ignored                 # Slow tests only
 - **CI portability**: Tests must not assume specific CLI tools (rg, bat, fd, etc.) are installed. CI runners have a minimal environment. If a test depends on tool availability, detect it at runtime and skip gracefully.
 - **Serde output verification**: Any struct or enum serialized to JSON for Claude Code must have a test asserting the exact field casing. The CLI expects camelCase (`updatedPermissions`, `hookEventName`). Use `serde_json::to_string` and assert key names to catch `rename_all` omissions.
 
+## CI and Release
+
+**CI** (`.github/workflows/ci.yml`): push/PR to main runs `cargo build`, `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test`, release build with binary size check (max 7MB). A separate MSRV job runs `cargo check` on Rust 1.86.
+
+**Release**: Fully automated via release-plz. Push to main triggers `release-plz release-pr` which creates a version bump PR. Merging it publishes to GitHub Releases with cross-compiled binaries (linux x86_64/arm64, macos x86_64/arm64) and updates the Homebrew tap.
+
+**MSRV**: 1.86. Do not use language features or dependencies requiring a newer Rust version.
+
+**CLAUDE.md** is a symlink to AGENTS.md. Always edit AGENTS.md directly.
+
 ## Runtime Files
 
 | File | Purpose |
