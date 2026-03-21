@@ -4,6 +4,7 @@
 //! settings to check if a command matches any allow/deny/ask rules.
 
 use serde::Deserialize;
+use std::borrow::Cow;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
@@ -179,40 +180,18 @@ impl Settings {
     }
 
     /// Check command against settings rules.
-    /// Priority: deny > ask > allow
+    /// Priority: deny first, then most-specific pattern wins between ask/allow (ties go to ask).
     pub fn check_command(&self, command: &str) -> SettingsDecision {
-        // Check deny first (highest priority)
         if self.matches_any(&self.permissions.deny, command) {
             return SettingsDecision::Deny;
         }
-
-        // Check ask
-        if self.matches_any(&self.permissions.ask, command) {
-            return SettingsDecision::Ask;
-        }
-
-        // Check allow
-        if self.matches_any(&self.permissions.allow, command) {
-            return SettingsDecision::Allow;
-        }
-
-        SettingsDecision::NoMatch
+        self.resolve_ask_allow(command)
     }
 
     /// Check command against settings rules, excluding deny (for use after deny check).
-    /// Returns Ask, Allow, or NoMatch.
+    /// Most-specific pattern wins between ask and allow (ties go to ask).
     pub fn check_command_excluding_deny(&self, command: &str) -> SettingsDecision {
-        // Check ask
-        if self.matches_any(&self.permissions.ask, command) {
-            return SettingsDecision::Ask;
-        }
-
-        // Check allow
-        if self.matches_any(&self.permissions.allow, command) {
-            return SettingsDecision::Allow;
-        }
-
-        SettingsDecision::NoMatch
+        self.resolve_ask_allow(command)
     }
 
     /// Match command against Bash(...) patterns
@@ -287,15 +266,79 @@ impl Settings {
     /// - "cmd*" - glob prefix match (cat /dev/zero* matches "cat /dev/zero | head")
     /// - "cmd" - exact match
     fn matches_bash_pattern(pattern: &str, command: &str) -> bool {
+        let expanded = Self::expand_pattern(pattern);
+        let pattern = expanded.as_ref();
+
         if let Some(prefix) = pattern.strip_suffix(":*") {
-            // Word-boundary prefix match: "git:*" matches "git", "git status"
             command == prefix || command.starts_with(&format!("{prefix} "))
         } else if let Some(prefix) = pattern.strip_suffix('*') {
-            // Glob prefix match: "cat /dev/zero*" matches "cat /dev/zero", "cat /dev/zero | head"
             command.starts_with(prefix)
         } else {
-            // Exact match: "pwd" only matches "pwd"
             command == pattern
+        }
+    }
+
+    /// Expand $HOME in a pattern to the actual home directory.
+    fn expand_pattern(pattern: &str) -> Cow<'_, str> {
+        if pattern.contains("$HOME") {
+            if let Some(home) = dirs::home_dir() {
+                return Cow::Owned(pattern.replace("$HOME", &home.to_string_lossy()));
+            }
+        }
+        Cow::Borrowed(pattern)
+    }
+
+    /// Specificity score for a pattern match. Higher = more specific.
+    /// Exact matches get usize::MAX. Prefix matches get the prefix length.
+    fn pattern_specificity(pattern: &str, command: &str) -> Option<usize> {
+        let expanded = Self::expand_pattern(pattern);
+        let pattern = expanded.as_ref();
+
+        if let Some(prefix) = pattern.strip_suffix(":*") {
+            if command == prefix || command.starts_with(&format!("{prefix} ")) {
+                Some(prefix.len())
+            } else {
+                None
+            }
+        } else if let Some(prefix) = pattern.strip_suffix('*') {
+            if command.starts_with(prefix) {
+                Some(prefix.len())
+            } else {
+                None
+            }
+        } else if command == pattern {
+            Some(usize::MAX)
+        } else {
+            None
+        }
+    }
+
+    /// Highest specificity score among all matching Bash patterns in the list.
+    fn best_match_specificity(patterns: &[String], command: &str) -> Option<usize> {
+        let mut best: Option<usize> = None;
+        for pattern in patterns {
+            if let Some(bash_pattern) = pattern.strip_prefix("Bash(") {
+                if let Some(inner) = bash_pattern.strip_suffix(')') {
+                    if let Some(score) = Self::pattern_specificity(inner, command) {
+                        best = Some(best.map_or(score, |b| b.max(score)));
+                    }
+                }
+            }
+        }
+        best
+    }
+
+    /// Resolve between ask and allow using pattern specificity.
+    /// More specific pattern wins; ties go to ask (safer default).
+    fn resolve_ask_allow(&self, command: &str) -> SettingsDecision {
+        let ask_score = Self::best_match_specificity(&self.permissions.ask, command);
+        let allow_score = Self::best_match_specificity(&self.permissions.allow, command);
+
+        match (ask_score, allow_score) {
+            (Some(a), Some(b)) if b > a => SettingsDecision::Allow,
+            (Some(_), _) => SettingsDecision::Ask,
+            (_, Some(_)) => SettingsDecision::Allow,
+            _ => SettingsDecision::NoMatch,
         }
     }
 }
@@ -627,5 +670,189 @@ mod tests {
             settings.check_mcp_tool("any-server", "any_tool"),
             SettingsDecision::NoMatch
         );
+    }
+
+    // === Specificity Tests (Bug 1: ask always beat allow) ===
+
+    #[test]
+    fn test_specific_allow_beats_broad_ask() {
+        let settings = Settings {
+            permissions: Permissions {
+                ask: vec!["Bash(mytool:*)".to_string()],
+                allow: vec!["Bash(mytool --config production:*)".to_string()],
+                ..Default::default()
+            },
+        };
+
+        // Specific allow ("mytool --config production" len=25) beats broad ask ("mytool" len=6)
+        assert_eq!(
+            settings.check_command("mytool --config production deploy"),
+            SettingsDecision::Allow
+        );
+        // Other mytool commands still ask
+        assert_eq!(
+            settings.check_command("mytool run-dangerous"),
+            SettingsDecision::Ask
+        );
+    }
+
+    #[test]
+    fn test_equal_specificity_ask_wins() {
+        let settings = Settings {
+            permissions: Permissions {
+                ask: vec!["Bash(git push:*)".to_string()],
+                allow: vec!["Bash(git push:*)".to_string()],
+                ..Default::default()
+            },
+        };
+
+        // Equal specificity: ask wins (safer default)
+        assert_eq!(
+            settings.check_command("git push origin main"),
+            SettingsDecision::Ask
+        );
+    }
+
+    #[test]
+    fn test_exact_allow_beats_prefix_ask() {
+        let settings = Settings {
+            permissions: Permissions {
+                ask: vec!["Bash(cargo:*)".to_string()],
+                allow: vec!["Bash(cargo test)".to_string()],
+                ..Default::default()
+            },
+        };
+
+        // Exact match (usize::MAX) beats prefix match (5)
+        assert_eq!(
+            settings.check_command("cargo test"),
+            SettingsDecision::Allow
+        );
+        // Other cargo commands still ask
+        assert_eq!(
+            settings.check_command("cargo publish"),
+            SettingsDecision::Ask
+        );
+    }
+
+    #[test]
+    fn test_deny_still_wins_over_specific_allow() {
+        let settings = Settings {
+            permissions: Permissions {
+                deny: vec!["Bash(rm -rf /)".to_string()],
+                allow: vec!["Bash(rm -rf /)".to_string()],
+                ..Default::default()
+            },
+        };
+
+        assert_eq!(settings.check_command("rm -rf /"), SettingsDecision::Deny);
+    }
+
+    #[test]
+    fn test_excluding_deny_uses_specificity() {
+        let settings = Settings {
+            permissions: Permissions {
+                ask: vec!["Bash(mytool:*)".to_string()],
+                allow: vec!["Bash(mytool --config production:*)".to_string()],
+                ..Default::default()
+            },
+        };
+
+        assert_eq!(
+            settings.check_command_excluding_deny("mytool --config production deploy"),
+            SettingsDecision::Allow
+        );
+        assert_eq!(
+            settings.check_command_excluding_deny("mytool other"),
+            SettingsDecision::Ask
+        );
+    }
+
+    // === $HOME Expansion Tests (Bug 2) ===
+
+    #[test]
+    fn test_home_expansion_in_allow_pattern() {
+        let home = dirs::home_dir().expect("HOME must be set for this test");
+        let home_str = home.to_string_lossy();
+
+        let settings = Settings {
+            permissions: Permissions {
+                allow: vec!["Bash(mytool run $HOME/scripts/deploy/*)".to_string()],
+                ..Default::default()
+            },
+        };
+
+        let cmd = format!("mytool run {home_str}/scripts/deploy/prod.sh --dry-run");
+        assert_eq!(settings.check_command(&cmd), SettingsDecision::Allow);
+    }
+
+    #[test]
+    fn test_home_expansion_in_deny_pattern() {
+        let home = dirs::home_dir().expect("HOME must be set for this test");
+        let home_str = home.to_string_lossy();
+
+        let settings = Settings {
+            permissions: Permissions {
+                deny: vec!["Bash(rm $HOME/.ssh/*)".to_string()],
+                ..Default::default()
+            },
+        };
+
+        let cmd = format!("rm {home_str}/.ssh/id_rsa");
+        assert_eq!(settings.check_command(&cmd), SettingsDecision::Deny);
+    }
+
+    #[test]
+    fn test_home_expansion_with_specificity() {
+        let home = dirs::home_dir().expect("HOME must be set for this test");
+        let home_str = home.to_string_lossy();
+
+        let settings = Settings {
+            permissions: Permissions {
+                ask: vec!["Bash(mytool run:*)".to_string()],
+                allow: vec!["Bash(mytool run $HOME/scripts/trusted/*)".to_string()],
+                ..Default::default()
+            },
+        };
+
+        // Expanded allow pattern is more specific than "mytool run"
+        let cmd = format!("mytool run {home_str}/scripts/trusted/deploy.sh --env staging");
+        assert_eq!(settings.check_command(&cmd), SettingsDecision::Allow);
+
+        // Other mytool run commands still ask
+        assert_eq!(
+            settings.check_command("mytool run untrusted.sh"),
+            SettingsDecision::Ask
+        );
+    }
+
+    #[test]
+    fn test_no_home_no_crash() {
+        // Pattern with $HOME when HOME can't be resolved still works (no match, no crash)
+        assert!(!Settings::matches_bash_pattern(
+            "$HOME/bin/tool",
+            "/usr/bin/tool"
+        ));
+    }
+
+    #[test]
+    fn test_pattern_specificity_scores() {
+        // Word-boundary: prefix length
+        assert_eq!(
+            Settings::pattern_specificity("git:*", "git status"),
+            Some(3)
+        );
+        // Glob: prefix length
+        assert_eq!(
+            Settings::pattern_specificity("git push *", "git push origin"),
+            Some(9)
+        );
+        // Exact: usize::MAX
+        assert_eq!(
+            Settings::pattern_specificity("pwd", "pwd"),
+            Some(usize::MAX)
+        );
+        // No match
+        assert_eq!(Settings::pattern_specificity("git:*", "cargo build"), None);
     }
 }

@@ -192,8 +192,11 @@ flowchart TD
     E -->|No| G{acceptEdits mode + file-edit?}
     G -->|Yes| H[ALLOW - auto-approved]
     G -->|No| I{Settings ASK/ALLOW match?}
-    I -->|matches ask| J[ASK - defer to Claude Code]
-    I -->|matches allow| K[ALLOW]
+    I -->|both match| J{More specific pattern wins}
+    J -->|allow more specific| K[ALLOW]
+    J -->|ask more specific or tie| M[ASK]
+    I -->|only ask| M
+    I -->|only allow| K
     I -->|no match| L[Use gate result]
 ```
 
@@ -208,6 +211,12 @@ flowchart TD
 | `Bash(pwd)` | Exact | Only `pwd` |
 
 The `:` word-boundary prefix is the most common. It splits on spaces and matches the command as a distinct word.
+
+**IMPORTANT: Pattern specificity and $HOME expansion**
+
+- **Specificity resolution**: When both ask and allow patterns match a command, the more specific pattern wins. Specificity is the length of the non-wildcard prefix (exact matches are highest). Ties go to ask (safer default). A specific allow like `Bash(mytool --verbose:*)` (len 16) beats a broad ask like `Bash(mytool:*)` (len 6). This prevents broad ask rules from overriding narrow allow rules.
+- **$HOME expansion**: Patterns containing `$HOME` are expanded to the actual home directory before matching. This is required for patterns like `Bash(uv run $HOME/scripts/*)` to match commands with resolved paths. Without expansion, these patterns silently fail to match.
+- **Deny is not affected**: Deny rules are always checked first and use simple matching (no specificity comparison). Specificity only applies to ask vs allow resolution.
 
 ### Accept Edits Mode
 
@@ -416,6 +425,7 @@ cargo test -- --ignored                 # Slow tests only
 
 ### Test Rules
 
+- **No real-world data in tests**: Never use real commands, paths, tool names, or service names from actual user sessions in test cases. Use generic placeholders (`mytool`, `$HOME/scripts/deploy/`, `my-service`). Tests are committed to a public repo and must not leak usage patterns or personal workflows.
 - **CI portability**: Tests must not assume specific CLI tools (rg, bat, fd, etc.) are installed. CI runners have a minimal environment. If a test depends on tool availability, detect it at runtime and skip gracefully.
 - **Serde output verification**: Any struct or enum serialized to JSON for Claude Code must have a test asserting the exact field casing. The CLI expects camelCase (`updatedPermissions`, `hookEventName`). Use `serde_json::to_string` and assert key names to catch `rename_all` omissions.
 
