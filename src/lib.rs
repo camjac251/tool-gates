@@ -9,17 +9,15 @@
 //! # Example
 //!
 //! ```
-//! use tool_gates::check_command;
+//! use tool_gates::{check_command, PermissionDecision};
 //!
 //! // Safe command - allowed
 //! let output = check_command("git status");
-//! let decision = &output.hook_specific_output.as_ref().unwrap().permission_decision;
-//! assert_eq!(decision, "allow");
+//! assert_eq!(output.decision, PermissionDecision::Allow);
 //!
 //! // Dangerous command - blocked
 //! let output = check_command("rm -rf /");
-//! let decision = &output.hook_specific_output.as_ref().unwrap().permission_decision;
-//! assert_eq!(decision, "deny");
+//! assert_eq!(output.decision, PermissionDecision::Deny);
 //! ```
 
 pub mod cache;
@@ -41,13 +39,12 @@ pub mod router;
 pub mod security_reminders;
 pub mod settings;
 pub mod settings_writer;
-pub mod toml_export;
 pub mod tool_blocks;
 pub mod tool_cache;
 pub mod tracking;
 pub mod tui;
 
-pub use models::{CommandInfo, Decision, GateResult};
+pub use models::{Client, CommandInfo, Decision, GateResult, PermissionDecision};
 pub use permission_request::handle_permission_request;
 pub use router::{
     check_command, check_command_with_settings, check_command_with_settings_and_session,

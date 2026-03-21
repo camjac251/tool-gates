@@ -87,9 +87,41 @@ impl GateResult {
     }
 }
 
+// === Client Detection ===
+
+/// Which AI coding tool is calling us
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Client {
+    Claude,
+    Gemini,
+}
+
+impl Client {
+    /// Detect client from hook_event_name
+    pub fn from_hook_event(event: &str) -> Self {
+        match event {
+            "BeforeTool" | "AfterTool" => Client::Gemini,
+            _ => Client::Claude,
+        }
+    }
+
+    /// The tool name used for shell commands
+    pub fn shell_tool_name(self) -> &'static str {
+        match self {
+            Client::Claude => "Bash",
+            Client::Gemini => "run_shell_command",
+        }
+    }
+
+    /// Check if a tool_name represents a shell command tool
+    pub fn is_shell_tool(tool_name: &str) -> bool {
+        tool_name == "Bash" || tool_name == "run_shell_command"
+    }
+}
+
 // === Hook Input/Output Types ===
 
-/// Tool input from Claude Code
+/// Tool input from Claude Code / Gemini CLI
 #[derive(Debug, Deserialize, Default)]
 #[allow(dead_code)]
 pub struct ToolInput {
@@ -217,42 +249,39 @@ impl HookInput {
     }
 }
 
-/// Updated tool input for modifying commands before execution
-#[derive(Debug, Serialize, Clone, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct UpdatedInput {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub command: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub timeout: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
+/// Permission decision for a hook response.
+/// This is the provider-agnostic decision type used by HookOutput.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PermissionDecision {
+    /// No opinion -- pass through to default behavior
+    Approve,
+    /// Explicitly allowed
+    Allow,
+    /// Requires user approval
+    Ask,
+    /// Blocked
+    Deny,
 }
 
-/// Hook-specific output for `PreToolUse`
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct HookSpecificOutput {
-    pub hook_event_name: String,
-    pub permission_decision: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub permission_decision_reason: Option<String>,
-    /// Modify the tool input before execution (e.g., rewrite command)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub updated_input: Option<UpdatedInput>,
-    /// Additional context to inject into Claude's conversation
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub additional_context: Option<String>,
+impl PermissionDecision {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Approve => "approve",
+            Self::Allow => "allow",
+            Self::Ask => "ask",
+            Self::Deny => "deny",
+        }
+    }
 }
 
-/// Output format for hooks
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
+/// Provider-agnostic hook output.
+/// Serialized differently for Claude Code vs Gemini CLI at output time.
+#[derive(Debug, Clone)]
 pub struct HookOutput {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub decision: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub hook_specific_output: Option<HookSpecificOutput>,
+    pub decision: PermissionDecision,
+    pub reason: Option<String>,
+    pub context: Option<String>,
+    pub updated_command: Option<String>,
 }
 
 impl HookOutput {
@@ -260,64 +289,50 @@ impl HookOutput {
     /// Returns empty JSON so Claude Code proceeds with its normal flow.
     pub fn no_opinion() -> Self {
         Self {
-            decision: None,
-            hook_specific_output: None,
+            decision: PermissionDecision::Approve,
+            reason: None,
+            context: None,
+            updated_command: None,
         }
     }
 
     /// Return explicit allow (overrides settings.json)
     pub fn allow(reason: Option<&str>) -> Self {
         Self {
-            decision: None,
-            hook_specific_output: Some(HookSpecificOutput {
-                hook_event_name: "PreToolUse".to_string(),
-                permission_decision: "allow".to_string(),
-                permission_decision_reason: reason.map(String::from),
-                updated_input: None,
-                additional_context: None,
-            }),
+            decision: PermissionDecision::Allow,
+            reason: reason.map(String::from),
+            context: None,
+            updated_command: None,
         }
     }
 
     /// Return explicit allow with additional context for Claude
     pub fn allow_with_context(reason: Option<&str>, context: &str) -> Self {
         Self {
-            decision: None,
-            hook_specific_output: Some(HookSpecificOutput {
-                hook_event_name: "PreToolUse".to_string(),
-                permission_decision: "allow".to_string(),
-                permission_decision_reason: reason.map(String::from),
-                updated_input: None,
-                additional_context: Some(context.to_string()),
-            }),
+            decision: PermissionDecision::Allow,
+            reason: reason.map(String::from),
+            context: Some(context.to_string()),
+            updated_command: None,
         }
     }
 
     /// Return ask for user permission
     pub fn ask(reason: &str) -> Self {
         Self {
-            decision: None,
-            hook_specific_output: Some(HookSpecificOutput {
-                hook_event_name: "PreToolUse".to_string(),
-                permission_decision: "ask".to_string(),
-                permission_decision_reason: Some(reason.to_string()),
-                updated_input: None,
-                additional_context: None,
-            }),
+            decision: PermissionDecision::Ask,
+            reason: Some(reason.to_string()),
+            context: None,
+            updated_command: None,
         }
     }
 
     /// Return ask with additional context for Claude
     pub fn ask_with_context(reason: &str, context: &str) -> Self {
         Self {
-            decision: None,
-            hook_specific_output: Some(HookSpecificOutput {
-                hook_event_name: "PreToolUse".to_string(),
-                permission_decision: "ask".to_string(),
-                permission_decision_reason: Some(reason.to_string()),
-                updated_input: None,
-                additional_context: Some(context.to_string()),
-            }),
+            decision: PermissionDecision::Ask,
+            reason: Some(reason.to_string()),
+            context: Some(context.to_string()),
+            updated_command: None,
         }
     }
 
@@ -328,47 +343,118 @@ impl HookOutput {
         context: Option<&str>,
     ) -> Self {
         Self {
-            decision: None,
-            hook_specific_output: Some(HookSpecificOutput {
-                hook_event_name: "PreToolUse".to_string(),
-                permission_decision: "ask".to_string(),
-                permission_decision_reason: Some(reason.to_string()),
-                updated_input: Some(UpdatedInput {
-                    command: Some(new_command.to_string()),
-                    timeout: None,
-                    description: None,
-                }),
-                additional_context: context.map(String::from),
-            }),
+            decision: PermissionDecision::Ask,
+            reason: Some(reason.to_string()),
+            context: context.map(String::from),
+            updated_command: Some(new_command.to_string()),
         }
     }
 
     /// Return deny (block the command)
     pub fn deny(reason: &str) -> Self {
         Self {
-            decision: None,
-            hook_specific_output: Some(HookSpecificOutput {
-                hook_event_name: "PreToolUse".to_string(),
-                permission_decision: "deny".to_string(),
-                permission_decision_reason: Some(reason.to_string()),
-                updated_input: None,
-                additional_context: None,
-            }),
+            decision: PermissionDecision::Deny,
+            reason: Some(reason.to_string()),
+            context: None,
+            updated_command: None,
         }
     }
 
     /// Return deny with additional context explaining the danger
     pub fn deny_with_context(reason: &str, context: &str) -> Self {
         Self {
-            decision: None,
-            hook_specific_output: Some(HookSpecificOutput {
-                hook_event_name: "PreToolUse".to_string(),
-                permission_decision: "deny".to_string(),
-                permission_decision_reason: Some(reason.to_string()),
-                updated_input: None,
-                additional_context: Some(context.to_string()),
-            }),
+            decision: PermissionDecision::Deny,
+            reason: Some(reason.to_string()),
+            context: Some(context.to_string()),
+            updated_command: None,
         }
+    }
+
+    /// Serialize for the given client.
+    pub fn serialize(&self, client: Client) -> serde_json::Value {
+        match client {
+            Client::Claude => self.to_claude_json(),
+            Client::Gemini => self.to_gemini_json(),
+        }
+    }
+
+    /// Serialize to Claude Code wire format.
+    ///
+    /// Approve: `{"decision":"approve"}`
+    /// Others: `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow",...}}`
+    fn to_claude_json(&self) -> serde_json::Value {
+        if self.decision == PermissionDecision::Approve {
+            return serde_json::json!({ "decision": "approve" });
+        }
+
+        let mut hso = serde_json::Map::new();
+        hso.insert("hookEventName".to_string(), serde_json::json!("PreToolUse"));
+        hso.insert(
+            "permissionDecision".to_string(),
+            serde_json::json!(self.decision.as_str()),
+        );
+
+        if let Some(ref reason) = self.reason {
+            hso.insert(
+                "permissionDecisionReason".to_string(),
+                serde_json::json!(reason),
+            );
+        }
+
+        if let Some(ref cmd) = self.updated_command {
+            let updated_input = serde_json::json!({ "command": cmd });
+            hso.insert("updatedInput".to_string(), updated_input);
+        }
+
+        if let Some(ref ctx) = self.context {
+            hso.insert("additionalContext".to_string(), serde_json::json!(ctx));
+        }
+
+        serde_json::json!({ "hookSpecificOutput": serde_json::Value::Object(hso) })
+    }
+
+    /// Serialize to Gemini CLI wire format.
+    ///
+    /// Approve: `{"decision":"allow"}`
+    /// Others: `{"decision":"allow|ask|block","reason":"..."}` with optional hookSpecificOutput for extras
+    fn to_gemini_json(&self) -> serde_json::Value {
+        if self.decision == PermissionDecision::Approve {
+            return serde_json::json!({ "decision": "allow" });
+        }
+
+        let mut out = serde_json::Map::new();
+
+        // Map permission decision (Gemini uses "block" instead of "deny")
+        let decision = match self.decision {
+            PermissionDecision::Deny => "block",
+            other => other.as_str(),
+        };
+        out.insert("decision".to_string(), serde_json::json!(decision));
+
+        // Reason at top level
+        if let Some(ref reason) = self.reason {
+            out.insert("reason".to_string(), serde_json::json!(reason));
+        }
+
+        // Additional context and updated command go in hookSpecificOutput
+        if self.context.is_some() || self.updated_command.is_some() {
+            let mut hook_out = serde_json::Map::new();
+            if let Some(ref ctx) = self.context {
+                hook_out.insert("additionalContext".to_string(), serde_json::json!(ctx));
+            }
+            if let Some(ref cmd) = self.updated_command {
+                hook_out.insert(
+                    "tool_input".to_string(),
+                    serde_json::json!({ "command": cmd }),
+                );
+            }
+            out.insert(
+                "hookSpecificOutput".to_string(),
+                serde_json::Value::Object(hook_out),
+            );
+        }
+
+        serde_json::Value::Object(out)
     }
 }
 
@@ -647,11 +733,75 @@ mod tests {
     }
 
     #[test]
-    fn test_hook_output_serialization() {
+    fn test_hook_output_fields() {
         let output = HookOutput::allow(Some("Read-only operation"));
-        let json = serde_json::to_string(&output).unwrap();
-        assert!(json.contains("allow"));
-        assert!(json.contains("Read-only operation"));
+        assert_eq!(output.decision, PermissionDecision::Allow);
+        assert_eq!(output.reason.as_deref(), Some("Read-only operation"));
+    }
+
+    #[test]
+    fn test_claude_serialization_allow() {
+        let output = HookOutput::allow(Some("Read-only operation"));
+        let json = serde_json::to_string(&output.to_claude_json()).unwrap();
+        assert!(json.contains("allow"), "should contain allow: {json}");
+        assert!(
+            json.contains("Read-only operation"),
+            "should contain reason: {json}"
+        );
+        assert!(
+            json.contains("hookSpecificOutput"),
+            "should contain hookSpecificOutput: {json}"
+        );
+        assert!(
+            json.contains("PreToolUse"),
+            "should contain PreToolUse: {json}"
+        );
+    }
+
+    #[test]
+    fn test_claude_serialization_approve() {
+        let output = HookOutput::no_opinion();
+        let json = serde_json::to_string(&output.to_claude_json()).unwrap();
+        assert!(
+            json.contains("\"decision\":\"approve\""),
+            "approve should produce decision:approve: {json}"
+        );
+        assert!(
+            !json.contains("hookSpecificOutput"),
+            "approve should not have hookSpecificOutput: {json}"
+        );
+    }
+
+    #[test]
+    fn test_claude_serialization_deny() {
+        let output = HookOutput::deny("Dangerous command");
+        let json = serde_json::to_string(&output.to_claude_json()).unwrap();
+        assert!(
+            json.contains("\"permissionDecision\":\"deny\""),
+            "should contain deny: {json}"
+        );
+        assert!(
+            json.contains("Dangerous command"),
+            "should contain reason: {json}"
+        );
+    }
+
+    #[test]
+    fn test_claude_serialization_ask_with_updated_command() {
+        let output = HookOutput::ask_with_updated_command("safer", "ls -la", Some("hint"));
+        let json = serde_json::to_string(&output.to_claude_json()).unwrap();
+        assert!(
+            json.contains("updatedInput"),
+            "should contain updatedInput: {json}"
+        );
+        assert!(
+            json.contains("ls -la"),
+            "should contain new command: {json}"
+        );
+        assert!(
+            json.contains("additionalContext"),
+            "should contain additionalContext: {json}"
+        );
     }
 
     #[test]
@@ -678,5 +828,105 @@ mod tests {
             json.contains("hookEventName"),
             "expected camelCase 'hookEventName', got: {json}"
         );
+    }
+
+    // === Gemini CLI output tests ===
+
+    #[test]
+    fn test_client_detection_from_hook_event() {
+        assert_eq!(Client::from_hook_event("BeforeTool"), Client::Gemini);
+        assert_eq!(Client::from_hook_event("AfterTool"), Client::Gemini);
+        assert_eq!(Client::from_hook_event("PreToolUse"), Client::Claude);
+        assert_eq!(Client::from_hook_event("PostToolUse"), Client::Claude);
+        assert_eq!(Client::from_hook_event("PermissionRequest"), Client::Claude);
+        assert_eq!(Client::from_hook_event(""), Client::Claude);
+    }
+
+    #[test]
+    fn test_is_shell_tool() {
+        assert!(Client::is_shell_tool("Bash"));
+        assert!(Client::is_shell_tool("run_shell_command"));
+        assert!(!Client::is_shell_tool("read_file"));
+        assert!(!Client::is_shell_tool("write_file"));
+    }
+
+    #[test]
+    fn test_gemini_allow_output() {
+        let output = HookOutput::allow(Some("Read-only"));
+        let gemini = output.serialize(Client::Gemini);
+        assert_eq!(gemini["decision"], "allow");
+        assert_eq!(gemini["reason"], "Read-only");
+        assert!(gemini.get("hookSpecificOutput").is_none());
+    }
+
+    #[test]
+    fn test_gemini_allow_with_context_output() {
+        let output = HookOutput::allow_with_context(Some("Safe"), "Use bat instead");
+        let gemini = output.serialize(Client::Gemini);
+        assert_eq!(gemini["decision"], "allow");
+        assert_eq!(gemini["reason"], "Safe");
+        assert_eq!(
+            gemini["hookSpecificOutput"]["additionalContext"],
+            "Use bat instead"
+        );
+    }
+
+    #[test]
+    fn test_gemini_deny_uses_block() {
+        let output = HookOutput::deny("Dangerous command");
+        let gemini = output.serialize(Client::Gemini);
+        assert_eq!(
+            gemini["decision"], "block",
+            "Gemini uses 'block' not 'deny': {gemini}"
+        );
+        assert_eq!(gemini["reason"], "Dangerous command");
+    }
+
+    #[test]
+    fn test_gemini_ask_output() {
+        let output = HookOutput::ask("Needs approval");
+        let gemini = output.serialize(Client::Gemini);
+        assert_eq!(gemini["decision"], "ask");
+        assert_eq!(gemini["reason"], "Needs approval");
+    }
+
+    #[test]
+    fn test_gemini_approve_passthrough() {
+        let output = HookOutput::no_opinion();
+        let gemini = output.serialize(Client::Gemini);
+        assert_eq!(gemini["decision"], "allow");
+    }
+
+    #[test]
+    fn test_gemini_no_nested_permission_decision() {
+        // Gemini output must NOT contain Claude-specific nested fields
+        let output = HookOutput::allow(Some("test"));
+        let gemini_str = serde_json::to_string(&output.serialize(Client::Gemini)).unwrap();
+        assert!(
+            !gemini_str.contains("permissionDecision"),
+            "Gemini output should not contain permissionDecision: {gemini_str}"
+        );
+        assert!(
+            !gemini_str.contains("hookEventName"),
+            "Gemini output should not contain hookEventName: {gemini_str}"
+        );
+    }
+
+    #[test]
+    fn test_serialize_dispatches_correctly() {
+        let output = HookOutput::allow(Some("test"));
+        let claude = output.serialize(Client::Claude);
+        let gemini = output.serialize(Client::Gemini);
+        // Claude has hookSpecificOutput nesting, Gemini has flat decision
+        assert!(claude.get("hookSpecificOutput").is_some());
+        assert!(gemini.get("hookSpecificOutput").is_none());
+    }
+
+    #[test]
+    fn test_permission_decision_as_str() {
+        assert_eq!(PermissionDecision::Approve.as_str(), "approve");
+        assert_eq!(PermissionDecision::Allow.as_str(), "allow");
+        assert_eq!(PermissionDecision::Ask.as_str(), "ask");
+        assert_eq!(PermissionDecision::Deny.as_str(), "deny");
     }
 }

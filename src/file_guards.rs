@@ -338,7 +338,8 @@ mod tests {
         let result = check_file_guard(symlink.to_str().unwrap(), "Read", &no_extras());
         assert!(result.is_some());
 
-        let json = serde_json::to_string(&result.unwrap()).unwrap();
+        let json = serde_json::to_string(&result.unwrap().serialize(crate::models::Client::Claude))
+            .unwrap();
         assert!(json.contains("deny"));
         assert!(json.contains("symlink"));
         assert!(json.contains("real-claude.md"));
@@ -367,7 +368,8 @@ mod tests {
         std::os::unix::fs::symlink(&real_file, &symlink).unwrap();
 
         let result = check_file_guard(symlink.to_str().unwrap(), "Edit", &no_extras());
-        let json = serde_json::to_string(&result.unwrap()).unwrap();
+        let json = serde_json::to_string(&result.unwrap().serialize(crate::models::Client::Claude))
+            .unwrap();
         assert!(json.contains("Edit"));
     }
 

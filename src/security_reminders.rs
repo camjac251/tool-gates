@@ -1030,7 +1030,8 @@ print(result.stdout)
         let session = unique_session("deny-secret");
         let result = check_security_reminders("Write", &map, &config, &session);
         assert!(result.is_some());
-        let json = serde_json::to_string(&result.unwrap()).unwrap();
+        let json = serde_json::to_string(&result.unwrap().serialize(crate::models::Client::Claude))
+            .unwrap();
         assert!(json.contains("deny"), "Secrets should deny: {json}");
     }
 
@@ -1680,7 +1681,8 @@ mod doc_file_secret_tests {
             result.is_some(),
             "PreToolUse should still deny secrets in source files"
         );
-        let json = serde_json::to_string(&result.unwrap()).unwrap();
+        let json = serde_json::to_string(&result.unwrap().serialize(crate::models::Client::Claude))
+            .unwrap();
         assert!(json.contains("deny"), "Should be a deny: {json}");
     }
 

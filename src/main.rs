@@ -5,10 +5,9 @@
 //! - **Read/Write/Edit/MultiEdit**: Symlink guard for AI config files
 //! - **Glob/Grep/MCP tools**: Configurable tool blocking
 //!
-//! Supports three Claude Code hook events:
-//! - `PreToolUse`: Routes all tool types through the appropriate handler
-//! - `PermissionRequest`: Approve safe Bash commands for subagents
-//! - `PostToolUse`: Track successful Bash execution for approval learning
+//! Supports Claude Code and Gemini CLI hook systems:
+//! - Claude Code: `PreToolUse`, `PermissionRequest`, `PostToolUse` (tool_name: "Bash")
+//! - Gemini CLI: `BeforeTool`, `AfterTool` (tool_name: "run_shell_command")
 //!
 //! Configuration: `~/.config/tool-gates/config.toml`
 //!
@@ -16,12 +15,18 @@
 //!   `echo '{"tool_name": "Bash", "tool_input": {"command": "gh pr list"}}' | tool-gates`
 //!   `echo '{"tool_name": "Read", "tool_input": {"file_path": "/project/CLAUDE.md"}}' | tool-gates`
 //!   `echo '{"tool_name": "Glob", "tool_input": {"pattern": "*.rs"}}' | tool-gates`
+//!
+//! Install:
+//!   `tool-gates hooks add -s user`      # Claude Code
+//!   `tool-gates hooks add --gemini`     # Gemini CLI
 
 use std::env;
 use std::io::{self, Read};
 use tool_gates::config;
 use tool_gates::file_guards::check_file_guard;
-use tool_gates::models::{HookInput, HookOutput, PermissionRequestInput, PostToolUseInput};
+use tool_gates::models::{
+    Client, HookInput, HookOutput, PermissionDecision, PermissionRequestInput, PostToolUseInput,
+};
 use tool_gates::patterns::suggest_patterns;
 use tool_gates::pending::{clear_pending, pending_count, read_pending};
 use tool_gates::permission_request::handle_permission_request;
@@ -31,7 +36,6 @@ use tool_gates::security_reminders::check_security_reminders;
 use tool_gates::settings_writer::{
     RuleType, Scope, add_rule, list_all_rules, list_rules, remove_rule,
 };
-use tool_gates::toml_export;
 use tool_gates::tool_blocks::check_tool_block;
 use tool_gates::tool_cache;
 use tool_gates::tracking::{CommandPart, track_ask_command};
@@ -76,14 +80,6 @@ fn main() {
     }
 
     // Handle global flags
-    if args
-        .iter()
-        .any(|a| a == "--export-toml" || a == "--gemini-policy")
-    {
-        print!("{}", toml_export::generate_toml());
-        return;
-    }
-
     if args.iter().any(|a| a == "--refresh-tools") {
         eprintln!("Refreshing tool cache...");
         let cache = tool_cache::refresh_cache();
@@ -140,23 +136,26 @@ fn main() {
                 .and_then(|h| h.as_str().map(String::from))
         });
 
+    // Detect which client is calling us
+    let client = Client::from_hook_event(hook_event.as_deref().unwrap_or("PreToolUse"));
+
     // Route based on hook event type
     match hook_event.as_deref() {
         Some("PermissionRequest") => {
             handle_permission_request_hook(&input);
         }
-        Some("PostToolUse") => {
-            handle_post_tool_use_hook(&input);
+        Some("PostToolUse") | Some("AfterTool") => {
+            handle_post_tool_use_hook(&input, client);
         }
         _ => {
-            // Default: PreToolUse or unspecified
-            handle_pre_tool_use_hook(&input);
+            // Default: PreToolUse (Claude) or BeforeTool (Gemini) or unspecified
+            handle_pre_tool_use_hook(&input, client);
         }
     }
 }
 
-/// Handle PreToolUse hook -- routes all tool types
-fn handle_pre_tool_use_hook(input: &str) {
+/// Handle PreToolUse (Claude) / BeforeTool (Gemini) hook -- routes all tool types
+fn handle_pre_tool_use_hook(input: &str, client: Client) {
     let hook_input: HookInput = match serde_json::from_str(input) {
         Ok(hi) => hi,
         Err(e) => {
@@ -182,7 +181,7 @@ fn handle_pre_tool_use_hook(input: &str) {
     if let Some(output) =
         check_tool_block(&hook_input.tool_name, &tool_input_map, config.block_rules())
     {
-        if let Ok(json) = serde_json::to_string(&output) {
+        if let Ok(json) = serde_json::to_string(&output.serialize(client)) {
             println!("{json}");
         } else {
             println!(
@@ -200,7 +199,7 @@ fn handle_pre_tool_use_hook(input: &str) {
                 print_no_opinion();
                 return;
             }
-            handle_bash_pre_tool_use(&hook_input);
+            handle_bash_pre_tool_use(&hook_input, client);
         }
         // File tools: symlink guard + security reminders
         "Read" | "Write" | "Edit" | "MultiEdit" => {
@@ -211,7 +210,7 @@ fn handle_pre_tool_use_hook(input: &str) {
                     if let Some(output) =
                         check_file_guard(file_path, &hook_input.tool_name, &config.file_guards)
                     {
-                        if let Ok(json) = serde_json::to_string(&output) {
+                        if let Ok(json) = serde_json::to_string(&output.serialize(client)) {
                             println!("{json}");
                         } else {
                             println!(
@@ -231,7 +230,7 @@ fn handle_pre_tool_use_hook(input: &str) {
                     &config.security_reminders,
                     &hook_input.session_id,
                 ) {
-                    if let Ok(json) = serde_json::to_string(&output) {
+                    if let Ok(json) = serde_json::to_string(&output.serialize(client)) {
                         println!("{json}");
                     } else {
                         println!(
@@ -258,7 +257,7 @@ fn handle_pre_tool_use_hook(input: &str) {
                             .as_deref()
                             .and_then(|m| if m.is_empty() { None } else { Some(m) });
                         let output = HookOutput::allow(reason);
-                        if let Ok(json) = serde_json::to_string(&output) {
+                        if let Ok(json) = serde_json::to_string(&output.serialize(client)) {
                             println!("{json}");
                         }
                         return;
@@ -299,7 +298,7 @@ fn extract_file_paths_from_map(map: &serde_json::Map<String, serde_json::Value>)
 }
 
 /// Handle Bash-specific PreToolUse logic (gate engine + tracking)
-fn handle_bash_pre_tool_use(hook_input: &HookInput) {
+fn handle_bash_pre_tool_use(hook_input: &HookInput, client: Client) {
     let command = hook_input.get_command();
     if command.is_empty() {
         print_no_opinion();
@@ -314,41 +313,49 @@ fn handle_bash_pre_tool_use(hook_input: &HookInput) {
         &hook_input.session_id,
     );
 
-    // If the result is "ask", track it for PostToolUse correlation
-    if let Some(ref hso) = output.hook_specific_output {
-        if hso.permission_decision == "ask" && !hook_input.tool_use_id.is_empty() {
-            let commands = tool_gates::parser::extract_commands(&command);
-            let suggested_patterns: Vec<String> =
-                commands.iter().flat_map(suggest_patterns).collect();
+    // If the result is "ask", track it for PostToolUse correlation (Claude only,
+    // Gemini doesn't provide tool_use_id)
+    if client == Client::Claude
+        && output.decision == PermissionDecision::Ask
+        && !hook_input.tool_use_id.is_empty()
+    {
+        let commands = tool_gates::parser::extract_commands(&command);
+        let suggested_patterns: Vec<String> = commands.iter().flat_map(suggest_patterns).collect();
 
-            let breakdown: Vec<CommandPart> = commands
-                .iter()
-                .map(|cmd| {
-                    CommandPart::new(
-                        &cmd.program,
-                        &cmd.args,
-                        tool_gates::Decision::Ask,
-                        hso.permission_decision_reason
-                            .as_deref()
-                            .unwrap_or("Requires approval"),
-                    )
-                })
-                .collect();
+        let breakdown: Vec<CommandPart> = commands
+            .iter()
+            .map(|cmd| {
+                CommandPart::new(
+                    &cmd.program,
+                    &cmd.args,
+                    tool_gates::Decision::Ask,
+                    output.reason.as_deref().unwrap_or("Requires approval"),
+                )
+            })
+            .collect();
 
-            track_ask_command(
-                &hook_input.tool_use_id,
-                &command,
-                suggested_patterns,
-                breakdown,
-                &hook_input.project_id(),
-                &hook_input.cwd,
-                &hook_input.session_id,
-            );
-        }
+        track_ask_command(
+            &hook_input.tool_use_id,
+            &command,
+            suggested_patterns,
+            breakdown,
+            &hook_input.project_id(),
+            &hook_input.cwd,
+            &hook_input.session_id,
+        );
     }
 
-    match serde_json::to_string(&output) {
-        Ok(json) => println!("{json}"),
+    // Serialize in the appropriate format for the client
+    let json_value = output.serialize(client);
+    let is_gemini_block = client == Client::Gemini
+        && json_value.get("decision").and_then(|d| d.as_str()) == Some("block");
+    match serde_json::to_string(&json_value) {
+        Ok(json) => {
+            println!("{json}");
+            if is_gemini_block {
+                std::process::exit(2);
+            }
+        }
         Err(e) => {
             eprintln!("Error serializing output: {e}");
             print_no_opinion();
@@ -367,13 +374,13 @@ fn handle_permission_request_hook(input: &str) {
         }
     };
 
-    // Only process Bash tools
-    if perm_input.tool_name != "Bash" {
+    // Only process shell command tools
+    if !Client::is_shell_tool(&perm_input.tool_name) {
         // Don't output anything - let normal prompt show
         return;
     }
 
-    // Check if we should approve this
+    // Check if we should approve this (PermissionRequest is Claude-only)
     if let Some(output) = handle_permission_request(&perm_input) {
         match serde_json::to_string(&output) {
             Ok(json) => println!("{json}"),
@@ -386,8 +393,8 @@ fn handle_permission_request_hook(input: &str) {
     // If None, we don't output anything - lets the normal permission prompt show
 }
 
-/// Handle PostToolUse hook (for tracking successful executions + security reminders)
-fn handle_post_tool_use_hook(input: &str) {
+/// Handle PostToolUse (Claude) / AfterTool (Gemini) hook
+fn handle_post_tool_use_hook(input: &str, client: Client) {
     let post_input: PostToolUseInput = match serde_json::from_str(input) {
         Ok(pi) => pi,
         Err(e) => {
@@ -397,8 +404,12 @@ fn handle_post_tool_use_hook(input: &str) {
     };
 
     match post_input.tool_name.as_str() {
-        // Bash: track successful executions for approval learning
-        "Bash" => {
+        // Shell commands: track successful executions for approval learning
+        "Bash" | "run_shell_command" => {
+            // Gemini doesn't provide tool_use_id, so tracking won't work
+            if client == Client::Gemini {
+                return;
+            }
             if let Some(output) = handle_post_tool_use(&post_input) {
                 if let Ok(json) = serde_json::to_string(&output) {
                     println!("{json}");
@@ -474,6 +485,21 @@ fn generate_hooks_json(binary_path: &str) -> serde_json::Value {
     })
 }
 
+fn generate_gemini_hook_entry(binary_path: &str) -> serde_json::Value {
+    serde_json::json!({
+        "matcher": "run_shell_command",
+        "hooks": [{"type": "command", "command": binary_path, "timeout": 5000}]
+    })
+}
+
+fn generate_gemini_hooks_json(binary_path: &str) -> serde_json::Value {
+    let entry = generate_gemini_hook_entry(binary_path);
+    serde_json::json!({
+        "BeforeTool": [entry],
+        "AfterTool": [generate_gemini_hook_entry(binary_path)]
+    })
+}
+
 /// Get the settings file path based on scope
 /// - "user" → ~/.claude/settings.json (or CLAUDE_CONFIG_DIR/settings.json)
 /// - "project" → .claude/settings.json (committed, shared with team)
@@ -509,8 +535,8 @@ fn has_tool_gates_hook(hooks_array: &serde_json::Value) -> bool {
     if let Some(arr) = hooks_array.as_array() {
         for entry in arr {
             let matcher = entry.get("matcher").and_then(|m| m.as_str()).unwrap_or("");
-            // Match both old "Bash" and new broader patterns containing "Bash"
-            if matcher.contains("Bash") {
+            // Match Claude patterns (containing "Bash") and Gemini patterns
+            if matcher.contains("Bash") || matcher == "run_shell_command" {
                 if let Some(hooks) = entry.get("hooks").and_then(|h| h.as_array()) {
                     for hook in hooks {
                         if let Some(cmd) = hook.get("command").and_then(|c| c.as_str()) {
@@ -656,6 +682,115 @@ fn install_hooks(scope: &str, dry_run: bool) {
     }
 }
 
+/// Get Gemini CLI settings path
+fn get_gemini_settings_path(scope: &str) -> std::path::PathBuf {
+    match scope {
+        "user" => dirs::home_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join(".gemini")
+            .join("settings.json"),
+        "project" => std::path::PathBuf::from(".gemini").join("settings.json"),
+        _ => {
+            eprintln!(
+                "Error: Invalid Gemini scope '{}'. Use: user or project",
+                scope
+            );
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Install hooks into Gemini CLI settings.json
+fn install_gemini_hooks(scope: &str, dry_run: bool) {
+    let binary_path = get_binary_path();
+    let settings_path = get_gemini_settings_path(scope);
+
+    eprintln!("tool-gates installer (Gemini CLI)");
+    eprintln!("Binary: {}", binary_path);
+    eprintln!("Target: {} ({})", settings_path.display(), scope);
+    eprintln!();
+
+    let mut settings: serde_json::Value = if settings_path.exists() {
+        match std::fs::read_to_string(&settings_path) {
+            Ok(content) => serde_json::from_str(&content).unwrap_or_else(|e| {
+                eprintln!("Error: Failed to parse {}: {}", settings_path.display(), e);
+                std::process::exit(1);
+            }),
+            Err(e) => {
+                eprintln!("Error: Failed to read {}: {}", settings_path.display(), e);
+                std::process::exit(1);
+            }
+        }
+    } else {
+        serde_json::json!({})
+    };
+
+    if settings.get("hooks").is_none() {
+        settings["hooks"] = serde_json::json!({});
+    }
+
+    let hooks = settings.get_mut("hooks").unwrap();
+    let hook_entry = generate_gemini_hook_entry(&binary_path);
+    let mut changes = Vec::new();
+
+    for event in ["BeforeTool", "AfterTool"] {
+        if hooks.get(event).is_none() {
+            hooks[event] = serde_json::json!([]);
+        }
+        if has_tool_gates_hook(&hooks[event]) {
+            eprintln!("✓ {} hook already configured", event);
+        } else {
+            hooks[event]
+                .as_array_mut()
+                .unwrap()
+                .push(hook_entry.clone());
+            changes.push(event);
+            eprintln!("+ Adding {} hook", event);
+        }
+    }
+
+    if changes.is_empty() {
+        eprintln!("\nNo changes needed - tool-gates already installed.");
+        return;
+    }
+
+    if dry_run {
+        eprintln!("\n--dry-run: Would write to {}", settings_path.display());
+        eprintln!("\nResulting hooks configuration:");
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&settings["hooks"]).unwrap()
+        );
+        return;
+    }
+
+    if let Some(parent) = settings_path.parent() {
+        if !parent.exists() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                eprintln!("Error: Failed to create {}: {}", parent.display(), e);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    match std::fs::write(
+        &settings_path,
+        serde_json::to_string_pretty(&settings).unwrap() + "\n",
+    ) {
+        Ok(_) => {
+            eprintln!("\n✓ Installed to {}", settings_path.display());
+            eprintln!("\nHooks added: {}", changes.join(", "));
+            eprintln!("\nGemini CLI hooks:");
+            eprintln!("  - BeforeTool: Command safety (allow/block/ask)");
+            eprintln!("  - AfterTool: Post-execution context");
+        }
+        Err(e) => {
+            eprintln!("Error: Failed to write {}: {}", settings_path.display(), e);
+            std::process::exit(1);
+        }
+    }
+}
+
 /// Handle `tool-gates hooks` subcommand
 fn handle_hooks_subcommand(args: &[String]) {
     if args.is_empty() || args.iter().any(|a| a == "--help" || a == "-h") {
@@ -669,7 +804,7 @@ fn handle_hooks_subcommand(args: &[String]) {
     match subcommand.as_str() {
         "add" => handle_hooks_add(sub_args),
         "status" => handle_hooks_status(),
-        "json" => print_hooks_json(),
+        "json" => print_hooks_json(sub_args),
         _ => {
             eprintln!("Unknown hooks subcommand: {}", subcommand);
             eprintln!("Run 'tool-gates hooks --help' for usage.");
@@ -681,6 +816,7 @@ fn handle_hooks_subcommand(args: &[String]) {
 /// Handle `tool-gates hooks add`
 fn handle_hooks_add(args: &[String]) {
     let dry_run = args.iter().any(|a| a == "--dry-run" || a == "-n");
+    let gemini = args.iter().any(|a| a == "--gemini");
 
     // Parse --scope option
     let scope = args
@@ -688,6 +824,13 @@ fn handle_hooks_add(args: &[String]) {
         .position(|a| a == "--scope" || a == "-s")
         .and_then(|i| args.get(i + 1))
         .map(|s| s.as_str());
+
+    if gemini {
+        // Gemini: scope defaults to "user" (~/.gemini/settings.json)
+        let scope = scope.unwrap_or("user");
+        install_gemini_hooks(scope, dry_run);
+        return;
+    }
 
     // No scope specified: show help (always required, even for dry-run)
     if scope.is_none() {
@@ -700,73 +843,86 @@ fn handle_hooks_add(args: &[String]) {
     install_hooks(scope, dry_run);
 }
 
+/// Check a settings file for hook installation and print status
+fn check_settings_hooks(scope: &str, path: &std::path::Path, hook_names: &[&str]) {
+    eprint!("{:8} {} ", scope, path.display());
+
+    if !path.exists() {
+        eprintln!("(not found)");
+        return;
+    }
+
+    match std::fs::read_to_string(path) {
+        Ok(content) => match serde_json::from_str::<serde_json::Value>(&content) {
+            Ok(settings) => {
+                let hooks = settings.get("hooks");
+                let statuses: Vec<bool> = hook_names
+                    .iter()
+                    .map(|name| {
+                        hooks
+                            .and_then(|h| h.get(*name))
+                            .map(has_tool_gates_hook)
+                            .unwrap_or(false)
+                    })
+                    .collect();
+
+                let installed_count = statuses.iter().filter(|&&x| x).count();
+
+                if installed_count == hook_names.len() {
+                    eprintln!("✓ installed (all hooks)");
+                } else if installed_count > 0 {
+                    let missing: Vec<&str> = hook_names
+                        .iter()
+                        .zip(statuses.iter())
+                        .filter(|(_, installed)| !*installed)
+                        .map(|(&name, _)| name)
+                        .collect();
+                    eprintln!("⚠ partial (missing {})", missing.join(", "));
+                } else {
+                    eprintln!("- not installed");
+                }
+            }
+            Err(_) => eprintln!("(parse error)"),
+        },
+        Err(_) => eprintln!("(read error)"),
+    }
+}
+
 /// Handle `tool-gates hooks status`
 fn handle_hooks_status() {
-    let scopes = [
+    eprintln!("bash-gates hook status\n");
+
+    eprintln!("Claude Code:");
+    let claude_scopes = [
         ("user", get_settings_path("user")),
         ("project", get_settings_path("project")),
         ("local", get_settings_path("local")),
     ];
+    let claude_hooks = ["PreToolUse", "PermissionRequest", "PostToolUse"];
+    for (scope, path) in &claude_scopes {
+        check_settings_hooks(scope, path, &claude_hooks);
+    }
 
-    eprintln!("tool-gates hook status\n");
-
-    for (scope, path) in &scopes {
-        eprint!("{:8} {} ", scope, path.display());
-
-        if !path.exists() {
-            eprintln!("(not found)");
-            continue;
-        }
-
-        match std::fs::read_to_string(path) {
-            Ok(content) => match serde_json::from_str::<serde_json::Value>(&content) {
-                Ok(settings) => {
-                    let hooks = settings.get("hooks");
-                    let has_pre = hooks
-                        .and_then(|h| h.get("PreToolUse"))
-                        .map(has_tool_gates_hook)
-                        .unwrap_or(false);
-                    let has_perm = hooks
-                        .and_then(|h| h.get("PermissionRequest"))
-                        .map(has_tool_gates_hook)
-                        .unwrap_or(false);
-                    let has_post = hooks
-                        .and_then(|h| h.get("PostToolUse"))
-                        .map(has_tool_gates_hook)
-                        .unwrap_or(false);
-
-                    let installed_count =
-                        [has_pre, has_perm, has_post].iter().filter(|&&x| x).count();
-
-                    if installed_count == 3 {
-                        eprintln!("✓ installed (all hooks)");
-                    } else if installed_count > 0 {
-                        let mut missing = Vec::new();
-                        if !has_pre {
-                            missing.push("PreToolUse");
-                        }
-                        if !has_perm {
-                            missing.push("PermissionRequest");
-                        }
-                        if !has_post {
-                            missing.push("PostToolUse");
-                        }
-                        eprintln!("⚠ partial (missing {})", missing.join(", "));
-                    } else {
-                        eprintln!("- not installed");
-                    }
-                }
-                Err(_) => eprintln!("(parse error)"),
-            },
-            Err(_) => eprintln!("(read error)"),
-        }
+    eprintln!("\nGemini CLI:");
+    let gemini_scopes = [
+        ("user", get_gemini_settings_path("user")),
+        ("project", get_gemini_settings_path("project")),
+    ];
+    let gemini_hooks = ["BeforeTool", "AfterTool"];
+    for (scope, path) in &gemini_scopes {
+        check_settings_hooks(scope, path, &gemini_hooks);
     }
 }
 
 /// Print hooks JSON only
-fn print_hooks_json() {
+fn print_hooks_json(args: &[String]) {
     let binary_path = get_binary_path();
-    let hooks = generate_hooks_json(&binary_path);
+    let gemini = args.iter().any(|a| a == "--gemini");
+    let hooks = if gemini {
+        generate_gemini_hooks_json(&binary_path)
+    } else {
+        generate_hooks_json(&binary_path)
+    };
     println!("{}", serde_json::to_string_pretty(&hooks).unwrap());
 }
 
@@ -775,13 +931,12 @@ fn print_main_help() {
     eprintln!();
     eprintln!("USAGE:");
     eprintln!("  tool-gates                   Read hook input from stdin (default)");
-    eprintln!("  tool-gates hooks <command>   Manage Claude Code hooks");
+    eprintln!("  tool-gates hooks <command>   Manage Claude Code / Gemini CLI hooks");
     eprintln!("  tool-gates approve <pattern> Add permission rule to settings");
     eprintln!("  tool-gates rules <command>   List/remove permission rules");
     eprintln!("  tool-gates pending <command> Manage pending approval queue");
     eprintln!("  tool-gates review            Interactive TUI for pending approvals");
     eprintln!("  tool-gates doctor            Check config, hooks, and cache health");
-    eprintln!("  tool-gates --export-toml     Export Gemini CLI policy rules");
     eprintln!("  tool-gates --refresh-tools   Refresh modern CLI tool detection");
     eprintln!("  tool-gates --tools-status    Show detected modern tools");
     eprintln!("  tool-gates --help            Show this help");
@@ -789,6 +944,7 @@ fn print_main_help() {
     eprintln!();
     eprintln!("COMMANDS:");
     eprintln!("  hooks add -s <scope>         Add hooks to Claude Code settings");
+    eprintln!("  hooks add --gemini           Add hooks to Gemini CLI settings");
     eprintln!("  hooks status                 Show hook installation status");
     eprintln!("  approve <pattern> -s <scope> Add allow rule for command pattern");
     eprintln!("  rules list                   List all permission rules");
@@ -803,36 +959,41 @@ fn print_main_help() {
     eprintln!("  local    .claude/settings.local.json (personal, not committed)");
     eprintln!();
     eprintln!("EXAMPLES:");
-    eprintln!("  tool-gates hooks add -s user          # Install hooks");
+    eprintln!("  tool-gates hooks add -s user          # Install Claude Code hooks");
+    eprintln!("  tool-gates hooks add --gemini         # Install Gemini CLI hooks");
     eprintln!("  tool-gates approve 'npm:*' -s local   # Allow npm commands");
     eprintln!("  tool-gates rules list                 # Show all rules");
     eprintln!("  tool-gates pending list               # Show pending approvals");
-    eprintln!();
-    eprintln!("  tool-gates --export-toml > ~/.gemini/policies/tool-gates.toml");
 }
 
 fn print_hooks_help() {
-    eprintln!("tool-gates hooks - Manage Claude Code hooks");
+    eprintln!("tool-gates hooks - Manage Claude Code / Gemini CLI hooks");
     eprintln!();
     eprintln!("USAGE:");
-    eprintln!("  tool-gates hooks add -s <scope>   Add hooks to settings file");
-    eprintln!("  tool-gates hooks status           Show hook installation status");
-    eprintln!("  tool-gates hooks json             Output hooks JSON only");
+    eprintln!("  tool-gates hooks add -s <scope>   Add hooks to Claude Code settings");
+    eprintln!("  tool-gates hooks add --gemini      Add hooks to Gemini CLI settings");
+    eprintln!("  tool-gates hooks status            Show hook installation status");
+    eprintln!("  tool-gates hooks json [--gemini]   Output hooks JSON only");
     eprintln!();
-    eprintln!("SCOPES:");
+    eprintln!("CLAUDE CODE SCOPES:");
     eprintln!("  user     ~/.claude/settings.json (global user settings)");
     eprintln!("  project  .claude/settings.json (committed, shared with team)");
     eprintln!("  local    .claude/settings.local.json (not committed)");
     eprintln!();
+    eprintln!("GEMINI CLI SCOPES:");
+    eprintln!("  user     ~/.gemini/settings.json (default)");
+    eprintln!("  project  .gemini/settings.json");
+    eprintln!();
     eprintln!("EXAMPLES:");
-    eprintln!("  tool-gates hooks add -s user         # Recommended for personal use");
-    eprintln!("  tool-gates hooks add -s project      # Share hooks with team");
+    eprintln!("  tool-gates hooks add -s user         # Claude Code (recommended)");
+    eprintln!("  tool-gates hooks add --gemini        # Gemini CLI");
     eprintln!("  tool-gates hooks add -s user --dry-run  # Preview changes");
 }
 
 fn print_hooks_add_help() {
     eprintln!("USAGE:");
     eprintln!("  tool-gates hooks add -s <scope> [--dry-run]");
+    eprintln!("  tool-gates hooks add --gemini [-s <scope>] [--dry-run]");
     eprintln!();
     eprintln!("SCOPES:");
     eprintln!("  user     ~/.claude/settings.json");
@@ -840,7 +1001,8 @@ fn print_hooks_add_help() {
     eprintln!("  local    .claude/settings.local.json");
     eprintln!();
     eprintln!("OPTIONS:");
-    eprintln!("  -s, --scope <scope>   Target settings file (required)");
+    eprintln!("  -s, --scope <scope>   Target settings file (required for Claude Code)");
+    eprintln!("  --gemini              Install for Gemini CLI instead of Claude Code");
     eprintln!("  -n, --dry-run         Preview changes without writing");
 }
 
@@ -1515,10 +1677,11 @@ fn humanize_bytes(bytes: u64) -> String {
     }
 }
 
-/// Print empty JSON to signal no opinion (pass through to Claude Code's normal flow).
+/// Print empty JSON to signal no opinion (pass through to normal flow).
 fn print_no_opinion() {
     let output = HookOutput::no_opinion();
-    if let Ok(json) = serde_json::to_string(&output) {
+    // Default to Claude format since this is the fallback when client is unknown
+    if let Ok(json) = serde_json::to_string(&output.serialize(Client::Claude)) {
         println!("{json}");
     } else {
         println!("{{}}");
@@ -1550,42 +1713,43 @@ mod tests {
     #[test]
     fn test_check_command_git_status() {
         let output = check_command("git status");
-        let json = serde_json::to_string(&output).unwrap();
-        assert!(json.contains("allow"));
+        assert_eq!(output.decision, PermissionDecision::Allow);
     }
 
     #[test]
     fn test_check_command_npm_install() {
         let output = check_command("npm install");
-        let json = serde_json::to_string(&output).unwrap();
-        assert!(json.contains("ask"));
+        assert_eq!(output.decision, PermissionDecision::Ask);
     }
 
     #[test]
     fn test_check_command_rm_rf_root() {
         let output = check_command("rm -rf /");
-        let json = serde_json::to_string(&output).unwrap();
-        assert!(json.contains("deny"));
+        assert_eq!(output.decision, PermissionDecision::Deny);
     }
 
     #[test]
-    fn test_output_uses_pre_tool_use() {
+    fn test_output_claude_wire_format() {
         let output = check_command("git status");
-        let json = serde_json::to_string(&output).unwrap();
+        let json = serde_json::to_string(&output.serialize(Client::Claude)).unwrap();
         assert!(
             json.contains("PreToolUse"),
             "Expected PreToolUse in: {json}"
         );
+        assert!(
+            json.contains("hookSpecificOutput"),
+            "Expected hookSpecificOutput in: {json}"
+        );
     }
 
-    // === Integration tests: JSON input → decision flow ===
+    // === Integration tests: JSON input -> decision flow ===
 
-    /// Simulate the full hook flow: JSON input → parse → check → JSON output
+    /// Simulate the full hook flow: JSON input -> parse -> check -> Claude JSON output
     fn simulate_hook(json_input: &str) -> String {
         let input: HookInput = serde_json::from_str(json_input).unwrap();
         let command = input.get_command();
         let output = check_command(&command);
-        serde_json::to_string(&output).unwrap()
+        serde_json::to_string(&output.serialize(Client::Claude)).unwrap()
     }
 
     #[test]
@@ -1658,7 +1822,7 @@ mod tests {
         let json = r#"{"tool_name": "Bash", "tool_input": {"command": "git status"}}"#;
         let output = simulate_hook(json);
 
-        // Verify output has expected structure
+        // Verify output has expected Claude wire format structure
         let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
         assert!(parsed["hookSpecificOutput"].is_object());
         assert_eq!(parsed["hookSpecificOutput"]["hookEventName"], "PreToolUse");
@@ -1691,7 +1855,8 @@ mod tests {
             "integration-sec-test",
         );
         assert!(result.is_some());
-        let output_json = serde_json::to_string(&result.unwrap()).unwrap();
+        let output_json =
+            serde_json::to_string(&result.unwrap().serialize(Client::Claude)).unwrap();
         assert!(
             output_json.contains("deny"),
             "Secret in Write should deny: {output_json}"
