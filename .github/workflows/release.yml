@@ -106,6 +106,14 @@ jobs:
           - target: aarch64-apple-darwin
             os: macos-latest
             arch: macos-arm64
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            arch: windows-x86_64
+            ext: .exe
+          - target: aarch64-pc-windows-msvc
+            os: windows-latest
+            arch: windows-arm64
+            ext: .exe
     steps:
       - uses: actions/checkout@v6
         with:
@@ -129,14 +137,14 @@ jobs:
       - name: Package binary
         shell: bash
         run: |
-          SRC="target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}"
-          DST="${{ env.BINARY_NAME }}-${{ matrix.arch }}"
+          SRC="target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}${{ matrix.ext }}"
+          DST="${{ env.BINARY_NAME }}-${{ matrix.arch }}${{ matrix.ext }}"
           cp "$SRC" "$DST"
 
       - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.arch }}
-          path: ${{ env.BINARY_NAME }}-${{ matrix.arch }}
+          path: ${{ env.BINARY_NAME }}-${{ matrix.arch }}${{ matrix.ext }}
 
   upload:
     name: Upload Binaries
