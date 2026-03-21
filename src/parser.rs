@@ -361,22 +361,108 @@ fn unquote(s: &str) -> String {
 fn fallback_parse(command_string: &str) -> Vec<CommandInfo> {
     let mut commands = Vec::new();
 
-    // Simple tokenization - split on whitespace while respecting quotes
-    let tokens = tokenize(command_string);
-    if tokens.is_empty() {
-        return commands;
+    // Split on compound operators (&&, ||, ;, |) before tokenizing each part
+    let parts = split_on_operators(command_string);
+
+    for part in &parts {
+        let trimmed = part.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        let tokens = tokenize(trimmed);
+        if tokens.is_empty() {
+            continue;
+        }
+
+        let program = tokens[0].clone();
+        let args = tokens[1..].to_vec();
+
+        commands.push(CommandInfo {
+            raw: command_string.to_string(),
+            program,
+            args,
+        });
     }
 
-    let program = tokens[0].clone();
-    let args = tokens[1..].to_vec();
-
-    commands.push(CommandInfo {
-        raw: command_string.to_string(),
-        program,
-        args,
-    });
-
     commands
+}
+
+/// Split a command string on compound operators (`&&`, `||`, `;`, `|`) while
+/// respecting single- and double-quoted strings.  `||` is consumed as a single
+/// two-character operator so it is never mistaken for two pipes.
+fn split_on_operators(s: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let mut in_single_quote = false;
+    let mut in_double_quote = false;
+    let mut escape_next = false;
+    let chars: Vec<char> = s.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+
+    while i < len {
+        let c = chars[i];
+
+        if escape_next {
+            current.push(c);
+            escape_next = false;
+            i += 1;
+            continue;
+        }
+
+        if c == '\\' && !in_single_quote {
+            escape_next = true;
+            current.push(c);
+            i += 1;
+            continue;
+        }
+
+        if c == '\'' && !in_double_quote {
+            in_single_quote = !in_single_quote;
+            current.push(c);
+            i += 1;
+            continue;
+        }
+
+        if c == '"' && !in_single_quote {
+            in_double_quote = !in_double_quote;
+            current.push(c);
+            i += 1;
+            continue;
+        }
+
+        // Only split when outside quotes
+        if !in_single_quote && !in_double_quote {
+            // Check two-character operators first: && and ||
+            if i + 1 < len {
+                let next = chars[i + 1];
+                if (c == '&' && next == '&') || (c == '|' && next == '|') {
+                    parts.push(current.clone());
+                    current.clear();
+                    i += 2;
+                    continue;
+                }
+            }
+            // Single-character operators: ; and | (single pipe)
+            if c == ';' || c == '|' {
+                parts.push(current.clone());
+                current.clear();
+                i += 1;
+                continue;
+            }
+        }
+
+        current.push(c);
+        i += 1;
+    }
+
+    // Push the last segment
+    if !current.is_empty() {
+        parts.push(current);
+    }
+
+    parts
 }
 
 /// Simple tokenizer that handles quoted strings
@@ -916,5 +1002,52 @@ mod tests {
                 prop_assert_eq!(&cmds[0].program, "echo");
             }
         }
+    }
+
+    // -- fallback_parse compound-operator splitting --
+
+    #[test]
+    fn test_fallback_splits_and_and() {
+        let cmds = fallback_parse("echo hello && rm -rf /");
+        assert_eq!(cmds.len(), 2);
+        assert_eq!(cmds[0].program, "echo");
+        assert_eq!(cmds[0].args, vec!["hello"]);
+        assert_eq!(cmds[1].program, "rm");
+        assert_eq!(cmds[1].args, vec!["-rf", "/"]);
+    }
+
+    #[test]
+    fn test_fallback_splits_or_or() {
+        let cmds = fallback_parse("echo hello || rm -rf /");
+        assert_eq!(cmds.len(), 2);
+        assert_eq!(cmds[0].program, "echo");
+        assert_eq!(cmds[0].args, vec!["hello"]);
+        assert_eq!(cmds[1].program, "rm");
+        assert_eq!(cmds[1].args, vec!["-rf", "/"]);
+    }
+
+    #[test]
+    fn test_fallback_splits_semicolons() {
+        let cmds = fallback_parse("a ; b ; c");
+        assert_eq!(cmds.len(), 3);
+        assert_eq!(cmds[0].program, "a");
+        assert_eq!(cmds[1].program, "b");
+        assert_eq!(cmds[2].program, "c");
+    }
+
+    #[test]
+    fn test_fallback_splits_pipe() {
+        let cmds = fallback_parse("a | b");
+        assert_eq!(cmds.len(), 2);
+        assert_eq!(cmds[0].program, "a");
+        assert_eq!(cmds[1].program, "b");
+    }
+
+    #[test]
+    fn test_fallback_no_split_inside_quotes() {
+        let cmds = fallback_parse("echo 'a && b'");
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].program, "echo");
+        assert_eq!(cmds[0].args, vec!["a && b"]);
     }
 }
