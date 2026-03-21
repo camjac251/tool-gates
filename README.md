@@ -297,6 +297,20 @@ Compound commands (`&&`, `||`, `|`) show per-segment patterns so you can approve
 
 ## Installation
 
+### Homebrew (Recommended)
+
+```bash
+brew install camjac251/tap/tool-gates
+```
+
+Upgrades work normally after the initial install:
+
+```bash
+brew upgrade tool-gates
+```
+
+Bottles are built for macOS (arm64, x86_64) and Linux (arm64, x86_64). Formulas are updated automatically when new releases are published.
+
 ### Download Binary
 
 ```bash
