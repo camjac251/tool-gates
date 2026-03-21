@@ -55,7 +55,7 @@ jobs:
 
       - name: Check binary size
         run: |
-          cargo build --release
+          cargo build --release --target x86_64-unknown-linux-musl
           SIZE=$(stat -c%s target/x86_64-unknown-linux-musl/release/tool-gates)
           echo "Binary size: $SIZE bytes ($(( SIZE / 1024 / 1024 ))MB)"
           if [ "$SIZE" -gt 7000000 ]; then
