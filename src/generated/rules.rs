@@ -177,9 +177,7 @@ pub static SAFE_COMMANDS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "zi",
         "zipinfo",
         "zoxide",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check if a command is in the safe commands list
@@ -201,15 +199,11 @@ pub enum ConditionalAction {
 }
 
 /// Conditional allow rules (program -> (flags that prevent allow, action))
-pub static CONDITIONAL_ALLOW: LazyLock<HashMap<&str, (&[&str], ConditionalAction)>> =
-    LazyLock::new(|| {
-        [(
-            "sed",
-            (&["-i", "--in-place"] as &[&str], ConditionalAction::Ask),
-        )]
-        .into_iter()
-        .collect()
-    });
+pub static CONDITIONAL_ALLOW: LazyLock<HashMap<&str, (&[&str], ConditionalAction)>> = LazyLock::new(|| {
+    [
+        ("sed", (&["-i", "--in-place"] as &[&str], ConditionalAction::Ask)),
+    ].into_iter().collect()
+});
 
 /// Check conditional allow rules
 pub fn check_conditional_allow(cmd: &CommandInfo) -> Option<GateResult> {
@@ -220,12 +214,8 @@ pub fn check_conditional_allow(cmd: &CommandInfo) -> Option<GateResult> {
         if has_flag {
             match action {
                 ConditionalAction::Skip => None,
-                ConditionalAction::Ask => {
-                    Some(GateResult::ask(format!("{}: in-place edit", cmd.program)))
-                }
-                ConditionalAction::Block => {
-                    Some(GateResult::block(format!("{}: blocked", cmd.program)))
-                }
+                ConditionalAction::Ask => Some(GateResult::ask(format!("{}: in-place edit", cmd.program))),
+                ConditionalAction::Block => Some(GateResult::block(format!("{}: blocked", cmd.program))),
             }
         } else {
             Some(GateResult::allow())
@@ -246,9 +236,7 @@ pub static MCP_CLI_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "resources",
         "read",
         "help",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check mcp-cli commands declaratively
@@ -323,22 +311,14 @@ pub static GH_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "ruleset view",
         "project list",
         "project view",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static GH_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
         ("repo clone", "Cloning repo (writes to local filesystem)"),
-        (
-            "run download",
-            "Downloading artifacts (writes to local filesystem)",
-        ),
-        (
-            "release download",
-            "Downloading release assets (writes to local filesystem)",
-        ),
+        ("run download", "Downloading artifacts (writes to local filesystem)"),
+        ("release download", "Downloading release assets (writes to local filesystem)"),
         ("gist clone", "Cloning gist (writes to local filesystem)"),
         ("issue create", "Creating issue"),
         ("issue close", "Closing issue"),
@@ -424,18 +404,14 @@ pub static GH_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("project item-edit", "Editing item"),
         ("project field-create", "Creating field"),
         ("project field-delete", "Deleting field"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static GH_BLOCK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
         ("repo delete", "Deleting repositories is blocked"),
         ("auth logout", "Logging out is blocked"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check gh commands declaratively
@@ -463,33 +439,23 @@ pub fn check_gh_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = GH_ASK
-        .get(subcmd.as_str())
-        .or_else(|| GH_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = GH_ASK.get(subcmd.as_str()).or_else(|| GH_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("gh: {}", reason)));
     }
 
     // API rules for 'gh api'
     if subcmd_single == "api" {
-        let explicit_method = cmd
-            .args
-            .iter()
+        let explicit_method = cmd.args.iter()
             .position(|a| ["-X", "--method"].contains(&a.as_str()))
             .and_then(|i| cmd.args.get(i + 1))
             .map(|s| s.to_uppercase());
-        let endpoint = cmd
-            .args
-            .iter()
-            .skip(1) // skip 'api'
+        let endpoint = cmd.args.iter()
+            .skip(1)  // skip 'api'
             .find(|a| !a.starts_with('-'));
-        let is_read_only_endpoint =
-            endpoint.is_some_and(|e| ["search/"].iter().any(|p| e.starts_with(p)));
+        let is_read_only_endpoint = endpoint.is_some_and(|e| ["search/"].iter().any(|p| e.starts_with(p)));
         let has_implicit_post = cmd.args.iter().any(|a| {
             let arg = a.as_str();
-            ["-f", "-F", "--field", "--raw-field", "--input"]
-                .iter()
-                .any(|f| arg == *f || arg.starts_with(&format!("{}=", f)))
+            ["-f", "-F", "--field", "--raw-field", "--input"].iter().any(|f| arg == *f || arg.starts_with(&format!("{}=", f)))
         });
         let method = explicit_method.unwrap_or_else(|| {
             if is_read_only_endpoint {
@@ -555,9 +521,7 @@ pub static GIT_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "remote show",
         "remote -v",
         "remote get-url",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static GIT_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -575,10 +539,7 @@ pub static GIT_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("worktree add", "git worktree add"),
         ("worktree remove", "git worktree remove"),
         ("worktree prune", "git worktree prune"),
-        (
-            "submodule foreach",
-            "git submodule foreach (runs arbitrary commands)",
-        ),
+        ("submodule foreach", "git submodule foreach (runs arbitrary commands)"),
         ("submodule init", "git submodule init"),
         ("submodule update", "git submodule update"),
         ("submodule add", "git submodule add"),
@@ -612,15 +573,10 @@ pub static GIT_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("filter-repo", "Rewriting history (dangerous)"),
         ("notes", "git notes operation"),
         ("bundle", "Bundle operation"),
-        (
-            "maintenance",
-            "Running maintenance tasks (modifies .git directory)",
-        ),
+        ("maintenance", "Running maintenance tasks (modifies .git directory)"),
         ("sparse-checkout", "Modifying sparse checkout"),
         ("worktree", "git worktree operation"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check git commands declaratively
@@ -630,11 +586,7 @@ pub fn check_git_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Check allow_if_flags (e.g., --dry-run)
-    if cmd
-        .args
-        .iter()
-        .any(|a| ["--dry-run", "-n"].contains(&a.as_str()))
-    {
+    if cmd.args.iter().any(|a| ["--dry-run", "-n"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
 
@@ -650,26 +602,14 @@ pub fn check_git_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Check ask rules with flag/prefix conditions
-    if subcmd_single == "push"
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["--force", "-f"].contains(&a.as_str()))
-    {
+    if subcmd_single == "push" && cmd.args.iter().any(|a| ["--force", "-f"].contains(&a.as_str())) {
         return Some(GateResult::ask("Force push (safer: --force-with-lease)"));
     }
     if subcmd_single == "reset" && cmd.args.iter().any(|a| ["--hard"].contains(&a.as_str())) {
         return Some(GateResult::ask("Hard reset (can lose uncommitted work)"));
     }
-    if subcmd_single == "clean"
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-fd", "-fdx", "-f"].contains(&a.as_str()))
-    {
-        return Some(GateResult::ask(
-            "Clean (deletes untracked files permanently)",
-        ));
+    if subcmd_single == "clean" && cmd.args.iter().any(|a| ["-fd", "-fdx", "-f"].contains(&a.as_str())) {
+        return Some(GateResult::ask("Clean (deletes untracked files permanently)"));
     }
     if subcmd_single == "checkout" && cmd.args.iter().any(|a| ["-b", "-B"].contains(&a.as_str())) {
         return Some(GateResult::ask("Creating branch"));
@@ -677,53 +617,19 @@ pub fn check_git_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if subcmd_single == "checkout" && cmd.args.iter().any(|a| ["--"].contains(&a.as_str())) {
         return Some(GateResult::ask("Discarding changes"));
     }
-    if subcmd_single == "tag"
-        && cmd.args.iter().any(|a| {
-            [
-                "-a",
-                "--annotate",
-                "-s",
-                "--sign",
-                "-u",
-                "--local-user",
-                "-m",
-                "--message",
-            ]
-            .contains(&a.as_str())
-        })
-    {
+    if subcmd_single == "tag" && cmd.args.iter().any(|a| ["-a", "--annotate", "-s", "--sign", "-u", "--local-user", "-m", "--message"].contains(&a.as_str())) {
         return Some(GateResult::ask("Creating tag"));
     }
-    if subcmd_single == "tag"
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-d", "--delete"].contains(&a.as_str()))
-    {
+    if subcmd_single == "tag" && cmd.args.iter().any(|a| ["-d", "--delete"].contains(&a.as_str())) {
         return Some(GateResult::ask("Deleting tag"));
     }
-    if subcmd_single == "tag"
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-f", "--force"].contains(&a.as_str()))
-    {
+    if subcmd_single == "tag" && cmd.args.iter().any(|a| ["-f", "--force"].contains(&a.as_str())) {
         return Some(GateResult::ask("Force-replacing tag"));
     }
-    if subcmd_single == "branch"
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-d", "-D", "--delete"].contains(&a.as_str()))
-    {
+    if subcmd_single == "branch" && cmd.args.iter().any(|a| ["-d", "-D", "--delete"].contains(&a.as_str())) {
         return Some(GateResult::ask("Deleting branch"));
     }
-    if subcmd_single == "branch"
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-m", "-M", "--move"].contains(&a.as_str()))
-    {
+    if subcmd_single == "branch" && cmd.args.iter().any(|a| ["-m", "-M", "--move"].contains(&a.as_str())) {
         return Some(GateResult::ask("Renaming branch"));
     }
 
@@ -732,50 +638,17 @@ pub fn check_git_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Check conditional allow rules
-    if subcmd_single == "tag"
-        && !cmd.args.iter().any(|a| {
-            [
-                "-d",
-                "--delete",
-                "-f",
-                "--force",
-                "-a",
-                "--annotate",
-                "-s",
-                "--sign",
-                "-u",
-                "--local-user",
-                "-m",
-                "--message",
-            ]
-            .contains(&a.as_str())
-        })
-    {
+    if subcmd_single == "tag" && !cmd.args.iter().any(|a| ["-d", "--delete", "-f", "--force", "-a", "--annotate", "-s", "--sign", "-u", "--local-user", "-m", "--message"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if subcmd_single == "branch"
-        && !cmd.args.iter().any(|a| {
-            [
-                "-d", "-D", "--delete", "-m", "-M", "--move", "-c", "-C", "--copy",
-            ]
-            .contains(&a.as_str())
-        })
-    {
+    if subcmd_single == "branch" && !cmd.args.iter().any(|a| ["-d", "-D", "--delete", "-m", "-M", "--move", "-c", "-C", "--copy"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if subcmd_single == "remote"
-        && !cmd
-            .args
-            .iter()
-            .any(|a| ["add", "remove", "rename", "set-url"].contains(&a.as_str()))
-    {
+    if subcmd_single == "remote" && !cmd.args.iter().any(|a| ["add", "remove", "rename", "set-url"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = GIT_ASK
-        .get(subcmd.as_str())
-        .or_else(|| GIT_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = GIT_ASK.get(subcmd.as_str()).or_else(|| GIT_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("git: {}", reason)));
     }
 
@@ -792,15 +665,13 @@ pub static AWS_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "sts get-caller-identity",
         "sts get-session-token",
         "configure list",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static AWS_BLOCK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
-    [("iam delete-user", "Deleting IAM users is blocked")]
-        .into_iter()
-        .collect()
+    [
+        ("iam delete-user", "Deleting IAM users is blocked"),
+    ].into_iter().collect()
 });
 
 /// Check aws commands declaratively
@@ -872,11 +743,7 @@ pub fn check_aws_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if cmd.args.get(1).is_some_and(|a| a.starts_with("associate")) {
         return Some(GateResult::ask("aws: Associating resources"));
     }
-    if cmd
-        .args
-        .get(1)
-        .is_some_and(|a| a.starts_with("disassociate"))
-    {
+    if cmd.args.get(1).is_some_and(|a| a.starts_with("disassociate")) {
         return Some(GateResult::ask("aws: Disassociating resources"));
     }
     if cmd.args.get(1).is_some_and(|a| a.starts_with("enable")) {
@@ -972,17 +839,12 @@ pub static GCLOUD_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "--version",
         "help",
         "info",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static GCLOUD_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        (
-            "container clusters get-credentials",
-            "Updating kubeconfig (writes to ~/.kube/config)",
-        ),
+        ("container clusters get-credentials", "Updating kubeconfig (writes to ~/.kube/config)"),
         ("compute instances create", "Compute create"),
         ("compute instances delete", "Compute delete"),
         ("compute instances start", "Compute start"),
@@ -1006,9 +868,7 @@ pub static GCLOUD_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("secrets delete", "Secrets delete"),
         ("projects create", "Project create"),
         ("projects delete", "Project delete"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check gcloud commands declaratively
@@ -1032,10 +892,7 @@ pub fn check_gcloud_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = GCLOUD_ASK
-        .get(subcmd.as_str())
-        .or_else(|| GCLOUD_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = GCLOUD_ASK.get(subcmd.as_str()).or_else(|| GCLOUD_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("gcloud: {}", reason)));
     }
 
@@ -1044,8 +901,13 @@ pub fn check_gcloud_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === AZ (from cloud.toml) ===
 
-pub static AZ_ALLOW: LazyLock<HashSet<&str>> =
-    LazyLock::new(|| ["--version", "--help", "-h"].into_iter().collect());
+pub static AZ_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
+    [
+        "--version",
+        "--help",
+        "-h",
+    ].into_iter().collect()
+});
 
 /// Check az commands declaratively
 pub fn check_az_declarative(cmd: &CommandInfo) -> Option<GateResult> {
@@ -1089,9 +951,7 @@ pub static TERRAFORM_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "state list",
         "state show",
         "workspace list",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static TERRAFORM_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -1110,9 +970,7 @@ pub static TERRAFORM_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("workspace new", "Terraform: workspace new"),
         ("workspace delete", "Terraform: workspace delete"),
         ("workspace select", "Terraform: workspace select"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check terraform commands declaratively
@@ -1141,10 +999,7 @@ pub fn check_terraform_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = TERRAFORM_ASK
-        .get(subcmd.as_str())
-        .or_else(|| TERRAFORM_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = TERRAFORM_ASK.get(subcmd.as_str()).or_else(|| TERRAFORM_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("terraform: {}", reason)));
     }
 
@@ -1172,9 +1027,7 @@ pub static KUBECTL_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "config get-clusters",
         "auth can-i",
         "auth whoami",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static KUBECTL_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -1204,18 +1057,14 @@ pub static KUBECTL_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("config set-credentials", "config set-credentials"),
         ("config delete-context", "config delete-context"),
         ("config delete-cluster", "config delete-cluster"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static KUBECTL_BLOCK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
         ("delete namespace kube-system", "Cannot delete kube-system"),
         ("delete ns kube-system", "Cannot delete kube-system"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check kubectl commands declaratively
@@ -1243,10 +1092,7 @@ pub fn check_kubectl_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = KUBECTL_ASK
-        .get(subcmd.as_str())
-        .or_else(|| KUBECTL_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = KUBECTL_ASK.get(subcmd.as_str()).or_else(|| KUBECTL_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("kubectl: {}", reason)));
     }
 
@@ -1286,9 +1132,7 @@ pub static DOCKER_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "compose ls",
         "compose version",
         "compose top",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static DOCKER_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -1333,9 +1177,7 @@ pub static DOCKER_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("volume create", "Docker: volume create"),
         ("volume rm", "Docker: volume rm"),
         ("system prune", "Docker: system prune"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check docker commands declaratively
@@ -1359,10 +1201,7 @@ pub fn check_docker_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = DOCKER_ASK
-        .get(subcmd.as_str())
-        .or_else(|| DOCKER_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = DOCKER_ASK.get(subcmd.as_str()).or_else(|| DOCKER_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("docker: {}", reason)));
     }
 
@@ -1409,9 +1248,7 @@ pub static PODMAN_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "secret ls",
         "secret list",
         "secret inspect",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static PODMAN_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -1438,9 +1275,7 @@ pub static PODMAN_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("pod", "Podman: Pod operation"),
         ("generate", "Podman: Generating config"),
         ("play", "Podman: Playing kube YAML"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check podman commands declaratively
@@ -1464,10 +1299,7 @@ pub fn check_podman_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = PODMAN_ASK
-        .get(subcmd.as_str())
-        .or_else(|| PODMAN_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = PODMAN_ASK.get(subcmd.as_str()).or_else(|| PODMAN_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("podman: {}", reason)));
     }
 
@@ -1478,10 +1310,15 @@ pub fn check_podman_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 pub static DOCKER_COMPOSE_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
     [
-        "ps", "logs", "config", "images", "ls", "version", "-h", "--help",
-    ]
-    .into_iter()
-    .collect()
+        "ps",
+        "logs",
+        "config",
+        "images",
+        "ls",
+        "version",
+        "-h",
+        "--help",
+    ].into_iter().collect()
 });
 
 pub static DOCKER_COMPOSE_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -1501,9 +1338,7 @@ pub static DOCKER_COMPOSE_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| 
         ("exec", "Compose: Executing in service"),
         ("run", "Compose: Running one-off"),
         ("create", "Compose: Creating services"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check docker-compose commands declaratively
@@ -1523,23 +1358,15 @@ pub fn check_docker_compose_declarative(cmd: &CommandInfo) -> Option<GateResult>
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if DOCKER_COMPOSE_ALLOW.contains(subcmd.as_str())
-        || DOCKER_COMPOSE_ALLOW.contains(subcmd_single)
-    {
+    if DOCKER_COMPOSE_ALLOW.contains(subcmd.as_str()) || DOCKER_COMPOSE_ALLOW.contains(subcmd_single) {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = DOCKER_COMPOSE_ASK
-        .get(subcmd.as_str())
-        .or_else(|| DOCKER_COMPOSE_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = DOCKER_COMPOSE_ASK.get(subcmd.as_str()).or_else(|| DOCKER_COMPOSE_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("docker-compose: {}", reason)));
     }
 
-    Some(GateResult::ask(format!(
-        "docker-compose: {}",
-        subcmd_single
-    )))
+    Some(GateResult::ask(format!("docker-compose: {}", subcmd_single)))
 }
 
 // === HELM (from cloud.toml) ===
@@ -1560,9 +1387,7 @@ pub static HELM_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "template",
         "lint",
         "verify",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static HELM_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -1577,9 +1402,7 @@ pub static HELM_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("delete", "Helm: Deleting release"),
         ("push", "Helm: Pushing chart"),
         ("package", "Helm: Packaging chart"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check helm commands declaratively
@@ -1603,10 +1426,7 @@ pub fn check_helm_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = HELM_ASK
-        .get(subcmd.as_str())
-        .or_else(|| HELM_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = HELM_ASK.get(subcmd.as_str()).or_else(|| HELM_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("helm: {}", reason)));
     }
 
@@ -1628,9 +1448,7 @@ pub static PULUMI_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "stack history",
         "stack export",
         "config get",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static PULUMI_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -1646,9 +1464,7 @@ pub static PULUMI_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("stack select", "Pulumi: stack select"),
         ("config set", "Pulumi: config set"),
         ("config rm", "Pulumi: config rm"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check pulumi commands declaratively
@@ -1672,10 +1488,7 @@ pub fn check_pulumi_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = PULUMI_ASK
-        .get(subcmd.as_str())
-        .or_else(|| PULUMI_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = PULUMI_ASK.get(subcmd.as_str()).or_else(|| PULUMI_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("pulumi: {}", reason)));
     }
 
@@ -1722,9 +1535,7 @@ pub static NPM_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "prettier",
         "eslint",
         "tsc",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static NPM_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -1758,9 +1569,7 @@ pub static NPM_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("cache", "Cache operation"),
         ("pack", "Creating tarball"),
         ("set", "Setting config"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check npm commands declaratively
@@ -1781,18 +1590,11 @@ pub fn check_npm_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Check ask rules with flag/prefix conditions
-    if subcmd_single == "config"
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["set", "delete", "edit"].contains(&a.as_str()))
-    {
+    if subcmd_single == "config" && cmd.args.iter().any(|a| ["set", "delete", "edit"].contains(&a.as_str())) {
         return Some(GateResult::ask("Modifying npm config"));
     }
     if subcmd_single == "audit" && cmd.args.iter().any(|a| ["fix"].contains(&a.as_str())) {
-        return Some(GateResult::ask(
-            "Fixing vulnerabilities (modifies dependencies)",
-        ));
+        return Some(GateResult::ask("Fixing vulnerabilities (modifies dependencies)"));
     }
 
     if NPM_ALLOW.contains(subcmd.as_str()) || NPM_ALLOW.contains(subcmd_single) {
@@ -1800,22 +1602,14 @@ pub fn check_npm_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Check conditional allow rules
-    if subcmd_single == "config"
-        && !cmd
-            .args
-            .iter()
-            .any(|a| ["set", "delete", "edit"].contains(&a.as_str()))
-    {
+    if subcmd_single == "config" && !cmd.args.iter().any(|a| ["set", "delete", "edit"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
     if subcmd_single == "audit" && !cmd.args.iter().any(|a| ["fix"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = NPM_ASK
-        .get(subcmd.as_str())
-        .or_else(|| NPM_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = NPM_ASK.get(subcmd.as_str()).or_else(|| NPM_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("npm: {}", reason)));
     }
 
@@ -1843,9 +1637,7 @@ pub static PNPM_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "typecheck",
         "format",
         "tsc",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static PNPM_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -1870,9 +1662,7 @@ pub static PNPM_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("prune", "Pruning packages"),
         ("store", "Store operation"),
         ("patch", "Patching package"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check pnpm commands declaratively
@@ -1894,9 +1684,7 @@ pub fn check_pnpm_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
     // Check ask rules with flag/prefix conditions
     if subcmd_single == "audit" && cmd.args.iter().any(|a| ["--fix"].contains(&a.as_str())) {
-        return Some(GateResult::ask(
-            "Fixing vulnerabilities (modifies dependencies)",
-        ));
+        return Some(GateResult::ask("Fixing vulnerabilities (modifies dependencies)"));
     }
 
     if PNPM_ALLOW.contains(subcmd.as_str()) || PNPM_ALLOW.contains(subcmd_single) {
@@ -1908,10 +1696,7 @@ pub fn check_pnpm_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = PNPM_ASK
-        .get(subcmd.as_str())
-        .or_else(|| PNPM_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = PNPM_ASK.get(subcmd.as_str()).or_else(|| PNPM_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("pnpm: {}", reason)));
     }
 
@@ -1938,9 +1723,7 @@ pub static YARN_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "check",
         "typecheck",
         "format",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static YARN_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -1962,9 +1745,7 @@ pub static YARN_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("cache", "Cache operation"),
         ("global", "Global operation"),
         ("set", "Setting config"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check yarn commands declaratively
@@ -1985,12 +1766,7 @@ pub fn check_yarn_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Check ask rules with flag/prefix conditions
-    if subcmd_single == "config"
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["set", "delete"].contains(&a.as_str()))
-    {
+    if subcmd_single == "config" && cmd.args.iter().any(|a| ["set", "delete"].contains(&a.as_str())) {
         return Some(GateResult::ask("Modifying yarn config"));
     }
 
@@ -1999,19 +1775,11 @@ pub fn check_yarn_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Check conditional allow rules
-    if subcmd_single == "config"
-        && !cmd
-            .args
-            .iter()
-            .any(|a| ["set", "delete"].contains(&a.as_str()))
-    {
+    if subcmd_single == "config" && !cmd.args.iter().any(|a| ["set", "delete"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = YARN_ASK
-        .get(subcmd.as_str())
-        .or_else(|| YARN_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = YARN_ASK.get(subcmd.as_str()).or_else(|| YARN_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("yarn: {}", reason)));
     }
 
@@ -2033,9 +1801,7 @@ pub static PIP_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "--version",
         "-h",
         "--help",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static PIP_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -2044,9 +1810,7 @@ pub static PIP_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("uninstall", "Uninstalling packages"),
         ("download", "Downloading packages"),
         ("wheel", "Building wheel"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check pip commands declaratively
@@ -2056,11 +1820,7 @@ pub fn check_pip_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Check allow_if_flags (e.g., --dry-run)
-    if cmd
-        .args
-        .iter()
-        .any(|a| ["--dry-run", "-n"].contains(&a.as_str()))
-    {
+    if cmd.args.iter().any(|a| ["--dry-run", "-n"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
 
@@ -2076,20 +1836,10 @@ pub fn check_pip_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Check ask rules with flag/prefix conditions
-    if subcmd_single == "config"
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["set", "edit", "unset"].contains(&a.as_str()))
-    {
+    if subcmd_single == "config" && cmd.args.iter().any(|a| ["set", "edit", "unset"].contains(&a.as_str())) {
         return Some(GateResult::ask("Modifying pip config"));
     }
-    if subcmd_single == "cache"
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["purge", "remove"].contains(&a.as_str()))
-    {
+    if subcmd_single == "cache" && cmd.args.iter().any(|a| ["purge", "remove"].contains(&a.as_str())) {
         return Some(GateResult::ask("Deleting pip cache"));
     }
 
@@ -2098,27 +1848,14 @@ pub fn check_pip_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Check conditional allow rules
-    if subcmd_single == "config"
-        && !cmd
-            .args
-            .iter()
-            .any(|a| ["set", "edit", "unset"].contains(&a.as_str()))
-    {
+    if subcmd_single == "config" && !cmd.args.iter().any(|a| ["set", "edit", "unset"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if subcmd_single == "cache"
-        && !cmd
-            .args
-            .iter()
-            .any(|a| ["purge", "remove"].contains(&a.as_str()))
-    {
+    if subcmd_single == "cache" && !cmd.args.iter().any(|a| ["purge", "remove"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = PIP_ASK
-        .get(subcmd.as_str())
-        .or_else(|| PIP_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = PIP_ASK.get(subcmd.as_str()).or_else(|| PIP_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("pip: {}", reason)));
     }
 
@@ -2140,9 +1877,7 @@ pub static UV_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "pip show",
         "pip freeze",
         "pip check",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static UV_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -2161,9 +1896,7 @@ pub static UV_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("publish", "Publishing package"),
         ("pip install", "uv pip: install"),
         ("pip uninstall", "uv pip: uninstall"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check uv commands declaratively
@@ -2187,10 +1920,7 @@ pub fn check_uv_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = UV_ASK
-        .get(subcmd.as_str())
-        .or_else(|| UV_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = UV_ASK.get(subcmd.as_str()).or_else(|| UV_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("uv: {}", reason)));
     }
 
@@ -2223,9 +1953,7 @@ pub static CARGO_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "bench",
         "fmt",
         "clean",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static CARGO_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -2241,9 +1969,7 @@ pub static CARGO_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("yank", "Yanking version"),
         ("fix", "Auto-fixing code"),
         ("generate-lockfile", "Generating lockfile"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check cargo commands declaratively
@@ -2277,10 +2003,7 @@ pub fn check_cargo_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = CARGO_ASK
-        .get(subcmd.as_str())
-        .or_else(|| CARGO_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = CARGO_ASK.get(subcmd.as_str()).or_else(|| CARGO_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("cargo: {}", reason)));
     }
 
@@ -2307,20 +2030,7 @@ pub fn check_rustc_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Check conditional allow rules
-    if true
-        && cmd.args.iter().any(|a| {
-            [
-                "--version",
-                "-V",
-                "--print",
-                "--explain",
-                "--help",
-                "-h",
-                "-vV",
-            ]
-            .contains(&a.as_str())
-        })
-    {
+    if true && cmd.args.iter().any(|a| ["--version", "-V", "--print", "--explain", "--help", "-h", "-vV"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
 
@@ -2344,9 +2054,7 @@ pub static RUSTUP_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "--help",
         "-h",
         "help",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static RUSTUP_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -2362,9 +2070,7 @@ pub static RUSTUP_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("component remove", "Removing component"),
         ("override", "Setting toolchain override"),
         ("self", "Modifying rustup installation"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check rustup commands declaratively
@@ -2388,10 +2094,7 @@ pub fn check_rustup_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = RUSTUP_ASK
-        .get(subcmd.as_str())
-        .or_else(|| RUSTUP_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = RUSTUP_ASK.get(subcmd.as_str()).or_else(|| RUSTUP_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("rustup: {}", reason)));
     }
 
@@ -2415,9 +2118,7 @@ pub static GO_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "mod graph",
         "mod verify",
         "mod why",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static GO_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -2433,9 +2134,7 @@ pub static GO_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("work", "Workspace operation"),
         ("mod init", "go mod: init"),
         ("mod edit", "go mod: edit"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check go commands declaratively
@@ -2469,10 +2168,7 @@ pub fn check_go_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = GO_ASK
-        .get(subcmd.as_str())
-        .or_else(|| GO_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = GO_ASK.get(subcmd.as_str()).or_else(|| GO_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("go: {}", reason)));
     }
 
@@ -2495,9 +2191,7 @@ pub static BUN_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "check",
         "typecheck",
         "format",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static BUN_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -2516,9 +2210,7 @@ pub static BUN_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("init", "Initializing project"),
         ("create", "Creating project"),
         ("publish", "Publishing"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check bun commands declaratively
@@ -2542,10 +2234,7 @@ pub fn check_bun_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = BUN_ASK
-        .get(subcmd.as_str())
-        .or_else(|| BUN_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = BUN_ASK.get(subcmd.as_str()).or_else(|| BUN_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("bun: {}", reason)));
     }
 
@@ -2568,9 +2257,7 @@ pub static CONDA_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "notices",
         "compare",
         "env list",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static CONDA_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -2589,9 +2276,7 @@ pub static CONDA_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("run", "Running in environment"),
         ("env create", "env create"),
         ("env remove", "env remove"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check conda commands declaratively
@@ -2612,19 +2297,7 @@ pub fn check_conda_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Check ask rules with flag/prefix conditions
-    if subcmd_single == "config"
-        && cmd.args.iter().any(|a| {
-            [
-                "--add",
-                "--remove",
-                "--set",
-                "--append",
-                "--prepend",
-                "--remove-key",
-            ]
-            .contains(&a.as_str())
-        })
-    {
+    if subcmd_single == "config" && cmd.args.iter().any(|a| ["--add", "--remove", "--set", "--append", "--prepend", "--remove-key"].contains(&a.as_str())) {
         return Some(GateResult::ask("Modifying conda config"));
     }
 
@@ -2633,26 +2306,11 @@ pub fn check_conda_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Check conditional allow rules
-    if subcmd_single == "config"
-        && !cmd.args.iter().any(|a| {
-            [
-                "--add",
-                "--remove",
-                "--set",
-                "--append",
-                "--prepend",
-                "--remove-key",
-            ]
-            .contains(&a.as_str())
-        })
-    {
+    if subcmd_single == "config" && !cmd.args.iter().any(|a| ["--add", "--remove", "--set", "--append", "--prepend", "--remove-key"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = CONDA_ASK
-        .get(subcmd.as_str())
-        .or_else(|| CONDA_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = CONDA_ASK.get(subcmd.as_str()).or_else(|| CONDA_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("conda: {}", reason)));
     }
 
@@ -2678,9 +2336,7 @@ pub static POETRY_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "-h",
         "build",
         "lock",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static POETRY_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -2700,9 +2356,7 @@ pub static POETRY_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("export", "Exporting dependencies"),
         ("self", "Self operation"),
         ("source", "Source operation"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check poetry commands declaratively
@@ -2731,10 +2385,7 @@ pub fn check_poetry_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = POETRY_ASK
-        .get(subcmd.as_str())
-        .or_else(|| POETRY_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = POETRY_ASK.get(subcmd.as_str()).or_else(|| POETRY_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("poetry: {}", reason)));
     }
 
@@ -2744,9 +2395,12 @@ pub fn check_poetry_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 // === PIPX (from package_managers.toml) ===
 
 pub static PIPX_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    ["list", "environment", "--version", "--help"]
-        .into_iter()
-        .collect()
+    [
+        "list",
+        "environment",
+        "--version",
+        "--help",
+    ].into_iter().collect()
 });
 
 pub static PIPX_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -2761,9 +2415,7 @@ pub static PIPX_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("uninject", "Uninjecting package"),
         ("ensurepath", "Modifying PATH"),
         ("run", "Running application"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check pipx commands declaratively
@@ -2787,10 +2439,7 @@ pub fn check_pipx_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = PIPX_ASK
-        .get(subcmd.as_str())
-        .or_else(|| PIPX_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = PIPX_ASK.get(subcmd.as_str()).or_else(|| PIPX_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("pipx: {}", reason)));
     }
 
@@ -2825,9 +2474,7 @@ pub static MISE_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "trust",
         "exec",
         "registry",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static MISE_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -2854,9 +2501,7 @@ pub static MISE_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("plugins update", "Updating plugins"),
         ("cache", "Cache operation"),
         ("link", "Linking tool version"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check mise commands declaratively
@@ -2880,10 +2525,7 @@ pub fn check_mise_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = MISE_ASK
-        .get(subcmd.as_str())
-        .or_else(|| MISE_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = MISE_ASK.get(subcmd.as_str()).or_else(|| MISE_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("mise: {}", reason)));
     }
 
@@ -2970,9 +2612,7 @@ pub static BD_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "tips",
         "deleted",
         "hook",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static BD_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -3087,9 +2727,7 @@ pub static BD_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("linear create", "Creating in Linear"),
         ("mail", "Delegating to mail provider"),
         ("reset", "Resetting database"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check bd commands declaratively
@@ -3110,36 +2748,16 @@ pub fn check_bd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Check ask rules with flag/prefix conditions
-    if subcmd_single == "migrate"
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["--apply", "--force"].contains(&a.as_str()))
-    {
+    if subcmd_single == "migrate" && cmd.args.iter().any(|a| ["--apply", "--force"].contains(&a.as_str())) {
         return Some(GateResult::ask("Migrating database"));
     }
-    if subcmd_single == "duplicates"
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["--auto-merge"].contains(&a.as_str()))
-    {
+    if subcmd_single == "duplicates" && cmd.args.iter().any(|a| ["--auto-merge"].contains(&a.as_str())) {
         return Some(GateResult::ask("Auto-merging duplicates"));
     }
-    if subcmd_single == "upgrade"
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["--apply", "--install"].contains(&a.as_str()))
-    {
+    if subcmd_single == "upgrade" && cmd.args.iter().any(|a| ["--apply", "--install"].contains(&a.as_str())) {
         return Some(GateResult::ask("Applying upgrade"));
     }
-    if subcmd_single == "pin"
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["--set", "--clear"].contains(&a.as_str()))
-    {
+    if subcmd_single == "pin" && cmd.args.iter().any(|a| ["--set", "--clear"].contains(&a.as_str())) {
         return Some(GateResult::ask("Pinning work to agent"));
     }
 
@@ -3148,20 +2766,10 @@ pub fn check_bd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Check conditional allow rules
-    if subcmd_single == "dep"
-        && !cmd
-            .args
-            .iter()
-            .any(|a| ["add", "remove"].contains(&a.as_str()))
-    {
+    if subcmd_single == "dep" && !cmd.args.iter().any(|a| ["add", "remove"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if subcmd_single == "label"
-        && !cmd
-            .args
-            .iter()
-            .any(|a| ["add", "remove"].contains(&a.as_str()))
-    {
+    if subcmd_single == "label" && !cmd.args.iter().any(|a| ["add", "remove"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
     if subcmd_single == "comments" && !cmd.args.iter().any(|a| ["add"].contains(&a.as_str())) {
@@ -3170,164 +2778,64 @@ pub fn check_bd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if subcmd_single == "comment" && !cmd.args.iter().any(|a| ["add"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if subcmd_single == "daemons"
-        && !cmd
-            .args
-            .iter()
-            .any(|a| ["start", "stop", "restart", "killall"].contains(&a.as_str()))
-    {
+    if subcmd_single == "daemons" && !cmd.args.iter().any(|a| ["start", "stop", "restart", "killall"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if subcmd_single == "daemon"
-        && !cmd
-            .args
-            .iter()
-            .any(|a| ["start", "stop", "restart", "kill", "run"].contains(&a.as_str()))
-    {
+    if subcmd_single == "daemon" && !cmd.args.iter().any(|a| ["start", "stop", "restart", "kill", "run"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if subcmd_single == "config"
-        && !cmd
-            .args
-            .iter()
-            .any(|a| ["set", "unset"].contains(&a.as_str()))
-    {
+    if subcmd_single == "config" && !cmd.args.iter().any(|a| ["set", "unset"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if subcmd_single == "audit"
-        && !cmd
-            .args
-            .iter()
-            .any(|a| ["record", "label"].contains(&a.as_str()))
-    {
+    if subcmd_single == "audit" && !cmd.args.iter().any(|a| ["record", "label"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if subcmd_single == "epic"
-        && !cmd
-            .args
-            .iter()
-            .any(|a| ["create", "close", "update"].contains(&a.as_str()))
-    {
+    if subcmd_single == "epic" && !cmd.args.iter().any(|a| ["create", "close", "update"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if subcmd_single == "swarm"
-        && !cmd
-            .args
-            .iter()
-            .any(|a| ["create", "close", "update", "add", "remove"].contains(&a.as_str()))
-    {
+    if subcmd_single == "swarm" && !cmd.args.iter().any(|a| ["create", "close", "update", "add", "remove"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if subcmd_single == "gate"
-        && !cmd
-            .args
-            .iter()
-            .any(|a| ["resolve", "add-waiter"].contains(&a.as_str()))
-    {
+    if subcmd_single == "gate" && !cmd.args.iter().any(|a| ["resolve", "add-waiter"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if subcmd_single == "template"
-        && !cmd
-            .args
-            .iter()
-            .any(|a| ["instantiate"].contains(&a.as_str()))
-    {
+    if subcmd_single == "template" && !cmd.args.iter().any(|a| ["instantiate"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if subcmd_single == "formula"
-        && !cmd
-            .args
-            .iter()
-            .any(|a| ["create", "delete", "update", "edit", "convert"].contains(&a.as_str()))
-    {
+    if subcmd_single == "formula" && !cmd.args.iter().any(|a| ["create", "delete", "update", "edit", "convert"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if subcmd_single == "mol"
-        && !cmd
-            .args
-            .iter()
-            .any(|a| ["burn", "squash", "bond", "distill", "create"].contains(&a.as_str()))
-    {
+    if subcmd_single == "mol" && !cmd.args.iter().any(|a| ["burn", "squash", "bond", "distill", "create"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if subcmd_single == "slot"
-        && !cmd
-            .args
-            .iter()
-            .any(|a| ["set", "clear", "claim", "release"].contains(&a.as_str()))
-    {
+    if subcmd_single == "slot" && !cmd.args.iter().any(|a| ["set", "clear", "claim", "release"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if subcmd_single == "agent"
-        && !cmd
-            .args
-            .iter()
-            .any(|a| ["set", "clear", "update", "create"].contains(&a.as_str()))
-    {
+    if subcmd_single == "agent" && !cmd.args.iter().any(|a| ["set", "clear", "update", "create"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if subcmd_single == "worktree"
-        && !cmd
-            .args
-            .iter()
-            .any(|a| ["add", "remove", "prune"].contains(&a.as_str()))
-    {
+    if subcmd_single == "worktree" && !cmd.args.iter().any(|a| ["add", "remove", "prune"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if subcmd_single == "repo"
-        && !cmd
-            .args
-            .iter()
-            .any(|a| ["add", "remove", "set", "sync"].contains(&a.as_str()))
-    {
+    if subcmd_single == "repo" && !cmd.args.iter().any(|a| ["add", "remove", "set", "sync"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if subcmd_single == "jira"
-        && !cmd
-            .args
-            .iter()
-            .any(|a| ["sync", "push", "import", "create"].contains(&a.as_str()))
-    {
+    if subcmd_single == "jira" && !cmd.args.iter().any(|a| ["sync", "push", "import", "create"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if subcmd_single == "linear"
-        && !cmd
-            .args
-            .iter()
-            .any(|a| ["sync", "push", "import", "create"].contains(&a.as_str()))
-    {
+    if subcmd_single == "linear" && !cmd.args.iter().any(|a| ["sync", "push", "import", "create"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if subcmd_single == "ship"
-        && !cmd
-            .args
-            .iter()
-            .any(|a| ["publish", "create", "delete"].contains(&a.as_str()))
-    {
+    if subcmd_single == "ship" && !cmd.args.iter().any(|a| ["publish", "create", "delete"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if subcmd_single == "upgrade"
-        && !cmd
-            .args
-            .iter()
-            .any(|a| ["--apply", "--install", "ack"].contains(&a.as_str()))
-    {
+    if subcmd_single == "upgrade" && !cmd.args.iter().any(|a| ["--apply", "--install", "ack"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if subcmd_single == "migrate"
-        && !cmd
-            .args
-            .iter()
-            .any(|a| ["--apply", "--force"].contains(&a.as_str()))
-    {
+    if subcmd_single == "migrate" && !cmd.args.iter().any(|a| ["--apply", "--force"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if subcmd_single == "duplicates"
-        && !cmd
-            .args
-            .iter()
-            .any(|a| ["--auto-merge"].contains(&a.as_str()))
-    {
+    if subcmd_single == "duplicates" && !cmd.args.iter().any(|a| ["--auto-merge"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
     if subcmd_single == "cleanup" && cmd.args.iter().any(|a| ["--dry-run"].contains(&a.as_str())) {
@@ -3339,33 +2847,17 @@ pub fn check_bd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if subcmd_single == "delete" && cmd.args.iter().any(|a| ["--dry-run"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if cmd.args.len() >= 2
-        && cmd.args[0] == "admin"
-        && cmd.args[1] == "cleanup"
-        && cmd.args.iter().any(|a| ["--dry-run"].contains(&a.as_str()))
-    {
+    if cmd.args.len() >= 2 && cmd.args[0] == "admin" && cmd.args[1] == "cleanup" && cmd.args.iter().any(|a| ["--dry-run"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if cmd.args.len() >= 2
-        && cmd.args[0] == "admin"
-        && cmd.args[1] == "compact"
-        && cmd.args.iter().any(|a| ["--dry-run"].contains(&a.as_str()))
-    {
+    if cmd.args.len() >= 2 && cmd.args[0] == "admin" && cmd.args[1] == "compact" && cmd.args.iter().any(|a| ["--dry-run"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if subcmd_single == "pin"
-        && !cmd
-            .args
-            .iter()
-            .any(|a| ["--set", "--clear"].contains(&a.as_str()))
-    {
+    if subcmd_single == "pin" && !cmd.args.iter().any(|a| ["--set", "--clear"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = BD_ASK
-        .get(subcmd.as_str())
-        .or_else(|| BD_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = BD_ASK.get(subcmd.as_str()).or_else(|| BD_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("bd: {}", reason)));
     }
 
@@ -3380,9 +2872,7 @@ pub static TOOL_GATES_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "pending count",
         "rules list",
         "hooks status",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static TOOL_GATES_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -3392,9 +2882,7 @@ pub static TOOL_GATES_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("pending clear", "Clearing pending approval queue"),
         ("hooks add", "Installing hooks into Claude Code settings"),
         ("review", "Opening interactive approval TUI"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check tool-gates commands declaratively
@@ -3415,12 +2903,7 @@ pub fn check_tool_gates_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Check ask rules with flag/prefix conditions
-    if true
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["--refresh-tools"].contains(&a.as_str()))
-    {
+    if true && cmd.args.iter().any(|a| ["--refresh-tools"].contains(&a.as_str())) {
         return Some(GateResult::ask("Refreshing tool detection cache"));
     }
 
@@ -3429,43 +2912,20 @@ pub fn check_tool_gates_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Check conditional allow rules
-    if true
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["--help", "-h"].contains(&a.as_str()))
-    {
+    if true && cmd.args.iter().any(|a| ["--help", "-h"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if true
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["--version", "-V"].contains(&a.as_str()))
-    {
+    if true && cmd.args.iter().any(|a| ["--version", "-V"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if true
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["--tools-status"].contains(&a.as_str()))
-    {
+    if true && cmd.args.iter().any(|a| ["--tools-status"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if true
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["--export-toml", "--gemini-policy"].contains(&a.as_str()))
-    {
+    if true && cmd.args.iter().any(|a| ["--export-toml", "--gemini-policy"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = TOOL_GATES_ASK
-        .get(subcmd.as_str())
-        .or_else(|| TOOL_GATES_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = TOOL_GATES_ASK.get(subcmd.as_str()).or_else(|| TOOL_GATES_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("tool-gates: {}", reason)));
     }
 
@@ -3542,12 +3002,7 @@ pub fn check_ast_grep_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Check ask rules with flag/prefix conditions
-    if true
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-U", "--update-all"].contains(&a.as_str()))
-    {
+    if true && cmd.args.iter().any(|a| ["-U", "--update-all"].contains(&a.as_str())) {
         return Some(GateResult::ask("Rewriting code"));
     }
 
@@ -3574,12 +3029,7 @@ pub fn check_yq_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Check ask rules with flag/prefix conditions
-    if true
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-i", "--inplace"].contains(&a.as_str()))
-    {
+    if true && cmd.args.iter().any(|a| ["-i", "--inplace"].contains(&a.as_str())) {
         return Some(GateResult::ask("In-place YAML edit"));
     }
 
@@ -3628,12 +3078,7 @@ pub fn check_semgrep_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Check ask rules with flag/prefix conditions
-    if true
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["--autofix", "--fix"].contains(&a.as_str()))
-    {
+    if true && cmd.args.iter().any(|a| ["--autofix", "--fix"].contains(&a.as_str())) {
         return Some(GateResult::ask("Auto-fixing code"));
     }
 
@@ -3660,12 +3105,7 @@ pub fn check_comby_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Check ask rules with flag/prefix conditions
-    if true
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-in-place", "-i"].contains(&a.as_str()))
-    {
+    if true && cmd.args.iter().any(|a| ["-in-place", "-i"].contains(&a.as_str())) {
         return Some(GateResult::ask("In-place replacement"));
     }
 
@@ -3674,8 +3114,11 @@ pub fn check_comby_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === GRIT (from devtools.toml) ===
 
-pub static GRIT_ASK: LazyLock<HashMap<&str, &str>> =
-    LazyLock::new(|| [("apply", "Applying migrations")].into_iter().collect());
+pub static GRIT_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
+    [
+        ("apply", "Applying migrations"),
+    ].into_iter().collect()
+});
 
 /// Check grit commands declaratively
 pub fn check_grit_declarative(cmd: &CommandInfo) -> Option<GateResult> {
@@ -3694,10 +3137,7 @@ pub fn check_grit_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if let Some(reason) = GRIT_ASK
-        .get(subcmd.as_str())
-        .or_else(|| GRIT_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = GRIT_ASK.get(subcmd.as_str()).or_else(|| GRIT_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("grit: {}", reason)));
     }
 
@@ -3729,7 +3169,11 @@ pub fn check_watchexec_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === BIOME (from devtools.toml) ===
 
-pub static BIOME_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| ["lint"].into_iter().collect());
+pub static BIOME_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
+    [
+        "lint",
+    ].into_iter().collect()
+});
 
 /// Check biome commands declaratively
 pub fn check_biome_declarative(cmd: &CommandInfo) -> Option<GateResult> {
@@ -3749,12 +3193,7 @@ pub fn check_biome_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Check ask rules with flag/prefix conditions
-    if subcmd_single == "check"
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["--write", "--fix", "--fix-unsafe"].contains(&a.as_str()))
-    {
+    if subcmd_single == "check" && cmd.args.iter().any(|a| ["--write", "--fix", "--fix-unsafe"].contains(&a.as_str())) {
         return Some(GateResult::ask("Writing fixes"));
     }
     if subcmd_single == "format" && cmd.args.iter().any(|a| ["--write"].contains(&a.as_str())) {
@@ -3788,12 +3227,7 @@ pub fn check_prettier_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Check ask rules with flag/prefix conditions
-    if true
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["--write", "-w"].contains(&a.as_str()))
-    {
+    if true && cmd.args.iter().any(|a| ["--write", "-w"].contains(&a.as_str())) {
         return Some(GateResult::ask("Writing formatted files"));
     }
 
@@ -3829,8 +3263,11 @@ pub fn check_eslint_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === RUFF (from devtools.toml) ===
 
-pub static RUFF_ASK: LazyLock<HashMap<&str, &str>> =
-    LazyLock::new(|| [("format", "Formatting files")].into_iter().collect());
+pub static RUFF_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
+    [
+        ("format", "Formatting files"),
+    ].into_iter().collect()
+});
 
 /// Check ruff commands declaratively
 pub fn check_ruff_declarative(cmd: &CommandInfo) -> Option<GateResult> {
@@ -3855,19 +3292,11 @@ pub fn check_ruff_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Check conditional allow rules
-    if subcmd_single == "format"
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["--check", "--diff"].contains(&a.as_str()))
-    {
+    if subcmd_single == "format" && cmd.args.iter().any(|a| ["--check", "--diff"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = RUFF_ASK
-        .get(subcmd.as_str())
-        .or_else(|| RUFF_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = RUFF_ASK.get(subcmd.as_str()).or_else(|| RUFF_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("ruff: {}", reason)));
     }
 
@@ -3894,12 +3323,7 @@ pub fn check_black_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Check conditional allow rules
-    if true
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["--check", "--diff"].contains(&a.as_str()))
-    {
+    if true && cmd.args.iter().any(|a| ["--check", "--diff"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
 
@@ -3927,12 +3351,7 @@ pub fn check_isort_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Check conditional allow rules
-    if true
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["--check", "--check-only", "--diff"].contains(&a.as_str()))
-    {
+    if true && cmd.args.iter().any(|a| ["--check", "--check-only", "--diff"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
 
@@ -4106,17 +3525,20 @@ pub fn check_gitleaks_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === LEFTHOOK (from devtools.toml) ===
 
-pub static LEFTHOOK_ALLOW: LazyLock<HashSet<&str>> =
-    LazyLock::new(|| ["run", "version", "dump"].into_iter().collect());
+pub static LEFTHOOK_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
+    [
+        "run",
+        "version",
+        "dump",
+    ].into_iter().collect()
+});
 
 pub static LEFTHOOK_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
         ("install", "Installing git hooks"),
         ("uninstall", "Removing git hooks"),
         ("add", "Adding hook configuration"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check lefthook commands declaratively
@@ -4140,10 +3562,7 @@ pub fn check_lefthook_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = LEFTHOOK_ASK
-        .get(subcmd.as_str())
-        .or_else(|| LEFTHOOK_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = LEFTHOOK_ASK.get(subcmd.as_str()).or_else(|| LEFTHOOK_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("lefthook: {}", reason)));
     }
 
@@ -4576,12 +3995,7 @@ pub fn check_autopep8_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Check ask rules with flag/prefix conditions
-    if true
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-i", "--in-place"].contains(&a.as_str()))
-    {
+    if true && cmd.args.iter().any(|a| ["-i", "--in-place"].contains(&a.as_str())) {
         return Some(GateResult::ask("Formatting files in-place"));
     }
 
@@ -4608,12 +4022,7 @@ pub fn check_rubocop_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Check ask rules with flag/prefix conditions
-    if true
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-a", "-A", "--auto-correct", "--autocorrect"].contains(&a.as_str()))
-    {
+    if true && cmd.args.iter().any(|a| ["-a", "-A", "--auto-correct", "--autocorrect"].contains(&a.as_str())) {
         return Some(GateResult::ask("Auto-correcting"));
     }
 
@@ -4640,12 +4049,7 @@ pub fn check_standardrb_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Check ask rules with flag/prefix conditions
-    if true
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-a", "-A", "--auto-correct", "--autocorrect"].contains(&a.as_str()))
-    {
+    if true && cmd.args.iter().any(|a| ["-a", "-A", "--auto-correct", "--autocorrect"].contains(&a.as_str())) {
         return Some(GateResult::ask("Auto-correcting"));
     }
 
@@ -4677,9 +4081,7 @@ pub fn check_patch_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare ask rule - any patch invocation asks
-    Some(GateResult::ask(
-        "patch: Applying patch (targets come from patch file content, not CLI args)",
-    ))
+    Some(GateResult::ask("patch: Applying patch (targets come from patch file content, not CLI args)"))
 }
 
 // === DOS2UNIX (from devtools.toml) ===
@@ -4757,8 +4159,11 @@ pub fn check_stylelint_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === MIX (from devtools.toml) ===
 
-pub static MIX_ASK: LazyLock<HashMap<&str, &str>> =
-    LazyLock::new(|| [("format", "Formatting files")].into_iter().collect());
+pub static MIX_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
+    [
+        ("format", "Formatting files"),
+    ].into_iter().collect()
+});
 
 /// Check mix commands declaratively
 pub fn check_mix_declarative(cmd: &CommandInfo) -> Option<GateResult> {
@@ -4777,10 +4182,7 @@ pub fn check_mix_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if let Some(reason) = MIX_ASK
-        .get(subcmd.as_str())
-        .or_else(|| MIX_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = MIX_ASK.get(subcmd.as_str()).or_else(|| MIX_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("mix: {}", reason)));
     }
 
@@ -4839,11 +4241,19 @@ pub fn check_dartfmt_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === DART (from devtools.toml) ===
 
-pub static DART_ALLOW: LazyLock<HashSet<&str>> =
-    LazyLock::new(|| ["analyze", "info", "--version"].into_iter().collect());
+pub static DART_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
+    [
+        "analyze",
+        "info",
+        "--version",
+    ].into_iter().collect()
+});
 
-pub static DART_ASK: LazyLock<HashMap<&str, &str>> =
-    LazyLock::new(|| [("format", "Formatting files")].into_iter().collect());
+pub static DART_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
+    [
+        ("format", "Formatting files"),
+    ].into_iter().collect()
+});
 
 /// Check dart commands declaratively
 pub fn check_dart_declarative(cmd: &CommandInfo) -> Option<GateResult> {
@@ -4866,10 +4276,7 @@ pub fn check_dart_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = DART_ASK
-        .get(subcmd.as_str())
-        .or_else(|| DART_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = DART_ASK.get(subcmd.as_str()).or_else(|| DART_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("dart: {}", reason)));
     }
 
@@ -4947,12 +4354,7 @@ pub fn check_ktlint_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Check ask rules with flag/prefix conditions
-    if true
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-F", "--format"].contains(&a.as_str()))
-    {
+    if true && cmd.args.iter().any(|a| ["-F", "--format"].contains(&a.as_str())) {
         return Some(GateResult::ask("Formatting files"));
     }
 
@@ -4990,13 +4392,19 @@ pub fn check_swiftformat_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 // === BUF (from devtools.toml) ===
 
 pub static BUF_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    ["lint", "breaking", "ls-files", "--version"]
-        .into_iter()
-        .collect()
+    [
+        "lint",
+        "breaking",
+        "ls-files",
+        "--version",
+    ].into_iter().collect()
 });
 
-pub static BUF_ASK: LazyLock<HashMap<&str, &str>> =
-    LazyLock::new(|| [("format", "Formatting files")].into_iter().collect());
+pub static BUF_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
+    [
+        ("format", "Formatting files"),
+    ].into_iter().collect()
+});
 
 /// Check buf commands declaratively
 pub fn check_buf_declarative(cmd: &CommandInfo) -> Option<GateResult> {
@@ -5019,10 +4427,7 @@ pub fn check_buf_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = BUF_ASK
-        .get(subcmd.as_str())
-        .or_else(|| BUF_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = BUF_ASK.get(subcmd.as_str()).or_else(|| BUF_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("buf: {}", reason)));
     }
 
@@ -5038,9 +4443,7 @@ pub static RM_BLOCK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("-rf ~", "rm -rf ~ blocked"),
         ("-fr /", "rm -fr / blocked"),
         ("-fr ~", "rm -fr ~ blocked"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check rm commands declaratively
@@ -5301,8 +4704,12 @@ pub fn check_perl_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === TAR (from filesystem.toml) ===
 
-pub static TAR_ALLOW: LazyLock<HashSet<&str>> =
-    LazyLock::new(|| ["-t", "--list"].into_iter().collect());
+pub static TAR_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
+    [
+        "-t",
+        "--list",
+    ].into_iter().collect()
+});
 
 /// Check tar commands declaratively
 pub fn check_tar_declarative(cmd: &CommandInfo) -> Option<GateResult> {
@@ -5381,8 +4788,13 @@ pub fn check_zip_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === CURL (from network.toml) ===
 
-pub static CURL_ALLOW: LazyLock<HashSet<&str>> =
-    LazyLock::new(|| ["--version", "-h", "--help"].into_iter().collect());
+pub static CURL_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
+    [
+        "--version",
+        "-h",
+        "--help",
+    ].into_iter().collect()
+});
 
 /// Check curl commands declaratively
 pub fn check_curl_declarative(cmd: &CommandInfo) -> Option<GateResult> {
@@ -5406,12 +4818,7 @@ pub fn check_curl_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Check conditional allow rules
-    if true
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-I", "--head"].contains(&a.as_str()))
-    {
+    if true && cmd.args.iter().any(|a| ["-I", "--head"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
 
@@ -5420,8 +4827,13 @@ pub fn check_curl_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === WGET (from network.toml) ===
 
-pub static WGET_ALLOW: LazyLock<HashSet<&str>> =
-    LazyLock::new(|| ["--version", "-h", "--help"].into_iter().collect());
+pub static WGET_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
+    [
+        "--version",
+        "-h",
+        "--help",
+    ].into_iter().collect()
+});
 
 /// Check wget commands declaratively
 pub fn check_wget_declarative(cmd: &CommandInfo) -> Option<GateResult> {
@@ -5441,36 +4853,16 @@ pub fn check_wget_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Check ask rules with flag/prefix conditions
-    if true
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-O", "--output-document", "-P", "--directory-prefix"].contains(&a.as_str()))
-    {
+    if true && cmd.args.iter().any(|a| ["-O", "--output-document", "-P", "--directory-prefix"].contains(&a.as_str())) {
         return Some(GateResult::ask("Downloading file"));
     }
-    if true
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-r", "--recursive"].contains(&a.as_str()))
-    {
+    if true && cmd.args.iter().any(|a| ["-r", "--recursive"].contains(&a.as_str())) {
         return Some(GateResult::ask("Recursive download"));
     }
-    if true
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-m", "--mirror"].contains(&a.as_str()))
-    {
+    if true && cmd.args.iter().any(|a| ["-m", "--mirror"].contains(&a.as_str())) {
         return Some(GateResult::ask("Mirroring site"));
     }
-    if true
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["--post-data", "--post-file"].contains(&a.as_str()))
-    {
+    if true && cmd.args.iter().any(|a| ["--post-data", "--post-file"].contains(&a.as_str())) {
         return Some(GateResult::ask("POST request"));
     }
 
@@ -5565,11 +4957,7 @@ pub fn check_rsync_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Check allow_if_flags (e.g., --dry-run)
-    if cmd
-        .args
-        .iter()
-        .any(|a| ["-n", "--dry-run"].contains(&a.as_str()))
-    {
+    if cmd.args.iter().any(|a| ["-n", "--dry-run"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
 
@@ -5620,8 +5008,13 @@ pub fn check_nc_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === HTTP (from network.toml) ===
 
-pub static HTTP_ALLOW: LazyLock<HashSet<&str>> =
-    LazyLock::new(|| ["--version", "--help", "GET"].into_iter().collect());
+pub static HTTP_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
+    [
+        "--version",
+        "--help",
+        "GET",
+    ].into_iter().collect()
+});
 
 pub static HTTP_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -5629,9 +5022,7 @@ pub static HTTP_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("PUT", "HTTPie: PUT request"),
         ("DELETE", "HTTPie: DELETE request"),
         ("PATCH", "HTTPie: PATCH request"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check http commands declaratively
@@ -5655,10 +5046,7 @@ pub fn check_http_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = HTTP_ASK
-        .get(subcmd.as_str())
-        .or_else(|| HTTP_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = HTTP_ASK.get(subcmd.as_str()).or_else(|| HTTP_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("http: {}", reason)));
     }
 
@@ -5902,9 +5290,7 @@ pub fn check_grub_install_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any grub-install invocation is blocked
-    Some(GateResult::block(
-        "grub-install: Bootloader modification blocked",
-    ))
+    Some(GateResult::block("grub-install: Bootloader modification blocked"))
 }
 
 // === UPDATE-GRUB (from system.toml) ===
@@ -5916,9 +5302,7 @@ pub fn check_update_grub_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any update-grub invocation is blocked
-    Some(GateResult::block(
-        "update-grub: Bootloader modification blocked",
-    ))
+    Some(GateResult::block("update-grub: Bootloader modification blocked"))
 }
 
 // === USERADD (from system.toml) ===
@@ -6014,9 +5398,7 @@ pub fn check_firewall_cmd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any firewall-cmd invocation is blocked
-    Some(GateResult::block(
-        "firewall-cmd: Firewall modification blocked",
-    ))
+    Some(GateResult::block("firewall-cmd: Firewall modification blocked"))
 }
 
 // === CHATTR (from system.toml) ===
@@ -6051,12 +5433,7 @@ pub fn check_mount_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Check conditional allow rules
-    if true
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["--version", "--help", "-h", "-V"].contains(&a.as_str()))
-    {
+    if true && cmd.args.iter().any(|a| ["--version", "--help", "-h", "-V"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
 
@@ -6156,12 +5533,7 @@ pub fn check_psql_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Check conditional allow rules
-    if true
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-l", "--list"].contains(&a.as_str()))
-    {
+    if true && cmd.args.iter().any(|a| ["-l", "--list"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
 
@@ -6354,9 +5726,13 @@ pub fn check_flyway_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 // === ALEMBIC (from system.toml) ===
 
 pub static ALEMBIC_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    ["history", "current", "heads", "branches", "show"]
-        .into_iter()
-        .collect()
+    [
+        "history",
+        "current",
+        "heads",
+        "branches",
+        "show",
+    ].into_iter().collect()
 });
 
 pub static ALEMBIC_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -6365,9 +5741,7 @@ pub static ALEMBIC_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("downgrade", "Rolling back database migration"),
         ("revision", "Creating new migration"),
         ("stamp", "Stamping database version"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check alembic commands declaratively
@@ -6391,10 +5765,7 @@ pub fn check_alembic_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = ALEMBIC_ASK
-        .get(subcmd.as_str())
-        .or_else(|| ALEMBIC_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = ALEMBIC_ASK.get(subcmd.as_str()).or_else(|| ALEMBIC_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("alembic: {}", reason)));
     }
 
@@ -6615,9 +5986,7 @@ pub static MAKE_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "dev",
         "run",
         "help",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check make commands declaratively
@@ -6627,18 +5996,10 @@ pub fn check_make_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Check allow_if_flags (e.g., --dry-run)
-    if cmd
-        .args
-        .iter()
-        .any(|a| ["-n", "--dry-run", "--just-print", "--recon"].contains(&a.as_str()))
-    {
+    if cmd.args.iter().any(|a| ["-n", "--dry-run", "--just-print", "--recon"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if cmd
-        .args
-        .iter()
-        .any(|a| ["-p", "--print-data-base", "-q", "--question"].contains(&a.as_str()))
-    {
+    if cmd.args.iter().any(|a| ["-p", "--print-data-base", "-q", "--question"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
 
@@ -6662,8 +6023,12 @@ pub fn check_make_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === CMAKE (from system.toml) ===
 
-pub static CMAKE_ALLOW: LazyLock<HashSet<&str>> =
-    LazyLock::new(|| ["--version", "--help"].into_iter().collect());
+pub static CMAKE_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
+    [
+        "--version",
+        "--help",
+    ].into_iter().collect()
+});
 
 /// Check cmake commands declaratively
 pub fn check_cmake_declarative(cmd: &CommandInfo) -> Option<GateResult> {
@@ -6672,11 +6037,7 @@ pub fn check_cmake_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Check allow_if_flags (e.g., --dry-run)
-    if cmd
-        .args
-        .iter()
-        .any(|a| ["-N", "--view-only"].contains(&a.as_str()))
-    {
+    if cmd.args.iter().any(|a| ["-N", "--view-only"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
 
@@ -6701,10 +6062,17 @@ pub fn check_cmake_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === NINJA (from system.toml) ===
 
-pub static NINJA_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| ["-t"].into_iter().collect());
+pub static NINJA_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
+    [
+        "-t",
+    ].into_iter().collect()
+});
 
-pub static NINJA_ASK: LazyLock<HashMap<&str, &str>> =
-    LazyLock::new(|| [("clean", "Cleaning build")].into_iter().collect());
+pub static NINJA_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
+    [
+        ("clean", "Cleaning build"),
+    ].into_iter().collect()
+});
 
 /// Check ninja commands declaratively
 pub fn check_ninja_declarative(cmd: &CommandInfo) -> Option<GateResult> {
@@ -6727,10 +6095,7 @@ pub fn check_ninja_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = NINJA_ASK
-        .get(subcmd.as_str())
-        .or_else(|| NINJA_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = NINJA_ASK.get(subcmd.as_str()).or_else(|| NINJA_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("ninja: {}", reason)));
     }
 
@@ -6740,9 +6105,12 @@ pub fn check_ninja_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 // === JUST (from system.toml) ===
 
 pub static JUST_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    ["--list", "--summary", "--dump", "--evaluate"]
-        .into_iter()
-        .collect()
+    [
+        "--list",
+        "--summary",
+        "--dump",
+        "--evaluate",
+    ].into_iter().collect()
 });
 
 /// Check just commands declaratively
@@ -6771,8 +6139,12 @@ pub fn check_just_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === TASK (from system.toml) ===
 
-pub static TASK_ALLOW: LazyLock<HashSet<&str>> =
-    LazyLock::new(|| ["--list", "--list-all"].into_iter().collect());
+pub static TASK_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
+    [
+        "--list",
+        "--list-all",
+    ].into_iter().collect()
+});
 
 /// Check task commands declaratively
 pub fn check_task_declarative(cmd: &CommandInfo) -> Option<GateResult> {
@@ -6810,18 +6182,14 @@ pub static GRADLE_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "test",
         "check",
         "clean",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static GRADLE_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
         ("publish", "Publishing artifacts"),
         ("uploadArchives", "Uploading archives"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check gradle commands declaratively
@@ -6845,10 +6213,7 @@ pub fn check_gradle_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = GRADLE_ASK
-        .get(subcmd.as_str())
-        .or_else(|| GRADLE_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = GRADLE_ASK.get(subcmd.as_str()).or_else(|| GRADLE_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("gradle: {}", reason)));
     }
 
@@ -6868,18 +6233,14 @@ pub static MVN_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "clean",
         "dependency:tree",
         "dependency:analyze",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static MVN_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
         ("install", "Installing to local repo"),
         ("deploy", "Deploying artifacts"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check mvn commands declaratively
@@ -6903,10 +6264,7 @@ pub fn check_mvn_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = MVN_ASK
-        .get(subcmd.as_str())
-        .or_else(|| MVN_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = MVN_ASK.get(subcmd.as_str()).or_else(|| MVN_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("mvn: {}", reason)));
     }
 
@@ -6917,16 +6275,23 @@ pub fn check_mvn_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 pub static BAZEL_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
     [
-        "info", "query", "cquery", "aquery", "build", "test", "coverage", "version", "help",
-    ]
-    .into_iter()
-    .collect()
+        "info",
+        "query",
+        "cquery",
+        "aquery",
+        "build",
+        "test",
+        "coverage",
+        "version",
+        "help",
+    ].into_iter().collect()
 });
 
 pub static BAZEL_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
-    [("clean", "Cleaning build"), ("run", "Running target")]
-        .into_iter()
-        .collect()
+    [
+        ("clean", "Cleaning build"),
+        ("run", "Running target"),
+    ].into_iter().collect()
 });
 
 /// Check bazel commands declaratively
@@ -6950,10 +6315,7 @@ pub fn check_bazel_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = BAZEL_ASK
-        .get(subcmd.as_str())
-        .or_else(|| BAZEL_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = BAZEL_ASK.get(subcmd.as_str()).or_else(|| BAZEL_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("bazel: {}", reason)));
     }
 
@@ -6963,9 +6325,12 @@ pub fn check_bazel_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 // === MESON (from system.toml) ===
 
 pub static MESON_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    ["introspect", "configure", "--version", "--help"]
-        .into_iter()
-        .collect()
+    [
+        "introspect",
+        "configure",
+        "--version",
+        "--help",
+    ].into_iter().collect()
 });
 
 pub static MESON_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -6973,9 +6338,7 @@ pub static MESON_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("setup", "Setting up build"),
         ("compile", "Compiling project"),
         ("install", "Installing"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check meson commands declaratively
@@ -6999,10 +6362,7 @@ pub fn check_meson_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = MESON_ASK
-        .get(subcmd.as_str())
-        .or_else(|| MESON_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = MESON_ASK.get(subcmd.as_str()).or_else(|| MESON_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("meson: {}", reason)));
     }
 
@@ -7018,30 +6378,17 @@ pub static ANSIBLE_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "--list-hosts",
         "--list-tasks",
         "--syntax-check",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check ansible commands declaratively
 pub fn check_ansible_declarative(cmd: &CommandInfo) -> Option<GateResult> {
-    if ![
-        "ansible",
-        "ansible-playbook",
-        "ansible-galaxy",
-        "ansible-vault",
-    ]
-    .contains(&cmd.program.as_str())
-    {
+    if !["ansible", "ansible-playbook", "ansible-galaxy", "ansible-vault"].contains(&cmd.program.as_str()) {
         return None;
     }
 
     // Check allow_if_flags (e.g., --dry-run)
-    if cmd
-        .args
-        .iter()
-        .any(|a| ["--check", "-C", "--diff"].contains(&a.as_str()))
-    {
+    if cmd.args.iter().any(|a| ["--check", "-C", "--diff"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
 
@@ -7074,9 +6421,7 @@ pub static VAGRANT_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "port",
         "version",
         "--help",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static VAGRANT_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -7087,9 +6432,7 @@ pub static VAGRANT_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("provision", "Provisioning VM"),
         ("ssh", "SSH into VM"),
         ("reload", "Reloading VM"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check vagrant commands declaratively
@@ -7113,10 +6456,7 @@ pub fn check_vagrant_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = VAGRANT_ASK
-        .get(subcmd.as_str())
-        .or_else(|| VAGRANT_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = VAGRANT_ASK.get(subcmd.as_str()).or_else(|| VAGRANT_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("vagrant: {}", reason)));
     }
 
@@ -7125,8 +6465,12 @@ pub fn check_vagrant_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === HYPERFINE (from system.toml) ===
 
-pub static HYPERFINE_ALLOW: LazyLock<HashSet<&str>> =
-    LazyLock::new(|| ["--version", "--help"].into_iter().collect());
+pub static HYPERFINE_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
+    [
+        "--version",
+        "--help",
+    ].into_iter().collect()
+});
 
 /// Check hyperfine commands declaratively
 pub fn check_hyperfine_declarative(cmd: &CommandInfo) -> Option<GateResult> {
@@ -7173,28 +6517,13 @@ pub fn check_sudo_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Check conditional allow rules
-    if true
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-l", "--list"].contains(&a.as_str()))
-    {
+    if true && cmd.args.iter().any(|a| ["-l", "--list"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if true
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-v", "--validate"].contains(&a.as_str()))
-    {
+    if true && cmd.args.iter().any(|a| ["-v", "--validate"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
-    if true
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-k", "--reset-timestamp"].contains(&a.as_str()))
-    {
+    if true && cmd.args.iter().any(|a| ["-k", "--reset-timestamp"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
 
@@ -7222,9 +6551,7 @@ pub static SYSTEMCTL_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "--version",
         "-h",
         "--help",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static SYSTEMCTL_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -7244,9 +6571,7 @@ pub static SYSTEMCTL_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("set-default", "Setting default target"),
         ("isolate", "Isolating target"),
         ("edit", "Editing unit"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check systemctl commands declaratively
@@ -7270,10 +6595,7 @@ pub fn check_systemctl_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = SYSTEMCTL_ASK
-        .get(subcmd.as_str())
-        .or_else(|| SYSTEMCTL_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = SYSTEMCTL_ASK.get(subcmd.as_str()).or_else(|| SYSTEMCTL_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("systemctl: {}", reason)));
     }
 
@@ -7300,12 +6622,7 @@ pub fn check_service_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Check conditional allow rules
-    if true
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["--status-all"].contains(&a.as_str()))
-    {
+    if true && cmd.args.iter().any(|a| ["--status-all"].contains(&a.as_str())) {
         return Some(GateResult::allow());
     }
 
@@ -7364,17 +6681,12 @@ pub static APT_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "-v",
         "--help",
         "-h",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static APT_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        (
-            "download",
-            "Downloading package files (writes to local filesystem)",
-        ),
+        ("download", "Downloading package files (writes to local filesystem)"),
         ("install", "Installing packages"),
         ("remove", "Removing packages"),
         ("purge", "Purging packages"),
@@ -7389,9 +6701,7 @@ pub static APT_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("source", "Downloading source"),
         ("edit-sources", "Editing sources"),
         ("satisfy", "Satisfying dependencies"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check apt commands declaratively
@@ -7415,10 +6725,7 @@ pub fn check_apt_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = APT_ASK
-        .get(subcmd.as_str())
-        .or_else(|| APT_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = APT_ASK.get(subcmd.as_str()).or_else(|| APT_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("apt: {}", reason)));
     }
 
@@ -7468,9 +6775,7 @@ pub static DNF_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "-v",
         "--help",
         "-h",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static DNF_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -7489,9 +6794,7 @@ pub static DNF_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("module", "Module operation"),
         ("swap", "Swapping packages"),
         ("distro-sync", "Syncing distribution"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check dnf commands declaratively
@@ -7515,10 +6818,7 @@ pub fn check_dnf_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = DNF_ASK
-        .get(subcmd.as_str())
-        .or_else(|| DNF_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = DNF_ASK.get(subcmd.as_str()).or_else(|| DNF_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("dnf: {}", reason)));
     }
 
@@ -7545,9 +6845,7 @@ pub static PACMAN_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "--version",
         "-h",
         "--help",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check pacman commands declaratively
@@ -7599,9 +6897,7 @@ pub static BREW_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "cat",
         "formula",
         "cask",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static BREW_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -7621,9 +6917,7 @@ pub static BREW_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("cleanup", "Cleaning up"),
         ("autoremove", "Removing unused"),
         ("services", "Managing services"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check brew commands declaratively
@@ -7647,10 +6941,7 @@ pub fn check_brew_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = BREW_ASK
-        .get(subcmd.as_str())
-        .or_else(|| BREW_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = BREW_ASK.get(subcmd.as_str()).or_else(|| BREW_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("brew: {}", reason)));
     }
 
@@ -7681,9 +6972,7 @@ pub static ZYPPER_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "-V",
         "--help",
         "-h",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static ZYPPER_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -7704,9 +6993,7 @@ pub static ZYPPER_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("refresh", "Refreshing repositories"),
         ("ref", "Refreshing repositories"),
         ("clean", "Cleaning cache"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check zypper commands declaratively
@@ -7730,10 +7017,7 @@ pub fn check_zypper_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = ZYPPER_ASK
-        .get(subcmd.as_str())
-        .or_else(|| ZYPPER_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = ZYPPER_ASK.get(subcmd.as_str()).or_else(|| ZYPPER_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("zypper: {}", reason)));
     }
 
@@ -7755,9 +7039,7 @@ pub static APK_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "-V",
         "--help",
         "-h",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static APK_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -7769,9 +7051,7 @@ pub static APK_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("fix", "Fixing packages"),
         ("cache", "Cache operation"),
         ("fetch", "Fetching packages"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check apk commands declaratively
@@ -7795,10 +7075,7 @@ pub fn check_apk_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = APK_ASK
-        .get(subcmd.as_str())
-        .or_else(|| APK_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = APK_ASK.get(subcmd.as_str()).or_else(|| APK_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("apk: {}", reason)));
     }
 
@@ -7821,9 +7098,7 @@ pub static NIX_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "why-depends",
         "--version",
         "--help",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static NIX_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -7836,9 +7111,7 @@ pub static NIX_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("upgrade-nix", "Upgrading Nix"),
         ("copy", "Copying paths"),
         ("collect-garbage", "Collecting garbage"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check nix commands declaratively
@@ -7862,10 +7135,7 @@ pub fn check_nix_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = NIX_ASK
-        .get(subcmd.as_str())
-        .or_else(|| NIX_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = NIX_ASK.get(subcmd.as_str()).or_else(|| NIX_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("nix: {}", reason)));
     }
 
@@ -7874,8 +7144,12 @@ pub fn check_nix_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === NIX-ENV (from system.toml) ===
 
-pub static NIX_ENV_ALLOW: LazyLock<HashSet<&str>> =
-    LazyLock::new(|| ["-q", "--query"].into_iter().collect());
+pub static NIX_ENV_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
+    [
+        "-q",
+        "--query",
+    ].into_iter().collect()
+});
 
 pub static NIX_ENV_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -7885,9 +7159,7 @@ pub static NIX_ENV_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("--uninstall", "Uninstalling packages"),
         ("-u", "Upgrading packages"),
         ("--upgrade", "Upgrading packages"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check nix-env commands declaratively
@@ -7911,10 +7183,7 @@ pub fn check_nix_env_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = NIX_ENV_ASK
-        .get(subcmd.as_str())
-        .or_else(|| NIX_ENV_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = NIX_ENV_ASK.get(subcmd.as_str()).or_else(|| NIX_ENV_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("nix-env: {}", reason)));
     }
 
@@ -7956,9 +7225,7 @@ pub static FLATPAK_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "history",
         "--version",
         "--help",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static FLATPAK_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -7972,9 +7239,7 @@ pub static FLATPAK_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("remote-add", "Adding remote"),
         ("remote-delete", "Removing remote"),
         ("repair", "Repairing"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check flatpak commands declaratively
@@ -7998,10 +7263,7 @@ pub fn check_flatpak_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow());
     }
 
-    if let Some(reason) = FLATPAK_ASK
-        .get(subcmd.as_str())
-        .or_else(|| FLATPAK_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = FLATPAK_ASK.get(subcmd.as_str()).or_else(|| FLATPAK_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("flatpak: {}", reason)));
     }
 
@@ -8014,9 +7276,7 @@ pub static SHORT_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
         ("install", "Configuring Shortcut API token"),
         ("create", "Creating new story"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check short commands declaratively
@@ -8037,145 +7297,61 @@ pub fn check_short_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Check ask rules with flag/prefix conditions
-    if subcmd_single == "search"
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-S", "--save"].contains(&a.as_str()))
-    {
+    if subcmd_single == "search" && cmd.args.iter().any(|a| ["-S", "--save"].contains(&a.as_str())) {
         return Some(GateResult::ask("Saving workspace to config"));
     }
-    if subcmd_single == "story"
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["--git-branch", "--git-branch-short"].contains(&a.as_str()))
-    {
+    if subcmd_single == "story" && cmd.args.iter().any(|a| ["--git-branch", "--git-branch-short"].contains(&a.as_str())) {
         return Some(GateResult::ask("Checking out git branch"));
     }
-    if subcmd_single == "story"
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-D", "--download"].contains(&a.as_str()))
-    {
+    if subcmd_single == "story" && cmd.args.iter().any(|a| ["-D", "--download"].contains(&a.as_str())) {
         return Some(GateResult::ask("Downloading attachments to disk"));
     }
-    if subcmd_single == "story"
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-c", "--comment"].contains(&a.as_str()))
-    {
+    if subcmd_single == "story" && cmd.args.iter().any(|a| ["-c", "--comment"].contains(&a.as_str())) {
         return Some(GateResult::ask("Adding comment to story"));
     }
-    if subcmd_single == "story"
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-d", "--description"].contains(&a.as_str()))
-    {
+    if subcmd_single == "story" && cmd.args.iter().any(|a| ["-d", "--description"].contains(&a.as_str())) {
         return Some(GateResult::ask("Updating story description"));
     }
-    if subcmd_single == "story"
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-e", "--estimate"].contains(&a.as_str()))
-    {
+    if subcmd_single == "story" && cmd.args.iter().any(|a| ["-e", "--estimate"].contains(&a.as_str())) {
         return Some(GateResult::ask("Updating story estimate"));
     }
     if subcmd_single == "story" && cmd.args.iter().any(|a| ["--epic"].contains(&a.as_str())) {
         return Some(GateResult::ask("Setting story epic"));
     }
-    if subcmd_single == "story"
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-i", "--iteration"].contains(&a.as_str()))
-    {
+    if subcmd_single == "story" && cmd.args.iter().any(|a| ["-i", "--iteration"].contains(&a.as_str())) {
         return Some(GateResult::ask("Setting story iteration"));
     }
-    if subcmd_single == "story"
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-l", "--label"].contains(&a.as_str()))
-    {
+    if subcmd_single == "story" && cmd.args.iter().any(|a| ["-l", "--label"].contains(&a.as_str())) {
         return Some(GateResult::ask("Updating story labels"));
     }
-    if subcmd_single == "story"
-        && cmd.args.iter().any(|a| {
-            ["--move-after", "--move-before", "--move-down", "--move-up"].contains(&a.as_str())
-        })
-    {
+    if subcmd_single == "story" && cmd.args.iter().any(|a| ["--move-after", "--move-before", "--move-down", "--move-up"].contains(&a.as_str())) {
         return Some(GateResult::ask("Moving story position"));
     }
-    if subcmd_single == "story"
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-o", "--owners"].contains(&a.as_str()))
-    {
+    if subcmd_single == "story" && cmd.args.iter().any(|a| ["-o", "--owners"].contains(&a.as_str())) {
         return Some(GateResult::ask("Updating story owners"));
     }
-    if subcmd_single == "story"
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-s", "--state"].contains(&a.as_str()))
-    {
+    if subcmd_single == "story" && cmd.args.iter().any(|a| ["-s", "--state"].contains(&a.as_str())) {
         return Some(GateResult::ask("Updating story state"));
     }
-    if subcmd_single == "story"
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-t", "--title"].contains(&a.as_str()))
-    {
+    if subcmd_single == "story" && cmd.args.iter().any(|a| ["-t", "--title"].contains(&a.as_str())) {
         return Some(GateResult::ask("Updating story title"));
     }
-    if subcmd_single == "story"
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-T", "--team"].contains(&a.as_str()))
-    {
+    if subcmd_single == "story" && cmd.args.iter().any(|a| ["-T", "--team"].contains(&a.as_str())) {
         return Some(GateResult::ask("Updating story team"));
     }
     if subcmd_single == "story" && cmd.args.iter().any(|a| ["--task"].contains(&a.as_str())) {
         return Some(GateResult::ask("Creating task on story"));
     }
-    if subcmd_single == "story"
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["--task-complete"].contains(&a.as_str()))
-    {
+    if subcmd_single == "story" && cmd.args.iter().any(|a| ["--task-complete"].contains(&a.as_str())) {
         return Some(GateResult::ask("Toggling task completion"));
     }
-    if subcmd_single == "story"
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-y", "--type"].contains(&a.as_str()))
-    {
+    if subcmd_single == "story" && cmd.args.iter().any(|a| ["-y", "--type"].contains(&a.as_str())) {
         return Some(GateResult::ask("Updating story type"));
     }
-    if subcmd_single == "story"
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-a", "--archived"].contains(&a.as_str()))
-    {
+    if subcmd_single == "story" && cmd.args.iter().any(|a| ["-a", "--archived"].contains(&a.as_str())) {
         return Some(GateResult::ask("Archiving story"));
     }
-    if subcmd_single == "workspace"
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["-u", "--unset"].contains(&a.as_str()))
-    {
+    if subcmd_single == "workspace" && cmd.args.iter().any(|a| ["-u", "--unset"].contains(&a.as_str())) {
         return Some(GateResult::ask("Removing saved workspace"));
     }
 
@@ -8208,10 +7384,7 @@ pub fn check_short_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::allow_with_reason("Showing help"));
     }
 
-    if let Some(reason) = SHORT_ASK
-        .get(subcmd.as_str())
-        .or_else(|| SHORT_ASK.get(subcmd_single))
-    {
+    if let Some(reason) = SHORT_ASK.get(subcmd.as_str()).or_else(|| SHORT_ASK.get(subcmd_single)) {
         return Some(GateResult::ask(format!("short: {}", reason)));
     }
 
@@ -8819,7 +7992,9 @@ pub fn check_mcp_gate(cmd: &CommandInfo) -> GateResult {
 }
 
 /// Programs handled by the mcp gate
-pub static MCP_PROGRAMS: &[&str] = &["mcp-cli"];
+pub static MCP_PROGRAMS: &[&str] = &[
+    "mcp-cli",
+];
 
 /// Generated gate for gh - handles: gh
 /// Custom handlers needed for: []
@@ -8831,7 +8006,9 @@ pub fn check_gh_gate(cmd: &CommandInfo) -> GateResult {
 }
 
 /// Programs handled by the gh gate
-pub static GH_PROGRAMS: &[&str] = &["gh"];
+pub static GH_PROGRAMS: &[&str] = &[
+    "gh",
+];
 
 /// Generated gate for git - handles: git
 /// Custom handlers needed for: ["git"]
@@ -8843,7 +8020,9 @@ pub fn check_git_gate(cmd: &CommandInfo) -> GateResult {
 }
 
 /// Programs handled by the git gate
-pub static GIT_PROGRAMS: &[&str] = &["git"];
+pub static GIT_PROGRAMS: &[&str] = &[
+    "git",
+];
 
 /// Generated gate for cloud - handles: aws, gcloud, az, terraform, tofu, kubectl, k, docker, podman, docker-compose, podman-compose, helm, pulumi
 /// Custom handlers needed for: ["docker", "gcloud"]
@@ -8856,9 +8035,7 @@ pub fn check_cloud_gate(cmd: &CommandInfo) -> GateResult {
         "kubectl" | "k" => check_kubectl_declarative(cmd).unwrap_or_else(GateResult::skip),
         "docker" => GateResult::skip(), // custom handler: check_docker
         "podman" => check_podman_declarative(cmd).unwrap_or_else(GateResult::skip),
-        "docker-compose" | "podman-compose" => {
-            check_docker_compose_declarative(cmd).unwrap_or_else(GateResult::skip)
-        }
+        "docker-compose" | "podman-compose" => check_docker_compose_declarative(cmd).unwrap_or_else(GateResult::skip),
         "helm" => check_helm_declarative(cmd).unwrap_or_else(GateResult::skip),
         "pulumi" => check_pulumi_declarative(cmd).unwrap_or_else(GateResult::skip),
         _ => GateResult::skip(),
@@ -8886,22 +8063,20 @@ pub static CLOUD_PROGRAMS: &[&str] = &[
 /// Custom handlers needed for: ["mise", "npm", "pip", "pipx", "pnpm", "poetry", "uv", "yarn"]
 pub fn check_package_managers_gate(cmd: &CommandInfo) -> GateResult {
     match cmd.program.as_str() {
-        "npm" => GateResult::skip(),          // custom handler: check_npm
-        "pnpm" => GateResult::skip(),         // custom handler: check_pnpm
-        "yarn" => GateResult::skip(),         // custom handler: check_yarn
+        "npm" => GateResult::skip(), // custom handler: check_npm
+        "pnpm" => GateResult::skip(), // custom handler: check_pnpm
+        "yarn" => GateResult::skip(), // custom handler: check_yarn
         "pip" | "pip3" => GateResult::skip(), // custom handler: check_pip
-        "uv" => GateResult::skip(),           // custom handler: check_uv
+        "uv" => GateResult::skip(), // custom handler: check_uv
         "cargo" => check_cargo_declarative(cmd).unwrap_or_else(GateResult::skip),
         "rustc" => check_rustc_declarative(cmd).unwrap_or_else(GateResult::skip),
         "rustup" => check_rustup_declarative(cmd).unwrap_or_else(GateResult::skip),
         "go" => check_go_declarative(cmd).unwrap_or_else(GateResult::skip),
         "bun" => check_bun_declarative(cmd).unwrap_or_else(GateResult::skip),
-        "conda" | "mamba" | "micromamba" => {
-            check_conda_declarative(cmd).unwrap_or_else(GateResult::skip)
-        }
+        "conda" | "mamba" | "micromamba" => check_conda_declarative(cmd).unwrap_or_else(GateResult::skip),
         "poetry" => GateResult::skip(), // custom handler: check_poetry
-        "pipx" => GateResult::skip(),   // custom handler: check_pipx
-        "mise" => GateResult::skip(),   // custom handler: check_mise
+        "pipx" => GateResult::skip(), // custom handler: check_pipx
+        "mise" => GateResult::skip(), // custom handler: check_mise
         _ => GateResult::skip(),
     }
 }
@@ -8937,21 +8112,25 @@ pub fn check_beads_gate(cmd: &CommandInfo) -> GateResult {
 }
 
 /// Programs handled by the beads gate
-pub static BEADS_PROGRAMS: &[&str] = &["bd", "beads"];
+pub static BEADS_PROGRAMS: &[&str] = &[
+    "bd",
+    "beads",
+];
 
 /// Generated gate for tool_gates - handles: tool-gates, bash-gates
 /// Custom handlers needed for: []
 pub fn check_tool_gates_gate(cmd: &CommandInfo) -> GateResult {
     match cmd.program.as_str() {
-        "tool-gates" | "bash-gates" => {
-            check_tool_gates_declarative(cmd).unwrap_or_else(GateResult::skip)
-        }
+        "tool-gates" | "bash-gates" => check_tool_gates_declarative(cmd).unwrap_or_else(GateResult::skip),
         _ => GateResult::skip(),
     }
 }
 
 /// Programs handled by the tool_gates gate
-pub static TOOL_GATES_PROGRAMS: &[&str] = &["tool-gates", "bash-gates"];
+pub static TOOL_GATES_PROGRAMS: &[&str] = &[
+    "tool-gates",
+    "bash-gates",
+];
 
 /// Generated gate for devtools - handles: sd, sad, ast-grep, sg, yq, jq, semgrep, comby, grit, watchexec, biome, prettier, eslint, ruff, black, isort, shellcheck, hadolint, golangci-lint, gci, air, actionlint, gitleaks, lefthook, vite, vitest, jest, mocha, tsc, tsup, esbuild, turbo, nx, knip, oxlint, gofmt, goimports, shfmt, rustfmt, stylua, clang-format, autopep8, rubocop, standardrb, patch, dos2unix, unix2dos, stylelint, mix, perltidy, dartfmt, dart, elm-format, scalafmt, ktlint, swiftformat, buf
 /// Custom handlers needed for: ["sd"]
@@ -9102,8 +8281,20 @@ pub fn check_filesystem_gate(cmd: &CommandInfo) -> GateResult {
 
 /// Programs handled by the filesystem gate
 pub static FILESYSTEM_PROGRAMS: &[&str] = &[
-    "rm", "mv", "cp", "mkdir", "rmdir", "touch", "chmod", "chown", "chgrp", "ln", "perl", "tar",
-    "unzip", "zip",
+    "rm",
+    "mv",
+    "cp",
+    "mkdir",
+    "rmdir",
+    "touch",
+    "chmod",
+    "chown",
+    "chgrp",
+    "ln",
+    "perl",
+    "tar",
+    "unzip",
+    "zip",
 ];
 
 /// Generated gate for network - handles: curl, wget, ssh, scp, sftp, rsync, nc, ncat, netcat, http, https, xh
@@ -9124,7 +8315,18 @@ pub fn check_network_gate(cmd: &CommandInfo) -> GateResult {
 
 /// Programs handled by the network gate
 pub static NETWORK_PROGRAMS: &[&str] = &[
-    "curl", "wget", "ssh", "scp", "sftp", "rsync", "nc", "ncat", "netcat", "http", "https", "xh",
+    "curl",
+    "wget",
+    "ssh",
+    "scp",
+    "sftp",
+    "rsync",
+    "nc",
+    "ncat",
+    "netcat",
+    "http",
+    "https",
+    "xh",
 ];
 
 /// Generated gate for system - handles: shutdown, reboot, poweroff, halt, init, mkfs, fdisk, parted, gdisk, dd, shred, wipe, mke2fs, mkswap, wipefs, hdparm, insmod, rmmod, modprobe, grub-install, update-grub, useradd, userdel, usermod, passwd, chsh, iptables, ufw, firewall-cmd, chattr, mount, umount, swapoff, swapon, lvremove, vgremove, pvremove, psql, createdb, dropdb, pg_dump, pg_restore, migrate, goose, dbmate, flyway, alembic, mysql, sqlite3, mongosh, mongo, redis-cli, kill, pkill, killall, xkill, make, cmake, ninja, just, task, gradle, gradlew, ./gradlew, mvn, maven, ./mvnw, mvnw, bazel, bazelisk, meson, ansible, ansible-playbook, ansible-galaxy, ansible-vault, vagrant, hyperfine, sudo, doas, systemctl, service, crontab, apt, apt-get, apt-cache, dnf, yum, pacman, yay, paru, brew, zypper, apk, nix, nix-env, nix-shell, flatpak, snap
@@ -9182,7 +8384,7 @@ pub fn check_system_gate(cmd: &CommandInfo) -> GateResult {
         "sqlite3" => check_sqlite3_declarative(cmd).unwrap_or_else(GateResult::skip),
         "mongosh" | "mongo" => check_mongosh_declarative(cmd).unwrap_or_else(GateResult::skip),
         "redis-cli" => check_redis_cli_declarative(cmd).unwrap_or_else(GateResult::skip),
-        "kill" => GateResult::skip(),  // custom handler: check_kill
+        "kill" => GateResult::skip(), // custom handler: check_kill
         "pkill" => GateResult::skip(), // custom handler: check_pkill
         "killall" => check_killall_declarative(cmd).unwrap_or_else(GateResult::skip),
         "xkill" => check_xkill_declarative(cmd).unwrap_or_else(GateResult::skip),
@@ -9191,28 +8393,22 @@ pub fn check_system_gate(cmd: &CommandInfo) -> GateResult {
         "ninja" => check_ninja_declarative(cmd).unwrap_or_else(GateResult::skip),
         "just" => check_just_declarative(cmd).unwrap_or_else(GateResult::skip),
         "task" => check_task_declarative(cmd).unwrap_or_else(GateResult::skip),
-        "gradle" | "gradlew" | "./gradlew" => {
-            check_gradle_declarative(cmd).unwrap_or_else(GateResult::skip)
-        }
-        "mvn" | "maven" | "./mvnw" | "mvnw" => {
-            check_mvn_declarative(cmd).unwrap_or_else(GateResult::skip)
-        }
+        "gradle" | "gradlew" | "./gradlew" => check_gradle_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "mvn" | "maven" | "./mvnw" | "mvnw" => check_mvn_declarative(cmd).unwrap_or_else(GateResult::skip),
         "bazel" | "bazelisk" => check_bazel_declarative(cmd).unwrap_or_else(GateResult::skip),
         "meson" => check_meson_declarative(cmd).unwrap_or_else(GateResult::skip),
-        "ansible" | "ansible-playbook" | "ansible-galaxy" | "ansible-vault" => {
-            check_ansible_declarative(cmd).unwrap_or_else(GateResult::skip)
-        }
+        "ansible" | "ansible-playbook" | "ansible-galaxy" | "ansible-vault" => check_ansible_declarative(cmd).unwrap_or_else(GateResult::skip),
         "vagrant" => check_vagrant_declarative(cmd).unwrap_or_else(GateResult::skip),
         "hyperfine" => check_hyperfine_declarative(cmd).unwrap_or_else(GateResult::skip),
         "sudo" | "doas" => GateResult::skip(), // custom handler: check_sudo
-        "systemctl" => GateResult::skip(),     // custom handler: check_systemctl
+        "systemctl" => GateResult::skip(), // custom handler: check_systemctl
         "service" => check_service_declarative(cmd).unwrap_or_else(GateResult::skip),
         "crontab" => GateResult::skip(), // custom handler: check_crontab
         "apt" | "apt-get" => GateResult::skip(), // custom handler: check_apt
         "apt-cache" => check_apt_cache_declarative(cmd).unwrap_or_else(GateResult::skip),
         "dnf" | "yum" => GateResult::skip(), // custom handler: check_dnf
         "pacman" | "yay" | "paru" => GateResult::skip(), // custom handler: check_pacman
-        "brew" => GateResult::skip(),        // custom handler: check_brew
+        "brew" => GateResult::skip(), // custom handler: check_brew
         "zypper" => check_zypper_declarative(cmd).unwrap_or_else(GateResult::skip),
         "apk" => check_apk_declarative(cmd).unwrap_or_else(GateResult::skip),
         "nix" => check_nix_declarative(cmd).unwrap_or_else(GateResult::skip),
@@ -9335,7 +8531,9 @@ pub fn check_shortcut_gate(cmd: &CommandInfo) -> GateResult {
 }
 
 /// Programs handled by the shortcut gate
-pub static SHORTCUT_PROGRAMS: &[&str] = &["short"];
+pub static SHORTCUT_PROGRAMS: &[&str] = &[
+    "short",
+];
 
 // ============================================================================
 // File Editing Detection (generated from accept_edits_auto_allow rules)
@@ -9387,54 +8585,49 @@ pub static FILE_EDITING_PROGRAMS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "tofu",
         "unix2dos",
         "yq",
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check if a command is a file-editing command (generated from accept_edits_auto_allow rules)
 /// Returns true if the command should be auto-allowed in acceptEdits mode.
 pub fn is_file_editing_command(cmd: &CommandInfo) -> bool {
     let base_program = cmd.program.rsplit('/').next().unwrap_or(&cmd.program);
-
+    
     // Quick check: is this a known file-editing program?
     if !FILE_EDITING_PROGRAMS.contains(base_program) {
         return false;
     }
 
     match base_program {
-        "ast-grep" => cmd
-            .args
-            .iter()
-            .any(|a| ["-U", "--update-all"].contains(&a.as_str())),
-        "autopep8" => cmd
-            .args
-            .iter()
-            .any(|a| ["-i", "--in-place"].contains(&a.as_str())),
+        "ast-grep" => {
+            cmd.args.iter().any(|a| ["-U", "--update-all"].contains(&a.as_str()))
+        }
+        "autopep8" => {
+            cmd.args.iter().any(|a| ["-i", "--in-place"].contains(&a.as_str()))
+        }
         "biome" => {
-            (cmd.args.first().is_some_and(|a| a == "check")
-                && cmd
-                    .args
-                    .iter()
-                    .any(|a| ["--write", "--fix", "--fix-unsafe"].contains(&a.as_str())))
-                || (cmd.args.first().is_some_and(|a| a == "format")
-                    && cmd.args.iter().any(|a| ["--write"].contains(&a.as_str())))
+            (cmd.args.first().is_some_and(|a| a == "check") && cmd.args.iter().any(|a| ["--write", "--fix", "--fix-unsafe"].contains(&a.as_str())))
+                || (cmd.args.first().is_some_and(|a| a == "format") && cmd.args.iter().any(|a| ["--write"].contains(&a.as_str())))
         }
         "black" => {
             // Bare rule: always file-editing
             true
         }
-        "buf" => cmd.args.first().is_some_and(|a| a == "format"),
-        "cargo" => {
-            cmd.args.first().is_some_and(|a| a == "clippy")
-                && cmd.args.iter().any(|a| ["--fix"].contains(&a.as_str()))
+        "buf" => {
+            cmd.args.first().is_some_and(|a| a == "format")
         }
-        "clang-format" => cmd.args.iter().any(|a| ["-i"].contains(&a.as_str())),
-        "comby" => cmd
-            .args
-            .iter()
-            .any(|a| ["-in-place", "-i"].contains(&a.as_str())),
-        "dart" => cmd.args.first().is_some_and(|a| a == "format"),
+        "cargo" => {
+            cmd.args.first().is_some_and(|a| a == "clippy") && cmd.args.iter().any(|a| ["--fix"].contains(&a.as_str()))
+        }
+        "clang-format" => {
+            cmd.args.iter().any(|a| ["-i"].contains(&a.as_str()))
+        }
+        "comby" => {
+            cmd.args.iter().any(|a| ["-in-place", "-i"].contains(&a.as_str()))
+        }
+        "dart" => {
+            cmd.args.first().is_some_and(|a| a == "format")
+        }
         "dartfmt" => {
             // Bare rule: always file-editing
             true
@@ -9447,45 +8640,61 @@ pub fn is_file_editing_command(cmd: &CommandInfo) -> bool {
             // Bare rule: always file-editing
             true
         }
-        "eslint" => cmd.args.iter().any(|a| ["--fix"].contains(&a.as_str())),
-        "gci" => cmd.args.iter().any(|a| ["write"].contains(&a.as_str())),
-        "go" => cmd.args.first().is_some_and(|a| a == "fmt"),
-        "gofmt" => cmd.args.iter().any(|a| ["-w"].contains(&a.as_str())),
-        "goimports" => cmd.args.iter().any(|a| ["-w"].contains(&a.as_str())),
-        "golangci-lint" => cmd.args.iter().any(|a| ["--fix"].contains(&a.as_str())),
-        "grit" => cmd.args.first().is_some_and(|a| a == "apply"),
+        "eslint" => {
+            cmd.args.iter().any(|a| ["--fix"].contains(&a.as_str()))
+        }
+        "gci" => {
+            cmd.args.iter().any(|a| ["write"].contains(&a.as_str()))
+        }
+        "go" => {
+            cmd.args.first().is_some_and(|a| a == "fmt")
+        }
+        "gofmt" => {
+            cmd.args.iter().any(|a| ["-w"].contains(&a.as_str()))
+        }
+        "goimports" => {
+            cmd.args.iter().any(|a| ["-w"].contains(&a.as_str()))
+        }
+        "golangci-lint" => {
+            cmd.args.iter().any(|a| ["--fix"].contains(&a.as_str()))
+        }
+        "grit" => {
+            cmd.args.first().is_some_and(|a| a == "apply")
+        }
         "isort" => {
             // Bare rule: always file-editing
             true
         }
-        "ktlint" => cmd
-            .args
-            .iter()
-            .any(|a| ["-F", "--format"].contains(&a.as_str())),
-        "mix" => cmd.args.first().is_some_and(|a| a == "format"),
+        "ktlint" => {
+            cmd.args.iter().any(|a| ["-F", "--format"].contains(&a.as_str()))
+        }
+        "mix" => {
+            cmd.args.first().is_some_and(|a| a == "format")
+        }
         "mkdir" => {
             // Bare rule: always file-editing
             true
         }
-        "perltidy" => cmd.args.iter().any(|a| ["-b"].contains(&a.as_str())),
-        "prettier" => cmd
-            .args
-            .iter()
-            .any(|a| ["--write", "-w"].contains(&a.as_str())),
-        "rubocop" => cmd
-            .args
-            .iter()
-            .any(|a| ["-a", "-A", "--auto-correct", "--autocorrect"].contains(&a.as_str())),
+        "perltidy" => {
+            cmd.args.iter().any(|a| ["-b"].contains(&a.as_str()))
+        }
+        "prettier" => {
+            cmd.args.iter().any(|a| ["--write", "-w"].contains(&a.as_str()))
+        }
+        "rubocop" => {
+            cmd.args.iter().any(|a| ["-a", "-A", "--auto-correct", "--autocorrect"].contains(&a.as_str()))
+        }
         "ruff" => {
-            (cmd.args.first().is_some_and(|a| a == "check")
-                && cmd.args.iter().any(|a| ["--fix"].contains(&a.as_str())))
+            (cmd.args.first().is_some_and(|a| a == "check") && cmd.args.iter().any(|a| ["--fix"].contains(&a.as_str())))
                 || cmd.args.first().is_some_and(|a| a == "format")
         }
         "rustfmt" => {
             // Bare rule: always file-editing
             true
         }
-        "sad" => cmd.args.iter().any(|a| ["--commit"].contains(&a.as_str())),
+        "sad" => {
+            cmd.args.iter().any(|a| ["--commit"].contains(&a.as_str()))
+        }
         "scalafmt" => {
             // Bare rule: always file-editing
             true
@@ -9494,24 +8703,24 @@ pub fn is_file_editing_command(cmd: &CommandInfo) -> bool {
             // Bare rule: always file-editing
             true
         }
-        "sed" => cmd
-            .args
-            .iter()
-            .any(|a| ["-i", "--in-place"].contains(&a.as_str())),
-        "semgrep" => cmd
-            .args
-            .iter()
-            .any(|a| ["--autofix", "--fix"].contains(&a.as_str())),
-        "sg" => cmd
-            .args
-            .iter()
-            .any(|a| ["-U", "--update-all"].contains(&a.as_str())),
-        "shfmt" => cmd.args.iter().any(|a| ["-w"].contains(&a.as_str())),
-        "standardrb" => cmd
-            .args
-            .iter()
-            .any(|a| ["-a", "-A", "--auto-correct", "--autocorrect"].contains(&a.as_str())),
-        "stylelint" => cmd.args.iter().any(|a| ["--fix"].contains(&a.as_str())),
+        "sed" => {
+            cmd.args.iter().any(|a| ["-i", "--in-place"].contains(&a.as_str()))
+        }
+        "semgrep" => {
+            cmd.args.iter().any(|a| ["--autofix", "--fix"].contains(&a.as_str()))
+        }
+        "sg" => {
+            cmd.args.iter().any(|a| ["-U", "--update-all"].contains(&a.as_str()))
+        }
+        "shfmt" => {
+            cmd.args.iter().any(|a| ["-w"].contains(&a.as_str()))
+        }
+        "standardrb" => {
+            cmd.args.iter().any(|a| ["-a", "-A", "--auto-correct", "--autocorrect"].contains(&a.as_str()))
+        }
+        "stylelint" => {
+            cmd.args.iter().any(|a| ["--fix"].contains(&a.as_str()))
+        }
         "stylua" => {
             // Bare rule: always file-editing
             true
@@ -9520,16 +8729,20 @@ pub fn is_file_editing_command(cmd: &CommandInfo) -> bool {
             // Bare rule: always file-editing
             true
         }
-        "terraform" => cmd.args.first().is_some_and(|a| a == "fmt"),
-        "tofu" => cmd.args.first().is_some_and(|a| a == "fmt"),
+        "terraform" => {
+            cmd.args.first().is_some_and(|a| a == "fmt")
+        }
+        "tofu" => {
+            cmd.args.first().is_some_and(|a| a == "fmt")
+        }
         "unix2dos" => {
             // Bare rule: always file-editing
             true
         }
-        "yq" => cmd
-            .args
-            .iter()
-            .any(|a| ["-i", "--inplace"].contains(&a.as_str())),
+        "yq" => {
+            cmd.args.iter().any(|a| ["-i", "--inplace"].contains(&a.as_str()))
+        }
         _ => false,
     }
 }
+

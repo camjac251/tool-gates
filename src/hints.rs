@@ -42,9 +42,9 @@ pub fn get_modern_hint(cmd: &CommandInfo) -> Option<ModernHint> {
     }
 
     let hint = match cmd.program.as_str() {
-        // File viewing
-        "cat" => Some(hint_cat(cmd)),
-        "head" => Some(hint_head(cmd)),
+        // File viewing (only when used with files, not pipes)
+        "cat" => hint_cat(cmd),
+        "head" => hint_head(cmd),
         "tail" => hint_tail(cmd),
         "less" | "more" => Some(hint_less(cmd)),
         // Search & find
@@ -57,7 +57,7 @@ pub fn get_modern_hint(cmd: &CommandInfo) -> Option<ModernHint> {
         "wc" => hint_wc(cmd),
         // File listing & disk
         "ls" => hint_ls(cmd),
-        "du" => Some(hint_du(cmd)),
+        "du" => hint_du(cmd),
         "tree" => hint_tree(cmd),
         // Process (for debugging)
         "ps" => hint_ps(cmd),
@@ -71,6 +71,10 @@ pub fn get_modern_hint(cmd: &CommandInfo) -> Option<ModernHint> {
         "cloc" => Some(hint_cloc(cmd)),
         // Documentation (understanding APIs/libraries)
         "man" => hint_man(cmd),
+        // Anti-patterns (bad flags, wrong tool for job)
+        "bat" => hint_bat_flags(cmd),
+        "rg" => hint_rg_body_capture(cmd),
+        "git" => hint_git_antipatterns(cmd),
         _ => None,
     }?;
 
@@ -82,19 +86,13 @@ pub fn get_modern_hint(cmd: &CommandInfo) -> Option<ModernHint> {
     }
 }
 
-fn hint_cat(cmd: &CommandInfo) -> ModernHint {
-    // Check if it's viewing a file (not piping)
+fn hint_cat(cmd: &CommandInfo) -> Option<ModernHint> {
     let files: Vec<_> = cmd.args.iter().filter(|a| !a.starts_with('-')).collect();
+    // No file argument means pipe usage (echo | cat) - no hint needed
     if files.is_empty() {
-        return ModernHint {
-            legacy_command: "cat",
-            modern_command: "bat",
-            hint: "**ALWAYS** use `bat` instead of `cat`. Syntax highlighting and line numbers."
-                .to_string(),
-        };
+        return None;
     }
 
-    // Check file extension for specific hints
     let file = files[0];
     let ext_hint = if file.ends_with(".json") {
         " (JSON syntax highlighting)"
@@ -106,18 +104,17 @@ fn hint_cat(cmd: &CommandInfo) -> ModernHint {
         ""
     };
 
-    ModernHint {
+    Some(ModernHint {
         legacy_command: "cat",
         modern_command: "bat",
         hint: format!(
-            "**ALWAYS** use `bat {}` instead of `cat`. Syntax highlighting and line numbers{}.",
+            "Use `bat {}` instead of `cat`. Syntax highlighting and line numbers{}.",
             file, ext_hint
         ),
-    }
+    })
 }
 
-fn hint_head(cmd: &CommandInfo) -> ModernHint {
-    // Parse -n flag to get line count
+fn hint_head(cmd: &CommandInfo) -> Option<ModernHint> {
     let mut lines = "10".to_string();
     let mut file = String::new();
 
@@ -134,16 +131,20 @@ fn hint_head(cmd: &CommandInfo) -> ModernHint {
         }
     }
 
+    // No file argument means pipe usage (command | head) - no hint needed
+    if file.is_empty() {
+        return None;
+    }
+
     let bat_range = format!(":{}", lines);
-    ModernHint {
+    Some(ModernHint {
         legacy_command: "head",
         modern_command: "bat",
         hint: format!(
-            "**ALWAYS** use `bat -r {} {}` instead of `head`. Syntax highlighting included.",
-            bat_range,
-            if file.is_empty() { "<file>" } else { &file },
+            "Use `bat -r {} {}` instead of `head` for file viewing.",
+            bat_range, file,
         ),
-    }
+    })
 }
 
 fn hint_tail(cmd: &CommandInfo) -> Option<ModernHint> {
@@ -172,14 +173,18 @@ fn hint_tail(cmd: &CommandInfo) -> Option<ModernHint> {
         return None;
     }
 
+    // No file argument means pipe usage (command | tail) - no hint needed
+    if file.is_empty() {
+        return None;
+    }
+
     let bat_range = format!("-{}:", lines);
     Some(ModernHint {
         legacy_command: "tail",
         modern_command: "bat",
         hint: format!(
-            "**ALWAYS** use `bat -r {} {}` instead of `tail`. Syntax highlighting included.",
-            bat_range,
-            if file.is_empty() { "<file>" } else { &file },
+            "Use `bat -r {} {}` instead of `tail` for file viewing.",
+            bat_range, file,
         ),
     })
 }
@@ -218,7 +223,7 @@ fn hint_grep(cmd: &CommandInfo) -> Option<ModernHint> {
         return Some(ModernHint {
             legacy_command: "grep",
             modern_command: "sg",
-            hint: "**ALWAYS** use `sg -p <pattern> <path>` instead of `grep` for code searches. AST-aware structural matching. Use `rg` for plain text.".to_string(),
+            hint: "Use `sg -p <pattern> <path>` instead of `grep` for code searches. AST-aware structural matching. Use `rg` for plain text.".to_string(),
         });
     }
 
@@ -233,11 +238,11 @@ fn hint_grep(cmd: &CommandInfo) -> Option<ModernHint> {
         .any(|a| a.starts_with("-A") || a.starts_with("-B") || a.starts_with("-C"));
 
     let hint = if has_recursive {
-        "**ALWAYS** use `rg <pattern>` instead of `grep -r`. Recursive by default, respects .gitignore, faster."
+        "Use `rg <pattern>` instead of `grep -r`. Recursive by default, respects .gitignore, faster."
     } else if has_context {
-        "**ALWAYS** use `rg <pattern>` instead of `grep`. Same -A/-B/-C flags, faster, better defaults."
+        "Use `rg <pattern>` instead of `grep`. Same -A/-B/-C flags, faster, better defaults."
     } else {
-        "**ALWAYS** use `rg <pattern>` instead of `grep`. Faster, recursive by default, respects .gitignore."
+        "Use `rg <pattern>` instead of `grep`. Faster, recursive by default, respects .gitignore."
     };
 
     Some(ModernHint {
@@ -272,22 +277,22 @@ fn hint_find(cmd: &CommandInfo) -> ModernHint {
     let hint = if let Some(pattern) = name_pattern {
         if let Some(kind) = type_filter {
             format!(
-                "**ALWAYS** use `fd -t {} {} .` instead of `find`. Faster, simpler syntax, .gitignore-aware.",
+                "Use `fd -t {} {} .` instead of `find`. Faster, simpler syntax, .gitignore-aware.",
                 kind, pattern
             )
         } else {
             format!(
-                "**ALWAYS** use `fd {} .` instead of `find`. Faster, simpler syntax, .gitignore-aware.",
+                "Use `fd {} .` instead of `find`. Faster, simpler syntax, .gitignore-aware.",
                 pattern
             )
         }
     } else if let Some(kind) = type_filter {
         format!(
-            "**ALWAYS** use `fd -t {} .` instead of `find`. Faster, simpler syntax, .gitignore-aware.",
+            "Use `fd -t {} .` instead of `find`. Faster, simpler syntax, .gitignore-aware.",
             kind
         )
     } else {
-        "**ALWAYS** use `fd <pattern> <path>` instead of `find`. Faster, simpler syntax, .gitignore-aware."
+        "Use `fd <pattern> <path>` instead of `find`. Faster, simpler syntax, .gitignore-aware."
             .to_string()
     };
 
@@ -367,9 +372,9 @@ fn hint_sed(cmd: &CommandInfo) -> Option<ModernHint> {
     }
 
     let hint = if has_inplace {
-        "**ALWAYS** use `sd <find> <replace> <file>` instead of `sed -i`. Simpler syntax, no escaping needed."
+        "Use `sd <find> <replace> <file>` instead of `sed -i`. Simpler syntax, no escaping needed."
     } else {
-        "**ALWAYS** use `sd <find> <replace>` instead of `sed`. No 's/.../.../g' syntax needed."
+        "Use `sd <find> <replace>` instead of `sed`. No 's/.../.../g' syntax needed."
     };
 
     Some(ModernHint {
@@ -399,18 +404,27 @@ fn hint_ls(cmd: &CommandInfo) -> Option<ModernHint> {
     Some(ModernHint {
         legacy_command: "ls",
         modern_command: "eza",
-        hint: "**ALWAYS** use `eza -la` instead of `ls -la`. Git status integration and better formatting."
+        hint: "Use `eza -la` instead of `ls -la`. Git status integration and better formatting."
             .to_string(),
     })
 }
 
-fn hint_du(_cmd: &CommandInfo) -> ModernHint {
-    ModernHint {
+fn hint_du(cmd: &CommandInfo) -> Option<ModernHint> {
+    // du -sh (summary) is a quick one-liner that's fine. Hint for deep/recursive usage.
+    let is_summary = cmd.args.iter().any(|a| {
+        (a.starts_with('-') && !a.starts_with("--") && a.contains('s')) || a == "--summarize"
+    });
+    if is_summary {
+        return None;
+    }
+
+    Some(ModernHint {
         legacy_command: "du",
         modern_command: "dust",
-        hint: "**ALWAYS** use `dust` instead of `du`. Visual tree view with better formatting."
-            .to_string(),
-    }
+        hint:
+            "Use `dust` instead of `du` for disk usage trees. Visual output with better formatting."
+                .to_string(),
+    })
 }
 
 fn hint_ps(cmd: &CommandInfo) -> Option<ModernHint> {
@@ -434,8 +448,7 @@ fn hint_ps(cmd: &CommandInfo) -> Option<ModernHint> {
     Some(ModernHint {
         legacy_command: "ps",
         modern_command: "procs",
-        hint: "**ALWAYS** use `procs` instead of `ps`. Better formatting with tree view."
-            .to_string(),
+        hint: "Use `procs` instead of `ps`. Better formatting with tree view.".to_string(),
     })
 }
 
@@ -451,7 +464,7 @@ fn hint_curl(cmd: &CommandInfo) -> Option<ModernHint> {
         return Some(ModernHint {
             legacy_command: "curl",
             modern_command: "xh",
-            hint: "**ALWAYS** use `xh <url>` instead of `curl`. Automatic JSON formatting, cleaner output."
+            hint: "Use `xh <url>` instead of `curl`. Automatic JSON formatting, cleaner output."
                 .to_string(),
         });
     }
@@ -459,12 +472,28 @@ fn hint_curl(cmd: &CommandInfo) -> Option<ModernHint> {
     None
 }
 
-fn hint_wget(_cmd: &CommandInfo) -> Option<ModernHint> {
+fn hint_wget(cmd: &CommandInfo) -> Option<ModernHint> {
+    // wget for file downloads (-O, -P, -r, -c) is the right tool. Only hint for simple fetches.
+    let is_download = cmd.args.iter().any(|a| {
+        a == "-O"
+            || a.starts_with("-O")
+            || a == "-P"
+            || a.starts_with("-P")
+            || a == "-r"
+            || a == "--recursive"
+            || a == "-c"
+            || a == "--continue"
+    });
+    if is_download {
+        return None;
+    }
+
     Some(ModernHint {
         legacy_command: "wget",
         modern_command: "xh",
-        hint: "**ALWAYS** use `xh <url>` instead of `wget`. Cleaner HTTP output, or `xh -d <url>` for downloads."
-            .to_string(),
+        hint:
+            "Use `xh <url>` instead of `wget` for HTTP requests. For file downloads, wget is fine."
+                .to_string(),
     })
 }
 
@@ -476,7 +505,7 @@ fn hint_awk(cmd: &CommandInfo) -> Option<ModernHint> {
         return Some(ModernHint {
             legacy_command: "awk",
             modern_command: "choose",
-            hint: "**ALWAYS** use `choose <field>` instead of `awk`. Example: `choose 0 2` replaces awk '{print $1, $3}'.".to_string(),
+            hint: "Use `choose <field>` instead of `awk`. Example: `choose 0 2` replaces awk '{print $1, $3}'.".to_string(),
         });
     }
 
@@ -484,15 +513,17 @@ fn hint_awk(cmd: &CommandInfo) -> Option<ModernHint> {
 }
 
 fn hint_wc(cmd: &CommandInfo) -> Option<ModernHint> {
-    // Only hint for line counting
+    // Only hint for line counting with a file argument.
+    // `command | wc -l` (pipe usage) is fine and has no good rg equivalent.
     let has_lines = cmd.args.iter().any(|a| a == "-l");
+    let has_file = cmd.args.iter().any(|a| !a.starts_with('-'));
 
-    if has_lines {
+    if has_lines && has_file {
         return Some(ModernHint {
             legacy_command: "wc -l",
             modern_command: "rg",
             hint:
-                "**ALWAYS** use `rg -c <pattern>` instead of `wc -l` for counting matches directly."
+                "Use `rg -c '.' <file>` to count lines in a file. For counting piped output, `| wc -l` is fine."
                     .to_string(),
         });
     }
@@ -504,8 +535,7 @@ fn hint_cloc(_cmd: &CommandInfo) -> ModernHint {
     ModernHint {
         legacy_command: "cloc",
         modern_command: "tokei",
-        hint: "**ALWAYS** use `tokei` instead of `cloc`. Faster with better formatting."
-            .to_string(),
+        hint: "Use `tokei` instead of `cloc`. Faster with better formatting.".to_string(),
     }
 }
 
@@ -513,7 +543,8 @@ fn hint_tree(_cmd: &CommandInfo) -> Option<ModernHint> {
     Some(ModernHint {
         legacy_command: "tree",
         modern_command: "eza",
-        hint: "**ALWAYS** use `eza -T` instead of `tree`. Git status integration and better formatting.".to_string(),
+        hint: "Use `eza -T` instead of `tree`. Git status integration and better formatting."
+            .to_string(),
     })
 }
 
@@ -526,19 +557,19 @@ fn hint_hex(cmd: &CommandInfo) -> ModernHint {
     ModernHint {
         legacy_command: legacy,
         modern_command: "hexyl",
-        hint: "**ALWAYS** use `hexyl <file>` instead of the legacy hex viewer. Colored output, better formatting.".to_string(),
+        hint: "Use `hexyl <file>` instead of the legacy hex viewer. Colored output, better formatting.".to_string(),
     }
 }
 
 fn hint_diff(cmd: &CommandInfo) -> Option<ModernHint> {
-    // Hint for code diffs
     let has_files = cmd.args.iter().filter(|a| !a.starts_with('-')).count() >= 2;
 
     if has_files {
         return Some(ModernHint {
             legacy_command: "diff",
-            modern_command: "delta",
-            hint: "**ALWAYS** use `delta` for code diffs. Pipe through it: `diff a b | delta`. Syntax highlighting included.".to_string(),
+            modern_command: "difft",
+            hint: "Use `difft` for syntax-aware code diffs, or `git diff` for unified patches."
+                .to_string(),
         });
     }
 
@@ -551,7 +582,8 @@ fn hint_less(_cmd: &CommandInfo) -> ModernHint {
     ModernHint {
         legacy_command: "less",
         modern_command: "bat",
-        hint: "**ALWAYS** use `bat <file>` instead of `less`. Syntax highlighting and line numbers included.".to_string(),
+        hint: "Use `bat <file>` instead of `less`. Syntax highlighting and line numbers included."
+            .to_string(),
     }
 }
 
@@ -566,7 +598,7 @@ fn hint_man(cmd: &CommandInfo) -> Option<ModernHint> {
         legacy_command: "man",
         modern_command: "tldr",
         hint: format!(
-            "**ALWAYS** use `tldr {}` instead of `man`. Practical examples, concise output.",
+            "Use `tldr {}` instead of `man`. Practical examples, concise output.",
             command
         ),
     })
@@ -577,9 +609,218 @@ fn hint_ag_ack(cmd: &CommandInfo) -> ModernHint {
         legacy_command: if cmd.program == "ag" { "ag" } else { "ack" },
         modern_command: "rg",
         hint: format!(
-            "**ALWAYS** use `rg` instead of `{}`. Faster with similar interface.",
+            "Use `rg` instead of `{}`. Faster with similar interface.",
             cmd.program
         ),
+    }
+}
+
+// === Git alias detection ===
+
+/// Check if a git alias exists. Cached per-process via OnceLock.
+fn has_git_alias(alias: &str) -> bool {
+    use std::sync::Mutex;
+    static GIT_ALIASES: OnceLock<Mutex<std::collections::HashMap<String, bool>>> = OnceLock::new();
+
+    let cache = GIT_ALIASES.get_or_init(|| Mutex::new(std::collections::HashMap::new()));
+    let mut map = cache.lock().unwrap_or_else(|e| e.into_inner());
+
+    if let Some(&cached) = map.get(alias) {
+        return cached;
+    }
+
+    let key = format!("alias.{alias}");
+    let exists = std::process::Command::new("git")
+        .args(["config", "--get", &key])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+
+    map.insert(alias.to_string(), exists);
+    exists
+}
+
+/// Return the short alias if it exists, otherwise the full command.
+fn git_alias_or_raw(alias: &str, raw: &str) -> String {
+    if has_git_alias(alias) {
+        format!("git {alias}")
+    } else {
+        raw.to_string()
+    }
+}
+
+// === Anti-pattern detection ===
+
+fn hint_bat_flags(cmd: &CommandInfo) -> Option<ModernHint> {
+    // Detect useless bat flags that are no-ops or counterproductive in piped output
+    let bad_flags = [
+        "--style",
+        "-p",
+        "--plain",
+        "--paging",
+        "--decorations",
+        "--color",
+    ];
+    let used_bad: Vec<&str> = cmd
+        .args
+        .iter()
+        .filter(|a| {
+            bad_flags
+                .iter()
+                .any(|f| a.as_str() == *f || a.starts_with(&format!("{f}=")))
+        })
+        .map(|a| a.as_str())
+        .collect();
+
+    if used_bad.is_empty() {
+        return None;
+    }
+
+    Some(ModernHint {
+        legacy_command: "bat",
+        modern_command: "bat",
+        hint: format!(
+            "bat flags {} are no-ops or counterproductive. Only use `-r START:END` (line range) and `-A` (show whitespace).",
+            used_bad.join(", ")
+        ),
+    })
+}
+
+fn hint_rg_body_capture(cmd: &CommandInfo) -> Option<ModernHint> {
+    // Detect rg -A (after context) targeting code directories, which suggests
+    // trying to capture function/class bodies. sg is better for this.
+    let has_after_context = cmd.args.iter().any(|a| {
+        a == "-A"
+            || (a.starts_with("-A") && a.len() > 2 && a[2..].chars().all(|c| c.is_ascii_digit()))
+    });
+
+    if !has_after_context {
+        return None;
+    }
+
+    // Check if targeting code directories
+    let targets_code = cmd.args.iter().any(|a| is_code_search_target(a));
+    if !targets_code {
+        return None;
+    }
+
+    Some(ModernHint {
+        legacy_command: "rg",
+        modern_command: "sg",
+        hint: "Use `sg -p 'pattern' src/` instead of `rg -A` for capturing function/class bodies. AST-aware matching gives exact boundaries.".to_string(),
+    })
+}
+
+fn hint_git_antipatterns(cmd: &CommandInfo) -> Option<ModernHint> {
+    if cmd.args.is_empty() {
+        return None;
+    }
+
+    let subcommand = cmd.args[0].as_str();
+
+    match subcommand {
+        "status" => {
+            if cmd
+                .args
+                .iter()
+                .any(|a| a == "-uall" || a == "--untracked-files=all")
+            {
+                return Some(ModernHint {
+                    legacy_command: "git",
+                    modern_command: "git",
+                    hint: "Avoid `git status -uall` on large repos (memory issues). Use `git status` without -uall.".to_string(),
+                });
+            }
+            None
+        }
+        "add" => {
+            // Interactive staging hangs agents
+            if cmd
+                .args
+                .iter()
+                .any(|a| a == "-p" || a == "--patch" || a == "-i" || a == "--interactive")
+            {
+                let diff_cmd =
+                    git_alias_or_raw("adiff", "git -c core.pager= diff --no-color --no-ext-diff");
+                return Some(ModernHint {
+                    legacy_command: "git",
+                    modern_command: "git",
+                    hint: format!(
+                        "Never use `git add -p` or `git add -i` (interactive, hangs agent). Use `{diff_cmd} | grepdiff 'pattern' --output-matching=hunk | git apply --cached` for surgical staging, or `git absorb --and-rebase` to auto-fold changes."
+                    ),
+                });
+            }
+            let is_bulk = cmd
+                .args
+                .iter()
+                .any(|a| a == "-A" || a == "--all" || a == ".");
+            if is_bulk {
+                return Some(ModernHint {
+                    legacy_command: "git",
+                    modern_command: "git",
+                    hint: "Stage specific files by name instead of `git add -A` or `git add .` (can include secrets, large binaries).".to_string(),
+                });
+            }
+            None
+        }
+        "rebase" => {
+            // Interactive rebase hangs agents
+            if cmd.args.iter().any(|a| a == "-i" || a == "--interactive") {
+                return Some(ModernHint {
+                    legacy_command: "git",
+                    modern_command: "git",
+                    hint: "Never use `git rebase -i` (interactive, hangs agent). Use `git revise --autosquash` for fixups, `git absorb --and-rebase` for auto-folding, or `git reset --soft HEAD~N && git commit` for squashing.".to_string(),
+                });
+            }
+            None
+        }
+        "diff" | "show" | "log" => {
+            // Using paged/colored/side-by-side diff output in agent context wastes tokens.
+            let uses_pager_diff = cmd
+                .args
+                .iter()
+                .any(|a| a == "--color=always" || a == "--color" || a == "--ext-diff");
+            if uses_pager_diff {
+                let alias = match subcommand {
+                    "diff" => "adiff",
+                    "show" => "ashow",
+                    "log" => "alog",
+                    _ => "",
+                };
+                let raw = format!(
+                    "git -c core.pager= -c color.ui=false {} --no-ext-diff --no-color",
+                    subcommand
+                );
+                let suggestion = if !alias.is_empty() {
+                    git_alias_or_raw(alias, &raw)
+                } else {
+                    raw
+                };
+                return Some(ModernHint {
+                    legacy_command: "git",
+                    modern_command: "git",
+                    hint: format!(
+                        "For agent-safe output, use `{suggestion}`. Colored/paged/ext-diff output wastes tokens."
+                    ),
+                });
+            }
+            None
+        }
+        "push" => {
+            // Force push warning
+            if cmd.args.iter().any(|a| a == "--force" || a == "-f") {
+                let targets_main = cmd.args.iter().any(|a| a == "main" || a == "master");
+                if targets_main {
+                    return Some(ModernHint {
+                        legacy_command: "git",
+                        modern_command: "git",
+                        hint: "Never force push to main/master. Use `--force-with-lease` on feature branches if needed.".to_string(),
+                    });
+                }
+            }
+            None
+        }
+        _ => None,
     }
 }
 
@@ -614,15 +855,40 @@ mod tests {
     #[test]
     fn test_cat_hint() {
         let hint = hint_cat(&cmd("cat", &["file.rs"]));
+        assert!(hint.is_some());
+        let hint = hint.unwrap();
         assert_eq!(hint.modern_command, "bat");
         assert!(hint.hint.contains("syntax highlighting"));
     }
 
     #[test]
+    fn test_cat_no_file_no_hint() {
+        // cat without a file is pipe usage - no hint
+        let hint = hint_cat(&cmd("cat", &[]));
+        assert!(hint.is_none());
+    }
+
+    #[test]
     fn test_head_hint() {
         let hint = hint_head(&cmd("head", &["-n", "50", "file.txt"]));
+        assert!(hint.is_some());
+        let hint = hint.unwrap();
         assert_eq!(hint.modern_command, "bat");
         assert!(hint.hint.contains("-r :50"));
+    }
+
+    #[test]
+    fn test_head_no_file_no_hint() {
+        // head without a file is pipe usage - no hint
+        let hint = hint_head(&cmd("head", &["-n", "10"]));
+        assert!(hint.is_none());
+    }
+
+    #[test]
+    fn test_tail_no_file_no_hint() {
+        // tail without a file is pipe usage - no hint
+        let hint = hint_tail(&cmd("tail", &["-n", "10"]));
+        assert!(hint.is_none());
     }
 
     #[test]
@@ -698,9 +964,17 @@ mod tests {
     }
 
     #[test]
-    fn test_du_hint() {
+    fn test_du_summary_no_hint() {
+        // du -sh is a quick summary - no hint
         let hint = hint_du(&cmd("du", &["-sh", "."]));
-        assert!(hint.hint.contains("dust"));
+        assert!(hint.is_none());
+    }
+
+    #[test]
+    fn test_du_recursive_hint() {
+        let hint = hint_du(&cmd("du", &["-h", "."]));
+        assert!(hint.is_some());
+        assert!(hint.unwrap().hint.contains("dust"));
     }
 
     #[test]
@@ -713,6 +987,148 @@ mod tests {
     fn test_unknown_command_no_hint() {
         // This tests get_modern_hint's matching logic (unknown commands not handled)
         let hint = get_modern_hint(&cmd("rustfmt", &["file.rs"]));
+        assert!(hint.is_none());
+    }
+
+    // === Anti-pattern tests ===
+
+    #[test]
+    fn test_bat_bad_flags() {
+        let hint = hint_bat_flags(&cmd("bat", &["--style=plain", "file.rs"]));
+        assert!(hint.is_some());
+        assert!(hint.unwrap().hint.contains("no-ops"));
+    }
+
+    #[test]
+    fn test_bat_plain_flag() {
+        let hint = hint_bat_flags(&cmd("bat", &["-p", "file.rs"]));
+        assert!(hint.is_some());
+    }
+
+    #[test]
+    fn test_bat_good_flags_no_hint() {
+        let hint = hint_bat_flags(&cmd("bat", &["-r", "10:20", "file.rs"]));
+        assert!(hint.is_none());
+    }
+
+    #[test]
+    fn test_bat_no_flags_no_hint() {
+        let hint = hint_bat_flags(&cmd("bat", &["file.rs"]));
+        assert!(hint.is_none());
+    }
+
+    #[test]
+    fn test_rg_body_capture_hint() {
+        let hint = hint_rg_body_capture(&cmd("rg", &["-A20", "function handleAuth", "src/"]));
+        assert!(hint.is_some());
+        assert!(hint.unwrap().hint.contains("sg"));
+    }
+
+    #[test]
+    fn test_rg_context_on_logs_no_hint() {
+        // rg -A on non-code targets is fine
+        let hint = hint_rg_body_capture(&cmd("rg", &["-A5", "ERROR", "logs/"]));
+        assert!(hint.is_none());
+    }
+
+    #[test]
+    fn test_git_status_uall_hint() {
+        let hint = hint_git_antipatterns(&cmd("git", &["status", "-uall"]));
+        assert!(hint.is_some());
+        assert!(hint.unwrap().hint.contains("memory"));
+    }
+
+    #[test]
+    fn test_git_status_normal_no_hint() {
+        let hint = hint_git_antipatterns(&cmd("git", &["status"]));
+        assert!(hint.is_none());
+    }
+
+    #[test]
+    fn test_git_add_all_hint() {
+        let hint = hint_git_antipatterns(&cmd("git", &["add", "-A"]));
+        assert!(hint.is_some());
+        assert!(hint.unwrap().hint.contains("specific files"));
+    }
+
+    #[test]
+    fn test_git_add_dot_hint() {
+        let hint = hint_git_antipatterns(&cmd("git", &["add", "."]));
+        assert!(hint.is_some());
+    }
+
+    #[test]
+    fn test_git_add_specific_no_hint() {
+        let hint = hint_git_antipatterns(&cmd("git", &["add", "src/main.rs"]));
+        assert!(hint.is_none());
+    }
+
+    #[test]
+    fn test_git_commit_no_hint() {
+        let hint = hint_git_antipatterns(&cmd("git", &["commit", "-m", "fix: thing"]));
+        assert!(hint.is_none());
+    }
+
+    #[test]
+    fn test_git_add_patch_hint() {
+        let hint = hint_git_antipatterns(&cmd("git", &["add", "-p"]));
+        assert!(hint.is_some());
+        assert!(hint.unwrap().hint.contains("grepdiff"));
+    }
+
+    #[test]
+    fn test_git_add_interactive_hint() {
+        let hint = hint_git_antipatterns(&cmd("git", &["add", "-i"]));
+        assert!(hint.is_some());
+        assert!(hint.unwrap().hint.contains("hangs agent"));
+    }
+
+    #[test]
+    fn test_git_rebase_interactive_hint() {
+        let hint = hint_git_antipatterns(&cmd("git", &["rebase", "-i", "HEAD~3"]));
+        assert!(hint.is_some());
+        assert!(hint.unwrap().hint.contains("hangs agent"));
+    }
+
+    #[test]
+    fn test_git_rebase_non_interactive_no_hint() {
+        let hint = hint_git_antipatterns(&cmd("git", &["rebase", "main"]));
+        assert!(hint.is_none());
+    }
+
+    #[test]
+    fn test_git_diff_color_always_hint() {
+        let hint = hint_git_antipatterns(&cmd("git", &["diff", "--color=always"]));
+        assert!(hint.is_some());
+        assert!(hint.unwrap().hint.contains("agent-safe"));
+    }
+
+    #[test]
+    fn test_git_show_ext_diff_hint() {
+        let hint = hint_git_antipatterns(&cmd("git", &["show", "--ext-diff"]));
+        assert!(hint.is_some());
+        assert!(hint.unwrap().hint.contains("wastes tokens"));
+    }
+
+    #[test]
+    fn test_git_diff_plain_no_hint() {
+        let hint = hint_git_antipatterns(&cmd("git", &["diff"]));
+        assert!(hint.is_none());
+    }
+
+    #[test]
+    fn test_git_push_force_main_hint() {
+        let hint = hint_git_antipatterns(&cmd("git", &["push", "--force", "origin", "main"]));
+        assert!(hint.is_some());
+        assert!(hint.unwrap().hint.contains("Never force push"));
+    }
+
+    #[test]
+    fn test_git_push_force_branch_no_hint() {
+        let hint = hint_git_antipatterns(&cmd(
+            "git",
+            &["push", "--force", "origin", "feature-branch"],
+        ));
         assert!(hint.is_none());
     }
 }
