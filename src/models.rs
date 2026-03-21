@@ -117,6 +117,54 @@ impl Client {
     pub fn is_shell_tool(tool_name: &str) -> bool {
         tool_name == "Bash" || tool_name == "run_shell_command"
     }
+
+    /// Check if a tool_name represents a file operation tool (read, write, edit)
+    pub fn is_file_tool(tool_name: &str) -> bool {
+        matches!(
+            tool_name,
+            "Read"
+                | "Write"
+                | "Edit"
+                | "MultiEdit"
+                | "read_file"
+                | "read_many_files"
+                | "write_file"
+                | "replace"
+        )
+    }
+
+    /// Check if a tool_name is a read-only file tool
+    pub fn is_read_tool(tool_name: &str) -> bool {
+        matches!(tool_name, "Read" | "read_file" | "read_many_files")
+    }
+
+    /// Check if a tool_name is a write/edit file tool
+    pub fn is_write_tool(tool_name: &str) -> bool {
+        matches!(
+            tool_name,
+            "Write" | "Edit" | "MultiEdit" | "write_file" | "replace"
+        )
+    }
+
+    /// Check if a tool_name represents a skill/extension tool
+    pub fn is_skill_tool(tool_name: &str) -> bool {
+        tool_name == "Skill" || tool_name == "activate_skill"
+    }
+
+    /// Check if a tool_name is a glob/search tool
+    pub fn is_glob_tool(tool_name: &str) -> bool {
+        tool_name == "Glob" || tool_name == "glob"
+    }
+
+    /// Check if a tool_name is a grep/search tool
+    pub fn is_grep_tool(tool_name: &str) -> bool {
+        tool_name == "Grep" || tool_name == "grep_search"
+    }
+
+    /// Check if a tool_name is an MCP tool (either prefix format)
+    pub fn is_mcp_tool(tool_name: &str) -> bool {
+        tool_name.starts_with("mcp__") || tool_name.starts_with("mcp_")
+    }
 }
 
 // === Hook Input/Output Types ===
@@ -928,5 +976,76 @@ mod tests {
         assert_eq!(PermissionDecision::Allow.as_str(), "allow");
         assert_eq!(PermissionDecision::Ask.as_str(), "ask");
         assert_eq!(PermissionDecision::Deny.as_str(), "deny");
+    }
+
+    // === Tool name classification tests ===
+
+    #[test]
+    fn test_is_file_tool() {
+        // Claude tool names
+        assert!(Client::is_file_tool("Read"));
+        assert!(Client::is_file_tool("Write"));
+        assert!(Client::is_file_tool("Edit"));
+        assert!(Client::is_file_tool("MultiEdit"));
+        // Gemini tool names
+        assert!(Client::is_file_tool("read_file"));
+        assert!(Client::is_file_tool("read_many_files"));
+        assert!(Client::is_file_tool("write_file"));
+        assert!(Client::is_file_tool("replace"));
+        // Not file tools
+        assert!(!Client::is_file_tool("Bash"));
+        assert!(!Client::is_file_tool("run_shell_command"));
+        assert!(!Client::is_file_tool("Glob"));
+    }
+
+    #[test]
+    fn test_is_read_tool() {
+        assert!(Client::is_read_tool("Read"));
+        assert!(Client::is_read_tool("read_file"));
+        assert!(Client::is_read_tool("read_many_files"));
+        assert!(!Client::is_read_tool("Write"));
+        assert!(!Client::is_read_tool("write_file"));
+        assert!(!Client::is_read_tool("replace"));
+    }
+
+    #[test]
+    fn test_is_write_tool() {
+        assert!(Client::is_write_tool("Write"));
+        assert!(Client::is_write_tool("Edit"));
+        assert!(Client::is_write_tool("MultiEdit"));
+        assert!(Client::is_write_tool("write_file"));
+        assert!(Client::is_write_tool("replace"));
+        assert!(!Client::is_write_tool("Read"));
+        assert!(!Client::is_write_tool("read_file"));
+    }
+
+    #[test]
+    fn test_is_skill_tool() {
+        assert!(Client::is_skill_tool("Skill"));
+        assert!(Client::is_skill_tool("activate_skill"));
+        assert!(!Client::is_skill_tool("Bash"));
+    }
+
+    #[test]
+    fn test_is_glob_grep_tool() {
+        assert!(Client::is_glob_tool("Glob"));
+        assert!(Client::is_glob_tool("glob"));
+        assert!(!Client::is_glob_tool("Grep"));
+        assert!(Client::is_grep_tool("Grep"));
+        assert!(Client::is_grep_tool("grep_search"));
+        assert!(!Client::is_grep_tool("Glob"));
+    }
+
+    #[test]
+    fn test_is_mcp_tool() {
+        // Claude MCP format (double underscore)
+        assert!(Client::is_mcp_tool("mcp__ast-grep__find_code"));
+        assert!(Client::is_mcp_tool("mcp__firecrawl__scrape"));
+        // Gemini MCP format (single underscore)
+        assert!(Client::is_mcp_tool("mcp_ast-grep_find_code"));
+        assert!(Client::is_mcp_tool("mcp_firecrawl_scrape"));
+        // Not MCP
+        assert!(!Client::is_mcp_tool("Bash"));
+        assert!(!Client::is_mcp_tool("Read"));
     }
 }

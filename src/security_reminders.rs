@@ -36,15 +36,17 @@ fn extract_content(
         .unwrap_or("")
         .to_string();
 
+    // Match tool names from both Claude (Write/Edit/MultiEdit) and Gemini (write_file/replace).
+    // Field names (file_path, content, old_string, new_string) are the same in both CLIs.
     match tool_name {
-        "Write" => {
+        "Write" | "write_file" => {
             if let Some(content) = map.get("content").and_then(|v| v.as_str()) {
                 if !content.is_empty() {
                     results.push((top_file_path, content.to_string()));
                 }
             }
         }
-        "Edit" => {
+        "Edit" | "replace" => {
             // Classic: single new_string
             if let Some(new_string) = map.get("new_string").and_then(|v| v.as_str()) {
                 if !new_string.is_empty() {
@@ -513,7 +515,7 @@ pub fn check_security_reminders(
     config: &SecurityRemindersConfig,
     session_id: &str,
 ) -> Option<HookOutput> {
-    if tool_name == "Read" {
+    if crate::models::Client::is_read_tool(tool_name) {
         return None;
     }
 
@@ -581,7 +583,7 @@ pub fn check_security_reminders_post(
     config: &SecurityRemindersConfig,
     session_id: &str,
 ) -> Option<PostToolUseOutput> {
-    if tool_name == "Read" {
+    if crate::models::Client::is_read_tool(tool_name) {
         return None;
     }
     // Early exit only if both subsystems are disabled

@@ -30,16 +30,29 @@ tool-gates supports Claude Code and Gemini CLI hook systems:
 | **PermissionRequest** | Approve safe commands for subagents | After internal checks decide to "ask" |
 | **PostToolUse** | Detect successful execution, add to pending approval queue | After command completes |
 
-**Gemini CLI** (tool_name: `run_shell_command`):
+**Gemini CLI** (tool names: `run_shell_command`, `read_file`, `write_file`, `replace`, `glob`, `grep_search`, `activate_skill`, `mcp_*`):
 
 | Hook | Purpose | When it runs |
 |------|---------|--------------|
-| **BeforeTool** | Block dangerous commands, allow safe ones, provide hints | Before tool execution |
-| **AfterTool** | Post-execution context (tracking is Claude-only) | After command completes |
+| **BeforeTool** | Route all tool types (shell, file ops, glob/grep, MCP, skills), block dangerous operations, allow safe ones, provide hints, file guards, security reminders | Before tool execution |
+| **AfterTool** | Post-execution security scanning for write tools (tracking is Claude-only) | After command completes |
 
 The client is auto-detected from `hook_event_name` -- no configuration needed. Output is serialized in the appropriate wire format:
 - Claude: nested `hookSpecificOutput` with `permissionDecision`
 - Gemini: flat `decision` + `reason` (uses `"block"` instead of `"deny"`, exit code 2 for hard blocks)
+
+**Tool name mapping** (Claude <-> Gemini):
+
+| Claude | Gemini | Category |
+|--------|--------|----------|
+| `Bash` | `run_shell_command` | Shell commands |
+| `Read` | `read_file`, `read_many_files` | File read |
+| `Write` | `write_file` | File write |
+| `Edit`, `MultiEdit` | `replace` | File edit |
+| `Glob` | `glob` | File search |
+| `Grep` | `grep_search` | Text search |
+| `Skill` | `activate_skill` | Skills/extensions |
+| `mcp__server__tool` | `mcp_server_tool` | MCP tools |
 
 **Why three hooks for Claude?**
 - PreToolUse handles command safety for the main session and tracks commands that return "ask"
@@ -207,7 +220,7 @@ flowchart TD
     I -->|no match| L[Use gate result]
 ```
 
-**Hook vs settings.json**: Hook returning `allow` or `deny` bypasses settings.json entirely. Hook returning `ask` defers to settings.json. Gate blocks always win -- `rm -rf /` is denied regardless of settings.
+**Hook vs settings.json**: tool-gates checks settings.json internally before returning a decision. Hook returning `deny` is always final. Hook returning `allow` is respected on the main thread unless Claude Code has a conflicting deny/ask rule it checks after the hook. Hook returning `ask` defers to settings.json. Gate blocks always win -- `rm -rf /` is denied regardless of settings.
 
 ### Settings Pattern Formats
 
@@ -469,7 +482,6 @@ Cache files under `~/.cache/tool-gates/`:
 | `tool-gates pending clear` | Clear pending approval queue |
 | `tool-gates review` | Interactive TUI for pending approvals |
 | `tool-gates doctor` | Check config, hooks, and cache health |
-| `tool-gates --export-toml` | Export Gemini CLI policy rules |
 | `tool-gates --refresh-tools` | Refresh modern CLI tool detection |
 | `tool-gates --tools-status` | Show detected modern tools |
 

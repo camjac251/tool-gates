@@ -191,84 +191,83 @@ fn handle_pre_tool_use_hook(input: &str, client: Client) {
         return;
     }
 
-    // Route by tool type
-    match hook_input.tool_name.as_str() {
-        // Bash tools: full gate engine
-        "Bash" => {
-            if !config.features.bash_gates {
-                print_no_opinion();
-                return;
-            }
-            handle_bash_pre_tool_use(&hook_input, client);
+    // Route by tool type (handles both Claude and Gemini tool names)
+    let tool_name = hook_input.tool_name.as_str();
+    if Client::is_shell_tool(tool_name) {
+        // Bash / run_shell_command: full gate engine
+        if !config.features.bash_gates {
+            print_no_opinion();
+            return;
         }
+        handle_bash_pre_tool_use(&hook_input, client);
+    } else if Client::is_file_tool(tool_name) {
         // File tools: symlink guard + security reminders
-        "Read" | "Write" | "Edit" | "MultiEdit" => {
-            // 1. File guards: symlink check for AI config files
-            if config.features.file_guards {
-                let file_paths = extract_file_paths_from_map(&tool_input_map);
-                for file_path in &file_paths {
-                    if let Some(output) =
-                        check_file_guard(file_path, &hook_input.tool_name, &config.file_guards)
-                    {
-                        if let Ok(json) = serde_json::to_string(&output.serialize(client)) {
-                            println!("{json}");
-                        } else {
-                            println!(
-                                r#"{{"hookSpecificOutput":{{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Internal error serializing file guard deny"}}}}"#
-                            );
-                        }
-                        return;
-                    }
-                }
-            }
-
-            // 2. Security reminders: content scanning for Write/Edit/MultiEdit
-            if config.features.security_reminders && hook_input.tool_name != "Read" {
-                if let Some(output) = check_security_reminders(
-                    &hook_input.tool_name,
-                    &tool_input_map,
-                    &config.security_reminders,
-                    &hook_input.session_id,
-                ) {
+        // 1. File guards: symlink check for AI config files
+        if config.features.file_guards {
+            let file_paths = extract_file_paths_from_map(&tool_input_map);
+            for file_path in &file_paths {
+                if let Some(output) =
+                    check_file_guard(file_path, &hook_input.tool_name, &config.file_guards)
+                {
                     if let Ok(json) = serde_json::to_string(&output.serialize(client)) {
                         println!("{json}");
                     } else {
                         println!(
-                            r#"{{"hookSpecificOutput":{{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Internal error serializing security reminder"}}}}"#
+                            r#"{{"hookSpecificOutput":{{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Internal error serializing file guard deny"}}}}"#
                         );
                     }
+                    return;
                 }
             }
-            // No output = allow (pass through)
         }
-        // Skill tool: auto-approve based on config rules
-        "Skill" => {
-            if !config.auto_approve_skills.is_empty() {
-                let skill_name = tool_input_map
-                    .get("skill")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                let project_dir = std::env::var("CLAUDE_PROJECT_DIR").unwrap_or_default();
 
-                for rule in &config.auto_approve_skills {
-                    if rule.matches_skill(skill_name) && rule.conditions_met(&project_dir) {
-                        let reason = rule
-                            .message
-                            .as_deref()
-                            .and_then(|m| if m.is_empty() { None } else { Some(m) });
-                        let output = HookOutput::allow(reason);
-                        if let Ok(json) = serde_json::to_string(&output.serialize(client)) {
-                            println!("{json}");
-                        }
-                        return;
-                    }
+        // 2. Security reminders: content scanning for write/edit tools
+        if config.features.security_reminders && Client::is_write_tool(tool_name) {
+            if let Some(output) = check_security_reminders(
+                &hook_input.tool_name,
+                &tool_input_map,
+                &config.security_reminders,
+                &hook_input.session_id,
+            ) {
+                if let Ok(json) = serde_json::to_string(&output.serialize(client)) {
+                    println!("{json}");
+                } else {
+                    println!(
+                        r#"{{"hookSpecificOutput":{{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Internal error serializing security reminder"}}}}"#
+                    );
                 }
             }
-            // No match = pass through (no opinion)
         }
-        // All other tools: pass through (blocks already checked above)
-        _ => {}
+        // No output = allow (pass through)
+    } else if Client::is_skill_tool(tool_name) {
+        // Skill / activate_skill: auto-approve based on config rules
+        if !config.auto_approve_skills.is_empty() {
+            let skill_name = tool_input_map
+                .get("skill")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            // Both Gemini and Claude set CLAUDE_PROJECT_DIR for compatibility
+            let project_dir = std::env::var("CLAUDE_PROJECT_DIR")
+                .or_else(|_| std::env::var("GEMINI_PROJECT_DIR"))
+                .unwrap_or_default();
+
+            for rule in &config.auto_approve_skills {
+                if rule.matches_skill(skill_name) && rule.conditions_met(&project_dir) {
+                    let reason = rule
+                        .message
+                        .as_deref()
+                        .and_then(|m| if m.is_empty() { None } else { Some(m) });
+                    let output = HookOutput::allow(reason);
+                    if let Ok(json) = serde_json::to_string(&output.serialize(client)) {
+                        println!("{json}");
+                    }
+                    return;
+                }
+            }
+        }
+        // No match = pass through (no opinion)
     }
+    // All other tools: pass through (blocks already checked above)
 }
 
 /// Extract all file paths from a raw tool_input map.
@@ -403,46 +402,43 @@ fn handle_post_tool_use_hook(input: &str, client: Client) {
         }
     };
 
-    match post_input.tool_name.as_str() {
+    let tool_name = post_input.tool_name.as_str();
+    if Client::is_shell_tool(tool_name) {
         // Shell commands: track successful executions for approval learning
-        "Bash" | "run_shell_command" => {
-            // Gemini doesn't provide tool_use_id, so tracking won't work
-            if client == Client::Gemini {
-                return;
-            }
-            if let Some(output) = handle_post_tool_use(&post_input) {
-                if let Ok(json) = serde_json::to_string(&output) {
-                    println!("{json}");
-                }
+        // Gemini doesn't provide tool_use_id, so tracking won't work
+        if client == Client::Gemini {
+            return;
+        }
+        if let Some(output) = handle_post_tool_use(&post_input) {
+            if let Ok(json) = serde_json::to_string(&output) {
+                println!("{json}");
             }
         }
+    } else if Client::is_write_tool(tool_name) {
         // File tools: post-write security scanning (Tier 2 anti-patterns)
-        "Write" | "Edit" | "MultiEdit" => {
-            let config = config::load();
-            if !config.features.security_reminders {
-                return;
-            }
-            // Re-extract tool_input as raw map
-            let tool_input_map = serde_json::from_str::<serde_json::Value>(input)
-                .ok()
-                .and_then(|v| v.get("tool_input").cloned())
-                .and_then(|v| match v {
-                    serde_json::Value::Object(m) => Some(m),
-                    _ => None,
-                })
-                .unwrap_or_default();
-            if let Some(output) = tool_gates::security_reminders::check_security_reminders_post(
-                &post_input.tool_name,
-                &tool_input_map,
-                &config.security_reminders,
-                &post_input.session_id,
-            ) {
-                if let Ok(json) = serde_json::to_string(&output) {
-                    println!("{json}");
-                }
+        let config = config::load();
+        if !config.features.security_reminders {
+            return;
+        }
+        // Re-extract tool_input as raw map
+        let tool_input_map = serde_json::from_str::<serde_json::Value>(input)
+            .ok()
+            .and_then(|v| v.get("tool_input").cloned())
+            .and_then(|v| match v {
+                serde_json::Value::Object(m) => Some(m),
+                _ => None,
+            })
+            .unwrap_or_default();
+        if let Some(output) = tool_gates::security_reminders::check_security_reminders_post(
+            &post_input.tool_name,
+            &tool_input_map,
+            &config.security_reminders,
+            &post_input.session_id,
+        ) {
+            if let Ok(json) = serde_json::to_string(&output) {
+                println!("{json}");
             }
         }
-        _ => {}
     }
 }
 
@@ -485,18 +481,31 @@ fn generate_hooks_json(binary_path: &str) -> serde_json::Value {
     })
 }
 
-fn generate_gemini_hook_entry(binary_path: &str) -> serde_json::Value {
+fn generate_gemini_hook_entry(binary_path: &str, matcher: &str) -> serde_json::Value {
     serde_json::json!({
-        "matcher": "run_shell_command",
+        "matcher": matcher,
         "hooks": [{"type": "command", "command": binary_path, "timeout": 5000}]
     })
 }
 
+/// Gemini BeforeTool matcher for shell + file + search + skill tools.
+const GEMINI_BEFORE_TOOL_MATCHER: &str = "run_shell_command|read_file|read_many_files|write_file|replace|glob|grep_search|activate_skill";
+
+/// Gemini BeforeTool matcher for MCP tools (single underscore prefix).
+const GEMINI_MCP_TOOL_MATCHER: &str = "mcp_.*";
+
+/// Gemini AfterTool matcher for shell (tracking) + write tools (security reminders).
+const GEMINI_AFTER_TOOL_MATCHER: &str = "run_shell_command|write_file|replace";
+
 fn generate_gemini_hooks_json(binary_path: &str) -> serde_json::Value {
-    let entry = generate_gemini_hook_entry(binary_path);
     serde_json::json!({
-        "BeforeTool": [entry],
-        "AfterTool": [generate_gemini_hook_entry(binary_path)]
+        "BeforeTool": [
+            generate_gemini_hook_entry(binary_path, GEMINI_BEFORE_TOOL_MATCHER),
+            generate_gemini_hook_entry(binary_path, GEMINI_MCP_TOOL_MATCHER),
+        ],
+        "AfterTool": [
+            generate_gemini_hook_entry(binary_path, GEMINI_AFTER_TOOL_MATCHER),
+        ]
     })
 }
 
@@ -530,19 +539,15 @@ fn get_settings_path(scope: &str) -> std::path::PathBuf {
 }
 
 /// Check if tool-gates hook already exists in a hook array.
-/// Detects any matcher pattern that includes "Bash" and points to tool-gates/bash-gates.
+/// Detects any entry whose command points to tool-gates or bash-gates.
 fn has_tool_gates_hook(hooks_array: &serde_json::Value) -> bool {
     if let Some(arr) = hooks_array.as_array() {
         for entry in arr {
-            let matcher = entry.get("matcher").and_then(|m| m.as_str()).unwrap_or("");
-            // Match Claude patterns (containing "Bash") and Gemini patterns
-            if matcher.contains("Bash") || matcher == "run_shell_command" {
-                if let Some(hooks) = entry.get("hooks").and_then(|h| h.as_array()) {
-                    for hook in hooks {
-                        if let Some(cmd) = hook.get("command").and_then(|c| c.as_str()) {
-                            if cmd.contains("tool-gates") || cmd.contains("bash-gates") {
-                                return true;
-                            }
+            if let Some(hooks) = entry.get("hooks").and_then(|h| h.as_array()) {
+                for hook in hooks {
+                    if let Some(cmd) = hook.get("command").and_then(|c| c.as_str()) {
+                        if cmd.contains("tool-gates") || cmd.contains("bash-gates") {
+                            return true;
                         }
                     }
                 }
@@ -730,7 +735,7 @@ fn install_gemini_hooks(scope: &str, dry_run: bool) {
     }
 
     let hooks = settings.get_mut("hooks").unwrap();
-    let hook_entry = generate_gemini_hook_entry(&binary_path);
+    let gemini_hooks = generate_gemini_hooks_json(&binary_path);
     let mut changes = Vec::new();
 
     for event in ["BeforeTool", "AfterTool"] {
@@ -740,12 +745,14 @@ fn install_gemini_hooks(scope: &str, dry_run: bool) {
         if has_tool_gates_hook(&hooks[event]) {
             eprintln!("✓ {} hook already configured", event);
         } else {
-            hooks[event]
-                .as_array_mut()
-                .unwrap()
-                .push(hook_entry.clone());
+            if let Some(entries) = gemini_hooks[event].as_array() {
+                let arr = hooks[event].as_array_mut().unwrap();
+                for entry in entries {
+                    arr.push(entry.clone());
+                }
+            }
             changes.push(event);
-            eprintln!("+ Adding {} hook", event);
+            eprintln!("+ Adding {} hook(s)", event);
         }
     }
 
