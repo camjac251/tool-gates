@@ -27,7 +27,7 @@ pub fn extract_commands(command_string: &str) -> Vec<CommandInfo> {
     }
 
     let tree = {
-        let mut parser = PARSER.lock().unwrap();
+        let mut parser = PARSER.lock().unwrap_or_else(|e| e.into_inner());
         match parser.parse(command_string, None) {
             Some(tree) => tree,
             None => return fallback_parse(command_string),
