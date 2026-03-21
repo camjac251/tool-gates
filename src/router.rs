@@ -13,6 +13,104 @@ use crate::package_json::{
 use crate::parser::extract_commands;
 use crate::settings::{Settings, SettingsDecision};
 use regex::Regex;
+use std::sync::LazyLock;
+
+// -- Static compiled regexes for check_raw_string_patterns() --
+// Compiled once at first use via LazyLock. Using expect() so invalid patterns
+// panic immediately instead of silently skipping security checks.
+
+/// Pipe-to-shell / privilege escalation patterns (hard ask: not overridable by settings).
+static PIPE_HARD_PATTERNS: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new(|| {
+    [
+        (r"\|\s*bash\b", "Piping to bash"),
+        (r"\|\s*/bin/bash\b", "Piping to bash"),
+        (r"\|\s*/usr/bin/bash\b", "Piping to bash"),
+        (r"\|\s*sh\b", "Piping to sh"),
+        (r"\|\s*/bin/sh\b", "Piping to sh"),
+        (r"\|\s*/usr/bin/sh\b", "Piping to sh"),
+        (r"\|\s*zsh\b", "Piping to zsh"),
+        (r"\|\s*/bin/zsh\b", "Piping to zsh"),
+        (r"\|\s*/usr/bin/zsh\b", "Piping to zsh"),
+        (r"\|\s*sudo\b", "Piping to sudo"),
+        (r"\|\s*/usr/bin/sudo\b", "Piping to sudo"),
+        (r"\|\s*doas\b", "Piping to doas"),
+    ]
+    .into_iter()
+    .map(|(pat, reason)| {
+        (
+            Regex::new(pat).expect("PIPE_HARD_PATTERNS regex must compile"),
+            reason,
+        )
+    })
+    .collect()
+});
+
+/// Pipe-to-interpreter patterns (soft ask: overridable by settings.json allow rules).
+static PIPE_SOFT_PATTERNS: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new(|| {
+    [
+        (r"\|\s*python[0-9.]*\b", "Piping to python"),
+        (r"\|\s*perl\b", "Piping to perl"),
+        (r"\|\s*ruby\b", "Piping to ruby"),
+        (r"\|\s*node\b", "Piping to node"),
+    ]
+    .into_iter()
+    .map(|(pat, reason)| {
+        (
+            Regex::new(pat).expect("PIPE_SOFT_PATTERNS regex must compile"),
+            reason,
+        )
+    })
+    .collect()
+});
+
+/// eval pattern (hard ask).
+static EVAL_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(^|[;&|])\s*eval\s").expect("EVAL_RE must compile"));
+
+/// source command pattern (soft ask).
+static SOURCE_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(^|[;&|])\s*source\s+\S").expect("SOURCE_RE must compile"));
+
+/// dot-source command pattern (soft ask).
+static DOT_SOURCE_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(^|[;&|])\s*\.\s+[^.]").expect("DOT_SOURCE_RE must compile"));
+
+/// xargs with dangerous commands (soft ask). Each entry: (compiled regex, command name for message).
+static XARGS_DANGEROUS_PATTERNS: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new(|| {
+    ["rm", "mv", "cp", "chmod", "chown", "dd", "shred"]
+        .into_iter()
+        .map(|cmd| {
+            let pattern = format!(r"xargs\s+.*\b{cmd}\b|xargs\s+\b{cmd}\b");
+            (
+                Regex::new(&pattern).expect("XARGS_DANGEROUS_PATTERNS regex must compile"),
+                cmd,
+            )
+        })
+        .collect()
+});
+
+/// kubectl delete via xargs (soft ask).
+static XARGS_KUBECTL_DELETE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"xargs\s+.*kubectl\s+delete|xargs\s+kubectl\s+delete")
+        .expect("XARGS_KUBECTL_DELETE_RE must compile")
+});
+
+/// $() command substitution pattern.
+static DOLLAR_SUBST_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\$\([^)]+\)").expect("DOLLAR_SUBST_RE must compile"));
+
+/// Backtick command substitution pattern.
+static BACKTICK_SUBST_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"`[^`]+`").expect("BACKTICK_SUBST_RE must compile"));
+
+/// Output redirection pattern (> / >>).
+static REDIRECT_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(^|[^0-9&=/$])>{1,2}\s*([^>&\s]+)").expect("REDIRECT_RE must compile")
+});
+
+/// &> redirection pattern.
+static AMP_REDIRECT_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"&>\s*([^\s]+)").expect("AMP_REDIRECT_RE must compile"));
 
 /// Generate approval instruction context for "ask" responses.
 ///
@@ -866,103 +964,61 @@ fn check_raw_string_patterns(command_string: &str) -> (Option<HookOutput>, Optio
     // Strip comments first to avoid false positives from patterns inside # comments.
     // E.g., `# feat: -> patch\necho hello` should not trigger output redirection.
     let command_string = &strip_comments(command_string);
-    // Pipe-to-shell and privilege escalation: hard ask (not overridable by settings).
-    // User can manually approve each time, but can't permanently auto-approve.
-    let pipe_hard_patterns: &[(&str, &str)] = &[
-        (r"\|\s*bash\b", "Piping to bash"),
-        (r"\|\s*/bin/bash\b", "Piping to bash"),
-        (r"\|\s*/usr/bin/bash\b", "Piping to bash"),
-        (r"\|\s*sh\b", "Piping to sh"),
-        (r"\|\s*/bin/sh\b", "Piping to sh"),
-        (r"\|\s*/usr/bin/sh\b", "Piping to sh"),
-        (r"\|\s*zsh\b", "Piping to zsh"),
-        (r"\|\s*/bin/zsh\b", "Piping to zsh"),
-        (r"\|\s*/usr/bin/zsh\b", "Piping to zsh"),
-        (r"\|\s*sudo\b", "Piping to sudo"),
-        (r"\|\s*/usr/bin/sudo\b", "Piping to sudo"),
-        (r"\|\s*doas\b", "Piping to doas"),
-    ];
-
-    // Pipe-to-interpreter: soft ask (overridable via settings.json allow rules).
-    // Runs a specific script the agent wrote, not arbitrary code.
-    let pipe_soft_patterns: &[(&str, &str)] = &[
-        (r"\|\s*python[0-9.]*\b", "Piping to python"),
-        (r"\|\s*perl\b", "Piping to perl"),
-        (r"\|\s*ruby\b", "Piping to ruby"),
-        (r"\|\s*node\b", "Piping to node"),
-    ];
-
     // Strip quoted strings to avoid false positives like `rg 'foo|bash|bar'`
     let unquoted = strip_quoted_strings(command_string);
 
-    // Hard ask: return as first element, settings cannot override
-    for (pattern, reason) in pipe_hard_patterns {
-        if let Ok(re) = Regex::new(pattern) {
-            if re.is_match(&unquoted) {
-                return (Some(HookOutput::ask(reason)), None);
-            }
+    // Pipe-to-shell / privilege escalation: hard ask (not overridable by settings).
+    // User can manually approve each time, but can't permanently auto-approve.
+    for (re, reason) in PIPE_HARD_PATTERNS.iter() {
+        if re.is_match(&unquoted) {
+            return (Some(HookOutput::ask(reason)), None);
         }
     }
 
-    // Soft ask: return as second element, settings can override
-    for (pattern, reason) in pipe_soft_patterns {
-        if let Ok(re) = Regex::new(pattern) {
-            if re.is_match(&unquoted) {
-                return (None, Some(HookOutput::ask(reason)));
-            }
+    // Pipe-to-interpreter: soft ask (overridable via settings.json allow rules).
+    // Runs a specific script the agent wrote, not arbitrary code.
+    for (re, reason) in PIPE_SOFT_PATTERNS.iter() {
+        if re.is_match(&unquoted) {
+            return (None, Some(HookOutput::ask(reason)));
         }
     }
 
     // eval: hard ask (arbitrary code execution, not overridable by settings)
-    if let Ok(re) = Regex::new(r"(^|[;&|])\s*eval\s") {
-        if re.is_match(&unquoted) {
-            return (
-                Some(HookOutput::ask("eval: Arbitrary code execution")),
-                None,
-            );
-        }
+    if EVAL_RE.is_match(&unquoted) {
+        return (
+            Some(HookOutput::ask("eval: Arbitrary code execution")),
+            None,
+        );
     }
 
     // source / . command: soft ask (sourcing scripts, overridable)
-    if let Ok(re) = Regex::new(r"(^|[;&|])\s*source\s+\S") {
-        if re.is_match(&unquoted) {
-            return (
-                None,
-                Some(HookOutput::ask("source: Sourcing external script")),
-            );
-        }
+    if SOURCE_RE.is_match(&unquoted) {
+        return (
+            None,
+            Some(HookOutput::ask("source: Sourcing external script")),
+        );
     }
-    if let Ok(re) = Regex::new(r"(^|[;&|])\s*\.\s+[^.]") {
-        if re.is_match(&unquoted) {
-            return (None, Some(HookOutput::ask(".: Sourcing external script")));
-        }
+    if DOT_SOURCE_RE.is_match(&unquoted) {
+        return (None, Some(HookOutput::ask(".: Sourcing external script")));
     }
 
     // xargs with dangerous commands
     if unquoted.contains("xargs") {
-        let dangerous_xargs = ["rm", "mv", "cp", "chmod", "chown", "dd", "shred"];
-        for cmd in dangerous_xargs {
-            // Use word boundaries to avoid matching substrings (e.g., "cp" in "mcpServers")
-            let pattern = format!(r"xargs\s+.*\b{cmd}\b|xargs\s+\b{cmd}\b");
-            if let Ok(re) = Regex::new(&pattern) {
-                if re.is_match(&unquoted) {
-                    return (
-                        None,
-                        Some(HookOutput::ask(&format!("xargs piping to {cmd}"))),
-                    );
-                }
+        for (re, cmd) in XARGS_DANGEROUS_PATTERNS.iter() {
+            if re.is_match(&unquoted) {
+                return (
+                    None,
+                    Some(HookOutput::ask(&format!("xargs piping to {cmd}"))),
+                );
             }
         }
 
         // kubectl delete via xargs (e.g., ... | xargs kubectl delete pod)
-        let kubectl_delete_pattern = r"xargs\s+.*kubectl\s+delete|xargs\s+kubectl\s+delete";
-        if let Ok(re) = Regex::new(kubectl_delete_pattern) {
-            if re.is_match(&unquoted) {
-                return (
-                    None,
-                    Some(HookOutput::ask("xargs piping to kubectl delete")),
-                );
-            }
+        if XARGS_KUBECTL_DELETE_RE.is_match(&unquoted) {
+            return (
+                None,
+                Some(HookOutput::ask("xargs piping to kubectl delete")),
+            );
         }
     }
 
@@ -1018,45 +1074,41 @@ fn check_raw_string_patterns(command_string: &str) -> (Option<HookOutput>, Optio
     let dangerous_in_subst = ["rm ", "rm\t", "mv ", "chmod ", "chown ", "dd "];
 
     // $() substitution
-    if let Ok(re) = Regex::new(r"\$\([^)]+\)") {
-        for cap in re.captures_iter(command_string) {
-            let subst = cap.get(0).map_or("", |m| m.as_str());
-            for danger in dangerous_in_subst {
-                if subst.contains(danger) {
-                    let truncated = if subst.len() > 30 {
-                        &subst[..30]
-                    } else {
-                        subst
-                    };
-                    return (
-                        None,
-                        Some(HookOutput::ask(&format!(
-                            "Dangerous command in substitution: {truncated}"
-                        ))),
-                    );
-                }
+    for cap in DOLLAR_SUBST_RE.captures_iter(command_string) {
+        let subst = cap.get(0).map_or("", |m| m.as_str());
+        for danger in dangerous_in_subst {
+            if subst.contains(danger) {
+                let truncated = if subst.len() > 30 {
+                    &subst[..30]
+                } else {
+                    subst
+                };
+                return (
+                    None,
+                    Some(HookOutput::ask(&format!(
+                        "Dangerous command in substitution: {truncated}"
+                    ))),
+                );
             }
         }
     }
 
     // Backtick substitution
-    if let Ok(re) = Regex::new(r"`[^`]+`") {
-        for cap in re.captures_iter(command_string) {
-            let subst = cap.get(0).map_or("", |m| m.as_str());
-            for danger in dangerous_in_subst {
-                if subst.contains(danger) {
-                    let truncated = if subst.len() > 30 {
-                        &subst[..30]
-                    } else {
-                        subst
-                    };
-                    return (
-                        None,
-                        Some(HookOutput::ask(&format!(
-                            "Dangerous command in backticks: {truncated}"
-                        ))),
-                    );
-                }
+    for cap in BACKTICK_SUBST_RE.captures_iter(command_string) {
+        let subst = cap.get(0).map_or("", |m| m.as_str());
+        for danger in dangerous_in_subst {
+            if subst.contains(danger) {
+                let truncated = if subst.len() > 30 {
+                    &subst[..30]
+                } else {
+                    subst
+                };
+                return (
+                    None,
+                    Some(HookOutput::ask(&format!(
+                        "Dangerous command in backticks: {truncated}"
+                    ))),
+                );
             }
         }
     }
@@ -1075,30 +1127,26 @@ fn check_raw_string_patterns(command_string: &str) -> (Option<HookOutput>, Optio
     // First, strip quoted strings to avoid false positives on patterns like `rg "\s*>\s*" file`
     // where `>` inside quotes is part of a regex, not a shell redirection
     let unquoted = strip_quoted_strings(command_string);
-    if let Ok(re) = Regex::new(r"(^|[^0-9&=/$])>{1,2}\s*([^>&\s]+)") {
-        for cap in re.captures_iter(&unquoted) {
-            if let Some(target) = cap.get(2) {
-                let target_str = target.as_str();
-                // Skip /dev/null - it's just discarding output
-                if target_str != "/dev/null" {
-                    return (
-                        None,
-                        Some(HookOutput::ask("Output redirection (writes to file)")),
-                    );
-                }
+    for cap in REDIRECT_RE.captures_iter(&unquoted) {
+        if let Some(target) = cap.get(2) {
+            let target_str = target.as_str();
+            // Skip /dev/null - it's just discarding output
+            if target_str != "/dev/null" {
+                return (
+                    None,
+                    Some(HookOutput::ask("Output redirection (writes to file)")),
+                );
             }
         }
     }
-    if let Ok(re) = Regex::new(r"&>\s*([^\s]+)") {
-        for cap in re.captures_iter(&unquoted) {
-            if let Some(target) = cap.get(1) {
-                let target_str = target.as_str();
-                if target_str != "/dev/null" {
-                    return (
-                        None,
-                        Some(HookOutput::ask("Output redirection (writes to file)")),
-                    );
-                }
+    for cap in AMP_REDIRECT_RE.captures_iter(&unquoted) {
+        if let Some(target) = cap.get(1) {
+            let target_str = target.as_str();
+            if target_str != "/dev/null" {
+                return (
+                    None,
+                    Some(HookOutput::ask("Output redirection (writes to file)")),
+                );
             }
         }
     }
