@@ -26,7 +26,7 @@ use tool_gates::patterns::suggest_patterns;
 use tool_gates::pending::{clear_pending, pending_count, read_pending};
 use tool_gates::permission_request::handle_permission_request;
 use tool_gates::post_tool_use::handle_post_tool_use;
-use tool_gates::router::check_command_with_settings_and_session;
+use tool_gates::router::{check_command_with_settings_and_session, check_single_command};
 use tool_gates::security_reminders::check_security_reminders;
 use tool_gates::settings_writer::{
     RuleType, Scope, add_rule, list_all_rules, list_rules, remove_rule,
@@ -318,32 +318,70 @@ fn handle_bash_pre_tool_use(hook_input: &HookInput) {
     if let Some(ref hso) = output.hook_specific_output {
         if hso.permission_decision == "ask" && !hook_input.tool_use_id.is_empty() {
             let commands = tool_gates::parser::extract_commands(&command);
-            let suggested_patterns: Vec<String> =
-                commands.iter().flat_map(suggest_patterns).collect();
 
-            let breakdown: Vec<CommandPart> = commands
-                .iter()
-                .map(|cmd| {
-                    CommandPart::new(
-                        &cmd.program,
-                        &cmd.args,
-                        tool_gates::Decision::Ask,
-                        hso.permission_decision_reason
-                            .as_deref()
-                            .unwrap_or("Requires approval"),
-                    )
-                })
-                .collect();
+            // Evaluate each subcommand individually to find which ones
+            // actually triggered "ask" vs which are already allowed.
+            let mut suggested_patterns: Vec<String> = Vec::new();
+            let mut breakdown: Vec<CommandPart> = Vec::new();
 
-            track_ask_command(
-                &hook_input.tool_use_id,
-                &command,
-                suggested_patterns,
-                breakdown,
-                &hook_input.project_id(),
-                &hook_input.cwd,
-                &hook_input.session_id,
-            );
+            for cmd in &commands {
+                let result = check_single_command(cmd);
+                let (decision, reason) = match result.decision {
+                    tool_gates::Decision::Allow => (
+                        tool_gates::Decision::Allow,
+                        result.reason.unwrap_or_else(|| "Allowed".to_string()),
+                    ),
+                    tool_gates::Decision::Block => (
+                        tool_gates::Decision::Block,
+                        result.reason.unwrap_or_else(|| "Blocked".to_string()),
+                    ),
+                    // Ask or Skip (unknown) both mean this subcommand needs approval
+                    _ => {
+                        let reason = result.reason.unwrap_or_else(|| {
+                            hso.permission_decision_reason
+                                .clone()
+                                .unwrap_or_else(|| "Requires approval".to_string())
+                        });
+                        // Only suggest patterns for subcommands that actually need approval
+                        suggested_patterns.extend(suggest_patterns(cmd));
+                        (tool_gates::Decision::Ask, reason)
+                    }
+                };
+                breakdown.push(CommandPart::new(&cmd.program, &cmd.args, decision, &reason));
+            }
+
+            // For compound commands, prepend patterns from the first program.
+            // Settings patterns match the full command string as a prefix,
+            // so only the first program's pattern (e.g. sg:*) actually works
+            // to allow the entire pipeline. Per-subcommand patterns (e.g.
+            // python3:*) are informational and cover standalone usage.
+            if commands.len() > 1 {
+                if let Some(first) = commands.first() {
+                    let mut full_cmd_patterns = suggest_patterns(first);
+                    full_cmd_patterns.extend(suggested_patterns);
+                    suggested_patterns = full_cmd_patterns;
+                }
+            }
+
+            // Deduplicate patterns while preserving order
+            let mut seen = std::collections::HashSet::new();
+            suggested_patterns.retain(|p| seen.insert(p.clone()));
+
+            // Skip tracking if no subcommand actually needs approval
+            // (e.g. raw string check fired but all individual programs are allowed)
+            if suggested_patterns.is_empty() {
+                // Nothing actionable to suggest, don't pollute pending queue
+            } else {
+                track_ask_command(
+                    &hook_input.tool_use_id,
+                    &command,
+                    suggested_patterns,
+                    breakdown,
+                    &hook_input.project_id(),
+                    &hook_input.cwd,
+                    &hook_input.session_id,
+                );
+            }
         }
     }
 
@@ -1122,6 +1160,7 @@ fn handle_pending_subcommand(args: &[String]) {
 
 fn handle_pending_list(args: &[String]) {
     let is_project = args.iter().any(|a| a == "--project" || a == "-p");
+    let is_json = args.iter().any(|a| a == "--json");
 
     let cwd = std::env::current_dir()
         .ok()
@@ -1130,6 +1169,44 @@ fn handle_pending_list(args: &[String]) {
     // Filter by project if --project flag is set
     let filter = if is_project { cwd.as_deref() } else { None };
     let all_entries = read_pending(filter);
+
+    if is_json {
+        // Machine-readable JSON output to stdout
+        let json_entries: Vec<serde_json::Value> = all_entries
+            .iter()
+            .map(|e| {
+                serde_json::json!({
+                    "command": e.command,
+                    "patterns": e.patterns,
+                    "breakdown": e.breakdown.iter().map(|b| {
+                        let mut obj = serde_json::json!({
+                            "program": b.program,
+                            "decision": b.decision,
+                        });
+                        if b.decision != "allow" {
+                            obj["reason"] = serde_json::json!(b.reason);
+                        }
+                        if !b.args.is_empty() {
+                            obj["args"] = serde_json::json!(b.args);
+                        }
+                        obj
+                    }).collect::<Vec<_>>(),
+                    "count": e.count,
+                    "project": e.project_id,
+                    "cwd": e.cwd,
+                    "last_seen": e.last_seen.to_rfc3339(),
+                })
+            })
+            .collect();
+        match serde_json::to_string_pretty(&json_entries) {
+            Ok(json) => println!("{json}"),
+            Err(e) => {
+                eprintln!("Error serializing pending entries: {e}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
 
     if all_entries.is_empty() {
         eprintln!("No pending approvals.");
@@ -1153,6 +1230,22 @@ fn handle_pending_list(args: &[String]) {
             entry.count,
             if entry.count == 1 { "" } else { "s" }
         );
+
+        // Show per-subcommand breakdown for compound commands
+        if entry.breakdown.len() > 1 {
+            let parts: Vec<String> = entry
+                .breakdown
+                .iter()
+                .map(|b| {
+                    if b.decision == "allow" {
+                        format!("{} (allow)", b.program)
+                    } else {
+                        format!("{} ({})", b.program, b.decision)
+                    }
+                })
+                .collect();
+            eprintln!("    Breakdown: {}", parts.join(" | "));
+        }
 
         if !entry.patterns.is_empty() {
             eprintln!("    Suggested patterns:");

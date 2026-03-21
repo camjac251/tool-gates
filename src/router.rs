@@ -48,7 +48,8 @@ fn check_command_for_session(command_string: &str, session_id: &str) -> HookOutp
 
     // Check for patterns at the raw string level
     // These require approval regardless of how they're parsed
-    if let Some(result) = check_raw_string_patterns(command_string) {
+    let (hard_ask, soft_ask) = check_raw_string_patterns(command_string);
+    if let Some(result) = hard_ask.or(soft_ask) {
         return result;
     }
 
@@ -268,9 +269,11 @@ pub fn check_command_with_settings_and_session(
     }
 
     // Check for raw string security patterns BEFORE any expansion.
-    // This catches dangerous patterns (pipe-to-shell, rm -rf /, eval, etc.)
-    // that could be appended to mise/package.json commands via compound operators.
-    if let Some(result) = check_raw_string_patterns(command_string) {
+    // Hard asks (pipe-to-shell, eval) return immediately -- not overridable by settings.
+    // Soft asks (pipe-to-interpreter, output redirection) are saved so
+    // settings.json allow rules can override them via pattern approval.
+    let (hard_ask, soft_ask) = check_raw_string_patterns(command_string);
+    if let Some(result) = hard_ask {
         return result;
     }
 
@@ -394,8 +397,35 @@ pub fn check_command_with_settings_and_session(
             unreachable!("check_command_excluding_deny should not return Deny");
         }
         SettingsDecision::NoMatch => {
-            // No match - use gate result
+            // No match - fall through to raw string / gate result
         }
+    }
+
+    // If raw string check flagged the command and no settings rule overrode it,
+    // return the raw string result. This means pipe-to-python, output redirection,
+    // etc. still ask by default, but can be permanently allowed via settings rules.
+    if let Some(raw_result) = soft_ask {
+        // Enhance with approval instructions
+        if let Some(ref hso) = raw_result.hook_specific_output {
+            if hso.permission_decision == "ask" {
+                let approval_context = generate_approval_context(session_id);
+                if !approval_context.is_empty() {
+                    let existing_context = hso.additional_context.as_deref().unwrap_or("");
+                    let combined_context = if existing_context.is_empty() {
+                        approval_context
+                    } else {
+                        format!("{}{}", existing_context, approval_context)
+                    };
+                    return HookOutput::ask_with_context(
+                        hso.permission_decision_reason
+                            .as_deref()
+                            .unwrap_or("Requires approval"),
+                        &combined_context,
+                    );
+                }
+            }
+        }
+        return raw_result;
     }
 
     // Enhance "ask" results with approval instructions
@@ -636,7 +666,8 @@ fn check_command_expanded(command_string: &str, cwd: &str, permission_mode: &str
     }
 
     // First do raw string security checks
-    if let Some(output) = check_raw_string_patterns(command_string) {
+    let (hard_ask, soft_ask) = check_raw_string_patterns(command_string);
+    if let Some(output) = hard_ask.or(soft_ask) {
         return output;
     }
 
@@ -827,14 +858,17 @@ fn strip_comments(s: &str) -> String {
 }
 
 /// Check raw string patterns before parsing.
-fn check_raw_string_patterns(command_string: &str) -> Option<HookOutput> {
+///
+/// Returns (hard_ask, soft_ask):
+/// - hard_ask: pipe-to-shell, eval -- user can approve manually but settings can't auto-approve
+/// - soft_ask: pipe-to-interpreter, redirection, source -- settings.json can override
+fn check_raw_string_patterns(command_string: &str) -> (Option<HookOutput>, Option<HookOutput>) {
     // Strip comments first to avoid false positives from patterns inside # comments.
     // E.g., `# feat: -> patch\necho hello` should not trigger output redirection.
     let command_string = &strip_comments(command_string);
-    // Dangerous pipe patterns - use regex with word boundaries to avoid false positives
-    // like "|shell=True" matching "|sh"
-    let pipe_patterns: &[(&str, &str)] = &[
-        // Shell interpreters (word boundary prevents matching "shell", "bash_script", etc.)
+    // Pipe-to-shell and privilege escalation: hard ask (not overridable by settings).
+    // User can manually approve each time, but can't permanently auto-approve.
+    let pipe_hard_patterns: &[(&str, &str)] = &[
         (r"\|\s*bash\b", "Piping to bash"),
         (r"\|\s*/bin/bash\b", "Piping to bash"),
         (r"\|\s*/usr/bin/bash\b", "Piping to bash"),
@@ -844,11 +878,14 @@ fn check_raw_string_patterns(command_string: &str) -> Option<HookOutput> {
         (r"\|\s*zsh\b", "Piping to zsh"),
         (r"\|\s*/bin/zsh\b", "Piping to zsh"),
         (r"\|\s*/usr/bin/zsh\b", "Piping to zsh"),
-        // Privilege escalation
         (r"\|\s*sudo\b", "Piping to sudo"),
         (r"\|\s*/usr/bin/sudo\b", "Piping to sudo"),
         (r"\|\s*doas\b", "Piping to doas"),
-        // Script interpreters
+    ];
+
+    // Pipe-to-interpreter: soft ask (overridable via settings.json allow rules).
+    // Runs a specific script the agent wrote, not arbitrary code.
+    let pipe_soft_patterns: &[(&str, &str)] = &[
         (r"\|\s*python[0-9.]*\b", "Piping to python"),
         (r"\|\s*perl\b", "Piping to perl"),
         (r"\|\s*ruby\b", "Piping to ruby"),
@@ -857,33 +894,47 @@ fn check_raw_string_patterns(command_string: &str) -> Option<HookOutput> {
 
     // Strip quoted strings to avoid false positives like `rg 'foo|bash|bar'`
     let unquoted = strip_quoted_strings(command_string);
-    for (pattern, reason) in pipe_patterns {
+
+    // Hard ask: return as first element, settings cannot override
+    for (pattern, reason) in pipe_hard_patterns {
         if let Ok(re) = Regex::new(pattern) {
             if re.is_match(&unquoted) {
-                return Some(HookOutput::ask(reason));
+                return (Some(HookOutput::ask(reason)), None);
             }
         }
     }
 
-    // Check for eval command (arbitrary code execution)
-    // Use unquoted to avoid false positives like `rg "eval stuff" src/`
-    if let Ok(re) = Regex::new(r"(^|[;&|])\s*eval\s") {
-        if re.is_match(&unquoted) {
-            return Some(HookOutput::ask("eval: Arbitrary code execution"));
+    // Soft ask: return as second element, settings can override
+    for (pattern, reason) in pipe_soft_patterns {
+        if let Ok(re) = Regex::new(pattern) {
+            if re.is_match(&unquoted) {
+                return (None, Some(HookOutput::ask(reason)));
+            }
         }
     }
 
-    // Check for source / . command (sourcing scripts can modify environment)
-    // Match: source <file> or . <file> (but not .. or ./)
-    if let Ok(re) = Regex::new(r"(^|[;&|])\s*source\s+\S") {
+    // eval: hard ask (arbitrary code execution, not overridable by settings)
+    if let Ok(re) = Regex::new(r"(^|[;&|])\s*eval\s") {
         if re.is_match(&unquoted) {
-            return Some(HookOutput::ask("source: Sourcing external script"));
+            return (
+                Some(HookOutput::ask("eval: Arbitrary code execution")),
+                None,
+            );
         }
     }
-    // Match standalone . followed by space and non-dot (to avoid matching .. or ./)
+
+    // source / . command: soft ask (sourcing scripts, overridable)
+    if let Ok(re) = Regex::new(r"(^|[;&|])\s*source\s+\S") {
+        if re.is_match(&unquoted) {
+            return (
+                None,
+                Some(HookOutput::ask("source: Sourcing external script")),
+            );
+        }
+    }
     if let Ok(re) = Regex::new(r"(^|[;&|])\s*\.\s+[^.]") {
         if re.is_match(&unquoted) {
-            return Some(HookOutput::ask(".: Sourcing external script"));
+            return (None, Some(HookOutput::ask(".: Sourcing external script")));
         }
     }
 
@@ -895,7 +946,10 @@ fn check_raw_string_patterns(command_string: &str) -> Option<HookOutput> {
             let pattern = format!(r"xargs\s+.*\b{cmd}\b|xargs\s+\b{cmd}\b");
             if let Ok(re) = Regex::new(&pattern) {
                 if re.is_match(&unquoted) {
-                    return Some(HookOutput::ask(&format!("xargs piping to {cmd}")));
+                    return (
+                        None,
+                        Some(HookOutput::ask(&format!("xargs piping to {cmd}"))),
+                    );
                 }
             }
         }
@@ -904,7 +958,10 @@ fn check_raw_string_patterns(command_string: &str) -> Option<HookOutput> {
         let kubectl_delete_pattern = r"xargs\s+.*kubectl\s+delete|xargs\s+kubectl\s+delete";
         if let Ok(re) = Regex::new(kubectl_delete_pattern) {
             if re.is_match(&unquoted) {
-                return Some(HookOutput::ask("xargs piping to kubectl delete"));
+                return (
+                    None,
+                    Some(HookOutput::ask("xargs piping to kubectl delete")),
+                );
             }
         }
     }
@@ -914,7 +971,7 @@ fn check_raw_string_patterns(command_string: &str) -> Option<HookOutput> {
         let destructive_find = ["-delete", "-exec rm", "-exec mv", "-execdir rm"];
         for action in destructive_find {
             if unquoted.contains(action) {
-                return Some(HookOutput::ask(&format!("find with {action}")));
+                return (None, Some(HookOutput::ask(&format!("find with {action}"))));
             }
         }
     }
@@ -950,7 +1007,7 @@ fn check_raw_string_patterns(command_string: &str) -> Option<HookOutput> {
                 ];
                 for pattern in &patterns {
                     if unquoted.contains(pattern) {
-                        return Some(HookOutput::ask(&format!("fd executing {cmd}")));
+                        return (None, Some(HookOutput::ask(&format!("fd executing {cmd}"))));
                     }
                 }
             }
@@ -971,9 +1028,12 @@ fn check_raw_string_patterns(command_string: &str) -> Option<HookOutput> {
                     } else {
                         subst
                     };
-                    return Some(HookOutput::ask(&format!(
-                        "Dangerous command in substitution: {truncated}"
-                    )));
+                    return (
+                        None,
+                        Some(HookOutput::ask(&format!(
+                            "Dangerous command in substitution: {truncated}"
+                        ))),
+                    );
                 }
             }
         }
@@ -990,9 +1050,12 @@ fn check_raw_string_patterns(command_string: &str) -> Option<HookOutput> {
                     } else {
                         subst
                     };
-                    return Some(HookOutput::ask(&format!(
-                        "Dangerous command in backticks: {truncated}"
-                    )));
+                    return (
+                        None,
+                        Some(HookOutput::ask(&format!(
+                            "Dangerous command in backticks: {truncated}"
+                        ))),
+                    );
                 }
             }
         }
@@ -1000,7 +1063,7 @@ fn check_raw_string_patterns(command_string: &str) -> Option<HookOutput> {
 
     // Leading semicolon (potential injection)
     if command_string.trim().starts_with(';') {
-        return Some(HookOutput::ask("Command starts with semicolon"));
+        return (None, Some(HookOutput::ask("Command starts with semicolon")));
     }
 
     // Output redirections (file writes)
@@ -1018,7 +1081,10 @@ fn check_raw_string_patterns(command_string: &str) -> Option<HookOutput> {
                 let target_str = target.as_str();
                 // Skip /dev/null - it's just discarding output
                 if target_str != "/dev/null" {
-                    return Some(HookOutput::ask("Output redirection (writes to file)"));
+                    return (
+                        None,
+                        Some(HookOutput::ask("Output redirection (writes to file)")),
+                    );
                 }
             }
         }
@@ -1028,13 +1094,16 @@ fn check_raw_string_patterns(command_string: &str) -> Option<HookOutput> {
             if let Some(target) = cap.get(1) {
                 let target_str = target.as_str();
                 if target_str != "/dev/null" {
-                    return Some(HookOutput::ask("Output redirection (writes to file)"));
+                    return (
+                        None,
+                        Some(HookOutput::ask("Output redirection (writes to file)")),
+                    );
                 }
             }
         }
     }
 
-    None
+    (None, None)
 }
 
 /// Check a single command against all gates.
@@ -3766,7 +3835,7 @@ run = "echo hello"
                 "mise run ci || rm -rf / should deny"
             );
 
-            // | bash (pipe to shell) -> ask (caught by raw string patterns)
+            // | bash (pipe to shell) -> ask (hard ask, not overridable by settings)
             let result = check_command_with_settings("mise run ci | bash", &cwd, "default");
             assert_eq!(
                 get_decision(&result),
@@ -3824,7 +3893,7 @@ run = "echo hello"
                 "pnpm run lint; rm -rf / should deny"
             );
 
-            // | bash -> ask (raw string pattern)
+            // | bash -> ask (hard ask, not overridable by settings)
             let result = check_command_with_settings("npm run lint | bash", &cwd, "default");
             assert_eq!(
                 get_decision(&result),
