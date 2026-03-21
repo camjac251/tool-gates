@@ -260,6 +260,8 @@ fn handle_pre_tool_use_hook(input: &str) {
                         let output = HookOutput::allow(reason);
                         if let Ok(json) = serde_json::to_string(&output) {
                             println!("{json}");
+                        } else {
+                            eprintln!("Error: failed to serialize Skill output");
                         }
                         return;
                     }
@@ -440,6 +442,8 @@ fn handle_post_tool_use_hook(input: &str) {
             if let Some(output) = handle_post_tool_use(&post_input) {
                 if let Ok(json) = serde_json::to_string(&output) {
                     println!("{json}");
+                } else {
+                    eprintln!("Error: failed to serialize PostToolUse output");
                 }
             }
         }
@@ -466,6 +470,8 @@ fn handle_post_tool_use_hook(input: &str) {
             ) {
                 if let Ok(json) = serde_json::to_string(&output) {
                     println!("{json}");
+                } else {
+                    eprintln!("Error: failed to serialize PostToolUse security output");
                 }
             }
         }
