@@ -1190,9 +1190,10 @@ fn targets_sensitive_path(cmd: &CommandInfo) -> bool {
         "/id_dsa",                    // SSH private key (anywhere in path)
     ];
 
-    // Git hook paths - could be used for code execution attacks
+    // Git directory paths - could be used for code execution attacks
+    // .git/config supports directives like core.fsmonitor that execute arbitrary commands
     // Use patterns without leading slash to match both absolute and relative paths
-    const BLOCKED_GIT_PATTERNS: &[&str] = &[".git/hooks/", ".githooks/"];
+    const BLOCKED_GIT_PATTERNS: &[&str] = &[".git/", ".githooks/"];
 
     // Lock files that affect dependency resolution
     const LOCK_FILES: &[&str] = &[
@@ -2320,6 +2321,22 @@ mod tests {
             assert!(
                 targets_sensitive_path(&cmd("sd", &["old", "new", ".git/hooks/pre-commit"])),
                 ".git/hooks should be blocked (code execution)"
+            );
+        }
+
+        #[test]
+        fn test_git_config_blocked() {
+            assert!(
+                targets_sensitive_path(&cmd("sd", &["old", "new", ".git/config"])),
+                ".git/config should be blocked (core.fsmonitor executes arbitrary commands)"
+            );
+        }
+
+        #[test]
+        fn test_git_info_attributes_blocked() {
+            assert!(
+                targets_sensitive_path(&cmd("sd", &["old", "new", ".git/info/attributes"])),
+                ".git/info/attributes should be blocked (inside .git/ directory)"
             );
         }
 
