@@ -2704,6 +2704,7 @@ commandPrefix = [
     "sleep ",
     "wait ",
     "printenv ",
+    "env ",
     "export ",
     "set ",
     "pwd ",
@@ -2724,7 +2725,7 @@ priority = 100
 # Safe commands (bare, no args)
 [[rule]]
 toolName = "run_shell_command"
-commandRegex = "^(echo|printf|cat|head|tail|less|more|bat|batcat|ls|eza|lsd|tree|find|fd|locate|which|whereis|type|grep|rg|ripgrep|choose|cut|sort|uniq|wc|tr|column|paste|join|comm|diff|cmp|fold|fmt|nl|rev|tac|expand|unexpand|pr|file|stat|du|df|lsof|readlink|realpath|basename|dirname|lsattr|getfacl|ps|top|htop|btop|procs|pgrep|pidof|uptime|w|who|whoami|id|groups|uname|hostname|hostnamectl|date|cal|free|vmstat|iostat|nproc|lscpu|lsmem|lsblk|lspci|lsusb|locale|getconf|vainfo|vdpauinfo|glxinfo|clinfo|xdpyinfo|xwininfo|ping|traceroute|tracepath|mtr|dig|nslookup|host|whois|ss|netstat|ip|ifconfig|route|arp|zipinfo|unrar|tokei|cloc|scc|loc|jq|yq|gron|fx|hexdump|xxd|base64|od|hexyl|strings|delta|difft|dust|fselect|pastel|numbat|fzf|tig|z|zi|zoxide|sha256sum|md5sum|sha1sum|sha512sum|b2sum|cksum|man|info|help|tldr|tealdeer|cheat|true|false|yes|seq|expr|bc|dc|factor|sleep|wait|printenv|export|set|pwd|cd|pushd|popd|dirs|unalias|hash|test|\\[|\\[\\[|read)$"
+commandRegex = "^(echo|printf|cat|head|tail|less|more|bat|batcat|ls|eza|lsd|tree|find|fd|locate|which|whereis|type|grep|rg|ripgrep|choose|cut|sort|uniq|wc|tr|column|paste|join|comm|diff|cmp|fold|fmt|nl|rev|tac|expand|unexpand|pr|file|stat|du|df|lsof|readlink|realpath|basename|dirname|lsattr|getfacl|ps|top|htop|btop|procs|pgrep|pidof|uptime|w|who|whoami|id|groups|uname|hostname|hostnamectl|date|cal|free|vmstat|iostat|nproc|lscpu|lsmem|lsblk|lspci|lsusb|locale|getconf|vainfo|vdpauinfo|glxinfo|clinfo|xdpyinfo|xwininfo|ping|traceroute|tracepath|mtr|dig|nslookup|host|whois|ss|netstat|ip|ifconfig|route|arp|zipinfo|unrar|tokei|cloc|scc|loc|jq|yq|gron|fx|hexdump|xxd|base64|od|hexyl|strings|delta|difft|dust|fselect|pastel|numbat|fzf|tig|z|zi|zoxide|sha256sum|md5sum|sha1sum|sha512sum|b2sum|cksum|man|info|help|tldr|tealdeer|cheat|true|false|yes|seq|expr|bc|dc|factor|sleep|wait|printenv|env|export|set|pwd|cd|pushd|popd|dirs|unalias|hash|test|\\[|\\[\\[|read)$"
 decision = "allow"
 priority = 100
 

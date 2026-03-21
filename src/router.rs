@@ -4099,4 +4099,88 @@ run = "echo hello"
             }
         }
     }
+
+    // === Transparent Wrapper Stripping (end-to-end) ===
+
+    mod transparent_wrappers {
+        use super::*;
+
+        #[test]
+        fn test_time_rm_denied() {
+            let result = check_command("time rm -rf /");
+            assert_eq!(
+                get_decision(&result),
+                "deny",
+                "time rm -rf / should be denied, not asked"
+            );
+        }
+
+        #[test]
+        fn test_env_rm_denied() {
+            let result = check_command("env rm -rf /");
+            assert_eq!(
+                get_decision(&result),
+                "deny",
+                "env rm -rf / should be denied"
+            );
+        }
+
+        #[test]
+        fn test_env_with_var_rm_denied() {
+            let result = check_command("env VAR=val rm -rf /");
+            assert_eq!(
+                get_decision(&result),
+                "deny",
+                "env VAR=val rm -rf / should be denied"
+            );
+        }
+
+        #[test]
+        fn test_nice_rm_denied() {
+            let result = check_command("nice -n 10 rm -rf /");
+            assert_eq!(
+                get_decision(&result),
+                "deny",
+                "nice -n 10 rm -rf / should be denied"
+            );
+        }
+
+        #[test]
+        fn test_timeout_rm_denied() {
+            let result = check_command("timeout 5 rm -rf /");
+            assert_eq!(
+                get_decision(&result),
+                "deny",
+                "timeout 5 rm -rf / should be denied"
+            );
+        }
+
+        #[test]
+        fn test_time_git_status_allowed() {
+            let result = check_command("time git status");
+            assert_eq!(
+                get_decision(&result),
+                "allow",
+                "time git status should be allowed"
+            );
+        }
+
+        #[test]
+        fn test_env_alone_allowed() {
+            let result = check_command("env");
+            // env alone prints environment variables (like printenv)
+            assert_eq!(
+                get_decision(&result),
+                "allow",
+                "env alone should be allowed"
+            );
+        }
+
+        #[test]
+        fn test_nohup_alone_asked() {
+            let result = check_command("nohup");
+            // nohup alone with no args -- unknown command
+            assert_eq!(get_decision(&result), "ask", "nohup alone should be asked");
+        }
+    }
 }

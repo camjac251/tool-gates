@@ -201,7 +201,129 @@ fn extract_command(cursor: &mut TreeCursor, source: &str) -> Option<CommandInfo>
     let program = parts.remove(0);
     let args = parts;
 
+    let (program, args) = strip_transparent_wrappers(program, args);
+
     Some(CommandInfo { raw, program, args })
+}
+
+/// Known transparent wrapper commands that just execute their arguments.
+/// Does NOT include `sudo`/`doas` (handled separately due to flag-value pairs like `-u root`),
+/// `env` (handles `VAR=value`), or `timeout` (has a positional duration arg).
+const SIMPLE_WRAPPERS: &[&str] = &[
+    "time", "exec", "nice", "nohup", "strace", "ltrace", "ionice", "taskset", "command", "builtin",
+];
+
+/// Flags for sudo/doas that consume the next argument as a value.
+const SUDO_VALUE_FLAGS: &[&str] = &["-u", "-g", "-C", "-D", "-h", "-p", "-r", "-t", "-U"];
+
+/// Check if an argument looks like a numeric value (flag argument, not a command name).
+///
+/// Matches integers (`10`), floats (`3.14`), and duration-like values (`5s`, `30m`).
+fn is_numeric_arg(s: &str) -> bool {
+    if s.is_empty() {
+        return false;
+    }
+    // Strip trailing duration suffix (s, m, h, d) for values like "5s", "30m"
+    let s = s.trim_end_matches(|c: char| "smhd".contains(c));
+    if s.is_empty() {
+        return false;
+    }
+    // Check if remaining is numeric (integer or float)
+    s.parse::<f64>().is_ok()
+}
+
+/// Strip transparent wrapper commands so the inner command is exposed to gates.
+///
+/// Handles these cases recursively:
+/// - Simple wrappers (`time`, `exec`, `nice`, etc.): skip flags, first non-flag arg becomes program
+/// - `env`: skip `-flags` and `VAR=value` args to find the real command
+/// - `timeout`: skip flags, then skip the duration arg, then the next arg is the command
+///
+/// Preserves the original `raw` field (the caller keeps it from the AST node).
+/// If no inner command is found (e.g., `env` alone), keeps the wrapper as the program.
+fn strip_transparent_wrappers(program: String, args: Vec<String>) -> (String, Vec<String>) {
+    strip_wrapper_recursive(program, args)
+}
+
+fn strip_wrapper_recursive(program: String, args: Vec<String>) -> (String, Vec<String>) {
+    if args.is_empty() {
+        return (program, args);
+    }
+
+    if SIMPLE_WRAPPERS.contains(&program.as_str()) {
+        // Skip flags and numeric flag values (e.g., `nice -n 10 rm` -- 10 is a flag value).
+        // The first arg that doesn't start with `-` and isn't purely numeric is the command.
+        if let Some(idx) = args
+            .iter()
+            .position(|a| !a.starts_with('-') && !is_numeric_arg(a))
+        {
+            let new_program = args[idx].clone();
+            let new_args = args[idx + 1..].to_vec();
+            return strip_wrapper_recursive(new_program, new_args);
+        }
+        // All args are flags or numeric values (e.g., `sudo -l`), keep as-is
+        return (program, args);
+    }
+
+    if program == "sudo" || program == "doas" {
+        // sudo/doas have flags that consume the next arg (e.g., `-u root`).
+        // Walk through args, skipping flags and their values, to find the command.
+        let mut i = 0;
+        while i < args.len() {
+            if args[i].starts_with('-') {
+                // Check if this flag consumes the next argument
+                if SUDO_VALUE_FLAGS.contains(&args[i].as_str()) {
+                    i += 1; // skip the flag's value
+                }
+                i += 1;
+                continue;
+            }
+            // First non-flag, non-value arg is the command
+            let new_program = args[i].clone();
+            let new_args = args[i + 1..].to_vec();
+            return strip_wrapper_recursive(new_program, new_args);
+        }
+        // All args are flags/values (e.g., `sudo -l`), keep as-is
+        return (program, args);
+    }
+
+    if program == "env" {
+        // `env` can have -flags and VAR=value before the actual command
+        if let Some(idx) = args
+            .iter()
+            .position(|a| !a.starts_with('-') && !a.contains('='))
+        {
+            let new_program = args[idx].clone();
+            let new_args = args[idx + 1..].to_vec();
+            return strip_wrapper_recursive(new_program, new_args);
+        }
+        // No real command found (e.g., `env` or `env VAR=val`), keep as-is
+        return (program, args);
+    }
+
+    if program == "timeout" {
+        // `timeout` takes: [flags...] duration command [args...]
+        // Find first non-flag (duration), then next non-flag (command)
+        let mut i = 0;
+        // Skip flags
+        while i < args.len() && args[i].starts_with('-') {
+            i += 1;
+        }
+        // Skip duration
+        if i < args.len() {
+            i += 1;
+        }
+        // Next arg is the command
+        if i < args.len() {
+            let new_program = args[i].clone();
+            let new_args = args[i + 1..].to_vec();
+            return strip_wrapper_recursive(new_program, new_args);
+        }
+        // No command found, keep as-is
+        return (program, args);
+    }
+
+    (program, args)
 }
 
 fn extract_concatenation(cursor: &mut TreeCursor, source: &str) -> Option<String> {
@@ -503,6 +625,192 @@ mod tests {
         assert!(!cmds.is_empty());
     }
 
+    // === Transparent Wrapper Stripping Tests ===
+
+    #[test]
+    fn test_time_strips_to_inner_command() {
+        let cmds = extract_commands("time rm -rf /");
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].program, "rm");
+        assert_eq!(cmds[0].args, vec!["-rf", "/"]);
+        assert_eq!(cmds[0].raw, "time rm -rf /");
+    }
+
+    #[test]
+    fn test_env_strips_to_inner_command() {
+        let cmds = extract_commands("env rm -rf /");
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].program, "rm");
+        assert_eq!(cmds[0].args, vec!["-rf", "/"]);
+    }
+
+    #[test]
+    fn test_env_with_var_assignment_strips() {
+        let cmds = extract_commands("env VAR=val rm -rf /");
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].program, "rm");
+        assert_eq!(cmds[0].args, vec!["-rf", "/"]);
+    }
+
+    #[test]
+    fn test_env_with_flags_and_vars_strips() {
+        let cmds = extract_commands("env -i PATH=/usr/bin HOME=/tmp rm -rf /");
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].program, "rm");
+        assert_eq!(cmds[0].args, vec!["-rf", "/"]);
+    }
+
+    #[test]
+    fn test_env_alone_keeps_program() {
+        let cmds = extract_commands("env");
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].program, "env");
+    }
+
+    #[test]
+    fn test_env_only_vars_keeps_program() {
+        let cmds = extract_commands("env VAR=val");
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].program, "env");
+    }
+
+    #[test]
+    fn test_nice_with_flags_strips() {
+        let cmds = extract_commands("nice -n 10 rm -rf /");
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].program, "rm");
+        assert_eq!(cmds[0].args, vec!["-rf", "/"]);
+    }
+
+    #[test]
+    fn test_timeout_strips_duration_and_command() {
+        let cmds = extract_commands("timeout 5 rm -rf /");
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].program, "rm");
+        assert_eq!(cmds[0].args, vec!["-rf", "/"]);
+    }
+
+    #[test]
+    fn test_timeout_with_flags_strips() {
+        let cmds = extract_commands("timeout --signal=KILL 30 rm -rf /");
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].program, "rm");
+        assert_eq!(cmds[0].args, vec!["-rf", "/"]);
+    }
+
+    #[test]
+    fn test_nohup_strips() {
+        let cmds = extract_commands("nohup rm -rf /");
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].program, "rm");
+        assert_eq!(cmds[0].args, vec!["-rf", "/"]);
+    }
+
+    #[test]
+    fn test_nohup_alone_keeps_program() {
+        let cmds = extract_commands("nohup");
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].program, "nohup");
+    }
+
+    #[test]
+    fn test_exec_strips() {
+        let cmds = extract_commands("exec rm -rf /");
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].program, "rm");
+        assert_eq!(cmds[0].args, vec!["-rf", "/"]);
+    }
+
+    #[test]
+    fn test_sudo_strips_to_inner_command() {
+        let cmds = extract_commands("sudo rm -rf /");
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].program, "rm");
+        assert_eq!(cmds[0].args, vec!["-rf", "/"]);
+    }
+
+    #[test]
+    fn test_sudo_with_flags_strips() {
+        let cmds = extract_commands("sudo -u root rm -rf /");
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].program, "rm");
+        assert_eq!(cmds[0].args, vec!["-rf", "/"]);
+    }
+
+    #[test]
+    fn test_sudo_only_flags_keeps_program() {
+        // sudo -l lists permissions, no inner command
+        let cmds = extract_commands("sudo -l");
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].program, "sudo");
+        assert_eq!(cmds[0].args, vec!["-l"]);
+    }
+
+    #[test]
+    fn test_command_builtin_strips() {
+        let cmds = extract_commands("command rm -rf /");
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].program, "rm");
+        assert_eq!(cmds[0].args, vec!["-rf", "/"]);
+    }
+
+    #[test]
+    fn test_recursive_stripping() {
+        // time env rm -rf / -> env rm -rf / -> rm -rf /
+        let cmds = extract_commands("time env rm -rf /");
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].program, "rm");
+        assert_eq!(cmds[0].args, vec!["-rf", "/"]);
+    }
+
+    #[test]
+    fn test_recursive_stripping_triple() {
+        let cmds = extract_commands("time nice -n 5 env VAR=x git status");
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].program, "git");
+        assert_eq!(cmds[0].args, vec!["status"]);
+    }
+
+    #[test]
+    fn test_time_safe_command_passes_through() {
+        let cmds = extract_commands("time git status");
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].program, "git");
+        assert_eq!(cmds[0].args, vec!["status"]);
+    }
+
+    #[test]
+    fn test_strace_strips() {
+        let cmds = extract_commands("strace -f rm -rf /");
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].program, "rm");
+        assert_eq!(cmds[0].args, vec!["-rf", "/"]);
+    }
+
+    #[test]
+    fn test_doas_strips() {
+        let cmds = extract_commands("doas rm -rf /");
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].program, "rm");
+        assert_eq!(cmds[0].args, vec!["-rf", "/"]);
+    }
+
+    #[test]
+    fn test_ionice_strips() {
+        let cmds = extract_commands("ionice -c 3 rm -rf /");
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].program, "rm");
+        assert_eq!(cmds[0].args, vec!["-rf", "/"]);
+    }
+
+    #[test]
+    fn test_taskset_strips() {
+        let cmds = extract_commands("taskset -c 0 rm -rf /");
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].program, "rm");
+        assert_eq!(cmds[0].args, vec!["-rf", "/"]);
+    }
+
     // === Property-based Fuzz Tests ===
     // These ensure the parser handles various inputs correctly.
     // Note: Some arbitrary inputs can crash tree-sitter-bash (C library),
@@ -518,9 +826,17 @@ mod tests {
             "done", "in", "function", "select", "time", "coproc",
         ];
 
+        // Transparent wrappers are stripped at parse time, changing the program name.
+        // Exclude them so `valid_commands_parse_correctly` doesn't fail on the
+        // `program == cmds[0].program` assertion.
+        const TRANSPARENT_WRAPPERS: &[&str] = &[
+            "time", "exec", "env", "nice", "nohup", "strace", "ltrace", "ionice", "taskset",
+            "timeout", "sudo", "doas", "command", "builtin",
+        ];
+
         #[allow(clippy::ptr_arg)]
         fn is_not_shell_keyword(s: &String) -> bool {
-            !SHELL_KEYWORDS.contains(&s.as_str())
+            !SHELL_KEYWORDS.contains(&s.as_str()) && !TRANSPARENT_WRAPPERS.contains(&s.as_str())
         }
 
         proptest! {
