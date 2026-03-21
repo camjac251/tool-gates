@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.5.9](https://github.com/camjac251/tool-gates/compare/v1.5.8...v1.5.9) - 2026-03-21
+
+### Fixed
+
+- *(hints)* remove ALWAYS, fix pipe false positives, add new detections
+
+### Other
+
+- bump plugin versions to 1.5.7
+- update skills and convert hook-reference to path-scoped rule
+
 ## [1.5.8](https://github.com/camjac251/tool-gates/compare/v1.5.7...v1.5.8) - 2026-03-21
 
 ### Fixed
