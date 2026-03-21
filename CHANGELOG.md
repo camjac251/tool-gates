@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.5.7](https://github.com/camjac251/tool-gates/compare/v1.5.6...v1.5.7) - 2026-03-21
+
+### Fixed
+
+- *(ci)* specify musl target for binary size check
+- *(settings)* specificity-based ask/allow resolution and $HOME expansion
+
+### Other
+
+- auto-merge release-plz PRs and trigger release
+
 ## [1.5.6](https://github.com/camjac251/tool-gates/compare/v1.5.5...v1.5.6) - 2026-03-21
 
 ### Fixed
