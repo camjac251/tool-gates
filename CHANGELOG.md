@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.5.8](https://github.com/camjac251/tool-gates/compare/v1.5.7...v1.5.8) - 2026-03-21
+
+### Fixed
+
+- *(pending)* sync simulate_append test helper with new dedup logic
+- *(pending)* per-subcommand gate evaluation for compound commands
+
+### Other
+
+- add Windows x64 and arm64 build targets
+
 ## [1.5.7](https://github.com/camjac251/tool-gates/compare/v1.5.6...v1.5.7) - 2026-03-21
 
 ### Fixed
