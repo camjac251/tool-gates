@@ -17,15 +17,19 @@ argument-hint: "[--all]"
    2. [ ] npm install (8x) -> npm install:*
    3. [ ] git push origin main (3x) -> git push:*
    ```
-   If multiple patterns are suggested, show the most specific one. Mention alternatives briefly (e.g., "or broader: cargo:*").
+   If multiple patterns are suggested, show the most specific one. Mention alternatives briefly (e.g., "or broader: `cargo:*`").
 
 4. Ask the user which to approve (e.g., "1, 3" or "all") and at what scope:
-   - **local** (default) -- just you, this project
-   - **project** -- shared with team via git
-   - **user** -- all projects globally
+   - **local** (default): just you, this project (`.claude/settings.local.json`)
+   - **project**: shared with team via git (`.claude/settings.json`)
+   - **user**: all projects globally (`~/.claude/settings.json`)
 
 5. For each selection, run `tool-gates approve '<pattern>' -s <scope>`.
 
 6. Show final rules with `tool-gates rules list`.
 
-Warn about overly broad patterns (e.g., `git:*` allows force-push). Low-count commands (1-2x) may be one-offs worth skipping.
+## Safety notes
+
+- Warn about overly broad patterns (e.g., `git:*` allows force-push, `rm:*` allows recursive delete)
+- Low-count commands (1-2x) may be one-offs worth skipping
+- Prefer specific patterns (`git push:*`) over broad ones (`git:*`) unless the user explicitly wants broad

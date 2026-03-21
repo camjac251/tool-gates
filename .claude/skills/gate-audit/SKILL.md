@@ -1,26 +1,30 @@
 ---
 name: gate-audit
-description: This skill should be used when the user asks to "audit gates", "find missing gates", "analyze sessions for edge cases", "check what commands need gates", "find false ask decisions", "mine sessions for read-only commands", or mentions finding commands that should be allowed but aren't.
+description: Mine Claude Code session logs for bash commands getting incorrect permission decisions. Find read-only commands that return "ask" when they should be "allow", unknown commands that need gates, and false categorizations. Triggers include "audit gates", "find missing gates", "edge cases", "false ask", "mine sessions".
 argument-hint: "[project-path-or-encoded-name]"
 ---
 
-# Gate Audit -- Mine Sessions for Edge Cases
+# Gate Audit
 
-Analyze Claude Code session logs to find bash commands that are getting incorrect permission decisions, particularly read-only commands that return "ask" when they should return "allow".
+Analyze Claude Code session logs to find bash commands getting incorrect permission decisions from tool-gates.
 
 ## Session File Locations
 
-Claude Code stores session logs at:
+Session transcripts live at:
 ```
-~/.claude/projects/<encoded-project-path>/<session-uuid>.jsonl
-```
-
-The project path is encoded by replacing `/` with `-`. For example:
-- `/home/user/projects/myapp` -> `-home-user-projects-myapp`
-
-Sessions with subagents store child logs at:
-```
+~/.claude/projects/<encoded-path>/<session-uuid>.jsonl
 ~/.claude/projects/<encoded-path>/<session-uuid>/subagents/agent-<id>.jsonl
+```
+
+The path is encoded by replacing all non-alphanumeric chars with `-` (lossy: hyphens in the original path also become `-`).
+
+### JSONL Bash extraction
+
+Assistant entries contain tool calls in `.message.content[]` as `{"type": "tool_use", "name": "Bash", "input": {"command": "..."}}`. The jq filter used throughout this skill:
+
+```
+select(.type == "assistant") | .message.content[]? |
+  select(.type == "tool_use" and .name == "Bash") | .input.command
 ```
 
 ## Workflow
@@ -31,13 +35,13 @@ If `$ARGUMENTS` is provided, use it. Accept either:
 - A full path (e.g., `/home/user/projects/myapp`)
 - An already-encoded name (e.g., `-home-user-projects-myapp`)
 
-Convert paths to encoded form by replacing `/` with `-`.
+Convert paths to encoded form by replacing non-alphanumeric chars with `-`.
 
 If no argument, ask which project to audit.
 
 Verify the session directory exists:
 ```bash
-ls ~/.claude/projects/<encoded-path>/
+eza ~/.claude/projects/<encoded-path>/
 ```
 
 ### 2. Extract all unique bash commands
@@ -45,44 +49,35 @@ ls ~/.claude/projects/<encoded-path>/
 Extract from ALL session files including subagents:
 ```bash
 fd -e jsonl . ~/.claude/projects/<encoded-path>/ -x \
-  jq -r 'select(.message.content[]?.name == "Bash") |
-    .message.content[] | select(.name == "Bash") |
+  jq -r 'select(.type == "assistant") | .message.content[]? |
+    select(.type == "tool_use" and .name == "Bash") |
     .input.command' {} 2>/dev/null | sort -u > /tmp/gate-audit-commands.txt
 ```
 
-**Warning**: jq extraction sometimes captures non-command text (Rust/Python code fragments, commit messages, partial expressions). These get "ask" as "Unknown command" which is correct behavior -- filter them out before analysis.
+**Warning**: jq extraction sometimes captures non-command text (code fragments, commit messages). These get "ask" as "Unknown command" which is correct behavior. Filter them out before analysis.
 
 Report counts:
 ```bash
-# Total files (sessions + subagents)
-fd -e jsonl . ~/.claude/projects/<encoded-path>/ | wc -l
+# Total JSONL files (sessions + subagents)
+fd -e jsonl . ~/.claude/projects/<encoded-path>/ | rg -c "."
 
 # Subagent sessions
 fd -e jsonl . ~/.claude/projects/<encoded-path>/ | rg -c subagents
 
 # Total unique commands
-wc -l /tmp/gate-audit-commands.txt
+rg -c "." /tmp/gate-audit-commands.txt
 ```
 
 ### 3. Classify every command through tool-gates
 
-Use the release binary (musl target):
-```bash
-BIN=$(fd tool-gates target/x86_64-unknown-linux-musl/release/ --type f --max-depth 1 \
-  -E '*.d' | head -1)
-```
-
-If binary not found, build it:
-```bash
-cargo build --release
-```
+The `tool-gates` binary should be on PATH. If not, build with `cargo build --release` and use `./target/release/tool-gates`.
 
 Run all commands through the hook interface:
 ```bash
 while IFS= read -r cmd; do
   result=$(printf '{"tool_name":"Bash","tool_input":{"command":%s}}' \
     "$(printf '%s' "$cmd" | jq -Rs .)" | \
-    $BIN 2>/dev/null | \
+    tool-gates 2>/dev/null | \
     jq -r '.hookSpecificOutput | "\(.permissionDecision // "allow")\t\(.permissionDecisionReason // "-")"')
   printf "%s\t%s\n" "$result" "$cmd"
 done < /tmp/gate-audit-commands.txt > /tmp/gate-audit-decisions.txt
@@ -94,12 +89,12 @@ done < /tmp/gate-audit-commands.txt > /tmp/gate-audit-decisions.txt
 
 Summarize decision counts:
 ```bash
-cut -f1 /tmp/gate-audit-decisions.txt | sort | uniq -c | sort -rn
+choose 0 -i /tmp/gate-audit-decisions.txt | sort | uniq -c | sort -rn
 ```
 
-Extract "ask" commands with reasons, filtering out code fragments (jq extraction sometimes captures non-command text):
+Extract "ask" commands with reasons:
 ```bash
-rg '^ask\t' /tmp/gate-audit-decisions.txt | cut -f2-
+rg '^ask\t' /tmp/gate-audit-decisions.txt | choose 1:
 ```
 
 ### 5. Identify read-only edge cases
@@ -110,22 +105,22 @@ For each "ask" command, evaluate whether it's genuinely read-only:
 - Version/help flags: `--version`, `-V`, `--help`, `-h`
 - List/query subcommands: `list`, `show`, `status`, `info`, `search`, `registry`
 - Git read-only plumbing: `check-ignore`, `check-attr`, `grep`, `merge-base`, `show-ref`
-- Shell builtins used in pipes: `read` in `while read` loops
+- Shell builtins in pipes: `read` in `while read` loops
 - Tool discovery: `which`, `command -v`, `type`
 
 **Should remain `ask` (mutations):**
-- File writes: `mkdir`, `mv`, `cp`, `rm`, `rmdir`, `touch`, `cat >`
+- File writes: `mkdir`, `mv`, `cp`, `rm`, `rmdir`, `touch`
 - Git mutations: `add`, `commit`, `push`, `pull`, `clone`, `stash`
 - Package installs: `cargo install`, `npm install`, `pip install`
 - In-place edits: `sd`, `sed -i`, `rustfmt` (without `--check`)
 - Network mutations: `curl -X POST`, `git push`
 
 **Should be `ask` but with better categorization (not "Unknown command"):**
-- Commands handled by no gate -- add to appropriate gate file
+- Commands handled by no gate. Add to the appropriate gate file.
 
 ### 6. Propose fixes
 
-For each edge case found, identify which file to modify:
+For each edge case, identify which file to modify:
 
 | Fix type | Where |
 |----------|-------|
@@ -134,43 +129,25 @@ For each edge case found, identify which file to modify:
 | New safe command | `rules/basics.toml` -- add to `safe_commands` list |
 | Move ask to allow | `rules/<gate>.toml` -- change `[[programs.ask]]` to `[[programs.allow]]` |
 
-**Critical**: When adding programs to TOML, also check the gate's Rust match statement in `src/gates/<gate>.rs`. Generated rules are only effective if the custom handler routes the program to the declarative function. This is the most common gotcha.
+**Critical**: When adding programs to TOML, also check the gate's Rust match statement in `src/gates/<gate>.rs`. Declarative rules only fire if the custom handler routes the program to the declarative function. This is the most common gotcha.
 
 ### 7. Verify and test
 
 After making changes:
 ```bash
-cargo build --release
-cargo test
+cargo build --release && cargo test
 ```
 
-Re-run the full audit to confirm the ask count dropped:
-```bash
-# Same classification loop from step 3
-```
+Re-run the full audit (step 3) and present before/after comparison of decision counts.
 
-Present before/after comparison.
+## Reference: Hook Input/Output
 
-## Reference: JSONL Extraction Patterns
-
-| Need | jq command |
-|------|-----------|
-| All Bash commands | `select(.message.content[]?.name == "Bash") \| .message.content[] \| select(.name == "Bash") \| .input.command` |
-| Human messages | `select(.type == "user" and (.message.content \| type == "string")) \| .message.content` |
-| Tool use counts | Group by `.name` on `tool_use` type blocks |
-| Session title | `select(.type == "summary") \| .summary` |
-
-## Reference: tool-gates Hook Input Format
-
+Input (pipe to stdin):
 ```json
-{
-  "tool_name": "Bash",
-  "tool_input": {
-    "command": "the command to test"
-  }
-}
+{"tool_name": "Bash", "tool_input": {"command": "the command to test"}}
 ```
 
-Pipe to the binary via stdin. Output JSON has `.hookSpecificOutput.permissionDecision` (`allow`/`ask`/`deny`) and `.hookSpecificOutput.permissionDecisionReason`.
-
-Empty output means `allow` (the hook returns nothing for allowed commands in some paths).
+Output fields:
+- `.hookSpecificOutput.permissionDecision`: `allow`, `ask`, or `deny`
+- `.hookSpecificOutput.permissionDecisionReason`: human-readable reason
+- Empty output means `allow` (hook returns nothing for allowed commands in some paths)
