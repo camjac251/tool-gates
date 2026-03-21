@@ -391,11 +391,8 @@ mod tests {
             .find(|e| e.command == approval.command && e.project_id == approval.project_id)
         {
             existing.increment();
-            for pattern in &approval.patterns {
-                if !existing.patterns.contains(pattern) {
-                    existing.patterns.push(pattern.clone());
-                }
-            }
+            existing.patterns = approval.patterns;
+            existing.breakdown = approval.breakdown;
         } else {
             entries.push(approval);
         }
