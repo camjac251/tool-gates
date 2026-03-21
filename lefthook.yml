@@ -7,6 +7,7 @@ pre-commit:
     build:
       run: cargo build
       glob: "*.rs"
+      stage_fixed: true
       priority: 1
     # Format generated code
     fmt:
