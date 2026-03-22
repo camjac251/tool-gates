@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.6.0](https://github.com/camjac251/tool-gates/compare/v1.5.10...v1.6.0) - 2026-03-22
+
+### Added
+
+- *(gates)* add gates for missing programs
+
 ## [1.5.10](https://github.com/camjac251/tool-gates/compare/v1.5.9...v1.5.10) - 2026-03-22
 
 ### Fixed
