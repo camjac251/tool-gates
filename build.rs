@@ -98,9 +98,16 @@ fn main() {
     let out_dir = Path::new("src/generated");
     fs::create_dir_all(out_dir).expect("Failed to create src/generated directory");
 
-    fs::write(out_dir.join("rules.rs"), rust_code).expect("Failed to write rules.rs");
+    fs::write(out_dir.join("rules.rs"), &rust_code).expect("Failed to write rules.rs");
+    fs::write(out_dir.join("toml_policy.rs"), &toml_policy).expect("Failed to write toml_policy.rs");
 
-    fs::write(out_dir.join("toml_policy.rs"), toml_policy).expect("Failed to write toml_policy.rs");
+    // Run rustfmt on generated files so they match what cargo fmt produces.
+    // Without this, every build dirties the working tree.
+    for file in &["rules.rs", "toml_policy.rs", "mod.rs"] {
+        let _ = std::process::Command::new("rustfmt")
+            .arg(out_dir.join(file))
+            .status();
+    }
 
     // Always write mod.rs to ensure it includes all generated modules
     let mod_content = r#"//! Auto-generated code from rules/*.toml files.
