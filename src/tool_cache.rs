@@ -27,7 +27,6 @@ const MODERN_TOOLS: &[&str] = &[
     "fd", "fdfind", // fd is sometimes fdfind on Debian/Ubuntu
     // File listing
     "eza", // modern ls with git integration
-    "lsd", // another modern ls alternative
     // Text processing
     "sd",     // modern sed - simpler syntax
     "choose", // modern awk field selection
