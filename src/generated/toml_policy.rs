@@ -792,6 +792,7 @@ toolName = "run_shell_command"
 commandPrefix = [
     "mise ls",
     "mise list",
+    "mise ls-remote",
     "mise current",
     "mise where",
     "mise which",
@@ -1274,6 +1275,13 @@ priority = 11
 [[rule]]
 toolName = "run_shell_command"
 commandPrefix = "gofmt "
+decision = "allow"
+priority = 11
+
+# gofumpt: unknown subcommands allow
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = "gofumpt "
 decision = "allow"
 priority = 11
 
@@ -2528,6 +2536,193 @@ commandPrefix = [
 decision = "allow"
 priority = 100
 
+# dpkg: allow when -l present
+[[rule]]
+toolName = "run_shell_command"
+commandRegex = "dpkg\\s+.*\\-l"
+decision = "allow"
+priority = 110
+
+# dpkg: allow when --list present
+[[rule]]
+toolName = "run_shell_command"
+commandRegex = "dpkg\\s+.*\\-\\-list"
+decision = "allow"
+priority = 110
+
+# dpkg: allow when -L present
+[[rule]]
+toolName = "run_shell_command"
+commandRegex = "dpkg\\s+.*\\-L"
+decision = "allow"
+priority = 110
+
+# dpkg: allow when --listfiles present
+[[rule]]
+toolName = "run_shell_command"
+commandRegex = "dpkg\\s+.*\\-\\-listfiles"
+decision = "allow"
+priority = 110
+
+# dpkg: allow when -S present
+[[rule]]
+toolName = "run_shell_command"
+commandRegex = "dpkg\\s+.*\\-S"
+decision = "allow"
+priority = 110
+
+# dpkg: allow when --search present
+[[rule]]
+toolName = "run_shell_command"
+commandRegex = "dpkg\\s+.*\\-\\-search"
+decision = "allow"
+priority = 110
+
+# dpkg: allow when -s present
+[[rule]]
+toolName = "run_shell_command"
+commandRegex = "dpkg\\s+.*\\-s"
+decision = "allow"
+priority = 110
+
+# dpkg: allow when --status present
+[[rule]]
+toolName = "run_shell_command"
+commandRegex = "dpkg\\s+.*\\-\\-status"
+decision = "allow"
+priority = 110
+
+# dpkg: allow when -p present
+[[rule]]
+toolName = "run_shell_command"
+commandRegex = "dpkg\\s+.*\\-p"
+decision = "allow"
+priority = 110
+
+# dpkg: allow when --print-avail present
+[[rule]]
+toolName = "run_shell_command"
+commandRegex = "dpkg\\s+.*\\-\\-print\\-avail"
+decision = "allow"
+priority = 110
+
+# dpkg: allow when --get-selections present
+[[rule]]
+toolName = "run_shell_command"
+commandRegex = "dpkg\\s+.*\\-\\-get\\-selections"
+decision = "allow"
+priority = 110
+
+# dpkg: allow when --print-architecture present
+[[rule]]
+toolName = "run_shell_command"
+commandRegex = "dpkg\\s+.*\\-\\-print\\-architecture"
+decision = "allow"
+priority = 110
+
+# dpkg: allow when --print-foreign-architectures present
+[[rule]]
+toolName = "run_shell_command"
+commandRegex = "dpkg\\s+.*\\-\\-print\\-foreign\\-architectures"
+decision = "allow"
+priority = 110
+
+# dpkg: allow when --audit present
+[[rule]]
+toolName = "run_shell_command"
+commandRegex = "dpkg\\s+.*\\-\\-audit"
+decision = "allow"
+priority = 110
+
+# dpkg: allow when -C present
+[[rule]]
+toolName = "run_shell_command"
+commandRegex = "dpkg\\s+.*\\-C"
+decision = "allow"
+priority = 110
+
+# dpkg: allow when --yet-to-unpack present
+[[rule]]
+toolName = "run_shell_command"
+commandRegex = "dpkg\\s+.*\\-\\-yet\\-to\\-unpack"
+decision = "allow"
+priority = 110
+
+# dpkg: allow when --compare-versions present
+[[rule]]
+toolName = "run_shell_command"
+commandRegex = "dpkg\\s+.*\\-\\-compare\\-versions"
+decision = "allow"
+priority = 110
+
+# dpkg: allow when --verify present
+[[rule]]
+toolName = "run_shell_command"
+commandRegex = "dpkg\\s+.*\\-\\-verify"
+decision = "allow"
+priority = 110
+
+# dpkg: allow when -V present
+[[rule]]
+toolName = "run_shell_command"
+commandRegex = "dpkg\\s+.*\\-V"
+decision = "allow"
+priority = 110
+
+# dpkg: allow when --version present
+[[rule]]
+toolName = "run_shell_command"
+commandRegex = "dpkg\\s+.*\\-\\-version"
+decision = "allow"
+priority = 110
+
+# dpkg: allow when --help present
+[[rule]]
+toolName = "run_shell_command"
+commandRegex = "dpkg\\s+.*\\-\\-help"
+decision = "allow"
+priority = 110
+
+# dpkg: allow when -? present
+[[rule]]
+toolName = "run_shell_command"
+commandRegex = "dpkg\\s+.*\\-\\?"
+decision = "allow"
+priority = 110
+
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = [
+    "apt-mark showmanual",
+    "apt-mark showauto",
+    "apt-mark showhold",
+    "apt-mark showinstall",
+    "apt-mark showremove",
+    "apt-mark showpurge",
+    "apt-mark --help",
+]
+decision = "allow"
+priority = 100
+
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = [
+    "pactl list",
+    "pactl info",
+    "pactl stat",
+    "pactl get-default-sink",
+    "pactl get-default-source",
+    "pactl get-sink-volume",
+    "pactl get-source-volume",
+    "pactl get-sink-mute",
+    "pactl get-source-mute",
+    "pactl subscribe",
+    "pactl --version",
+    "pactl --help",
+]
+decision = "allow"
+priority = 100
+
 # === SHORTCUT gate ===
 
 [[rule]]
@@ -2555,6 +2750,7 @@ commandPrefix = [
     "echo ",
     "printf ",
     "cat ",
+    "zcat ",
     "head ",
     "tail ",
     "less ",
@@ -2574,6 +2770,7 @@ commandPrefix = [
     "grep ",
     "rg ",
     "ripgrep ",
+    "zgrep ",
     "choose ",
     "cut ",
     "sort ",
@@ -2656,10 +2853,13 @@ commandPrefix = [
     "arp ",
     "zipinfo ",
     "unrar ",
+    "pdftotext ",
+    "pdfinfo ",
     "tokei ",
     "cloc ",
     "scc ",
     "loc ",
+    "token-counter ",
     "jq ",
     "yq ",
     "gron ",
@@ -2687,6 +2887,11 @@ commandPrefix = [
     "sha512sum ",
     "b2sum ",
     "cksum ",
+    "b3sum ",
+    "xxhsum ",
+    "xxh32sum ",
+    "xxh64sum ",
+    "xxh128sum ",
     "man ",
     "info ",
     "help ",
@@ -2717,6 +2922,7 @@ commandPrefix = [
     "test ",
     "[ ",
     "[[ ",
+    "dpkg-query ",
     "read ",
 ]
 decision = "allow"
@@ -2725,7 +2931,7 @@ priority = 100
 # Safe commands (bare, no args)
 [[rule]]
 toolName = "run_shell_command"
-commandRegex = "^(echo|printf|cat|head|tail|less|more|bat|batcat|ls|eza|lsd|tree|find|fd|locate|which|whereis|type|grep|rg|ripgrep|choose|cut|sort|uniq|wc|tr|column|paste|join|comm|diff|cmp|fold|fmt|nl|rev|tac|expand|unexpand|pr|file|stat|du|df|lsof|readlink|realpath|basename|dirname|lsattr|getfacl|ps|top|htop|btop|procs|pgrep|pidof|uptime|w|who|whoami|id|groups|uname|hostname|hostnamectl|date|cal|free|vmstat|iostat|nproc|lscpu|lsmem|lsblk|lspci|lsusb|locale|getconf|vainfo|vdpauinfo|glxinfo|clinfo|xdpyinfo|xwininfo|ping|traceroute|tracepath|mtr|dig|nslookup|host|whois|ss|netstat|ip|ifconfig|route|arp|zipinfo|unrar|tokei|cloc|scc|loc|jq|yq|gron|fx|hexdump|xxd|base64|od|hexyl|strings|delta|difft|dust|fselect|pastel|numbat|fzf|tig|z|zi|zoxide|sha256sum|md5sum|sha1sum|sha512sum|b2sum|cksum|man|info|help|tldr|tealdeer|cheat|true|false|yes|seq|expr|bc|dc|factor|sleep|wait|printenv|env|export|set|pwd|cd|pushd|popd|dirs|unalias|hash|test|\\[|\\[\\[|read)$"
+commandRegex = "^(echo|printf|cat|zcat|head|tail|less|more|bat|batcat|ls|eza|lsd|tree|find|fd|locate|which|whereis|type|grep|rg|ripgrep|zgrep|choose|cut|sort|uniq|wc|tr|column|paste|join|comm|diff|cmp|fold|fmt|nl|rev|tac|expand|unexpand|pr|file|stat|du|df|lsof|readlink|realpath|basename|dirname|lsattr|getfacl|ps|top|htop|btop|procs|pgrep|pidof|uptime|w|who|whoami|id|groups|uname|hostname|hostnamectl|date|cal|free|vmstat|iostat|nproc|lscpu|lsmem|lsblk|lspci|lsusb|locale|getconf|vainfo|vdpauinfo|glxinfo|clinfo|xdpyinfo|xwininfo|ping|traceroute|tracepath|mtr|dig|nslookup|host|whois|ss|netstat|ip|ifconfig|route|arp|zipinfo|unrar|pdftotext|pdfinfo|tokei|cloc|scc|loc|token\\-counter|jq|yq|gron|fx|hexdump|xxd|base64|od|hexyl|strings|delta|difft|dust|fselect|pastel|numbat|fzf|tig|z|zi|zoxide|sha256sum|md5sum|sha1sum|sha512sum|b2sum|cksum|b3sum|xxhsum|xxh32sum|xxh64sum|xxh128sum|man|info|help|tldr|tealdeer|cheat|true|false|yes|seq|expr|bc|dc|factor|sleep|wait|printenv|env|export|set|pwd|cd|pushd|popd|dirs|unalias|hash|test|\\[|\\[\\[|dpkg\\-query|read)$"
 decision = "allow"
 priority = 100
 

@@ -604,6 +604,7 @@ fn check_mise(cmd: &CommandInfo) -> GateResult {
                 &[
                     "ls",
                     "list",
+                    "ls-remote",
                     "current",
                     "where",
                     "which",

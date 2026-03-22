@@ -7,17 +7,18 @@
 
 use crate::generated::rules::{
     check_alembic_declarative, check_ansible_declarative, check_apt_cache_declarative,
-    check_apt_declarative, check_bazel_declarative, check_brew_declarative,
-    check_cmake_declarative, check_createdb_declarative, check_dbmate_declarative,
-    check_dd_declarative, check_dnf_declarative, check_dropdb_declarative,
-    check_flyway_declarative, check_goose_declarative, check_gradle_declarative,
-    check_hyperfine_declarative, check_just_declarative, check_kill_declarative,
-    check_killall_declarative, check_make_declarative, check_meson_declarative,
-    check_migrate_declarative, check_mongosh_declarative, check_mvn_declarative,
-    check_mysql_declarative, check_ninja_declarative, check_pacman_declarative,
-    check_pg_dump_declarative, check_pg_restore_declarative, check_pkill_declarative,
-    check_psql_declarative, check_systemctl_declarative, check_task_declarative,
-    check_vagrant_declarative, check_xkill_declarative,
+    check_apt_declarative, check_apt_mark_declarative, check_bazel_declarative,
+    check_brew_declarative, check_cmake_declarative, check_createdb_declarative,
+    check_dbmate_declarative, check_dd_declarative, check_dnf_declarative, check_dpkg_declarative,
+    check_dropdb_declarative, check_flyway_declarative, check_goose_declarative,
+    check_gradle_declarative, check_hyperfine_declarative, check_just_declarative,
+    check_kill_declarative, check_killall_declarative, check_make_declarative,
+    check_meson_declarative, check_migrate_declarative, check_mongosh_declarative,
+    check_mvn_declarative, check_mysql_declarative, check_ninja_declarative,
+    check_pacman_declarative, check_pactl_declarative, check_pg_dump_declarative,
+    check_pg_restore_declarative, check_pkill_declarative, check_psql_declarative,
+    check_systemctl_declarative, check_task_declarative, check_vagrant_declarative,
+    check_xkill_declarative,
 };
 use crate::models::{CommandInfo, Decision, GateResult};
 
@@ -95,6 +96,10 @@ pub fn check_system(cmd: &CommandInfo) -> GateResult {
         // OS Package managers
         "apt" | "apt-get" => check_apt(cmd),
         "apt-cache" => check_apt_cache_declarative(cmd).unwrap_or_else(GateResult::allow),
+        "apt-mark" => check_apt_mark_declarative(cmd)
+            .unwrap_or_else(|| GateResult::ask("apt-mark: Package marking")),
+        "dpkg" => check_dpkg_declarative(cmd)
+            .unwrap_or_else(|| GateResult::ask("dpkg: Package management")),
         "dnf" | "yum" => check_dnf(cmd),
         "pacman" | "yay" | "paru" => check_pacman(cmd),
         "brew" => check_brew(cmd),
@@ -102,6 +107,11 @@ pub fn check_system(cmd: &CommandInfo) -> GateResult {
         "apk" => GateResult::ask("apk: Package management"),
         "nix" | "nix-env" | "nix-shell" => GateResult::ask("nix: Package management"),
         "flatpak" | "snap" => GateResult::ask(format!("{program}: Package management")),
+
+        // Audio control
+        "pactl" => {
+            check_pactl_declarative(cmd).unwrap_or_else(|| GateResult::ask("pactl: Audio control"))
+        }
 
         // Dangerous system commands - blocked
         "shutdown" | "reboot" | "poweroff" | "halt" | "init" => {

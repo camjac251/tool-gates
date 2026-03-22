@@ -438,6 +438,20 @@ if_flags_any = ["-w"]
 accept_edits_auto_allow = true
 
 # =============================================================================
+# GOFUMPT (stricter Go formatter - same interface as gofmt)
+# =============================================================================
+
+[[programs]]
+name = "gofumpt"
+unknown_action = "allow"
+
+# -w writes files, needs approval
+[[programs.ask]]
+reason = "Formatting files"
+if_flags_any = ["-w"]
+accept_edits_auto_allow = true
+
+# =============================================================================
 # GOIMPORTS (Go import formatter - -w writes files)
 # =============================================================================
 

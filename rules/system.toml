@@ -1922,3 +1922,174 @@ reason = "Removing remote"
 [[programs.ask]]
 subcommand = "repair"
 reason = "Repairing"
+
+# =============================================================================
+# DPKG (Debian package manager - query flags are read-only)
+# =============================================================================
+
+[[programs]]
+name = "dpkg"
+unknown_action = "ask"
+
+# Read-only query flags
+[[programs.allow]]
+if_flags_any = ["-l", "--list", "-L", "--listfiles", "-S", "--search", "-s", "--status", "-p", "--print-avail"]
+
+[[programs.allow]]
+if_flags_any = ["--get-selections", "--print-architecture", "--print-foreign-architectures"]
+
+[[programs.allow]]
+if_flags_any = ["--audit", "-C", "--yet-to-unpack", "--compare-versions", "--verify", "-V"]
+
+[[programs.allow]]
+if_flags_any = ["--version", "--help", "-?"]
+
+# Mutating operations
+[[programs.ask]]
+reason = "Installing packages"
+if_flags_any = ["-i", "--install"]
+
+[[programs.ask]]
+reason = "Removing packages"
+if_flags_any = ["-r", "--remove", "-P", "--purge"]
+
+[[programs.ask]]
+reason = "Configuring packages"
+if_flags_any = ["--configure", "--unpack"]
+
+[[programs.ask]]
+reason = "Modifying package state"
+if_flags_any = ["--set-selections", "--clear-selections", "--add-architecture", "--remove-architecture"]
+
+# =============================================================================
+# APT-MARK (package marking - show* are read-only)
+# =============================================================================
+
+[[programs]]
+name = "apt-mark"
+unknown_action = "ask"
+
+# Read-only query subcommands
+[[programs.allow]]
+subcommand = "showmanual"
+
+[[programs.allow]]
+subcommand = "showauto"
+
+[[programs.allow]]
+subcommand = "showhold"
+
+[[programs.allow]]
+subcommand = "showinstall"
+
+[[programs.allow]]
+subcommand = "showremove"
+
+[[programs.allow]]
+subcommand = "showpurge"
+
+[[programs.allow]]
+subcommand = "--help"
+
+# Mutating subcommands
+[[programs.ask]]
+subcommand = "manual"
+reason = "Marking packages as manually installed"
+
+[[programs.ask]]
+subcommand = "auto"
+reason = "Marking packages as automatically installed"
+
+[[programs.ask]]
+subcommand = "hold"
+reason = "Holding package version"
+
+[[programs.ask]]
+subcommand = "unhold"
+reason = "Removing package hold"
+
+[[programs.ask]]
+subcommand = "minimize-manual"
+reason = "Minimizing manually installed packages"
+
+# =============================================================================
+# PACTL (PulseAudio control - list/info/stat are read-only)
+# =============================================================================
+
+[[programs]]
+name = "pactl"
+unknown_action = "ask"
+
+# Read-only subcommands
+[[programs.allow]]
+subcommand = "list"
+
+[[programs.allow]]
+subcommand = "info"
+
+[[programs.allow]]
+subcommand = "stat"
+
+[[programs.allow]]
+subcommand = "get-default-sink"
+
+[[programs.allow]]
+subcommand = "get-default-source"
+
+[[programs.allow]]
+subcommand = "get-sink-volume"
+
+[[programs.allow]]
+subcommand = "get-source-volume"
+
+[[programs.allow]]
+subcommand = "get-sink-mute"
+
+[[programs.allow]]
+subcommand = "get-source-mute"
+
+[[programs.allow]]
+subcommand = "subscribe"
+
+[[programs.allow]]
+subcommand = "--version"
+
+[[programs.allow]]
+subcommand = "--help"
+
+# Mutating subcommands
+[[programs.ask]]
+subcommand = "set-sink-volume"
+reason = "Changing audio volume"
+
+[[programs.ask]]
+subcommand = "set-source-volume"
+reason = "Changing audio volume"
+
+[[programs.ask]]
+subcommand = "set-sink-mute"
+reason = "Changing mute state"
+
+[[programs.ask]]
+subcommand = "set-source-mute"
+reason = "Changing mute state"
+
+[[programs.ask]]
+subcommand = "set-default-sink"
+reason = "Changing default audio output"
+
+[[programs.ask]]
+subcommand = "set-default-source"
+reason = "Changing default audio input"
+
+[[programs.ask]]
+subcommand = "load-module"
+reason = "Loading PulseAudio module"
+
+[[programs.ask]]
+subcommand = "unload-module"
+reason = "Unloading PulseAudio module"
+
+[[programs.ask]]
+subcommand = "exit"
+reason = "Terminating PulseAudio daemon"

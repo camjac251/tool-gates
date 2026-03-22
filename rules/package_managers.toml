@@ -1549,6 +1549,9 @@ subcommand = "ls"
 subcommand = "list"
 
 [[programs.allow]]
+subcommand = "ls-remote"
+
+[[programs.allow]]
 subcommand = "current"
 
 [[programs.allow]]

@@ -13,10 +13,11 @@
 
 # Simple list of always-safe commands
 safe_commands = [
-    # Display/output
+    # Display/output (including compressed variants)
     "echo",
     "printf",
     "cat",
+    "zcat",
     "head",
     "tail",
     "less",
@@ -36,10 +37,11 @@ safe_commands = [
     "whereis",
     "type",
 
-    # Text processing (read-only)
+    # Text processing (read-only, including compressed variants)
     "grep",
     "rg",
     "ripgrep",
+    "zgrep",
     "choose",
     "cut",
     "sort",
@@ -136,11 +138,16 @@ safe_commands = [
     "zipinfo",
     "unrar",
 
+    # PDF tools (read-only extraction/info)
+    "pdftotext",
+    "pdfinfo",
+
     # Dev tools (read-only)
     "tokei",
     "cloc",
     "scc",
     "loc",
+    "token-counter",
     "jq",
     "yq",
     "gron",
@@ -168,6 +175,11 @@ safe_commands = [
     "sha512sum",
     "b2sum",
     "cksum",
+    "b3sum",
+    "xxhsum",
+    "xxh32sum",
+    "xxh64sum",
+    "xxh128sum",
 
     # Help/docs
     "man",
@@ -202,6 +214,9 @@ safe_commands = [
     "test",
     "[",
     "[[",
+
+    # Package query (read-only)
+    "dpkg-query",
 
     # Shell builtins (used in while read loops, etc.)
     "read",

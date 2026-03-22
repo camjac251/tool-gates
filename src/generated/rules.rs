@@ -16,6 +16,7 @@ pub static SAFE_COMMANDS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "[[",
         "arp",
         "b2sum",
+        "b3sum",
         "base64",
         "basename",
         "bat",
@@ -43,6 +44,7 @@ pub static SAFE_COMMANDS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "dig",
         "dirname",
         "dirs",
+        "dpkg-query",
         "du",
         "dust",
         "echo",
@@ -109,6 +111,8 @@ pub static SAFE_COMMANDS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "od",
         "paste",
         "pastel",
+        "pdfinfo",
+        "pdftotext",
         "pgrep",
         "pidof",
         "ping",
@@ -145,6 +149,7 @@ pub static SAFE_COMMANDS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "tig",
         "tldr",
         "tokei",
+        "token-counter",
         "top",
         "tr",
         "tracepath",
@@ -172,9 +177,15 @@ pub static SAFE_COMMANDS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "xdpyinfo",
         "xwininfo",
         "xxd",
+        "xxh128sum",
+        "xxh32sum",
+        "xxh64sum",
+        "xxhsum",
         "yes",
         "yq",
         "z",
+        "zcat",
+        "zgrep",
         "zi",
         "zipinfo",
         "zoxide",
@@ -2804,6 +2815,7 @@ pub static MISE_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
     [
         "ls",
         "list",
+        "ls-remote",
         "current",
         "where",
         "which",
@@ -4398,6 +4410,33 @@ pub fn check_oxlint_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 /// Check gofmt commands declaratively
 pub fn check_gofmt_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if !["gofmt"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    // Check ask rules with flag/prefix conditions
+    if true && cmd.args.iter().any(|a| ["-w"].contains(&a.as_str())) {
+        return Some(GateResult::ask("Formatting files"));
+    }
+
+    Some(GateResult::allow())
+}
+
+// === GOFUMPT (from devtools.toml) ===
+
+/// Check gofumpt commands declaratively
+pub fn check_gofumpt_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["gofumpt"].contains(&cmd.program.as_str()) {
         return None;
     }
 
@@ -8009,6 +8048,250 @@ pub fn check_flatpak_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     Some(GateResult::ask(format!("flatpak: {}", subcmd_single)))
 }
 
+// === DPKG (from system.toml) ===
+
+/// Check dpkg commands declaratively
+pub fn check_dpkg_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["dpkg"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    // Check ask rules with flag/prefix conditions
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["-i", "--install"].contains(&a.as_str()))
+    {
+        return Some(GateResult::ask("Installing packages"));
+    }
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["-r", "--remove", "-P", "--purge"].contains(&a.as_str()))
+    {
+        return Some(GateResult::ask("Removing packages"));
+    }
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--configure", "--unpack"].contains(&a.as_str()))
+    {
+        return Some(GateResult::ask("Configuring packages"));
+    }
+    if true
+        && cmd.args.iter().any(|a| {
+            [
+                "--set-selections",
+                "--clear-selections",
+                "--add-architecture",
+                "--remove-architecture",
+            ]
+            .contains(&a.as_str())
+        })
+    {
+        return Some(GateResult::ask("Modifying package state"));
+    }
+
+    // Check conditional allow rules
+    if true
+        && cmd.args.iter().any(|a| {
+            [
+                "-l",
+                "--list",
+                "-L",
+                "--listfiles",
+                "-S",
+                "--search",
+                "-s",
+                "--status",
+                "-p",
+                "--print-avail",
+            ]
+            .contains(&a.as_str())
+        })
+    {
+        return Some(GateResult::allow());
+    }
+    if true
+        && cmd.args.iter().any(|a| {
+            [
+                "--get-selections",
+                "--print-architecture",
+                "--print-foreign-architectures",
+            ]
+            .contains(&a.as_str())
+        })
+    {
+        return Some(GateResult::allow());
+    }
+    if true
+        && cmd.args.iter().any(|a| {
+            [
+                "--audit",
+                "-C",
+                "--yet-to-unpack",
+                "--compare-versions",
+                "--verify",
+                "-V",
+            ]
+            .contains(&a.as_str())
+        })
+    {
+        return Some(GateResult::allow());
+    }
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--version", "--help", "-?"].contains(&a.as_str()))
+    {
+        return Some(GateResult::allow());
+    }
+
+    Some(GateResult::ask(format!("dpkg: {}", subcmd_single)))
+}
+
+// === APT-MARK (from system.toml) ===
+
+pub static APT_MARK_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
+    [
+        "showmanual",
+        "showauto",
+        "showhold",
+        "showinstall",
+        "showremove",
+        "showpurge",
+        "--help",
+    ]
+    .into_iter()
+    .collect()
+});
+
+pub static APT_MARK_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
+    [
+        ("manual", "Marking packages as manually installed"),
+        ("auto", "Marking packages as automatically installed"),
+        ("hold", "Holding package version"),
+        ("unhold", "Removing package hold"),
+        ("minimize-manual", "Minimizing manually installed packages"),
+    ]
+    .into_iter()
+    .collect()
+});
+
+/// Check apt-mark commands declaratively
+pub fn check_apt_mark_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["apt-mark"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    if APT_MARK_ALLOW.contains(subcmd.as_str()) || APT_MARK_ALLOW.contains(subcmd_single) {
+        return Some(GateResult::allow());
+    }
+
+    if let Some(reason) = APT_MARK_ASK
+        .get(subcmd.as_str())
+        .or_else(|| APT_MARK_ASK.get(subcmd_single))
+    {
+        return Some(GateResult::ask(format!("apt-mark: {}", reason)));
+    }
+
+    Some(GateResult::ask(format!("apt-mark: {}", subcmd_single)))
+}
+
+// === PACTL (from system.toml) ===
+
+pub static PACTL_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
+    [
+        "list",
+        "info",
+        "stat",
+        "get-default-sink",
+        "get-default-source",
+        "get-sink-volume",
+        "get-source-volume",
+        "get-sink-mute",
+        "get-source-mute",
+        "subscribe",
+        "--version",
+        "--help",
+    ]
+    .into_iter()
+    .collect()
+});
+
+pub static PACTL_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
+    [
+        ("set-sink-volume", "Changing audio volume"),
+        ("set-source-volume", "Changing audio volume"),
+        ("set-sink-mute", "Changing mute state"),
+        ("set-source-mute", "Changing mute state"),
+        ("set-default-sink", "Changing default audio output"),
+        ("set-default-source", "Changing default audio input"),
+        ("load-module", "Loading PulseAudio module"),
+        ("unload-module", "Unloading PulseAudio module"),
+        ("exit", "Terminating PulseAudio daemon"),
+    ]
+    .into_iter()
+    .collect()
+});
+
+/// Check pactl commands declaratively
+pub fn check_pactl_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["pactl"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    if PACTL_ALLOW.contains(subcmd.as_str()) || PACTL_ALLOW.contains(subcmd_single) {
+        return Some(GateResult::allow());
+    }
+
+    if let Some(reason) = PACTL_ASK
+        .get(subcmd.as_str())
+        .or_else(|| PACTL_ASK.get(subcmd_single))
+    {
+        return Some(GateResult::ask(format!("pactl: {}", reason)));
+    }
+
+    Some(GateResult::ask(format!("pactl: {}", subcmd_single)))
+}
+
 // === SHORT (from shortcut.toml) ===
 
 pub static SHORT_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -8425,6 +8708,9 @@ pub fn check_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if let Some(result) = check_gofmt_declarative(cmd) {
         return Some(result);
     }
+    if let Some(result) = check_gofumpt_declarative(cmd) {
+        return Some(result);
+    }
     if let Some(result) = check_goimports_declarative(cmd) {
         return Some(result);
     }
@@ -8800,6 +9086,15 @@ pub fn check_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if let Some(result) = check_flatpak_declarative(cmd) {
         return Some(result);
     }
+    if let Some(result) = check_dpkg_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_apt_mark_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_pactl_declarative(cmd) {
+        return Some(result);
+    }
     if let Some(result) = check_short_declarative(cmd) {
         return Some(result);
     }
@@ -8954,7 +9249,7 @@ pub fn check_tool_gates_gate(cmd: &CommandInfo) -> GateResult {
 /// Programs handled by the tool_gates gate
 pub static TOOL_GATES_PROGRAMS: &[&str] = &["tool-gates", "bash-gates"];
 
-/// Generated gate for devtools - handles: sd, sad, ast-grep, sg, yq, jq, semgrep, comby, grit, watchexec, biome, prettier, eslint, ruff, black, isort, shellcheck, hadolint, golangci-lint, gci, air, actionlint, gitleaks, lefthook, vite, vitest, jest, mocha, tsc, tsup, esbuild, turbo, nx, knip, oxlint, gofmt, goimports, shfmt, rustfmt, stylua, clang-format, autopep8, rubocop, standardrb, patch, dos2unix, unix2dos, stylelint, mix, perltidy, dartfmt, dart, elm-format, scalafmt, ktlint, swiftformat, buf
+/// Generated gate for devtools - handles: sd, sad, ast-grep, sg, yq, jq, semgrep, comby, grit, watchexec, biome, prettier, eslint, ruff, black, isort, shellcheck, hadolint, golangci-lint, gci, air, actionlint, gitleaks, lefthook, vite, vitest, jest, mocha, tsc, tsup, esbuild, turbo, nx, knip, oxlint, gofmt, gofumpt, goimports, shfmt, rustfmt, stylua, clang-format, autopep8, rubocop, standardrb, patch, dos2unix, unix2dos, stylelint, mix, perltidy, dartfmt, dart, elm-format, scalafmt, ktlint, swiftformat, buf
 /// Custom handlers needed for: ["sd"]
 pub fn check_devtools_gate(cmd: &CommandInfo) -> GateResult {
     match cmd.program.as_str() {
@@ -8993,6 +9288,7 @@ pub fn check_devtools_gate(cmd: &CommandInfo) -> GateResult {
         "knip" => check_knip_declarative(cmd).unwrap_or_else(GateResult::skip),
         "oxlint" => check_oxlint_declarative(cmd).unwrap_or_else(GateResult::skip),
         "gofmt" => check_gofmt_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "gofumpt" => check_gofumpt_declarative(cmd).unwrap_or_else(GateResult::skip),
         "goimports" => check_goimports_declarative(cmd).unwrap_or_else(GateResult::skip),
         "shfmt" => check_shfmt_declarative(cmd).unwrap_or_else(GateResult::skip),
         "rustfmt" => check_rustfmt_declarative(cmd).unwrap_or_else(GateResult::skip),
@@ -9056,6 +9352,7 @@ pub static DEVTOOLS_PROGRAMS: &[&str] = &[
     "knip",
     "oxlint",
     "gofmt",
+    "gofumpt",
     "goimports",
     "shfmt",
     "rustfmt",
@@ -9128,7 +9425,7 @@ pub static NETWORK_PROGRAMS: &[&str] = &[
     "curl", "wget", "ssh", "scp", "sftp", "rsync", "nc", "ncat", "netcat", "http", "https", "xh",
 ];
 
-/// Generated gate for system - handles: shutdown, reboot, poweroff, halt, init, mkfs, fdisk, parted, gdisk, dd, shred, wipe, mke2fs, mkswap, wipefs, hdparm, insmod, rmmod, modprobe, grub-install, update-grub, useradd, userdel, usermod, passwd, chsh, iptables, ufw, firewall-cmd, chattr, mount, umount, swapoff, swapon, lvremove, vgremove, pvremove, psql, createdb, dropdb, pg_dump, pg_restore, migrate, goose, dbmate, flyway, alembic, mysql, sqlite3, mongosh, mongo, redis-cli, kill, pkill, killall, xkill, make, cmake, ninja, just, task, gradle, gradlew, ./gradlew, mvn, maven, ./mvnw, mvnw, bazel, bazelisk, meson, ansible, ansible-playbook, ansible-galaxy, ansible-vault, vagrant, hyperfine, sudo, doas, systemctl, service, crontab, apt, apt-get, apt-cache, dnf, yum, pacman, yay, paru, brew, zypper, apk, nix, nix-env, nix-shell, flatpak, snap
+/// Generated gate for system - handles: shutdown, reboot, poweroff, halt, init, mkfs, fdisk, parted, gdisk, dd, shred, wipe, mke2fs, mkswap, wipefs, hdparm, insmod, rmmod, modprobe, grub-install, update-grub, useradd, userdel, usermod, passwd, chsh, iptables, ufw, firewall-cmd, chattr, mount, umount, swapoff, swapon, lvremove, vgremove, pvremove, psql, createdb, dropdb, pg_dump, pg_restore, migrate, goose, dbmate, flyway, alembic, mysql, sqlite3, mongosh, mongo, redis-cli, kill, pkill, killall, xkill, make, cmake, ninja, just, task, gradle, gradlew, ./gradlew, mvn, maven, ./mvnw, mvnw, bazel, bazelisk, meson, ansible, ansible-playbook, ansible-galaxy, ansible-vault, vagrant, hyperfine, sudo, doas, systemctl, service, crontab, apt, apt-get, apt-cache, dnf, yum, pacman, yay, paru, brew, zypper, apk, nix, nix-env, nix-shell, flatpak, snap, dpkg, apt-mark, pactl
 /// Custom handlers needed for: ["apt", "brew", "crontab", "dnf", "kill", "make", "mysql", "pacman", "pkill", "psql", "sudo", "systemctl"]
 pub fn check_system_gate(cmd: &CommandInfo) -> GateResult {
     match cmd.program.as_str() {
@@ -9220,6 +9517,9 @@ pub fn check_system_gate(cmd: &CommandInfo) -> GateResult {
         "nix-env" => check_nix_env_declarative(cmd).unwrap_or_else(GateResult::skip),
         "nix-shell" => check_nix_shell_declarative(cmd).unwrap_or_else(GateResult::skip),
         "flatpak" | "snap" => check_flatpak_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "dpkg" => check_dpkg_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "apt-mark" => check_apt_mark_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "pactl" => check_pactl_declarative(cmd).unwrap_or_else(GateResult::skip),
         _ => GateResult::skip(),
     }
 }
@@ -9324,6 +9624,9 @@ pub static SYSTEM_PROGRAMS: &[&str] = &[
     "nix-shell",
     "flatpak",
     "snap",
+    "dpkg",
+    "apt-mark",
+    "pactl",
 ];
 
 /// Generated gate for shortcut - handles: short
@@ -9361,6 +9664,7 @@ pub static FILE_EDITING_PROGRAMS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "gci",
         "go",
         "gofmt",
+        "gofumpt",
         "goimports",
         "golangci-lint",
         "grit",
@@ -9452,6 +9756,7 @@ pub fn is_file_editing_command(cmd: &CommandInfo) -> bool {
         "gci" => cmd.args.iter().any(|a| ["write"].contains(&a.as_str())),
         "go" => cmd.args.first().is_some_and(|a| a == "fmt"),
         "gofmt" => cmd.args.iter().any(|a| ["-w"].contains(&a.as_str())),
+        "gofumpt" => cmd.args.iter().any(|a| ["-w"].contains(&a.as_str())),
         "goimports" => cmd.args.iter().any(|a| ["-w"].contains(&a.as_str())),
         "golangci-lint" => cmd.args.iter().any(|a| ["--fix"].contains(&a.as_str())),
         "grit" => cmd.args.first().is_some_and(|a| a == "apply"),
