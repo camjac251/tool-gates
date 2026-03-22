@@ -157,7 +157,7 @@ fn extract_command(cursor: &mut TreeCursor, source: &str) -> Option<CommandInfo>
         loop {
             let child = cursor.node();
             match child.kind() {
-                "word" | "simple_expansion" | "number" => {
+                "word" | "simple_expansion" | "expansion" | "number" => {
                     if let Ok(text) = child.utf8_text(source.as_bytes()) {
                         parts.push(text.to_string());
                     }
