@@ -6,19 +6,19 @@ pre-commit:
     # Build first to generate code via build.rs
     build:
       run: cargo build
-      glob: "*.rs"
+      glob: "{**/*.rs,rules/**/*.toml,build.rs,Cargo.toml}"
       stage_fixed: true
       priority: 1
-    # Format generated code
+    # Format generated code (including freshly generated files)
     fmt:
       run: cargo fmt
-      glob: "*.rs"
+      glob: "**/*.rs"
       stage_fixed: true
       priority: 2
     # Then check with clippy
     clippy:
       run: cargo clippy --all-targets -- -D warnings
-      glob: "*.rs"
+      glob: "{**/*.rs,rules/**/*.toml}"
       priority: 3
 
 pre-push:
