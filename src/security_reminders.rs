@@ -212,7 +212,7 @@ fn rules() -> &'static [SecurityRule] {
                 name: "hardcoded_github_token",
                 tier: Tier::Deny,
                 message: "GitHub token detected in file content. Use GITHUB_TOKEN environment variable or gh auth instead. Revoke this token if it was ever committed.",
-                check: CheckType::ContentRegex { pattern: r"(ghp|ghs|ghu|gho|ghr)_[A-Za-z0-9_]{36,}" },
+                check: CheckType::ContentRegex { pattern: r"(ghp|ghs|ghu|gho|ghr)_[A-Za-z0-9_]{36,}|github_pat_[A-Za-z0-9_]{22,}" },
                 always_check: true,
             },
             SecurityRule {
@@ -740,6 +740,17 @@ mod tests {
     #[test]
     fn test_tier1_github_token_detected() {
         let content = r#"token = "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij""#;
+        let matches = scan_content("/tmp/config.ts", content);
+        assert!(
+            matches
+                .iter()
+                .any(|m| m.rule_name == "hardcoded_github_token")
+        );
+    }
+
+    #[test]
+    fn test_tier1_github_fine_grained_pat_detected() {
+        let content = r#"token = "github_pat_11ABCDEFG0abcdefghijkl_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrs""#;
         let matches = scan_content("/tmp/config.ts", content);
         assert!(
             matches
