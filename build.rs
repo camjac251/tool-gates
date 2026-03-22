@@ -98,17 +98,6 @@ fn main() {
     let out_dir = Path::new("src/generated");
     fs::create_dir_all(out_dir).expect("Failed to create src/generated directory");
 
-    fs::write(out_dir.join("rules.rs"), &rust_code).expect("Failed to write rules.rs");
-    fs::write(out_dir.join("toml_policy.rs"), &toml_policy).expect("Failed to write toml_policy.rs");
-
-    // Run rustfmt on generated files so they match what cargo fmt produces.
-    // Without this, every build dirties the working tree.
-    for file in &["rules.rs", "toml_policy.rs", "mod.rs"] {
-        let _ = std::process::Command::new("rustfmt")
-            .arg(out_dir.join(file))
-            .status();
-    }
-
     // Always write mod.rs to ensure it includes all generated modules
     let mod_content = r#"//! Auto-generated code from rules/*.toml files.
 //!
@@ -117,7 +106,29 @@ fn main() {
 pub mod rules;
 pub mod toml_policy;
 "#;
+
+    fs::write(out_dir.join("rules.rs"), &rust_code).expect("Failed to write rules.rs");
+    fs::write(out_dir.join("toml_policy.rs"), &toml_policy)
+        .expect("Failed to write toml_policy.rs");
     fs::write(out_dir.join("mod.rs"), mod_content).expect("Failed to write mod.rs");
+
+    // Format generated files so they match cargo fmt output and don't dirty
+    // the working tree. Try rustfmt first (exact match), fall back to
+    // prettyplease (close enough, no external dependency).
+    for file in &["rules.rs", "toml_policy.rs", "mod.rs"] {
+        let path = out_dir.join(file);
+        let ok = std::process::Command::new("rustfmt")
+            .arg(&path)
+            .status()
+            .is_ok_and(|s| s.success());
+        if !ok {
+            // rustfmt unavailable or failed -- use prettyplease as fallback
+            if let Ok(code) = fs::read_to_string(&path) {
+                let formatted = format_rust(&code);
+                let _ = fs::write(&path, formatted);
+            }
+        }
+    }
 }
 
 // ============================================================================
@@ -2035,4 +2046,13 @@ fn generate_allow_call(reason: &Option<String>) -> String {
 
 fn toml_escape(s: &str) -> String {
     s.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+fn format_rust(code: &str) -> String {
+    syn::parse_file(code)
+        .map(|tree| prettyplease::unparse(&tree))
+        .unwrap_or_else(|e| {
+            eprintln!("Warning: failed to parse generated code for formatting: {e}");
+            code.to_string()
+        })
 }

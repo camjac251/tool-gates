@@ -52,6 +52,8 @@ tempfile = "3"  # Temporary directories for settings.json tests
 [build-dependencies]
 serde = { version = "1", features = ["derive"] }
 toml = "1.0"
+syn = "2"
+prettyplease = "0.2"
 
 [profile.release]
 lto = true
