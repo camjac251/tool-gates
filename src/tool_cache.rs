@@ -16,7 +16,10 @@ fn cache_ttl_secs() -> u64 {
     u64::from(days) * 24 * 60 * 60
 }
 
-/// All modern tools we might hint about (focused on code reading/understanding)
+/// Modern CLI tools to detect and cache. Each tool here must have a corresponding
+/// hint in `hints.rs` (as `modern_command`). Tools only used via user-configured
+/// `requires_tool` in block rules don't need to be here -- `is_available()` falls
+/// back to a live `which` check for tools not in this list.
 const MODERN_TOOLS: &[&str] = &[
     // File viewing
     "bat", "batcat", // bat is sometimes installed as batcat on Debian/Ubuntu
@@ -30,8 +33,6 @@ const MODERN_TOOLS: &[&str] = &[
     // Text processing
     "sd",     // modern sed - simpler syntax
     "choose", // modern awk field selection
-    "jq",     // JSON processor
-    "gron",   // JSON flattening for grep
     // Disk usage
     "dust", // modern du - visual tree
     // Process viewing
@@ -40,18 +41,12 @@ const MODERN_TOOLS: &[&str] = &[
     "xh", // modern curl/wget - cleaner output
     // Code stats
     "tokei", // modern cloc - faster
-    "scc",   // another fast code stats tool
     // Hex viewing
     "hexyl", // modern xxd/hexdump - colored
     // Diff viewing
-    "delta", // syntax-highlighted diffs
     "difft", // difftastic - structural diff
     // Documentation
     "tldr", "tealdeer", // simplified man pages with examples
-    // Fuzzy finding
-    "fzf", // fuzzy finder for code exploration
-    // Markdown
-    "glow", // markdown rendering in terminal
 ];
 
 /// Cached tool availability data
