@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.5.10](https://github.com/camjac251/tool-gates/compare/v1.5.9...v1.5.10) - 2026-03-22
+
+### Fixed
+
+- *(build)* format generated code with rustfmt, prettyplease fallback
+- *(build)* run rustfmt on generated files to prevent dirty worktree
+- *(hooks)* use recursive globs so hooks trigger for all source files
+- *(parser)* include expansion nodes in command argument extraction
+- *(security)* detect github_pat_ fine-grained personal access tokens
+- *(security)* detect Stripe sk_live_ and sk_test_ secret keys
+- *(cache)* use atomic write-then-rename for hint tracker and tool cache
+- *(parser)* split compound commands in fallback parser
+- *(parser)* recover from poisoned mutex instead of panicking
+- *(main)* log serialization errors instead of silently swallowing
+- *(parser)* strip transparent command wrappers before gate evaluation
+- *(router)* block entire .git/ directory in acceptEdits mode
+
+### Other
+
+- *(cache)* remove unused tools from detection cache
+- *(cache)* remove unused lsd from tool detection
+- *(router)* compile security regexes once via LazyLock
+
 ## [1.5.9](https://github.com/camjac251/tool-gates/compare/v1.5.8...v1.5.9) - 2026-03-21
 
 ### Fixed
