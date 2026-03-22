@@ -220,7 +220,7 @@ fn rules() -> &'static [SecurityRule] {
                 tier: Tier::Deny,
                 message: "API key or token detected in file content. Use environment variables or a secrets manager. Never hardcode secrets in source code.",
                 check: CheckType::ContentRegex {
-                    pattern: r"(sk-[A-Za-z0-9]{20,}|xox[bporas]-[A-Za-z0-9\-]{10,}|AIza[A-Za-z0-9_\-]{35})",
+                    pattern: r"(sk-[A-Za-z0-9]{20,}|sk_(live|test)_[A-Za-z0-9]{20,}|xox[bporas]-[A-Za-z0-9\-]{10,}|AIza[A-Za-z0-9_\-]{35})",
                 },
                 always_check: true,
             },
@@ -925,6 +925,30 @@ print(result.stdout)
             matches2
                 .iter()
                 .any(|m| m.rule_name == "hardcoded_generic_secret")
+        );
+    }
+
+    #[test]
+    fn test_stripe_secret_key_patterns() {
+        // Build test keys at runtime to avoid GitHub push protection
+        let live_key = format!("stripe_key = \"sk_{}_abc123def456ghi789jkl012mno\"", "live");
+        let matches = scan_content("/tmp/config.py", &live_key);
+        assert!(
+            matches
+                .iter()
+                .any(|m| m.rule_name == "hardcoded_generic_secret"),
+            "sk_live_ key should be caught as hardcoded_generic_secret: {:?}",
+            matches
+        );
+
+        let test_key = format!("stripe_key = \"sk_{}_abc123def456ghi789jkl012mno\"", "test");
+        let matches2 = scan_content("/tmp/config.py", &test_key);
+        assert!(
+            matches2
+                .iter()
+                .any(|m| m.rule_name == "hardcoded_generic_secret"),
+            "sk_test_ key should be caught as hardcoded_generic_secret: {:?}",
+            matches2
         );
     }
 
