@@ -500,10 +500,28 @@ fn handle_post_tool_use_hook(input: &str, client: Client) {
 }
 
 fn get_binary_path() -> String {
-    // Prefer the non-canonicalized path from current_exe() to preserve symlinks
-    // (e.g., /home/linuxbrew/.linuxbrew/bin/tool-gates instead of the versioned
-    // Cellar path which breaks on brew upgrade). Falls back to bare "tool-gates"
-    // which both Claude Code and Gemini CLI resolve via PATH.
+    // On Linux, current_exe() reads /proc/self/exe which the kernel resolves
+    // through symlinks to the real binary (e.g., Homebrew Cellar path). That
+    // path breaks on brew upgrade. Instead, use argv[0] and resolve via PATH
+    // to get the stable symlink path.
+    let argv0 = std::env::args().next().unwrap_or_default();
+
+    if argv0.contains('/') {
+        // Invoked with an explicit path -- use it directly (preserves symlinks)
+        return argv0;
+    }
+
+    // Bare name (e.g., "tool-gates") -- find the symlink in PATH
+    if let Ok(path) = std::env::var("PATH") {
+        for dir in path.split(':') {
+            let candidate = std::path::PathBuf::from(dir).join(&argv0);
+            if candidate.exists() {
+                return candidate.display().to_string();
+            }
+        }
+    }
+
+    // Last resort: current_exe (may be Cellar path, but better than nothing)
     std::env::current_exe()
         .ok()
         .map(|p| p.display().to_string())
