@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.7.2](https://github.com/camjac251/tool-gates/compare/v1.7.1...v1.7.2) - 2026-03-25
+
+### Fixed
+
+- *(hooks)* resolve binary path via argv[0] and PATH lookup
+
 ## [1.7.1](https://github.com/camjac251/tool-gates/compare/v1.7.0...v1.7.1) - 2026-03-25
 
 ### Fixed
