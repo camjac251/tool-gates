@@ -500,9 +500,12 @@ fn handle_post_tool_use_hook(input: &str, client: Client) {
 }
 
 fn get_binary_path() -> String {
+    // Prefer the non-canonicalized path from current_exe() to preserve symlinks
+    // (e.g., /home/linuxbrew/.linuxbrew/bin/tool-gates instead of the versioned
+    // Cellar path which breaks on brew upgrade). Falls back to bare "tool-gates"
+    // which both Claude Code and Gemini CLI resolve via PATH.
     std::env::current_exe()
         .ok()
-        .and_then(|p| p.canonicalize().ok())
         .map(|p| p.display().to_string())
         .unwrap_or_else(|| "tool-gates".to_string())
 }
