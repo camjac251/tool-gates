@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.7.1](https://github.com/camjac251/tool-gates/compare/v1.7.0...v1.7.1) - 2026-03-25
+
+### Fixed
+
+- *(hooks)* use symlink path instead of canonicalized Cellar path
+
 ## [1.7.0](https://github.com/camjac251/tool-gates/compare/v1.6.0...v1.7.0) - 2026-03-25
 
 ### Added
