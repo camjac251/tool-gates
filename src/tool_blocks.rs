@@ -153,7 +153,8 @@ mod tests {
         let rules = vec![rule("Glob", "Use fd.")];
         let result = check_tool_block("Glob", &empty_input(), &rules);
         assert!(result.is_some());
-        let json = serde_json::to_string(&result.unwrap()).unwrap();
+        let json = serde_json::to_string(&result.unwrap().serialize(crate::models::Client::Claude))
+            .unwrap();
         assert!(json.contains("deny"));
         assert!(json.contains("Use fd."));
     }
@@ -213,7 +214,8 @@ mod tests {
     fn test_multiple_rules_first_match_wins() {
         let rules = vec![rule("Glob", "First rule."), rule("Glob", "Second rule.")];
         let result = check_tool_block("Glob", &empty_input(), &rules);
-        let json = serde_json::to_string(&result.unwrap()).unwrap();
+        let json = serde_json::to_string(&result.unwrap().serialize(crate::models::Client::Claude))
+            .unwrap();
         assert!(json.contains("First rule."));
     }
 

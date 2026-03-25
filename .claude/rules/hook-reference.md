@@ -8,7 +8,13 @@ paths:
 
 # Hook Input/Output Reference
 
-All JSON output uses **camelCase** field names (`hookEventName`, `permissionDecision`, `updatedPermissions`). Enforced by `#[serde(rename_all = "camelCase")]` on output structs in `models.rs`. New fields must follow this convention with test coverage asserting exact casing.
+tool-gates supports two clients, detected via `hook_event_name`:
+- **Claude Code**: `PreToolUse` / `PermissionRequest` / `PostToolUse` events
+- **Gemini CLI**: `BeforeTool` / `AfterTool` events
+
+The `Client` enum in `models.rs` maps hook events to the appropriate client and controls serialization format, tool name mapping, and exit code behavior.
+
+All Claude JSON output uses **camelCase** field names (`hookEventName`, `permissionDecision`, `updatedPermissions`). Enforced by `#[serde(rename_all = "camelCase")]` on output structs in `models.rs`. New fields must follow this convention with test coverage asserting exact casing.
 
 ## Common Base Fields (all hook inputs)
 
@@ -158,3 +164,35 @@ These fields are available on all hook outputs (not just hookSpecificOutput):
 | `decision` | `"approve" \| "block"` (optional) | General decision (used by some hook types) |
 | `reason` | `string` (optional) | Explanation for the decision |
 | `systemMessage` | `string` (optional) | Warning message shown to the user |
+
+## Gemini CLI Hooks
+
+Gemini uses `BeforeTool` (pre) and `AfterTool` (post) events. Detected by `Client::from_hook_event()`.
+
+**Tool name mapping** (Gemini -> Claude equivalents):
+| Gemini | Claude |
+|--------|--------|
+| `run_shell_command` | `Bash` |
+| `read_file` / `read_many_files` | `Read` |
+| `write_file` | `Write` |
+| `replace` | `Edit` |
+| `glob` | `Glob` |
+| `grep_search` | `Grep` |
+| `activate_skill` | `Skill` |
+| `mcp_*` (single `_`) | `mcp__*` (double `__`) |
+
+**Output format** (flat, no nesting):
+```json
+{
+  "decision": "allow|ask|block",
+  "reason": "Human-readable reason"
+}
+```
+
+Key differences from Claude:
+- Gemini accepts both `"block"` and `"deny"` for blocking decisions, and both `"allow"` and `"approve"` for allowing. We output `"block"` for clarity.
+- `decision` and `reason` are flat top-level fields (not nested in `hookSpecificOutput`)
+- `additionalContext` goes inside `hookSpecificOutput` only when present (for hints)
+- Exit code 2 used as process-level block signal. Gemini treats any non-zero/non-1 exit as deny for non-JSON output, but JSON `decision` field takes precedence when present.
+- No `tool_use_id` from Gemini, so PostToolUse tracking is skipped
+- MCP tools use single underscore prefix (`mcp_server_tool`) vs Claude's double (`mcp__server__tool`)

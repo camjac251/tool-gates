@@ -6,7 +6,7 @@ use crate::hints::{ModernHint, format_hints, get_modern_hint};
 use crate::mise::{
     extract_task_commands, find_mise_config, load_mise_config, parse_mise_invocation,
 };
-use crate::models::{CommandInfo, Decision, GateResult, HookOutput};
+use crate::models::{CommandInfo, Decision, GateResult, HookOutput, PermissionDecision};
 use crate::package_json::{
     find_package_json, get_script_command, load_package_json, parse_script_invocation,
 };
@@ -433,16 +433,11 @@ pub fn check_command_with_settings_and_session(
     // Reuse already-parsed commands to avoid double tree-sitter parsing.
     let gate_result =
         check_command_for_session_with_commands(command_string, session_id, &commands);
-    let gate_context = gate_result
-        .hook_specific_output
-        .as_ref()
-        .and_then(|o| o.additional_context.clone());
+    let gate_context = gate_result.context.clone();
 
     // If gates block, deny directly (dangerous commands should never be deferred)
-    if let Some(ref output) = gate_result.hook_specific_output {
-        if output.permission_decision == "deny" {
-            return gate_result;
-        }
+    if gate_result.decision == PermissionDecision::Deny {
+        return gate_result;
     }
 
     // Check settings.json deny rules FIRST - user's explicit deny rules always respected
@@ -457,15 +452,11 @@ pub fn check_command_with_settings_and_session(
     // - Are file-editing commands
     // - Don't target sensitive paths (system files, credentials)
     // - Don't target paths outside allowed directories (cwd + additionalDirectories)
-    if permission_mode == "acceptEdits" {
-        if let Some(ref output) = gate_result.hook_specific_output {
-            if output.permission_decision == "ask" {
-                let commands = extract_commands(command_string);
-                let allowed_dirs = settings.allowed_directories(cwd);
-                if should_auto_allow_in_accept_edits(&commands, &allowed_dirs) {
-                    return HookOutput::allow(Some("Auto-allowed in acceptEdits mode"));
-                }
-            }
+    if permission_mode == "acceptEdits" && gate_result.decision == PermissionDecision::Ask {
+        let commands = extract_commands(command_string);
+        let allowed_dirs = settings.allowed_directories(cwd);
+        if should_auto_allow_in_accept_edits(&commands, &allowed_dirs) {
+            return HookOutput::allow(Some("Auto-allowed in acceptEdits mode"));
         }
     }
 
@@ -504,46 +495,38 @@ pub fn check_command_with_settings_and_session(
     // etc. still ask by default, but can be permanently allowed via settings rules.
     if let Some(raw_result) = soft_ask {
         // Enhance with approval instructions
-        if let Some(ref hso) = raw_result.hook_specific_output {
-            if hso.permission_decision == "ask" {
-                let approval_context = generate_approval_context(session_id);
-                if !approval_context.is_empty() {
-                    let existing_context = hso.additional_context.as_deref().unwrap_or("");
-                    let combined_context = if existing_context.is_empty() {
-                        approval_context
-                    } else {
-                        format!("{}{}", existing_context, approval_context)
-                    };
-                    return HookOutput::ask_with_context(
-                        hso.permission_decision_reason
-                            .as_deref()
-                            .unwrap_or("Requires approval"),
-                        &combined_context,
-                    );
-                }
-            }
-        }
-        return raw_result;
-    }
-
-    // Enhance "ask" results with approval instructions
-    if let Some(ref hso) = gate_result.hook_specific_output {
-        if hso.permission_decision == "ask" {
+        if raw_result.decision == PermissionDecision::Ask {
             let approval_context = generate_approval_context(session_id);
             if !approval_context.is_empty() {
-                let existing_context = hso.additional_context.as_deref().unwrap_or("");
+                let existing_context = raw_result.context.as_deref().unwrap_or("");
                 let combined_context = if existing_context.is_empty() {
                     approval_context
                 } else {
                     format!("{}{}", existing_context, approval_context)
                 };
                 return HookOutput::ask_with_context(
-                    hso.permission_decision_reason
-                        .as_deref()
-                        .unwrap_or("Requires approval"),
+                    raw_result.reason.as_deref().unwrap_or("Requires approval"),
                     &combined_context,
                 );
             }
+        }
+        return raw_result;
+    }
+
+    // Enhance "ask" results with approval instructions
+    if gate_result.decision == PermissionDecision::Ask {
+        let approval_context = generate_approval_context(session_id);
+        if !approval_context.is_empty() {
+            let existing_context = gate_result.context.as_deref().unwrap_or("");
+            let combined_context = if existing_context.is_empty() {
+                approval_context
+            } else {
+                format!("{}{}", existing_context, approval_context)
+            };
+            return HookOutput::ask_with_context(
+                gate_result.reason.as_deref().unwrap_or("Requires approval"),
+                &combined_context,
+            );
         }
     }
 
@@ -585,24 +568,16 @@ fn check_mise_task(task_name: &str, cwd: &str, permission_mode: &str) -> HookOut
         // Check each extracted command, with package.json expansion support
         let result = check_command_expanded(cmd_string, cwd, permission_mode);
 
-        if let Some(ref output) = result.hook_specific_output {
-            match output.permission_decision.as_str() {
-                "deny" => {
-                    if let Some(reason) = &output.permission_decision_reason {
-                        block_reasons.push(format!("mise {task_name}: {reason}"));
-                    } else {
-                        block_reasons.push(format!("mise {task_name}: Blocked"));
-                    }
-                }
-                "ask" => {
-                    if let Some(reason) = &output.permission_decision_reason {
-                        ask_reasons.push(format!("mise {task_name}: {reason}"));
-                    } else {
-                        ask_reasons.push(format!("mise {task_name}: Requires approval"));
-                    }
-                }
-                _ => {}
+        match result.decision {
+            PermissionDecision::Deny => {
+                let reason = result.reason.as_deref().unwrap_or("Blocked");
+                block_reasons.push(format!("mise {task_name}: {reason}"));
             }
+            PermissionDecision::Ask => {
+                let reason = result.reason.as_deref().unwrap_or("Requires approval");
+                ask_reasons.push(format!("mise {task_name}: {reason}"));
+            }
+            _ => {}
         }
     }
 
@@ -663,49 +638,36 @@ fn check_package_script(
     // Check the underlying command through the gate engine
     let result = check_command(&script_cmd);
 
-    if let Some(ref output) = result.hook_specific_output {
-        match output.permission_decision.as_str() {
-            "deny" => {
-                let reason = output
-                    .permission_decision_reason
-                    .as_deref()
-                    .unwrap_or("Blocked");
-                return HookOutput::deny(&format!("{pm} run {script_name}: {reason}"));
-            }
-            "ask" => {
-                // In acceptEdits mode, check if the underlying command is a file-editing command
-                if permission_mode == "acceptEdits" {
-                    let commands = extract_commands(&script_cmd);
-                    let settings = Settings::load(cwd);
-                    let allowed_dirs = settings.allowed_directories(cwd);
-                    if should_auto_allow_in_accept_edits(&commands, &allowed_dirs) {
-                        return HookOutput::allow(Some(&format!(
-                            "{pm} run {script_name}: Auto-allowed in acceptEdits mode"
-                        )));
-                    }
+    match result.decision {
+        PermissionDecision::Deny => {
+            let reason = result.reason.as_deref().unwrap_or("Blocked");
+            HookOutput::deny(&format!("{pm} run {script_name}: {reason}"))
+        }
+        PermissionDecision::Ask => {
+            // In acceptEdits mode, check if the underlying command is a file-editing command
+            if permission_mode == "acceptEdits" {
+                let commands = extract_commands(&script_cmd);
+                let settings = Settings::load(cwd);
+                let allowed_dirs = settings.allowed_directories(cwd);
+                if should_auto_allow_in_accept_edits(&commands, &allowed_dirs) {
+                    return HookOutput::allow(Some(&format!(
+                        "{pm} run {script_name}: Auto-allowed in acceptEdits mode"
+                    )));
                 }
+            }
 
-                let reason = output
-                    .permission_decision_reason
-                    .as_deref()
-                    .unwrap_or("Requires approval");
-                return HookOutput::ask(&format!("{pm} run {script_name}: {reason}"));
-            }
-            "allow" => {
-                return HookOutput::allow(Some(&format!(
-                    "{pm} run {script_name}: {}",
-                    output
-                        .permission_decision_reason
-                        .as_deref()
-                        .unwrap_or("Safe")
-                )));
-            }
-            _ => {}
+            let reason = result.reason.as_deref().unwrap_or("Requires approval");
+            HookOutput::ask(&format!("{pm} run {script_name}: {reason}"))
+        }
+        PermissionDecision::Allow => HookOutput::allow(Some(&format!(
+            "{pm} run {script_name}: {}",
+            result.reason.as_deref().unwrap_or("Safe")
+        ))),
+        PermissionDecision::Approve => {
+            // Approve means passthrough -- treat as safe
+            HookOutput::allow(Some(&format!("{pm} run {script_name}: Safe")))
         }
     }
-
-    // Fallback
-    HookOutput::ask(&format!("{pm} run {script_name}"))
 }
 
 /// Check an mcp-cli command with settings.json awareness.
@@ -799,26 +761,18 @@ fn check_command_expanded(command_string: &str, cwd: &str, permission_mode: &str
         // Try package.json script expansion for this individual command
         if let Some((pm, script_name)) = parse_script_invocation(&cmd.raw) {
             let result = check_package_script(pm, &script_name, &cwd_str, permission_mode);
-            if let Some(ref output) = result.hook_specific_output {
-                match output.permission_decision.as_str() {
-                    "deny" => {
-                        block_reasons.push(
-                            output
-                                .permission_decision_reason
-                                .clone()
-                                .unwrap_or_else(|| "Blocked".to_string()),
-                        );
-                    }
-                    "ask" => {
-                        ask_reasons.push(
-                            output
-                                .permission_decision_reason
-                                .clone()
-                                .unwrap_or_else(|| "Requires approval".to_string()),
-                        );
-                    }
-                    _ => {}
+            match result.decision {
+                PermissionDecision::Deny => {
+                    block_reasons.push(result.reason.unwrap_or_else(|| "Blocked".to_string()));
                 }
+                PermissionDecision::Ask => {
+                    ask_reasons.push(
+                        result
+                            .reason
+                            .unwrap_or_else(|| "Requires approval".to_string()),
+                    );
+                }
+                _ => {}
             }
         } else {
             // Run through gates
@@ -1480,27 +1434,15 @@ mod tests {
 
     // Helper to get permission decision
     fn get_decision(result: &HookOutput) -> &str {
-        result
-            .hook_specific_output
-            .as_ref()
-            .map_or(result.decision.as_deref().unwrap_or("unknown"), |o| {
-                o.permission_decision.as_str()
-            })
+        result.decision.as_str()
     }
 
     fn get_reason(result: &HookOutput) -> &str {
-        result
-            .hook_specific_output
-            .as_ref()
-            .and_then(|o| o.permission_decision_reason.as_deref())
-            .unwrap_or("")
+        result.reason.as_deref().unwrap_or("")
     }
 
     fn get_context(result: &HookOutput) -> Option<&str> {
-        result
-            .hook_specific_output
-            .as_ref()
-            .and_then(|o| o.additional_context.as_deref())
+        result.context.as_deref()
     }
 
     // === Accept Edits Mode ===
@@ -3605,16 +3547,13 @@ mod tests {
         #[test]
         fn test_empty_string_no_opinion() {
             let result = check_command("");
-            assert_eq!(
-                result.decision, None,
-                "Empty input should return no opinion"
-            );
+            assert_eq!(result.decision, PermissionDecision::Approve);
         }
 
         #[test]
         fn test_whitespace_only_no_opinion() {
             let result = check_command("   ");
-            assert_eq!(result.decision, None, "Whitespace should return no opinion");
+            assert_eq!(result.decision, PermissionDecision::Approve);
         }
 
         #[test]
@@ -4039,10 +3978,7 @@ run = "echo hello"
         use super::*;
 
         fn get_context(result: &HookOutput) -> Option<String> {
-            result
-                .hook_specific_output
-                .as_ref()
-                .and_then(|o| o.additional_context.clone())
+            result.context.clone()
         }
 
         #[test]

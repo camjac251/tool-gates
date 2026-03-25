@@ -31,7 +31,7 @@ priority = 30
 name = "rm"
 unknown_action = "ask"
 
-# Block catastrophic rm patterns (exported to Gemini CLI)
+# Block catastrophic rm patterns
 [[programs.block]]
 if_args_contain = [" /", " /*", " ~/", " ~/*"]
 reason = "Catastrophic rm blocked (root or home)"

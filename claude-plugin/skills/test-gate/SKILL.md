@@ -45,7 +45,7 @@ echo '{"tool_name": "Bash", "tool_input": {"command": "<COMMAND>"}, "hook_event_
    - Any **additionalContext** (hints, approval commands)
    - Any **updatedPermissions** (for PermissionRequest)
 
-4. If the result is unexpected, suggest which gate or TOML rule is responsible by checking `rules/*.toml` for the program name.
+4. If the result is unexpected, suggest which gate or rule is responsible by checking `rules/*.toml` for the program name.
 
 ## Output format
 
@@ -56,6 +56,8 @@ Output JSON has `.hookSpecificOutput` with:
 - For PermissionRequest: `decision.updatedPermissions[]`
 
 Empty output means `allow` (no hook output = passthrough).
+
+For Gemini CLI (`hook_event_name: "BeforeTool"`), output is flat: `{"decision": "allow|ask|block", "reason": "..."}`.
 
 ## Examples
 

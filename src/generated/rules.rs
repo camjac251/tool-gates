@@ -3466,14 +3466,6 @@ pub fn check_tool_gates_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     {
         return Some(GateResult::allow());
     }
-    if true
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["--export-toml", "--gemini-policy"].contains(&a.as_str()))
-    {
-        return Some(GateResult::allow());
-    }
 
     if let Some(reason) = TOOL_GATES_ASK
         .get(subcmd.as_str())

@@ -2,7 +2,6 @@
 //!
 //! Reads all rules/*.toml files and generates:
 //! - src/generated/rules.rs - Rust code for declarative gates
-//! - src/generated/toml_policy.rs - Gemini CLI TOML policy string
 
 use serde::Deserialize;
 use std::collections::HashSet;
@@ -91,9 +90,6 @@ fn main() {
     // Generate Rust code
     let rust_code = generate_rust_code(&rule_files);
 
-    // Generate TOML policy
-    let toml_policy = generate_toml_policy(&rule_files);
-
     // Write to src/generated/
     let out_dir = Path::new("src/generated");
     fs::create_dir_all(out_dir).expect("Failed to create src/generated directory");
@@ -104,18 +100,15 @@ fn main() {
 //! DO NOT EDIT - changes will be overwritten by build.rs
 
 pub mod rules;
-pub mod toml_policy;
 "#;
 
     fs::write(out_dir.join("rules.rs"), &rust_code).expect("Failed to write rules.rs");
-    fs::write(out_dir.join("toml_policy.rs"), &toml_policy)
-        .expect("Failed to write toml_policy.rs");
     fs::write(out_dir.join("mod.rs"), mod_content).expect("Failed to write mod.rs");
 
     // Format generated files so they match cargo fmt output and don't dirty
     // the working tree. Try rustfmt first (exact match), fall back to
     // prettyplease (close enough, no external dependency).
-    for file in &["rules.rs", "toml_policy.rs", "mod.rs"] {
+    for file in &["rules.rs", "mod.rs"] {
         let path = out_dir.join(file);
         let ok = std::process::Command::new("rustfmt")
             .arg(&path)
@@ -411,7 +404,7 @@ struct AskRule {
     action_prefix: Option<String>,
     reason: String,
     #[serde(default)]
-    #[allow(dead_code)] // Used in TOML but not in Gemini export (inherits default ask)
+    #[allow(dead_code)]
     warn: bool,
     #[serde(default)]
     if_flags: Vec<String>,
@@ -1724,307 +1717,6 @@ fn generate_file_editing_code(rule_files: &[(String, RuleFile)]) -> String {
     output
 }
 
-// ============================================================================
-// TOML Policy Generation
-// ============================================================================
-
-/// Priority levels for TOML policy rules
-mod priority {
-    pub const BLOCK: u32 = 900;
-    pub const ALLOW: u32 = 100;
-    pub const DEFAULT: u32 = 1;
-}
-
-fn generate_toml_policy(rule_files: &[(String, RuleFile)]) -> String {
-    let mut output = String::new();
-
-    output.push_str("//! Auto-generated TOML policy for Gemini CLI.\n");
-    output.push_str("//! DO NOT EDIT - changes will be overwritten by build.rs\n\n");
-
-    output.push_str("/// Generated TOML policy content\n");
-    output.push_str("pub const TOML_POLICY: &str = r#\"\n");
-
-    // Header
-    output.push_str("# Bash Gates - Generated Policy for Gemini CLI\n");
-    output.push_str("#\n");
-    output.push_str("# This file was auto-generated from declarative TOML rules.\n");
-    output.push_str("# Save to: ~/.gemini/policies/tool-gates.toml\n");
-    output.push_str("#\n");
-    output.push_str("# Only allow and deny rules are generated.\n");
-    output.push_str("# Everything else inherits Gemini CLI's default: ask_user\n");
-    output.push_str("#\n\n");
-
-    // Generate rules
-    for (name, rules) in rule_files {
-        output.push_str(&format!("# === {} gate ===\n\n", name.to_uppercase()));
-
-        // Safe commands - consolidated into array rules
-        if !rules.safe_commands.is_empty() {
-            // Single rule with commandPrefix array for "cmd ..." (with args)
-            output.push_str("# Safe commands (with args)\n");
-            output.push_str("[[rule]]\n");
-            output.push_str("toolName = \"run_shell_command\"\n");
-            output.push_str("commandPrefix = [\n");
-            for cmd in &rules.safe_commands {
-                output.push_str(&format!("    \"{} \",\n", toml_escape(cmd)));
-            }
-            output.push_str("]\n");
-            output.push_str("decision = \"allow\"\n");
-            output.push_str(&format!("priority = {}\n\n", priority::ALLOW));
-
-            // Single regex rule for bare commands (no args)
-            output.push_str("# Safe commands (bare, no args)\n");
-            output.push_str("[[rule]]\n");
-            output.push_str("toolName = \"run_shell_command\"\n");
-            let bare_pattern: Vec<String> = rules
-                .safe_commands
-                .iter()
-                .map(|cmd| regex_escape(cmd))
-                .collect();
-            output.push_str(&format!(
-                "commandRegex = \"^({})$\"\n",
-                bare_pattern.join("|")
-            ));
-            output.push_str("decision = \"allow\"\n");
-            output.push_str(&format!("priority = {}\n\n", priority::ALLOW));
-        }
-
-        // Conditional allow rules - only generate deny for block
-        // Skip allow rules - Gemini CLI can't express "allow unless flag present"
-        // These commands will fall through to default ask_user, which is safer
-        for cond in &rules.conditional_allow {
-            for flag in &cond.unless_flags {
-                if cond.on_flag_present == OnFlagAction::Block {
-                    output.push_str(&format!(
-                        "# {}: blocked when {} flag present\n",
-                        cond.program, flag
-                    ));
-                    output.push_str("[[rule]]\n");
-                    output.push_str("toolName = \"run_shell_command\"\n");
-                    output.push_str(&format!(
-                        "commandRegex = \"{}\\\\s+.*{}\"\n",
-                        regex_escape(&cond.program),
-                        regex_escape(flag)
-                    ));
-                    output.push_str("decision = \"deny\"\n");
-                    output.push_str(&format!("priority = {}\n\n", priority::BLOCK));
-                }
-            }
-            // Note: No allow rule generated - falls through to default ask_user
-        }
-
-        // Program rules
-        for program in &rules.programs {
-            // Blocks (highest priority)
-            for block in &program.block {
-                let parts = block.subcommand_parts();
-
-                output.push_str(&format!("# Block: {}\n", block.reason));
-                output.push_str("[[rule]]\n");
-                output.push_str("toolName = \"run_shell_command\"\n");
-
-                // Handle bare blocks (matches any invocation)
-                // Only if no if_args_contain - those need regex matching
-                if parts.is_empty()
-                    && block.subcommand_prefix.is_none()
-                    && block.if_args_contain.is_empty()
-                {
-                    output.push_str(&format!(
-                        "commandPrefix = \"{} \"\n",
-                        toml_escape(&program.name)
-                    ));
-                    output.push_str("decision = \"deny\"\n");
-                    output.push_str(&format!("priority = {}\n\n", priority::BLOCK));
-                    continue;
-                }
-
-                // Handle subcommand_prefix blocks
-                if let Some(ref prefix) = block.subcommand_prefix {
-                    if parts.is_empty() {
-                        output.push_str(&format!(
-                            "commandPrefix = \"{} {}\"\n",
-                            program.name, prefix
-                        ));
-                    } else {
-                        output.push_str(&format!(
-                            "commandPrefix = \"{} {} {}\"\n",
-                            program.name,
-                            parts.join(" "),
-                            prefix
-                        ));
-                    }
-                } else if block.if_args_contain.is_empty() {
-                    // Simple block - use prefix
-                    output.push_str(&format!(
-                        "commandPrefix = \"{} {}\"\n",
-                        program.name,
-                        parts.join(" ")
-                    ));
-                } else {
-                    // Complex block - use regex to match when args contain specific values
-                    let args_pattern: Vec<String> = block
-                        .if_args_contain
-                        .iter()
-                        .map(|a| regex_escape(a))
-                        .collect();
-                    output.push_str(&format!(
-                        "commandRegex = \"{}\\\\s+{}(\\\\s+.*)?({})(\\\\s|$)\"\n",
-                        regex_escape(&program.name),
-                        parts
-                            .iter()
-                            .map(|p| regex_escape(p))
-                            .collect::<Vec<_>>()
-                            .join("\\\\s+"),
-                        args_pattern.join("|")
-                    ));
-                }
-                output.push_str("decision = \"deny\"\n");
-                output.push_str(&format!("priority = {}\n\n", priority::BLOCK));
-            }
-
-            // Allows - collect simple allows for consolidation
-            let mut simple_allow_prefixes: Vec<String> = Vec::new();
-
-            for allow in &program.allow {
-                let parts = allow.subcommand_parts();
-
-                // Handle unless_flags - skip generating ask rules, they inherit default
-                // Just add to allow list (lower priority than default ask means it won't match when flags present)
-                if !allow.unless_flags.is_empty() {
-                    // Skip commands with unless_flags - let default ask handle them
-                    // This is safer: sed -i will ask, sed without -i will also ask
-                    // Trade-off: less convenient but more secure
-                    continue;
-                }
-
-                // Handle if_flags_any - allow when specific flags present
-                if !allow.if_flags_any.is_empty() {
-                    let subcmd = if parts.is_empty() {
-                        program.name.clone()
-                    } else {
-                        format!("{} {}", program.name, parts.join(" "))
-                    };
-
-                    for flag in &allow.if_flags_any {
-                        output.push_str(&format!("# {}: allow when {} present\n", subcmd, flag));
-                        output.push_str("[[rule]]\n");
-                        output.push_str("toolName = \"run_shell_command\"\n");
-                        output.push_str(&format!(
-                            "commandRegex = \"{}\\\\s+.*{}\"\n",
-                            regex_escape(&subcmd),
-                            regex_escape(flag)
-                        ));
-                        output.push_str("decision = \"allow\"\n");
-                        output.push_str(&format!("priority = {}\n\n", priority::ALLOW + 10)); // Higher priority than base allow
-                    }
-                    continue;
-                }
-
-                // Handle action_prefix - allow when 2nd arg (action) starts with prefix
-                // Used for AWS-style commands: aws <service> <action>
-                if let Some(ref prefix) = allow.action_prefix {
-                    output.push_str(&format!(
-                        "# {}: allow when action starts with {}\n",
-                        program.name, prefix
-                    ));
-                    output.push_str("[[rule]]\n");
-                    output.push_str("toolName = \"run_shell_command\"\n");
-                    // Match: program <anything> <prefix>...
-                    output.push_str(&format!(
-                        "commandRegex = \"{}\\\\s+\\\\S+\\\\s+{}[^\\\\s]*\"\n",
-                        regex_escape(&program.name),
-                        regex_escape(prefix)
-                    ));
-                    output.push_str("decision = \"allow\"\n");
-                    output.push_str(&format!("priority = {}\n\n", priority::ALLOW));
-                    continue;
-                }
-
-                // Simple allow - collect for consolidation
-                if parts.is_empty() {
-                    continue;
-                }
-                simple_allow_prefixes.push(format!("{} {}", program.name, parts.join(" ")));
-            }
-
-            // Output consolidated simple allows
-            if !simple_allow_prefixes.is_empty() {
-                output.push_str("[[rule]]\n");
-                output.push_str("toolName = \"run_shell_command\"\n");
-                if simple_allow_prefixes.len() == 1 {
-                    output.push_str(&format!(
-                        "commandPrefix = \"{}\"\n",
-                        toml_escape(&simple_allow_prefixes[0])
-                    ));
-                } else {
-                    output.push_str("commandPrefix = [\n");
-                    for prefix in &simple_allow_prefixes {
-                        output.push_str(&format!("    \"{}\",\n", toml_escape(prefix)));
-                    }
-                    output.push_str("]\n");
-                }
-                output.push_str("decision = \"allow\"\n");
-                output.push_str(&format!("priority = {}\n\n", priority::ALLOW));
-            }
-
-            // Skip all ask rules - they inherit Gemini CLI's default ask_user
-
-            // Handle unknown_action fallback rules - only Allow and Block need explicit rules
-            match program.unknown_action {
-                UnknownAction::Ask | UnknownAction::Skip => {
-                    // Inherits default ask_user, no rule needed
-                }
-                UnknownAction::Allow => {
-                    output.push_str(&format!("# {}: unknown subcommands allow\n", program.name));
-                    output.push_str("[[rule]]\n");
-                    output.push_str("toolName = \"run_shell_command\"\n");
-                    output.push_str(&format!(
-                        "commandPrefix = \"{} \"\n",
-                        toml_escape(&program.name)
-                    ));
-                    output.push_str("decision = \"allow\"\n");
-                    output.push_str(&format!("priority = {}\n\n", priority::DEFAULT + 10));
-                }
-                UnknownAction::Block => {
-                    output.push_str(&format!(
-                        "# {}: unknown subcommands blocked\n",
-                        program.name
-                    ));
-                    output.push_str("[[rule]]\n");
-                    output.push_str("toolName = \"run_shell_command\"\n");
-                    output.push_str(&format!(
-                        "commandPrefix = \"{} \"\n",
-                        toml_escape(&program.name)
-                    ));
-                    output.push_str("decision = \"deny\"\n");
-                    output.push_str(&format!("priority = {}\n\n", priority::DEFAULT + 10));
-                }
-            }
-        }
-    }
-
-    // No default fallback needed - Gemini CLI defaults to ask_user for run_shell_command
-
-    output.push_str("\"#;\n");
-
-    output
-}
-
-/// Escape special regex characters for TOML commandRegex
-fn regex_escape(s: &str) -> String {
-    let special = [
-        '.', '^', '$', '*', '+', '?', '{', '}', '[', ']', '|', '(', ')', '\\', '-',
-    ];
-    let mut result = String::with_capacity(s.len() * 2);
-    for c in s.chars() {
-        if special.contains(&c) {
-            result.push_str("\\\\"); // Double escape for TOML string
-        }
-        result.push(c);
-    }
-    result
-}
-
 fn escape_rust_string(s: &str) -> String {
     s.replace('\\', "\\\\")
         .replace('"', "\\\"")
@@ -2042,10 +1734,6 @@ fn generate_allow_call(reason: &Option<String>) -> String {
         ),
         None => "Some(GateResult::allow())".to_string(),
     }
-}
-
-fn toml_escape(s: &str) -> String {
-    s.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
 fn format_rust(code: &str) -> String {

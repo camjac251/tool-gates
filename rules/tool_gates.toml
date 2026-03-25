@@ -62,9 +62,6 @@ if_flags_any = ["--version", "-V"]
 [[programs.allow]]
 if_flags_any = ["--tools-status"]
 
-[[programs.allow]]
-if_flags_any = ["--export-toml", "--gemini-policy"]
-
 # =============================================================================
 # WRITE OPERATIONS (need approval)
 # =============================================================================

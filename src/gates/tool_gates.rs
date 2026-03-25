@@ -66,12 +66,6 @@ mod tests {
         assert_eq!(result.decision, Decision::Allow);
     }
 
-    #[test]
-    fn test_export_toml_allows() {
-        let result = check_tool_gates(&cmd("tool-gates", &["--export-toml"]));
-        assert_eq!(result.decision, Decision::Allow);
-    }
-
     // === Write commands (ask) ===
 
     #[test]

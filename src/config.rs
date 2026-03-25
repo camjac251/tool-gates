@@ -328,6 +328,7 @@ impl BlockRule {
 /// Built-in default block rules (used when config omits `[[block_tools]]`).
 static DEFAULT_BLOCK_RULES: std::sync::LazyLock<Vec<BlockRule>> = std::sync::LazyLock::new(|| {
     vec![
+        // Claude: Glob, Gemini: glob
         BlockRule {
             tool: "Glob".to_string(),
             message: "Glob tool is blocked. Use 'fd' instead.".to_string(),
@@ -335,7 +336,21 @@ static DEFAULT_BLOCK_RULES: std::sync::LazyLock<Vec<BlockRule>> = std::sync::Laz
             requires_tool: Some("fd".to_string()),
         },
         BlockRule {
+            tool: "glob".to_string(),
+            message: "Glob tool is blocked. Use 'fd' instead.".to_string(),
+            block_domains: vec![],
+            requires_tool: Some("fd".to_string()),
+        },
+        // Claude: Grep, Gemini: grep_search
+        BlockRule {
             tool: "Grep".to_string(),
+            message: "Grep tool is blocked. Use 'rg' (ripgrep) or 'ast-grep' (for code)."
+                .to_string(),
+            block_domains: vec![],
+            requires_tool: Some("rg".to_string()),
+        },
+        BlockRule {
+            tool: "grep_search".to_string(),
             message: "Grep tool is blocked. Use 'rg' (ripgrep) or 'ast-grep' (for code)."
                 .to_string(),
             block_domains: vec![],
@@ -410,13 +425,20 @@ mod tests {
     fn test_default_block_rules() {
         let config = Config::default();
         let rules = config.block_rules();
-        assert_eq!(rules.len(), 3);
+        assert_eq!(rules.len(), 5);
+        // Claude + Gemini Glob rules
         assert_eq!(rules[0].tool, "Glob");
         assert_eq!(rules[0].requires_tool.as_deref(), Some("fd"));
-        assert_eq!(rules[1].tool, "Grep");
-        assert_eq!(rules[1].requires_tool.as_deref(), Some("rg"));
-        assert_eq!(rules[2].tool, "*firecrawl*");
-        assert_eq!(rules[2].requires_tool.as_deref(), Some("gh"));
+        assert_eq!(rules[1].tool, "glob");
+        assert_eq!(rules[1].requires_tool.as_deref(), Some("fd"));
+        // Claude + Gemini Grep rules
+        assert_eq!(rules[2].tool, "Grep");
+        assert_eq!(rules[2].requires_tool.as_deref(), Some("rg"));
+        assert_eq!(rules[3].tool, "grep_search");
+        assert_eq!(rules[3].requires_tool.as_deref(), Some("rg"));
+        // Firecrawl (same pattern for both clients)
+        assert_eq!(rules[4].tool, "*firecrawl*");
+        assert_eq!(rules[4].requires_tool.as_deref(), Some("gh"));
     }
 
     #[test]
@@ -428,7 +450,7 @@ file_guards = false
         let config: Config = toml::from_str(toml).unwrap();
         assert!(!config.features.file_guards);
         assert!(config.block_tools.is_none());
-        assert_eq!(config.block_rules().len(), 3);
+        assert_eq!(config.block_rules().len(), 5);
     }
 
     #[test]
@@ -554,7 +576,7 @@ requires_tool = "gh"
         let config: Config = toml::from_str("").unwrap();
         assert!(config.features.bash_gates);
         assert!(config.features.file_guards);
-        assert_eq!(config.block_rules().len(), 3);
+        assert_eq!(config.block_rules().len(), 5);
     }
 
     #[test]

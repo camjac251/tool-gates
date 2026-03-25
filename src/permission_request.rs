@@ -13,7 +13,10 @@
 //! Note: `blocked_path` and `decision_reason` may be missing in real hook payloads,
 //! so this handler treats them as optional metadata.
 
-use crate::models::{Decision, HookOutput, PermissionRequestInput, PermissionRequestOutput};
+use crate::models::{
+    Client, Decision, HookOutput, PermissionDecision, PermissionRequestInput,
+    PermissionRequestOutput,
+};
 use crate::router::check_command_with_settings;
 
 /// Reasons that indicate a path-based permission check (safe to override if command is safe)
@@ -49,8 +52,8 @@ fn is_path_based_reason(reason: &Option<String>) -> bool {
 pub fn handle_permission_request(
     input: &PermissionRequestInput,
 ) -> Option<PermissionRequestOutput> {
-    // Only handle Bash tools
-    if input.tool_name != "Bash" {
+    // Only handle shell command tools (Bash for Claude, run_shell_command for Gemini)
+    if !Client::is_shell_tool(&input.tool_name) {
         return None;
     }
 
@@ -123,21 +126,12 @@ pub fn handle_permission_request(
 }
 
 fn output_to_decision(output: HookOutput) -> (Decision, Option<String>) {
-    if let Some(hso) = output.hook_specific_output {
-        let decision = match hso.permission_decision.as_str() {
-            "allow" => Decision::Allow,
-            "deny" => Decision::Block,
-            "ask" => Decision::Ask,
-            _ => Decision::Ask,
-        };
-        return (decision, hso.permission_decision_reason);
-    }
-
-    match output.decision.as_deref() {
-        Some("approve") => (Decision::Allow, None),
-        Some("block") => (Decision::Block, None),
-        _ => (Decision::Ask, None),
-    }
+    let decision = match output.decision {
+        PermissionDecision::Allow | PermissionDecision::Approve => Decision::Allow,
+        PermissionDecision::Deny => Decision::Block,
+        PermissionDecision::Ask => Decision::Ask,
+    };
+    (decision, output.reason)
 }
 
 #[cfg(test)]

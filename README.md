@@ -11,7 +11,7 @@
 [![Rust](https://img.shields.io/badge/rust-1.86+-orange.svg)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A Claude Code [hook](https://code.claude.com/docs/en/hooks) that gates Bash commands, file operations, and tool invocations using AST parsing -- determines whether to allow, ask, or block based on potential impact.
+A hook for [Claude Code](https://code.claude.com/docs/en/hooks) and [Gemini CLI](https://github.com/google-gemini/gemini-cli) that gates Bash commands, file operations, and tool invocations using AST parsing -- determines whether to allow, ask, or block based on potential impact.
 
 [Installation](#installation) · [Permission Gates](#permission-gates) · [Security](#security-features) · [Testing](#testing)
 
@@ -104,11 +104,18 @@ flowchart TD
     REVIEW --> SETTINGS[settings.json]
 ```
 
-**Why three hooks?**
+**Why three hooks? (Claude Code)**
 
 - **PreToolUse**: Gates Bash commands, blocks secrets in Write/Edit, provides CLI hints
 - **PermissionRequest**: Gates commands for subagents (where PreToolUse's `allow` is ignored)
 - **PostToolUse**: Tracks successful Bash execution for approval learning; scans Write/Edit content for security anti-patterns and nudges Claude via `additionalContext`
+
+**Gemini CLI** uses two hooks (`BeforeTool`/`AfterTool`) with the same gate engine. The client is auto-detected from `hook_event_name`. Key differences:
+
+- No `PermissionRequest` (Gemini doesn't have subagent permission hooks)
+- No approval tracking (Gemini doesn't provide `tool_use_id`)
+- `"block"` instead of `"deny"` in output, exit code 2 for blocks
+- Security anti-pattern scanning in AfterTool is not yet supported
 
 > `PermissionRequest` metadata like `blocked_path` and `decision_reason` is optional in Claude Code payloads. tool-gates treats those fields as best-effort context, not required inputs.
 
@@ -174,13 +181,16 @@ When Claude uses legacy commands, tool-gates suggests modern alternatives via `a
 
 ```bash
 # Claude runs: cat README.md
-# tool-gates returns:
+# tool-gates returns (Claude format):
 {
   "hookSpecificOutput": {
     "permissionDecision": "allow",
     "additionalContext": "Tip: Use 'bat README.md' for syntax highlighting and line numbers (Markdown rendering)"
   }
 }
+
+# Gemini format (auto-detected):
+{"decision":"allow","hookSpecificOutput":{"additionalContext":"Tip: Use 'bat README.md' ..."}}
 ```
 
 | Legacy Command                | Modern Alternative | When triggered                       |
@@ -343,31 +353,28 @@ cargo build --release
 # Binary: ./target/x86_64-unknown-linux-musl/release/tool-gates
 ```
 
-### Configure Claude Code
-
-Use the `hooks` subcommand to configure Claude Code:
+### Configure
 
 ```bash
-# Install to user settings (recommended)
+# Claude Code (recommended)
 tool-gates hooks add -s user
+
+# Gemini CLI
+tool-gates hooks add --gemini
 
 # Install to project settings (shared with team)
 tool-gates hooks add -s project
 
-# Install to local project settings (not committed)
-tool-gates hooks add -s local
+# Check installation status (both clients)
+tool-gates hooks status
 
 # Preview changes without writing
 tool-gates hooks add -s user --dry-run
-
-# Check installation status
-tool-gates hooks status
-
-# Output hooks JSON for manual config
-tool-gates hooks json
+tool-gates hooks add --gemini --dry-run
 ```
 
-**Scopes:**
+#### Claude Code
+
 | Scope | File | Use case |
 |-------|------|----------|
 | `user` | `~/.claude/settings.json` | Personal use (recommended) |
@@ -457,6 +464,49 @@ The skill lists commands you've been manually approving, shows counts and sugges
 | Show current rules     | `tool-gates rules list`                     | Auto-approved (read-only)  |
 | Approve a pattern      | `tool-gates approve '<pattern>' -s <scope>` | Requires your confirmation |
 
+#### Gemini CLI
+
+Requires Gemini CLI **v0.36.0+** (`ask` decision support for BeforeTool hooks).
+
+| Scope | File | Use case |
+|-------|------|----------|
+| `user` | `~/.gemini/settings.json` | Personal use (default) |
+| `project` | `.gemini/settings.json` | Share with team |
+
+Two hooks are installed: `BeforeTool`, `AfterTool`
+
+<details>
+<summary>Manual installation</summary>
+
+Add to `~/.gemini/settings.json`:
+
+```json
+{
+  "hooks": {
+    "BeforeTool": [
+      {
+        "matcher": "run_shell_command|read_file|read_many_files|write_file|replace|glob|grep_search|activate_skill",
+        "hooks": [{"type": "command", "command": "~/.local/bin/tool-gates", "timeout": 5000}]
+      },
+      {
+        "matcher": "mcp_.*",
+        "hooks": [{"type": "command", "command": "~/.local/bin/tool-gates", "timeout": 5000}]
+      }
+    ],
+    "AfterTool": [
+      {
+        "matcher": "run_shell_command|write_file|replace",
+        "hooks": [{"type": "command", "command": "~/.local/bin/tool-gates", "timeout": 5000}]
+      }
+    ]
+  }
+}
+```
+
+</details>
+
+The client is auto-detected from the `hook_event_name` field -- no configuration needed. The same binary handles both.
+
 ---
 
 ## Permission Gates
@@ -467,7 +517,7 @@ tool-gates recognizes its own CLI commands:
 
 | Allow                                                                                                                   | Ask                                                                                  |
 | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `pending list`, `pending count`, `rules list`, `hooks status`, `--help`, `--version`, `--tools-status`, `--export-toml` | `approve`, `rules remove`, `pending clear`, `hooks add`, `review`, `--refresh-tools` |
+| `pending list`, `pending count`, `rules list`, `hooks status`, `--help`, `--version`, `--tools-status` | `approve`, `rules remove`, `pending clear`, `hooks add`, `review`, `--refresh-tools` |
 
 ### Basics
 
@@ -619,17 +669,22 @@ cargo test -- --nocapture         # With output
 ### Manual Testing
 
 ```bash
-# Allow
+# Claude Code format
 echo '{"tool_name":"Bash","tool_input":{"command":"git status"}}' | tool-gates
 # -> {"hookSpecificOutput":{"permissionDecision":"allow"}}
 
-# Ask
 echo '{"tool_name":"Bash","tool_input":{"command":"npm install"}}' | tool-gates
 # -> {"hookSpecificOutput":{"permissionDecision":"ask","permissionDecisionReason":"npm: Installing packages"}}
 
-# Deny
 echo '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}' | tool-gates
 # -> {"hookSpecificOutput":{"permissionDecision":"deny"}}
+
+# Gemini CLI format (auto-detected from hook_event_name)
+echo '{"hook_event_name":"BeforeTool","tool_name":"run_shell_command","tool_input":{"command":"git status"}}' | tool-gates
+# -> {"decision":"allow","reason":"Read-only operation"}
+
+echo '{"hook_event_name":"BeforeTool","tool_name":"run_shell_command","tool_input":{"command":"rm -rf /"}}' | tool-gates
+# -> {"decision":"block","reason":"rm: rm -rf / blocked"}  (exit code 2)
 ```
 
 ---
@@ -784,13 +839,11 @@ src/
 ├── post_tool_use.rs     # PostToolUse handler
 ├── permission_request.rs # PermissionRequest hook handler
 ├── settings_writer.rs   # Write rules to Claude settings files
-├── toml_export.rs       # TOML policy export for Gemini CLI
 ├── config.rs            # User configuration (~/.config/tool-gates/config.toml)
 ├── file_guards.rs       # Symlink guard for AI config files
 ├── tool_blocks.rs       # Configurable tool blocking
 ├── generated/           # Auto-generated by build.rs (DO NOT EDIT)
-│   ├── rules.rs         # Rust gate functions from rules/*.toml
-│   └── toml_policy.rs   # Gemini CLI TOML policy string
+│   └── rules.rs         # Rust gate functions from rules/*.toml
 ├── tui/                 # Interactive review TUI (three-panel dashboard)
 └── gates/               # 13 specialized permission gates
     ├── mod.rs           # Gate registry (ordered by priority)
@@ -812,25 +865,6 @@ src/
 
 ---
 
-## Gemini CLI Integration
-
-Gemini CLI's hook system cannot prompt users (only allow/block). Use the policy engine instead:
-
-```bash
-tool-gates --export-toml > ~/.gemini/policies/tool-gates.toml
-```
-
-This exports 700+ policy rules derived from the gate definitions:
-
-| Priority | Action     | Examples                              |
-| -------- | ---------- | ------------------------------------- |
-| 900+     | `deny`     | `rm -rf /`, `gh repo delete`          |
-| 200-299  | `ask_user` | `npm install`, `git push`             |
-| 100-199  | `allow`    | `git status`, `ls`, `cat`             |
-| 1        | `ask_user` | Default fallback for unknown commands |
-
----
-
 ## Credits
 
 Security reminder patterns were built on and informed by:
@@ -842,9 +876,12 @@ Security reminder patterns were built on and informed by:
 - [dwarvesf/claude-guardrails](https://github.com/dwarvesf/claude-guardrails) -- multi-layer defense hooks for Claude Code
 - [GitHub Actions workflow injection research](https://github.blog/security/vulnerability-research/how-to-catch-github-actions-workflow-injections-before-attackers-do/) -- GHA injection patterns and remediation
 
+---
+
 ## Links
 
 - [Claude Code Hooks Documentation](https://code.claude.com/docs/en/hooks)
+- [Gemini CLI](https://github.com/google-gemini/gemini-cli)
 - [Claude Code MCP-CLI (experimental)](https://github.com/anthropics/claude-code/issues/12836#issuecomment-3629052941)
 - [tree-sitter-bash](https://github.com/tree-sitter/tree-sitter-bash)
 - [Beads Issue Tracker](https://github.com/steveyegge/beads)
