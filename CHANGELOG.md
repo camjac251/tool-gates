@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.7.0](https://github.com/camjac251/tool-gates/compare/v1.6.0...v1.7.0) - 2026-03-25
+
+### Added
+
+- *(gemini)* native BeforeTool/AfterTool hook support
+
 ## [1.6.0](https://github.com/camjac251/tool-gates/compare/v1.5.10...v1.6.0) - 2026-03-22
 
 ### Added
