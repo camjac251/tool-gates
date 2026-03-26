@@ -1,5 +1,9 @@
 ---
-description: Test tool-gates against any tool invocation (Bash, Read, Glob, etc.) to see the permission decision (allow/ask/deny). Use when debugging gate behavior, verifying a new rule, or checking how a command or tool is handled.
+description: Test how tool-gates evaluates any tool invocation (Bash, Read, Write, Edit, Glob) and show the permission decision (allow/ask/deny).
+when_to_use: >
+  Use when checking if a command is allowed, debugging why something was blocked or denied, verifying a
+  permission rule works, or simulating how a tool call would be handled. Triggers include "is this
+  allowed", "test gate", "why was this blocked", "check permission", "simulate tool call".
 argument-hint: "[tool_name] [command_or_input] [--mode=acceptEdits]"
 ---
 

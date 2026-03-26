@@ -1,5 +1,11 @@
 ---
-description: Review commands you've been manually approving and optionally make them permanent. Shows counts, suggests patterns, lets you multi-select which to always allow.
+description: Review and approve pending tool-gates permissions. Lists commands you've been manually approving with counts and suggested glob patterns, lets you multi-select which to permanently allow, and writes rules to settings.json.
+when_to_use: >
+  Use when the user wants to allow a command, approve a permission, stop getting prompted for a tool,
+  make an approval permanent, always allow something, auto-approve, or batch-approve pending approvals.
+  Triggers include "allow", "approve", "permission", "stop prompting", "always allow", "auto approve",
+  "pending approvals". NOT for manual settings.json edits, hooks, env vars, or MCP config (use
+  update-config).
 argument-hint: "[--all]"
 ---
 
