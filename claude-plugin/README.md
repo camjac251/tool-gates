@@ -2,7 +2,7 @@
 
 > Formerly known as bash-gates.
 
-Companion plugin for [tool-gates](https://github.com/camjac251/tool-gates) -- review manually approved commands and promote them to permanent permission rules.
+Companion plugin for [tool-gates](https://github.com/camjac251/tool-gates). Review manually approved commands and promote them to permanent permission rules.
 
 ## Overview
 

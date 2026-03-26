@@ -18,7 +18,7 @@ fn cache_ttl_secs() -> u64 {
 
 /// Modern CLI tools to detect and cache. Each tool here must have a corresponding
 /// hint in `hints.rs` (as `modern_command`). Tools only used via user-configured
-/// `requires_tool` in block rules don't need to be here -- `is_available()` falls
+/// `requires_tool` in block rules don't need to be here. `is_available()` falls
 /// back to a live `which` check for tools not in this list.
 const MODERN_TOOLS: &[&str] = &[
     // File viewing

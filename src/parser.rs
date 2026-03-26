@@ -251,7 +251,7 @@ fn strip_wrapper_recursive(program: String, args: Vec<String>) -> (String, Vec<S
     }
 
     if SIMPLE_WRAPPERS.contains(&program.as_str()) {
-        // Skip flags and numeric flag values (e.g., `nice -n 10 rm` -- 10 is a flag value).
+        // Skip flags and numeric flag values (e.g., `nice -n 10 rm`, where 10 is a flag value).
         // The first arg that doesn't start with `-` and isn't purely numeric is the command.
         if let Some(idx) = args
             .iter()
@@ -1004,7 +1004,7 @@ mod tests {
         }
     }
 
-    // -- fallback_parse compound-operator splitting --
+    // fallback_parse compound-operator splitting
 
     #[test]
     fn test_fallback_splits_and_and() {

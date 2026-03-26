@@ -720,7 +720,7 @@ impl App {
                 self.sync_sidebar_state();
                 self.on_project_changed();
             }
-            // Else: clicked the separator -- ignore
+            // Else: clicked the separator, ignore
         } else if in_rect(la.commands, col, row) {
             self.panel = Panel::CommandList;
             let clicked =
@@ -783,7 +783,7 @@ pub fn describe_pattern(pattern: &str) -> String {
 }
 
 /// Extract operators from a raw compound command for display.
-/// NOTE: Does not respect quoting -- operators inside strings will be matched.
+/// NOTE: Does not respect quoting. Operators inside strings will be matched.
 /// This is display-only; the actual parsing uses tree-sitter and is correct.
 pub fn extract_operators(raw: &str) -> Vec<&str> {
     let mut ops = Vec::new();

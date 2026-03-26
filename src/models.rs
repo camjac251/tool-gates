@@ -301,7 +301,7 @@ impl HookInput {
 /// This is the provider-agnostic decision type used by HookOutput.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PermissionDecision {
-    /// No opinion -- pass through to default behavior
+    /// No opinion. Pass through to default behavior
     Approve,
     /// Explicitly allowed
     Allow,
@@ -333,7 +333,7 @@ pub struct HookOutput {
 }
 
 impl HookOutput {
-    /// No opinion -- tool-gates doesn't handle this tool/command.
+    /// No opinion. tool-gates doesn't handle this tool/command.
     /// Returns empty JSON so Claude Code proceeds with its normal flow.
     pub fn no_opinion() -> Self {
         Self {

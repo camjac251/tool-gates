@@ -15,7 +15,7 @@ use crate::settings::{Settings, SettingsDecision};
 use regex::Regex;
 use std::sync::LazyLock;
 
-// -- Static compiled regexes for check_raw_string_patterns() --
+// Static compiled regexes for check_raw_string_patterns()
 // Compiled once at first use via LazyLock. Using expect() so invalid patterns
 // panic immediately instead of silently skipping security checks.
 
@@ -367,7 +367,7 @@ pub fn check_command_with_settings_and_session(
     }
 
     // Check for raw string security patterns BEFORE any expansion.
-    // Hard asks (pipe-to-shell, eval) return immediately -- not overridable by settings.
+    // Hard asks (pipe-to-shell, eval) return immediately. Not overridable by settings.
     // Soft asks (pipe-to-interpreter, output redirection) are saved so
     // settings.json allow rules can override them via pattern approval.
     let (hard_ask, soft_ask) = check_raw_string_patterns(command_string);
@@ -664,7 +664,7 @@ fn check_package_script(
             result.reason.as_deref().unwrap_or("Safe")
         ))),
         PermissionDecision::Approve => {
-            // Approve means passthrough -- treat as safe
+            // Approve means passthrough. Treat as safe
             HookOutput::allow(Some(&format!("{pm} run {script_name}: Safe")))
         }
     }
@@ -912,8 +912,8 @@ fn strip_comments(s: &str) -> String {
 /// Check raw string patterns before parsing.
 ///
 /// Returns (hard_ask, soft_ask):
-/// - hard_ask: pipe-to-shell, eval -- user can approve manually but settings can't auto-approve
-/// - soft_ask: pipe-to-interpreter, redirection, source -- settings.json can override
+/// - hard_ask: pipe-to-shell, eval. User can approve manually but settings can't auto-approve
+/// - soft_ask: pipe-to-interpreter, redirection, source. settings.json can override
 fn check_raw_string_patterns(command_string: &str) -> (Option<HookOutput>, Option<HookOutput>) {
     // Strip comments first to avoid false positives from patterns inside # comments.
     // E.g., `# feat: -> patch\necho hello` should not trigger output redirection.
@@ -1296,7 +1296,7 @@ fn targets_outside_allowed_dirs(cmd: &CommandInfo, allowed_dirs: &[String]) -> b
                     home.join(&arg[2..]).to_string_lossy().to_string()
                 }
             } else {
-                return true; // Can't expand -- fail closed
+                return true; // Can't expand. Fail closed
             };
             // Resolve symlinks in the expanded path
             let resolved = resolve_path(&expanded);
@@ -1768,7 +1768,7 @@ mod tests {
 
         #[test]
         fn test_compound_file_edit_then_rm_asks() {
-            // sd is file-editing, rm is not -- mixed compound must ask
+            // sd is file-editing, rm is not. Mixed compound must ask
             let result = check_command_with_settings(
                 "sd 'old' 'new' file.txt && rm file.txt",
                 "/tmp",
@@ -1790,7 +1790,7 @@ mod tests {
 
         #[test]
         fn test_compound_all_file_edits_allows() {
-            // Both parts are file-editing within cwd -- should auto-allow
+            // Both parts are file-editing within cwd. Should auto-allow
             let result = check_command_with_settings(
                 "sd 'old' 'new' file.txt && prettier --write file.txt",
                 "/tmp",
@@ -3421,7 +3421,7 @@ mod tests {
         #[test]
         fn test_deny_single_command_defers_to_full_string() {
             let settings = make_settings(&[], &[], &["Bash(rm:*)"]);
-            // Single command -- helper returns false (full string check handles it)
+            // Single command. Helper returns false (full string check handles it)
             assert!(!check_subcommands_denied(&settings, "rm -rf ."));
         }
 
@@ -3983,11 +3983,11 @@ run = "echo hello"
 
         #[test]
         fn test_hint_emitted_once_per_session() {
-            // First call with session -- should have hint (if tool is installed)
+            // First call with session. Should have hint (if tool is installed)
             let result1 = check_command_for_session("head -n 10 file.txt", "dedup-session-1");
             let ctx1 = get_context(&result1);
 
-            // Second call with same session -- hint should be suppressed
+            // Second call with same session. Hint should be suppressed
             let result2 = check_command_for_session("head -n 10 file.txt", "dedup-session-1");
             let ctx2 = get_context(&result2);
 
@@ -4005,7 +4005,7 @@ run = "echo hello"
             let result1 = check_command_for_session("head -n 10 file.txt", "dedup-session-2a");
             let ctx1 = get_context(&result1);
 
-            // Different session -- hint should fire again
+            // Different session. Hint should fire again
             let result2 = check_command_for_session("head -n 10 file.txt", "dedup-session-2b");
             let ctx2 = get_context(&result2);
 
@@ -4036,7 +4036,7 @@ run = "echo hello"
 
         #[test]
         fn test_approval_context_emitted_once_per_session() {
-            // npm install triggers "ask" -- first ask should include approval instructions
+            // npm install triggers "ask". First ask should include approval instructions
             let result1 = check_command_with_settings_and_session(
                 "npm install lodash",
                 "/tmp",
@@ -4163,7 +4163,7 @@ run = "echo hello"
         #[test]
         fn test_nohup_alone_asked() {
             let result = check_command("nohup");
-            // nohup alone with no args -- unknown command
+            // nohup alone with no args. Unknown command
             assert_eq!(get_decision(&result), "ask", "nohup alone should be asked");
         }
     }

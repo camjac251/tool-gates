@@ -4,7 +4,7 @@
 //! it tries to read both the symlink and the source, then commits the wrong one.
 //! This guard blocks the symlink read and tells Claude the real path.
 //!
-//! Only fires on known AI assistant instruction/config filenames -- all other
+//! Only fires on known AI assistant instruction/config filenames. All other
 //! symlinks pass through untouched. The guarded names and directories can be
 //! extended via `[file_guards]` in the config TOML.
 
@@ -170,7 +170,7 @@ pub fn check_file_guard(
     // Resolve the symlink target
     let resolved = match path.canonicalize() {
         Ok(r) => r,
-        Err(_) => return None, // Broken symlink -- let the tool handle it
+        Err(_) => return None, // Broken symlink, let the tool handle it
     };
 
     // Prefer relative display path when target is nearby

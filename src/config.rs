@@ -230,13 +230,13 @@ fn expand_tilde(path: &str) -> String {
 #[derive(Debug, Deserialize, Clone)]
 #[serde(default)]
 pub struct SecurityRemindersConfig {
-    /// Enable secret detection -- AWS keys, private keys, tokens (default: true).
+    /// Enable secret detection: AWS keys, private keys, tokens (default: true).
     /// These are Tier 1 (always denied, never deduped).
     pub secrets: bool,
-    /// Enable anti-pattern detection -- eval, exec, innerHTML, pickle, etc. (default: true).
+    /// Enable anti-pattern detection: eval, exec, innerHTML, pickle, etc. (default: true).
     /// These are Tier 2 (PostToolUse nudge, deduped per file+rule per session).
     pub anti_patterns: bool,
-    /// Enable informational warnings -- SSL verify=False, chmod 777, etc. (default: true).
+    /// Enable informational warnings: SSL verify=False, chmod 777, etc. (default: true).
     /// These are Tier 3 (allow with additionalContext, deduped per session).
     pub warnings: bool,
     /// Rule names to disable (e.g., ["eval_injection", "pickle_deserialization"]).
@@ -400,7 +400,7 @@ pub fn load() -> Config {
     }
 }
 
-/// Global config singleton -- loaded once per process.
+/// Global config singleton. Loaded once per process.
 static GLOBAL_CONFIG: OnceLock<Config> = OnceLock::new();
 
 /// Get the global config (loads from disk on first call).

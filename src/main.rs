@@ -154,7 +154,7 @@ fn main() {
     }
 }
 
-/// Handle PreToolUse (Claude) / BeforeTool (Gemini) hook -- routes all tool types
+/// Handle PreToolUse (Claude) / BeforeTool (Gemini) hook. Routes all tool types
 fn handle_pre_tool_use_hook(input: &str, client: Client) {
     let hook_input: HookInput = match serde_json::from_str(input) {
         Ok(hi) => hi,
@@ -507,11 +507,11 @@ fn get_binary_path() -> String {
     let argv0 = std::env::args().next().unwrap_or_default();
 
     if argv0.contains('/') {
-        // Invoked with an explicit path -- use it directly (preserves symlinks)
+        // Invoked with an explicit path. Use it directly (preserves symlinks)
         return argv0;
     }
 
-    // Bare name (e.g., "tool-gates") -- find the symlink in PATH
+    // Bare name (e.g., "tool-gates"). Find the symlink in PATH
     if let Ok(path) = std::env::var("PATH") {
         for dir in path.split(':') {
             let candidate = std::path::PathBuf::from(dir).join(&argv0);

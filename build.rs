@@ -115,7 +115,7 @@ pub mod rules;
             .status()
             .is_ok_and(|s| s.success());
         if !ok {
-            // rustfmt unavailable or failed -- use prettyplease as fallback
+            // rustfmt unavailable or failed. Use prettyplease as fallback
             if let Ok(code) = fs::read_to_string(&path) {
                 let formatted = format_rust(&code);
                 let _ = fs::write(&path, formatted);

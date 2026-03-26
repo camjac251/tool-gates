@@ -124,10 +124,10 @@ For each edge case, identify which file to modify:
 
 | Fix type | Where |
 |----------|-------|
-| New allow subcommand | `rules/<gate>.toml` -- add `[[programs.allow]]` entry |
-| New program to existing gate | `rules/<gate>.toml` -- add `[[programs]]` section + wire in `src/gates/<gate>.rs` match arm |
-| New safe command | `rules/basics.toml` -- add to `safe_commands` list |
-| Move ask to allow | `rules/<gate>.toml` -- change `[[programs.ask]]` to `[[programs.allow]]` |
+| New allow subcommand | `rules/<gate>.toml`. Add `[[programs.allow]]` entry |
+| New program to existing gate | `rules/<gate>.toml`. Add `[[programs]]` section + wire in `src/gates/<gate>.rs` match arm |
+| New safe command | `rules/basics.toml`. Add to `safe_commands` list |
+| Move ask to allow | `rules/<gate>.toml`. Change `[[programs.ask]]` to `[[programs.allow]]` |
 
 **Critical**: When adding programs to TOML, also check the gate's Rust match statement in `src/gates/<gate>.rs`. Declarative rules only fire if the custom handler routes the program to the declarative function. This is the most common gotcha.
 

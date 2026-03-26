@@ -93,7 +93,7 @@ fn extract_content(
 /// Pattern severity tier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tier {
-    /// Hard deny -- always blocked (secrets, keys).
+    /// Hard deny. Always blocked (secrets, keys).
     Deny,
     /// Ask once per (file, rule) per session, then silent.
     AskOnce,
@@ -133,7 +133,7 @@ struct SecurityRule {
     always_check: bool,
 }
 
-/// Doc file extensions -- content-based checks are skipped for these.
+/// Doc file extensions. Content-based checks are skipped for these.
 const DOC_EXTENSIONS: &[&str] = &[".md", ".txt", ".rst", ".adoc", ".asciidoc", ".html", ".htm"];
 
 fn is_doc_file(path: &str) -> bool {
@@ -141,7 +141,7 @@ fn is_doc_file(path: &str) -> bool {
     DOC_EXTENSIONS.iter().any(|ext| lower.ends_with(ext))
 }
 
-/// Files designed to hold secrets -- Tier 1 secret detection is skipped for these.
+/// Files designed to hold secrets. Tier 1 secret detection is skipped for these.
 fn is_secret_file(path: &str) -> bool {
     let lower = path.to_ascii_lowercase().replace('\\', "/");
     let basename = lower.rsplit('/').next().unwrap_or(&lower);
@@ -149,7 +149,7 @@ fn is_secret_file(path: &str) -> bool {
         return true;
     }
     if let Some(suffix) = basename.strip_prefix(".env.") {
-        // Template files are meant to be committed -- secrets in them are a real problem
+        // Template files are meant to be committed. Secrets in them are a real problem
         return !matches!(suffix, "example" | "sample" | "template" | "dist");
     }
     false
@@ -238,7 +238,7 @@ fn rules() -> &'static [SecurityRule] {
             SecurityRule {
                 name: "child_process_exec",
                 tier: Tier::AskOnce,
-                message: "child_process.exec() can lead to command injection. Use child_process.execFile() or child_process.spawn() instead -- they don't invoke a shell and prevent argument injection.",
+                message: "child_process.exec() can lead to command injection. Use child_process.execFile() or child_process.spawn() instead. They don't invoke a shell and prevent argument injection.",
                 check: CheckType::Substring { patterns: &["child_process.exec", "execSync("] },
                 always_check: false,
             },
@@ -445,7 +445,7 @@ pub fn scan_content(file_path: &str, content: &str) -> Vec<PatternMatch> {
     let mut matches = Vec::new();
 
     for rule in all_rules {
-        // Secret files (.env, .envrc) exist to hold secrets -- skip Tier 1 secret detection
+        // Secret files (.env, .envrc) exist to hold secrets. Skip Tier 1 secret detection
         if is_secret && rule.always_check && rule.tier == Tier::Deny {
             continue;
         }
@@ -504,10 +504,10 @@ pub fn scan_content(file_path: &str, content: &str) -> Vec<PatternMatch> {
 /// PreToolUse: Check content for Tier 1 (deny) and Tier 3 (warn) patterns.
 ///
 /// Tier 2 (anti-patterns) is handled by PostToolUse instead, so the write lands
-/// and Claude gets a nudge to fix it -- no wasted edits from re-prompting.
+/// and Claude gets a nudge to fix it. No wasted edits from re-prompting.
 ///
 /// - Tier 1 (secrets) in source code: Always deny, never deduped
-/// - Tier 1 (secrets) in doc files: Skipped -- handled by PostToolUse warn instead
+/// - Tier 1 (secrets) in doc files: skipped, handled by PostToolUse warn instead
 /// - Tier 3 (informational): Allow with additionalContext, deduped per session
 pub fn check_security_reminders(
     tool_name: &str,
@@ -548,7 +548,7 @@ pub fn check_security_reminders(
                     ));
                 }
                 Tier::AskOnce => {
-                    // Handled by PostToolUse -- skip in PreToolUse
+                    // Handled by PostToolUse. Skip in PreToolUse
                     continue;
                 }
                 Tier::Warn => {
@@ -610,7 +610,7 @@ pub fn check_security_reminders_post(
                     if !config.secrets {
                         true
                     } else {
-                        // Only handle Tier 1 here for doc files -- source code
+                        // Only handle Tier 1 here for doc files. Source code
                         // secrets are blocked by PreToolUse before reaching this point
                         !is_doc_file(file_path)
                     }
@@ -782,7 +782,7 @@ jobs:
 
     #[test]
     fn test_tier1_gha_only_in_workflow_path() {
-        // Same content but NOT in .github/workflows/ -- should not match
+        // Same content but NOT in .github/workflows/. Should not match
         let content = r#"run: echo "${{ github.event.pull_request.title }}""#;
         let matches = scan_content("/tmp/notes.txt", content);
         assert!(
@@ -1431,7 +1431,7 @@ mod coverage_gap_tests {
         let matches = scan_content("/project/not.env", &content);
         assert!(
             matches.iter().any(|m| m.rule_name == "hardcoded_aws_key"),
-            "not.env is not a secret file -- Tier 1 should fire"
+            "not.env is not a secret file. Tier 1 should fire"
         );
     }
 
@@ -1443,7 +1443,7 @@ mod coverage_gap_tests {
             matches
                 .iter()
                 .any(|m| m.rule_name == "hardcoded_github_token"),
-            "myapp.envrc is not a secret file -- Tier 1 should fire"
+            "myapp.envrc is not a secret file. Tier 1 should fire"
         );
     }
 
@@ -1594,7 +1594,7 @@ mod template_file_tests {
         let matches = scan_content("/project/.env.example", &content);
         assert!(
             matches.iter().any(|m| m.rule_name == "hardcoded_aws_key"),
-            ".env.example is a template -- secrets should still be detected"
+            ".env.example is a template. Secrets should still be detected"
         );
     }
 
@@ -1604,7 +1604,7 @@ mod template_file_tests {
         let matches = scan_content("/project/.env.sample", &content);
         assert!(
             matches.iter().any(|m| m.rule_name == "hardcoded_aws_key"),
-            ".env.sample is a template -- secrets should still be detected"
+            ".env.sample is a template. Secrets should still be detected"
         );
     }
 
@@ -1614,7 +1614,7 @@ mod template_file_tests {
         let matches = scan_content("/project/.env.template", &content);
         assert!(
             matches.iter().any(|m| m.rule_name == "hardcoded_aws_key"),
-            ".env.template is a template -- secrets should still be detected"
+            ".env.template is a template. Secrets should still be detected"
         );
     }
 
@@ -1624,7 +1624,7 @@ mod template_file_tests {
         let matches = scan_content("/project/.env.dist", &content);
         assert!(
             matches.iter().any(|m| m.rule_name == "hardcoded_aws_key"),
-            ".env.dist is a template -- secrets should still be detected"
+            ".env.dist is a template. Secrets should still be detected"
         );
     }
 
@@ -1634,7 +1634,7 @@ mod template_file_tests {
         let matches = scan_content("/project/.env.local", &content);
         assert!(
             !matches.iter().any(|m| m.rule_name == "hardcoded_aws_key"),
-            ".env.local is a real secret file -- should skip Tier 1"
+            ".env.local is a real secret file. Should skip Tier 1"
         );
     }
 
@@ -1644,7 +1644,7 @@ mod template_file_tests {
         let matches = scan_content("/project/.env.production", &content);
         assert!(
             !matches.iter().any(|m| m.rule_name == "hardcoded_aws_key"),
-            ".env.production is a real secret file -- should skip Tier 1"
+            ".env.production is a real secret file. Should skip Tier 1"
         );
     }
 }

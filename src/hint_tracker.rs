@@ -13,7 +13,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
-/// Global tracker -- loaded once per process, mutated in-place.
+/// Global tracker. Loaded once per process, mutated in-place.
 static TRACKER: OnceLock<Mutex<HintTracker>> = OnceLock::new();
 
 /// Session-scoped hint/approval dedup state.
@@ -43,7 +43,7 @@ impl HintTracker {
                 return tracker;
             }
         }
-        // New session or no file -- start fresh
+        // New session or no file. Start fresh
         HintTracker {
             session_id: session_id.to_string(),
             ..Default::default()
@@ -147,7 +147,7 @@ pub fn filter_hints(session_id: &str, hints: &mut Vec<crate::hints::ModernHint>)
 /// Saves the tracker to disk if state changed.
 pub fn is_first_ask(session_id: &str) -> bool {
     if session_id.is_empty() {
-        return true; // No session tracking -- always show
+        return true; // No session tracking, always show
     }
     let mut tracker = get(session_id);
     let first = tracker.is_first_ask();
@@ -160,7 +160,7 @@ pub fn is_first_ask(session_id: &str) -> bool {
 /// Returns `true` on first call per key per session. Persists to disk.
 pub fn is_security_warning_new(session_id: &str, key: &str) -> bool {
     if session_id.is_empty() {
-        return true; // No session tracking -- always show
+        return true; // No session tracking, always show
     }
     let mut tracker = get(session_id);
     let is_new = tracker.is_security_warning_new(key);
@@ -287,7 +287,7 @@ mod tests {
         let content = serde_json::to_string(&tracker).unwrap();
         fs::write(&path, &content).unwrap();
 
-        // Load with different session_id -- should start fresh
+        // Load with different session_id. Should start fresh
         let loaded_content = fs::read_to_string(&path).unwrap();
         let loaded: HintTracker = serde_json::from_str(&loaded_content).unwrap();
 
@@ -350,7 +350,7 @@ mod tests {
 
     #[test]
     fn test_is_first_ask_empty_session_always_true() {
-        // Empty session_id means no tracking -- always show
+        // Empty session_id means no tracking, always show
         assert!(is_first_ask(""));
         assert!(is_first_ask(""));
     }
@@ -417,7 +417,7 @@ mod tests {
 
     #[test]
     fn test_security_warning_backwards_compat_missing_field() {
-        // Old JSON without security_warnings field -- should deserialize with empty set
+        // Old JSON without security_warnings field. Should deserialize with empty set
         let json = r#"{"session_id":"old","hints":["cat"],"first_ask_shown":false}"#;
         let loaded: HintTracker = serde_json::from_str(json).unwrap();
         assert!(loaded.security_warnings.is_empty());

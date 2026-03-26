@@ -6,7 +6,7 @@ git_tag_enable = true
 changelog_update = true
 # Only create release PRs for meaningful changes (not CI/chore-only pushes)
 release_commits = "^(feat|fix|perf|refactor)"
-# Binary-only crate, no crates.io consumers -- skip API compat checks
+# Binary-only crate, no crates.io consumers. Skip API compat checks
 semver_check = false
 # Skip build verification during packaging (CI lacks musl target)
 publish_no_verify = true
