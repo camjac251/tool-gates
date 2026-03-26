@@ -11,7 +11,7 @@
 [![Rust](https://img.shields.io/badge/rust-1.86+-orange.svg)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A hook for [Claude Code](https://code.claude.com/docs/en/hooks) and [Gemini CLI](https://github.com/google-gemini/gemini-cli) that gates Bash commands, file operations, and tool invocations using AST parsing -- determines whether to allow, ask, or block based on potential impact.
+A hook for [Claude Code](https://code.claude.com/docs/en/hooks) and [Gemini CLI](https://github.com/google-gemini/gemini-cli) that gates Bash commands, file operations, and tool invocations using AST parsing. Determines whether to allow, ask, or block based on potential impact.
 
 [Installation](#installation) · [Permission Gates](#permission-gates) · [Security](#security-features) · [Testing](#testing)
 
@@ -36,7 +36,7 @@ A hook for [Claude Code](https://code.claude.com/docs/en/hooks) and [Gemini CLI]
 | **File Guards**          | Blocks symlinked AI config files (CLAUDE.md, .cursorrules, etc.) to prevent confused reads/edits       |
 | **Security Reminders**   | Scans Write/Edit/MultiEdit content for 26 anti-patterns (secrets, XSS, injection, etc.) across 3 tiers |
 | **Tool Blocking**        | Configurable rules to block tools (Glob, Grep, firecrawl on GitHub) with domain filtering              |
-| **Skill Auto-Approval**  | Auto-approve Skill tool calls based on project directory conditions -- no external hook scripts needed  |
+| **Skill Auto-Approval**  | Auto-approve Skill tool calls based on project directory conditions. No external hook scripts needed  |
 | **Configuration**        | `~/.config/tool-gates/config.toml` for feature toggles, custom block rules, and file guard extensions  |
 | **Health Check**         | `tool-gates doctor` verifies config, hooks, cache files, and flags legacy remnants                     |
 | **Fast**                 | Static native binary, no interpreter overhead                                                          |
@@ -229,16 +229,16 @@ When Claude writes code via Write/Edit/MultiEdit, tool-gates scans the content f
 | Tier | Hook | Decision | Behavior |
 |------|------|----------|----------|
 | **Tier 1** | PreToolUse | `deny` | Hardcoded secrets always blocked before write |
-| **Tier 2** | PostToolUse | `additionalContext` | Anti-patterns flagged after write -- Claude gets a nudge to fix |
+| **Tier 2** | PostToolUse | `additionalContext` | Anti-patterns flagged after write. Claude gets a nudge to fix |
 | **Tier 3** | PreToolUse | `allow` + context | Informational warnings injected without blocking |
 
-**Tier 1 -- Secrets (always denied):**
+**Tier 1: Secrets (always denied):**
 AWS access keys (`AKIA...`), private keys (`-----BEGIN * PRIVATE KEY`), GitHub tokens (`ghp_/ghs_/ghu_/gho_/ghr_`), Stripe/Slack/Google API keys, GitHub Actions workflow injection.
 
-**Tier 2 -- Anti-patterns (post-write nudge, once per file+rule per session):**
+**Tier 2: Anti-patterns (post-write nudge, once per file+rule per session):**
 `eval()`, `child_process.exec`, `new Function()`, `os.system()`, `pickle.load`, `dangerouslySetInnerHTML`, `document.write()`, `.innerHTML =`, `yaml.load()` without SafeLoader, SQL f-string interpolation, `subprocess` with `shell=True`, `render_template_string()` (Flask SSTI), `marshal.load`/`shelve.open`, `__import__()`, PHP `unserialize()`.
 
-**Tier 3 -- Informational (allow with warning, once per session):**
+**Tier 3: Informational (allow with warning, once per session):**
 SSL `verify=False`, `chmod 777`, MD5/SHA1 for security, CORS wildcard `*`, Vue `v-html=`, template `autoescape=False`.
 
 **Why Tier 2 uses PostToolUse:** The write lands without blocking. Claude sees a `<system-reminder>` with the security warning and can self-correct in its next action. No wasted edits from re-prompting. Deduped per (file, rule) per session so you only see each warning once.
@@ -284,7 +284,7 @@ tool-gates rules remove 'pattern' -s local
 
 **Review TUI** (`tool-gates review`):
 
-Three-panel dashboard -- project sidebar, command list, and detail panel.
+Three-panel dashboard with project sidebar, command list, and detail panel.
 
 - **Sidebar**: Lists projects with pending counts, auto-selects current project. Click or arrow to switch.
 - **Command list**: Full commands with color-coded segments (green=allowed, yellow=ask, red=blocked). Multi-select with Space for batch operations.
@@ -425,7 +425,7 @@ Add to `~/.claude/settings.json`:
 
 ### Claude Code Plugin (Optional)
 
-tool-gates ships as a [Claude Code plugin](https://code.claude.com/docs/en/plugins) with the `/tool-gates:review` skill for interactive approval management. The plugin provides the skill only -- hook installation is handled by the binary (see [Configure Claude Code](#configure-claude-code) above).
+tool-gates ships as a [Claude Code plugin](https://code.claude.com/docs/en/plugins) with the `/tool-gates:review` skill for interactive approval management. The plugin provides the skill only. Hook installation is handled by the binary (see [Configure Claude Code](#configure-claude-code) above).
 
 **Prerequisites:** The `tool-gates` binary must be installed and hooks configured before using the plugin.
 
@@ -505,7 +505,7 @@ Add to `~/.gemini/settings.json`:
 
 </details>
 
-The client is auto-detected from the `hook_event_name` field -- no configuration needed. The same binary handles both.
+The client is auto-detected from the `hook_event_name` field. No configuration needed. The same binary handles both.
 
 ---
 
@@ -691,7 +691,7 @@ echo '{"hook_event_name":"BeforeTool","tool_name":"run_shell_command","tool_inpu
 
 ## Configuration
 
-All configuration is in `~/.config/tool-gates/config.toml`. The file is optional -- if missing, all features are enabled with sensible defaults.
+All configuration is in `~/.config/tool-gates/config.toml`. The file is optional. If missing, all features are enabled with sensible defaults.
 
 ### Feature Toggles
 
@@ -699,7 +699,7 @@ All configuration is in `~/.config/tool-gates/config.toml`. The file is optional
 [features]
 bash_gates = true          # AST-based Bash command gating (default: true)
 file_guards = true         # Symlink guard for AI config files (default: true)
-hints = true               # Modern CLI hints -- cat->bat, grep->rg, etc. (default: true)
+hints = true               # Modern CLI hints, e.g. cat->bat, grep->rg, etc. (default: true)
 security_reminders = true  # Scan Write/Edit/MultiEdit for security anti-patterns (default: true)
 ```
 
@@ -707,9 +707,9 @@ security_reminders = true  # Scan Write/Edit/MultiEdit for security anti-pattern
 
 ```toml
 [security_reminders]
-secrets = true         # Tier 1: hardcoded secrets -- always deny (default: true)
-anti_patterns = true   # Tier 2: eval, exec, innerHTML, etc. -- PostToolUse nudge (default: true)
-warnings = true        # Tier 3: SSL verify=False, chmod 777, etc. -- informational (default: true)
+secrets = true         # Tier 1: hardcoded secrets, always deny (default: true)
+anti_patterns = true   # Tier 2: eval, exec, innerHTML, etc. PostToolUse nudge (default: true)
+warnings = true        # Tier 3: SSL verify=False, chmod 777, etc. Informational (default: true)
 disable_rules = ["eval_injection", "pickle_deserialization"]  # skip individual rules
 ```
 
@@ -828,12 +828,12 @@ src/
 ├── router.rs            # Security checks + gate routing
 ├── security_reminders.rs # Content scanning for security anti-patterns (Write/Edit/MultiEdit)
 ├── settings.rs          # settings.json parsing and pattern matching
-├── hints.rs             # Modern CLI hints (cat→bat, grep→rg, etc.)
+├── hints.rs             # Modern CLI hints (cat->bat, grep->rg, etc.)
 ├── hint_tracker.rs      # Session-scoped dedup for hints + security warnings (disk-backed)
 ├── tool_cache.rs        # Tool availability cache for hints
 ├── mise.rs              # Mise task file parsing and command extraction
 ├── package_json.rs      # package.json script parsing and command extraction
-├── tracking.rs          # PreToolUse→PostToolUse correlation (15min TTL)
+├── tracking.rs          # PreToolUse->PostToolUse correlation (15min TTL)
 ├── pending.rs           # Pending approval queue (JSONL format)
 ├── patterns.rs          # Pattern suggestion algorithm
 ├── post_tool_use.rs     # PostToolUse handler
@@ -869,12 +869,12 @@ src/
 
 Security reminder patterns were built on and informed by:
 
-- [Anthropic's security-guidance plugin](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/security-guidance) -- the official Claude Code security hook (9 base patterns we expanded to 26)
-- [Arcanum-Sec/sec-context](https://github.com/Arcanum-Sec/sec-context) -- curated security anti-pattern database synthesized from 150+ sources
-- [SecureCodeWarrior/ai-security-rules](https://github.com/SecureCodeWarrior/ai-security-rules) -- security rule files for AI coding tools
-- [OWASP Top 10](https://owasp.org/www-project-top-ten/) -- standard web application security risks
-- [dwarvesf/claude-guardrails](https://github.com/dwarvesf/claude-guardrails) -- multi-layer defense hooks for Claude Code
-- [GitHub Actions workflow injection research](https://github.blog/security/vulnerability-research/how-to-catch-github-actions-workflow-injections-before-attackers-do/) -- GHA injection patterns and remediation
+- [Anthropic's security-guidance plugin](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/security-guidance), the official Claude Code security hook (9 base patterns we expanded to 26)
+- [Arcanum-Sec/sec-context](https://github.com/Arcanum-Sec/sec-context), curated security anti-pattern database synthesized from 150+ sources
+- [SecureCodeWarrior/ai-security-rules](https://github.com/SecureCodeWarrior/ai-security-rules), security rule files for AI coding tools
+- [OWASP Top 10](https://owasp.org/www-project-top-ten/), standard web application security risks
+- [dwarvesf/claude-guardrails](https://github.com/dwarvesf/claude-guardrails), multi-layer defense hooks for Claude Code
+- [GitHub Actions workflow injection research](https://github.blog/security/vulnerability-research/how-to-catch-github-actions-workflow-injections-before-attackers-do/), GHA injection patterns and remediation
 
 ---
 

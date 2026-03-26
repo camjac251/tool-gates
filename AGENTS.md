@@ -37,7 +37,7 @@ tool-gates supports Claude Code and Gemini CLI hook systems:
 | **BeforeTool** | Route all tool types (shell, file ops, glob/grep, MCP, skills), block dangerous operations, allow safe ones, provide hints, file guards, security reminders | Before tool execution |
 | **AfterTool** | Post-execution security scanning for write tools (tracking is Claude-only) | After command completes |
 
-The client is auto-detected from `hook_event_name` -- no configuration needed. Output is serialized in the appropriate wire format:
+The client is auto-detected from `hook_event_name`. No configuration needed. Output is serialized in the appropriate wire format:
 - Claude: nested `hookSpecificOutput` with `permissionDecision`
 - Gemini: flat `decision` + `reason` (uses `"block"` instead of `"deny"`, exit code 2 for hard blocks)
 
@@ -135,7 +135,7 @@ src/
 ### Build Pipeline
 
 `build.rs` reads `rules/*.toml` and generates:
-- `src/generated/rules.rs` -- Rust functions implementing declarative gate logic
+- `src/generated/rules.rs`, Rust functions implementing declarative gate logic
 
 Most gate behavior is defined in TOML; custom handlers in Rust cover cases TOML can't express.
 
@@ -145,7 +145,7 @@ Most gate behavior is defined in TOML; custom handlers in Rust cover cases TOML 
 
 1. **Input**: JSON from PreToolUse (Claude) or BeforeTool (Gemini) hook (includes `tool_name`, `cwd`, `permission_mode`, `tool_use_id`)
 2. **Load config**: Read user configuration from `~/.config/tool-gates/config.toml`
-3. **Configurable block rules**: Check `[[block_tools]]` rules against all tool types -- blocks matching tools with a deny message
+3. **Configurable block rules**: Check `[[block_tools]]` rules against all tool types. Blocks matching tools with a deny message
 4. **Route by tool_name**:
    - **Bash** -> Bash gate engine (steps 5-13 below)
    - **Read/Write/Edit/MultiEdit** -> File guards (symlink detection for AI config files)
@@ -223,13 +223,13 @@ flowchart TD
     I -->|no match| L[Use gate result]
 ```
 
-**Hook vs settings.json**: tool-gates checks settings.json internally before returning a decision. Hook returning `deny` is always final. Hook returning `allow` is respected on the main thread unless Claude Code has a conflicting deny/ask rule it checks after the hook. Hook returning `ask` defers to settings.json. Gate blocks always win -- `rm -rf /` is denied regardless of settings.
+**Hook vs settings.json**: tool-gates checks settings.json internally before returning a decision. Hook returning `deny` is always final. Hook returning `allow` is respected on the main thread unless Claude Code has a conflicting deny/ask rule it checks after the hook. Hook returning `ask` defers to settings.json. Gate blocks always win. `rm -rf /` is denied regardless of settings.
 
 ### Settings Pattern Formats
 
 | Pattern | Type | Matches |
 |---------|------|---------|
-| `Bash(git:*)` | Word-boundary prefix (`:`) | `git`, `git status`, `git push` -- but NOT `github` |
+| `Bash(git:*)` | Word-boundary prefix (`:`) | `git`, `git status`, `git push`, but NOT `github` |
 | `Bash(cat /dev/zero*)` | Glob prefix | `cat /dev/zero`, `cat /dev/zero \| head` |
 | `Bash(pwd)` | Exact | Only `pwd` |
 
@@ -244,7 +244,7 @@ The `:` word-boundary prefix is the most common. It splits on spaces and matches
 ### Accept Edits Mode
 
 When `permission_mode` is `acceptEdits`, file-editing commands are auto-allowed if:
-1. The command is a known file-editing program (formatters, linters, text replacement -- defined via `accept_edits_auto_allow = true` in TOML rules)
+1. The command is a known file-editing program (formatters, linters, text replacement, defined via `accept_edits_auto_allow = true` in TOML rules)
 2. The target files are within allowed directories (cwd + `additionalDirectories` from settings.json)
 3. The target files are not sensitive system paths or credentials
 
@@ -256,11 +256,11 @@ Before AST parsing, `router.rs` runs raw string checks on the command (after str
 
 ## Gate Rules
 
-Gate rules are defined declaratively in `rules/*.toml`. Each rule has a `reason` field explaining why it asks/blocks. Read the TOML files for complete coverage -- they are the source of truth.
+Gate rules are defined declaratively in `rules/*.toml`. Each rule has a `reason` field explaining why it asks/blocks. Read the TOML files for complete coverage. They are the source of truth.
 
 ### Hints
 
-When allowed commands use legacy tools (cat, grep, find, etc.), tool-gates adds hints suggesting modern alternatives (bat, rg, fd) via `additionalContext` -- only if the modern tool is installed (checked via `tool_cache.rs`, 7-day TTL at `~/.cache/tool-gates/available-tools.json`). Hint definitions are in `hints.rs`.
+When allowed commands use legacy tools (cat, grep, find, etc.), tool-gates adds hints suggesting modern alternatives (bat, rg, fd) via `additionalContext`, only if the modern tool is installed (checked via `tool_cache.rs`, 7-day TTL at `~/.cache/tool-gates/available-tools.json`). Hint definitions are in `hints.rs`.
 
 ### Security Reminders
 
@@ -293,7 +293,7 @@ Both pass expanded commands through the gate engine; strictest decision wins.
 
 ## Adding a Tool to an Existing Gate
 
-For most tools, just edit the TOML and rebuild -- no Rust changes needed.
+For most tools, just edit the TOML and rebuild. No Rust changes needed.
 
 **Example: Adding shellcheck to devtools**
 
@@ -356,7 +356,7 @@ Then implement `check_ruff` in the gate file. The generated gate returns `Skip` 
 
 For a new category of tools (not fitting existing gates):
 
-1. Create `rules/newgate.toml` (`priority` controls gate ordering -- lower runs first, `basics` at 100 is always last):
+1. Create `rules/newgate.toml` (`priority` controls gate ordering. Lower runs first, `basics` at 100 is always last):
 
 ```toml
 [meta]
@@ -473,15 +473,15 @@ Cache files under `~/.cache/tool-gates/`:
 | File | Purpose |
 |------|---------|
 | `tracking.json` | PreToolUse->PostToolUse correlation (15min TTL, auto-cleaned) |
-| `pending.jsonl` | Approval queue -- commands awaiting `tool-gates review` |
+| `pending.jsonl` | Approval queue. Commands awaiting `tool-gates review` |
 | `available-tools.json` | Tool cache for hints (7-day TTL) |
 | `hint-tracker.json` | Session-scoped dedup for hints + security warnings |
 
 ## Gotchas
 
-- **Never edit `src/generated/`** -- files are overwritten by `build.rs` on every build
-- **`basics` must be last** in `GATES` array (priority 100) -- it's the catch-all for safe commands
-- **`reason` is required** on all `[[programs.ask]]` and `[[programs.block]]` rules -- build fails without it
+- **Never edit `src/generated/`**. Files are overwritten by `build.rs` on every build
+- **`basics` must be last** in `GATES` array (priority 100). It's the catch-all for safe commands
+- **`reason` is required** on all `[[programs.ask]]` and `[[programs.block]]` rules. Build fails without it
 - **Generated function naming**: gate named `foo` generates `check_foo_gate()` in `src/generated/rules.rs`
 - **TOML + Rust wiring**: Adding a new program to `rules/*.toml` is not enough if the gate has a custom handler in `src/gates/<gate>.rs`. The Rust match statement must also route the program to the generated declarative function, or it falls through to `GateResult::skip()`. Always check both files.
 - **MCP permissions** use a different pattern format in settings.json: `mcp__<server>__<tool>` (double underscores, not `Bash(...)` format)
@@ -509,7 +509,7 @@ Cache files under `~/.cache/tool-gates/`:
 
 ## Configuration
 
-User configuration lives at `~/.config/tool-gates/config.toml`. All sections are optional -- omitting a section uses built-in defaults.
+User configuration lives at `~/.config/tool-gates/config.toml`. All sections are optional. Omitting a section uses built-in defaults.
 
 ### Feature Toggles
 
@@ -517,7 +517,7 @@ User configuration lives at `~/.config/tool-gates/config.toml`. All sections are
 [features]
 bash_gates = true    # Enable Bash command gate engine (default: true)
 file_guards = true   # Enable symlink guards for Read/Write/Edit/MultiEdit (default: true)
-hints = true         # Enable modern CLI hints -- cat->bat, grep->rg, etc. (default: true)
+hints = true         # Enable modern CLI hints, e.g. cat->bat, grep->rg, etc. (default: true)
 security_reminders = true  # Scan Write/Edit/MultiEdit for security anti-patterns (default: true)
 ```
 
