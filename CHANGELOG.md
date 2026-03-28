@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.7.3](https://github.com/camjac251/tool-gates/compare/v1.7.2...v1.7.3) - 2026-03-28
+
+### Other
+
+- remove MultiEdit tool and mcp-cli gate
+- replace em-dash patterns in source code and config
+- *(plugin)* bump to 1.5.8, add when_to_use to skills
+- replace em-dash patterns with periods and commas
+- Merge pull request #46 from camjac251/renovate/proptest-1.x-lockfile
+
 ## [1.7.2](https://github.com/camjac251/tool-gates/compare/v1.7.1...v1.7.2) - 2026-03-25
 
 ### Fixed
