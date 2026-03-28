@@ -135,7 +135,7 @@ subcommand = "-h"
 subcommand = "--help"
 
 # === Branch Command (mixed read/write) ===
-# Bare "git branch" or with listing flags is read-only
+# Listing and creating branches are safe. Only delete/move/copy require approval.
 
 [[programs.allow]]
 subcommand = "branch"
