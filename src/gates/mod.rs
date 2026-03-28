@@ -12,7 +12,6 @@ pub mod filesystem;
 pub mod gh;
 pub mod git;
 pub mod helpers;
-pub mod mcp;
 pub mod network;
 pub mod package_managers;
 pub mod shortcut;
@@ -29,7 +28,6 @@ pub use devtools::check_devtools;
 pub use filesystem::check_filesystem;
 pub use gh::check_gh;
 pub use git::check_git;
-pub use mcp::{check_mcp, check_mcp_call};
 pub use network::check_network;
 pub use package_managers::check_package_managers;
 pub use shortcut::check_shortcut;
@@ -42,9 +40,8 @@ use crate::models::{CommandInfo, GateResult};
 pub type GateCheckFn = fn(&CommandInfo) -> GateResult;
 
 /// All gates to run (in order)
-/// mcp runs first (priority 5), basics runs last as a catch-all for safe commands
+/// basics runs last as a catch-all for safe commands
 pub static GATES: &[(&str, GateCheckFn)] = &[
-    ("mcp", check_mcp),
     ("gh", check_gh),
     ("beads", check_beads),
     ("tool_gates", check_tool_gates),

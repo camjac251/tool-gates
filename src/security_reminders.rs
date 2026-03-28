@@ -1,4 +1,4 @@
-//! Security anti-pattern scanning for Write/Edit/MultiEdit content.
+//! Security anti-pattern scanning for Write/Edit content.
 //!
 //! Scans file edit content for common vulnerability patterns (command injection,
 //! XSS, hardcoded secrets, unsafe deserialization, etc.) and returns deny/warn
@@ -20,10 +20,9 @@ use std::sync::OnceLock;
 /// - Write: `map["content"]`
 /// - Edit (classic): `map["new_string"]`
 /// - Edit (batch): `map["edits"][*]["new_string"]`
-/// - MultiEdit: `map["files"][*]["edits"][*]["new_string"]`
 ///
-/// Returns a vec of (file_path, content) pairs. For Write/Edit the file_path
-/// comes from the top-level `file_path` field. For MultiEdit each file has its own.
+/// Returns a vec of (file_path, content) pairs. The file_path
+/// comes from the top-level `file_path` field.
 fn extract_content(
     tool_name: &str,
     map: &serde_json::Map<String, serde_json::Value>,
@@ -36,7 +35,7 @@ fn extract_content(
         .unwrap_or("")
         .to_string();
 
-    // Match tool names from both Claude (Write/Edit/MultiEdit) and Gemini (write_file/replace).
+    // Match tool names from both Claude (Write/Edit) and Gemini (write_file/replace).
     // Field names (file_path, content, old_string, new_string) are the same in both CLIs.
     match tool_name {
         "Write" | "write_file" => {
@@ -59,26 +58,6 @@ fn extract_content(
                     if let Some(ns) = edit.get("new_string").and_then(|v| v.as_str()) {
                         if !ns.is_empty() {
                             results.push((top_file_path.clone(), ns.to_string()));
-                        }
-                    }
-                }
-            }
-        }
-        "MultiEdit" => {
-            if let Some(files) = map.get("files").and_then(|v| v.as_array()) {
-                for file in files {
-                    let fp = file
-                        .get("file_path")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
-                    if let Some(edits) = file.get("edits").and_then(|v| v.as_array()) {
-                        for edit in edits {
-                            if let Some(ns) = edit.get("new_string").and_then(|v| v.as_str()) {
-                                if !ns.is_empty() {
-                                    results.push((fp.clone(), ns.to_string()));
-                                }
-                            }
                         }
                     }
                 }
@@ -688,20 +667,6 @@ mod tests {
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].1, "eval(x)");
         assert_eq!(results[1].1, "safe()");
-    }
-
-    #[test]
-    fn test_extract_multiedit() {
-        let map = make_map(
-            r#"{"files": [
-            {"file_path": "/tmp/a.ts", "edits": [{"old_string": "x", "new_string": "eval(y)"}]},
-            {"file_path": "/tmp/b.py", "edits": [{"old_string": "z", "new_string": "pickle.load(f)"}]}
-        ]}"#,
-        );
-        let results = extract_content("MultiEdit", &map);
-        assert_eq!(results.len(), 2);
-        assert_eq!(results[0].0, "/tmp/a.ts");
-        assert_eq!(results[1].0, "/tmp/b.py");
     }
 
     #[test]

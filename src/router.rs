@@ -1,6 +1,6 @@
 //! Main router that combines all gates.
 
-use crate::gates::{GATES, check_mcp_call};
+use crate::gates::GATES;
 use crate::hint_tracker;
 use crate::hints::{ModernHint, format_hints, get_modern_hint};
 use crate::mise::{
@@ -424,11 +424,6 @@ pub fn check_command_with_settings_and_session(
         }
     }
 
-    // Check for mcp-cli commands with settings-aware handling
-    if let Some(output) = check_mcp_cli_command(command_string, cwd) {
-        return output;
-    }
-
     // Run gate analysis - blocks take priority.
     // Reuse already-parsed commands to avoid double tree-sitter parsing.
     let gate_result =
@@ -667,54 +662,6 @@ fn check_package_script(
             // Approve means passthrough. Treat as safe
             HookOutput::allow(Some(&format!("{pm} run {script_name}: Safe")))
         }
-    }
-}
-
-/// Check an mcp-cli command with settings.json awareness.
-///
-/// Returns Some(HookOutput) if this is an mcp-cli command, None otherwise.
-/// This enables mcp-cli commands to be checked against MCP permissions in settings.json.
-fn check_mcp_cli_command(command_string: &str, cwd: &str) -> Option<HookOutput> {
-    // Quick check - must start with mcp-cli
-    let trimmed = command_string.trim();
-    if !trimmed.starts_with("mcp-cli ") && trimmed != "mcp-cli" {
-        return None;
-    }
-
-    // Parse the command
-    let commands = extract_commands(command_string);
-    if commands.is_empty() {
-        return None;
-    }
-
-    let cmd = &commands[0];
-    if cmd.program != "mcp-cli" {
-        return None;
-    }
-
-    // Use the settings-aware mcp gate check
-    let result = check_mcp_call(cmd, cwd);
-
-    match result.decision {
-        Decision::Allow => {
-            let reason = result
-                .reason
-                .unwrap_or_else(|| "MCP tool allowed".to_string());
-            Some(HookOutput::allow(Some(&reason)))
-        }
-        Decision::Ask => {
-            let reason = result
-                .reason
-                .unwrap_or_else(|| "MCP tool requires approval".to_string());
-            Some(HookOutput::ask(&reason))
-        }
-        Decision::Block => {
-            let reason = result
-                .reason
-                .unwrap_or_else(|| "MCP tool blocked".to_string());
-            Some(HookOutput::deny(&reason))
-        }
-        Decision::Skip => None, // Not an mcp-cli command we recognize
     }
 }
 
@@ -3906,69 +3853,6 @@ run = "echo hello"
             );
 
             let _ = std::fs::remove_dir_all(&tmp);
-        }
-    }
-
-    // === MCP CLI Integration Tests ===
-
-    mod mcp_cli {
-        use super::*;
-
-        #[test]
-        fn test_mcp_cli_servers_allows() {
-            let result = check_command("mcp-cli servers");
-            assert_eq!(
-                get_decision(&result),
-                "allow",
-                "mcp-cli servers should allow"
-            );
-        }
-
-        #[test]
-        fn test_mcp_cli_info_allows() {
-            let result = check_command("mcp-cli info example/tool");
-            assert_eq!(get_decision(&result), "allow", "mcp-cli info should allow");
-        }
-
-        #[test]
-        fn test_mcp_cli_tools_allows() {
-            let result = check_command("mcp-cli tools");
-            assert_eq!(get_decision(&result), "allow", "mcp-cli tools should allow");
-        }
-
-        #[test]
-        fn test_mcp_cli_grep_allows() {
-            let result = check_command("mcp-cli grep pattern");
-            assert_eq!(get_decision(&result), "allow", "mcp-cli grep should allow");
-        }
-
-        #[test]
-        fn test_mcp_cli_call_asks() {
-            let result = check_command(r#"mcp-cli call example/tool '{}'"#);
-            assert_eq!(get_decision(&result), "ask", "mcp-cli call should ask");
-            assert!(get_reason(&result).contains("mcp-cli"));
-        }
-
-        #[test]
-        fn test_mcp_cli_unknown_asks() {
-            let result = check_command("mcp-cli unknown_subcommand");
-            assert_eq!(get_decision(&result), "ask", "mcp-cli unknown should ask");
-        }
-
-        // Full flow tests using check_command_with_settings
-
-        #[test]
-        fn test_mcp_cli_with_settings_servers_allows() {
-            let result = check_command_with_settings("mcp-cli servers", "/tmp", "default");
-            assert_eq!(get_decision(&result), "allow");
-        }
-
-        #[test]
-        fn test_mcp_cli_with_settings_call_asks() {
-            let result =
-                check_command_with_settings("mcp-cli call example/tool '{}'", "/tmp", "default");
-            assert_eq!(get_decision(&result), "ask");
-            assert!(get_reason(&result).contains("mcp-cli"));
         }
     }
 

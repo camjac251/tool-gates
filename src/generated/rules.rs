@@ -247,46 +247,6 @@ pub fn check_conditional_allow(cmd: &CommandInfo) -> Option<GateResult> {
     }
 }
 
-// === MCP-CLI (from mcp.toml) ===
-
-pub static MCP_CLI_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "servers",
-        "tools",
-        "info",
-        "grep",
-        "resources",
-        "read",
-        "help",
-    ]
-    .into_iter()
-    .collect()
-});
-
-/// Check mcp-cli commands declaratively
-pub fn check_mcp_cli_declarative(cmd: &CommandInfo) -> Option<GateResult> {
-    if !["mcp-cli"].contains(&cmd.program.as_str()) {
-        return None;
-    }
-
-    #[allow(unused_variables)]
-    let subcmd = if cmd.args.is_empty() {
-        String::new()
-    } else if cmd.args.len() == 1 {
-        cmd.args[0].clone()
-    } else {
-        format!("{} {}", cmd.args[0], cmd.args[1])
-    };
-    #[allow(unused_variables)]
-    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
-
-    if MCP_CLI_ALLOW.contains(subcmd.as_str()) || MCP_CLI_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
-    }
-
-    Some(GateResult::ask(format!("mcp-cli: {}", subcmd_single)))
-}
-
 // === GH (from gh.toml) ===
 
 pub static GH_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
@@ -8508,9 +8468,6 @@ pub fn check_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Check program-specific rules
-    if let Some(result) = check_mcp_cli_declarative(cmd) {
-        return Some(result);
-    }
     if let Some(result) = check_gh_declarative(cmd) {
         return Some(result);
     }
@@ -9096,18 +9053,6 @@ pub fn check_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 // === Generated Gate Functions ===
 // These replace manual routing in gate files.
 // Add tool to TOML, rebuild, done - no Rust changes needed.
-
-/// Generated gate for mcp - handles: mcp-cli
-/// Custom handlers needed for: ["mcp-cli"]
-pub fn check_mcp_gate(cmd: &CommandInfo) -> GateResult {
-    match cmd.program.as_str() {
-        "mcp-cli" => GateResult::skip(), // custom handler: check_mcp_call
-        _ => GateResult::skip(),
-    }
-}
-
-/// Programs handled by the mcp gate
-pub static MCP_PROGRAMS: &[&str] = &["mcp-cli"];
 
 /// Generated gate for gh - handles: gh
 /// Custom handlers needed for: []

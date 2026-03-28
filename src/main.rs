@@ -2,7 +2,7 @@
 //!
 //! Formerly `bash-gates`. Single binary that handles all tool types:
 //! - **Bash**: AST-parsed command gating (13 ordered gates, settings.json integration)
-//! - **Read/Write/Edit/MultiEdit**: Symlink guard for AI config files
+//! - **Read/Write/Edit**: Symlink guard for AI config files
 //! - **Glob/Grep/MCP tools**: Configurable tool blocking
 //!
 //! Supports Claude Code and Gemini CLI hook systems:
@@ -277,7 +277,7 @@ fn handle_pre_tool_use_hook(input: &str, client: Client) {
 }
 
 /// Extract all file paths from a raw tool_input map.
-/// Handles both single-file tools (file_path) and MultiEdit (files[].file_path).
+/// Handles single-file tools (file_path).
 fn extract_file_paths_from_map(map: &serde_json::Map<String, serde_json::Value>) -> Vec<String> {
     let mut paths = Vec::new();
 
@@ -285,17 +285,6 @@ fn extract_file_paths_from_map(map: &serde_json::Map<String, serde_json::Value>)
     if let Some(fp) = map.get("file_path").and_then(|v| v.as_str()) {
         if !fp.is_empty() {
             paths.push(fp.to_string());
-        }
-    }
-
-    // MultiEdit: files[].file_path
-    if let Some(files) = map.get("files").and_then(|v| v.as_array()) {
-        for file in files {
-            if let Some(fp) = file.get("file_path").and_then(|v| v.as_str()) {
-                if !fp.is_empty() {
-                    paths.push(fp.to_string());
-                }
-            }
         }
     }
 
@@ -529,15 +518,15 @@ fn get_binary_path() -> String {
 }
 
 /// PreToolUse matcher for built-in tools (exact match mode).
-/// Bash (gate engine), Read/Write/Edit/MultiEdit (file guards), Glob/Grep (block rules).
-const PRE_TOOL_USE_MATCHER: &str = "Bash|Read|Write|Edit|MultiEdit|Glob|Grep|Skill";
+/// Bash (gate engine), Read/Write/Edit (file guards), Glob/Grep (block rules).
+const PRE_TOOL_USE_MATCHER: &str = "Bash|Read|Write|Edit|Glob|Grep|Skill";
 
 /// PreToolUse matcher for MCP tools (regex mode).
 /// Matches all MCP tool calls; block rules in config decide what to deny.
 const MCP_TOOL_USE_MATCHER: &str = "mcp__.*";
 
 /// PostToolUse matcher for Bash (approval tracking) + file tools (security reminders).
-const POST_TOOL_USE_MATCHER: &str = "Bash|Write|Edit|MultiEdit";
+const POST_TOOL_USE_MATCHER: &str = "Bash|Write|Edit";
 
 fn generate_hook_entry(binary_path: &str, matcher: &str) -> serde_json::Value {
     serde_json::json!({

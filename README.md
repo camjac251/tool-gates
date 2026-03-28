@@ -32,9 +32,9 @@ A hook for [Claude Code](https://code.claude.com/docs/en/hooks) and [Gemini CLI]
 | **Security First**       | Catches pipe-to-shell, eval, command injection patterns                                                |
 | **Unknown Protection**   | Unrecognized commands require approval                                                                 |
 | **Claude Code Plugin**   | Install as a plugin with the `/tool-gates:review` skill for interactive approval management            |
-| **300+ Commands**        | 13 specialized gates with comprehensive coverage                                                       |
+| **300+ Commands**        | 12 specialized gates with comprehensive coverage                                                       |
 | **File Guards**          | Blocks symlinked AI config files (CLAUDE.md, .cursorrules, etc.) to prevent confused reads/edits       |
-| **Security Reminders**   | Scans Write/Edit/MultiEdit content for 26 anti-patterns (secrets, XSS, injection, etc.) across 3 tiers |
+| **Security Reminders**   | Scans Write/Edit content for 26 anti-patterns (secrets, XSS, injection, etc.) across 3 tiers |
 | **Tool Blocking**        | Configurable rules to block tools (Glob, Grep, firecrawl on GitHub) with domain filtering              |
 | **Skill Auto-Approval**  | Auto-approve Skill tool calls based on project directory conditions. No external hook scripts needed  |
 | **Configuration**        | `~/.config/tool-gates/config.toml` for feature toggles, custom block rules, and file guard extensions  |
@@ -224,7 +224,7 @@ tool-gates --tools-status
 
 ### Security Reminders
 
-When Claude writes code via Write/Edit/MultiEdit, tool-gates scans the content for 26 security anti-patterns organized into three tiers:
+When Claude writes code via Write/Edit, tool-gates scans the content for 26 security anti-patterns organized into three tiers:
 
 | Tier | Hook | Decision | Behavior |
 |------|------|----------|----------|
@@ -397,7 +397,7 @@ Add to `~/.claude/settings.json`:
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash|Read|Write|Edit|MultiEdit|Glob|Grep|Skill",
+        "matcher": "Bash|Read|Write|Edit|Glob|Grep|Skill",
         "hooks": [{ "type": "command", "command": "~/.local/bin/tool-gates", "timeout": 10 }]
       },
       {
@@ -413,7 +413,7 @@ Add to `~/.claude/settings.json`:
     ],
     "PostToolUse": [
       {
-        "matcher": "Bash|Write|Edit|MultiEdit",
+        "matcher": "Bash|Write|Edit",
         "hooks": [{ "type": "command", "command": "~/.local/bin/tool-gates", "timeout": 10 }]
       }
     ]
@@ -530,29 +530,6 @@ tool-gates recognizes its own CLI commands:
 | Allow                                                                                | Ask                                                                              |
 | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
 | `list`, `show`, `ready`, `blocked`, `search`, `stats`, `doctor`, `dep tree`, `prime` | `create`, `update`, `close`, `delete`, `sync`, `init`, `dep add`, `comments add` |
-
-### MCP CLI
-
-`mcp-cli` - Claude Code's [experimental token-efficient MCP interface](https://github.com/anthropics/claude-code/issues/12836#issuecomment-3629052941)
-
-Instead of loading full MCP tool definitions into the system prompt, Claude discovers tools on-demand via `mcp-cli` and executes them through Bash. Enable with `ENABLE_EXPERIMENTAL_MCP_CLI=true`.
-
-| Allow                                                           | Ask                        |
-| --------------------------------------------------------------- | -------------------------- |
-| `servers`, `tools`, `info`, `grep`, `resources`, `read`, `help` | `call` (invokes MCP tools) |
-
-Pre-approve trusted servers in settings.json to avoid repeated prompts:
-
-```json
-{
-  "permissions": {
-    "allow": ["mcp__perplexity", "mcp__context7__*"],
-    "deny": ["mcp__firecrawl__firecrawl_crawl"]
-  }
-}
-```
-
-Patterns: `mcp__<server>` (entire server), `mcp__<server>__<tool>` (specific tool), `mcp__<server>__*` (wildcard)
 
 ### GitHub CLI
 
@@ -700,7 +677,7 @@ All configuration is in `~/.config/tool-gates/config.toml`. The file is optional
 bash_gates = true          # AST-based Bash command gating (default: true)
 file_guards = true         # Symlink guard for AI config files (default: true)
 hints = true               # Modern CLI hints, e.g. cat->bat, grep->rg, etc. (default: true)
-security_reminders = true  # Scan Write/Edit/MultiEdit for security anti-patterns (default: true)
+security_reminders = true  # Scan Write/Edit for security anti-patterns (default: true)
 ```
 
 ### Security Reminders
@@ -826,7 +803,7 @@ src/
 ├── models.rs            # Types (HookInput, HookOutput, Decision)
 ├── parser.rs            # tree-sitter-bash AST parsing
 ├── router.rs            # Security checks + gate routing
-├── security_reminders.rs # Content scanning for security anti-patterns (Write/Edit/MultiEdit)
+├── security_reminders.rs # Content scanning for security anti-patterns (Write/Edit)
 ├── settings.rs          # settings.json parsing and pattern matching
 ├── hints.rs             # Modern CLI hints (cat->bat, grep->rg, etc.)
 ├── hint_tracker.rs      # Session-scoped dedup for hints + security warnings (disk-backed)
@@ -851,7 +828,6 @@ src/
     ├── tool_gates.rs    # tool-gates CLI itself
     ├── basics.rs        # Safe commands (~130+)
     ├── beads.rs         # Beads issue tracker (bd) - github.com/steveyegge/beads
-    ├── mcp.rs           # MCP CLI (mcp-cli) - Model Context Protocol
     ├── gh.rs            # GitHub CLI
     ├── git.rs           # Git
     ├── shortcut.rs      # Shortcut CLI (short) - github.com/shortcut-cli/shortcut-cli

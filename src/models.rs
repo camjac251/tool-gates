@@ -122,14 +122,7 @@ impl Client {
     pub fn is_file_tool(tool_name: &str) -> bool {
         matches!(
             tool_name,
-            "Read"
-                | "Write"
-                | "Edit"
-                | "MultiEdit"
-                | "read_file"
-                | "read_many_files"
-                | "write_file"
-                | "replace"
+            "Read" | "Write" | "Edit" | "read_file" | "read_many_files" | "write_file" | "replace"
         )
     }
 
@@ -140,10 +133,7 @@ impl Client {
 
     /// Check if a tool_name is a write/edit file tool
     pub fn is_write_tool(tool_name: &str) -> bool {
-        matches!(
-            tool_name,
-            "Write" | "Edit" | "MultiEdit" | "write_file" | "replace"
-        )
+        matches!(tool_name, "Write" | "Edit" | "write_file" | "replace")
     }
 
     /// Check if a tool_name represents a skill/extension tool
@@ -177,7 +167,7 @@ pub struct ToolInput {
     pub command: String,
     pub description: Option<String>,
     pub timeout: Option<u32>,
-    /// File path for Read/Write/Edit/MultiEdit tools
+    /// File path for Read/Write/Edit tools
     #[serde(default)]
     pub file_path: Option<String>,
 }
@@ -243,8 +233,7 @@ impl HookInput {
 
     /// Extract all file paths from `tool_input`.
     ///
-    /// Handles both single-file tools (Read/Write/Edit with `file_path`)
-    /// and multi-file tools (MultiEdit with `files[].file_path`).
+    /// Handles single-file tools (Read/Write/Edit with `file_path`).
     pub fn get_file_paths(&self) -> Vec<String> {
         let mut paths = Vec::new();
 
@@ -252,26 +241,6 @@ impl HookInput {
         let fp = self.get_file_path();
         if !fp.is_empty() {
             paths.push(fp);
-        }
-
-        // MultiEdit: files[].file_path
-        match &self.tool_input {
-            ToolInputVariant::Map(m) => {
-                if let Some(files) = m.get("files").and_then(|v| v.as_array()) {
-                    for file in files {
-                        if let Some(fp) = file.get("file_path").and_then(|v| v.as_str()) {
-                            if !fp.is_empty() {
-                                paths.push(fp.to_string());
-                            }
-                        }
-                    }
-                }
-            }
-            ToolInputVariant::Structured(ti) => {
-                // Structured won't have files array, but file_path already handled above
-                let _ = ti;
-            }
-            ToolInputVariant::Empty => {}
         }
 
         paths
@@ -986,7 +955,6 @@ mod tests {
         assert!(Client::is_file_tool("Read"));
         assert!(Client::is_file_tool("Write"));
         assert!(Client::is_file_tool("Edit"));
-        assert!(Client::is_file_tool("MultiEdit"));
         // Gemini tool names
         assert!(Client::is_file_tool("read_file"));
         assert!(Client::is_file_tool("read_many_files"));
@@ -1012,7 +980,6 @@ mod tests {
     fn test_is_write_tool() {
         assert!(Client::is_write_tool("Write"));
         assert!(Client::is_write_tool("Edit"));
-        assert!(Client::is_write_tool("MultiEdit"));
         assert!(Client::is_write_tool("write_file"));
         assert!(Client::is_write_tool("replace"));
         assert!(!Client::is_write_tool("Read"));

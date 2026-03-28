@@ -99,11 +99,11 @@ impl Config {
 pub struct Features {
     /// AST-based bash command permission gating
     pub bash_gates: bool,
-    /// Symlink guard for AI config files (Read/Write/Edit/MultiEdit)
+    /// Symlink guard for AI config files (Read/Write/Edit)
     pub file_guards: bool,
     /// Modern CLI hints (cat->bat, grep->rg, etc.)
     pub hints: bool,
-    /// Security anti-pattern scanning for Write/Edit/MultiEdit content
+    /// Security anti-pattern scanning for Write/Edit content
     pub security_reminders: bool,
 }
 
