@@ -6,6 +6,7 @@
 //!
 //! The PermissionRequest hook can:
 //! - Approve commands that our gates already deem safe
+//! - Approve Edit/Write operations in agent worktrees (workaround for Claude Code bug)
 //! - Deny commands that should be blocked
 //! - Pass through to show the normal permission prompt
 //!
@@ -13,6 +14,9 @@
 //! Note: `blocked_path` and `decision_reason` may be missing in real hook payloads,
 //! so this handler treats them as optional metadata.
 
+use std::path::Path;
+
+use crate::file_guards::is_guarded;
 use crate::models::{
     Client, Decision, HookOutput, PermissionDecision, PermissionRequestInput,
     PermissionRequestOutput,
@@ -44,14 +48,19 @@ fn is_path_based_reason(reason: &Option<String>) -> bool {
 /// Handle a PermissionRequest hook.
 ///
 /// Strategy:
-/// 1. If not a Bash tool, pass through (return None)
-/// 2. Re-check command policy using the same settings-aware path as PreToolUse
+/// 1. For Edit/Write tools: check if we're in a worktree context and auto-approve
+/// 2. For Bash tools: re-check command policy using the same settings-aware path as PreToolUse
 /// 3. If our gates say "allow" AND the reason is path-based, approve it
 /// 4. If our gates say "deny", deny it
 /// 5. Otherwise, pass through (return None to let normal prompt show)
 pub fn handle_permission_request(
     input: &PermissionRequestInput,
 ) -> Option<PermissionRequestOutput> {
+    // Edit/Write tools: auto-approve in worktree contexts
+    if Client::is_write_tool(&input.tool_name) {
+        return handle_file_permission_request(input);
+    }
+
     // Only handle shell command tools (Bash for Claude, run_shell_command for Gemini)
     if !Client::is_shell_tool(&input.tool_name) {
         return None;
@@ -123,6 +132,86 @@ pub fn handle_permission_request(
             None
         }
     }
+}
+
+/// Handle PermissionRequest for Edit/Write tools in worktree contexts.
+///
+/// Claude Code has a bug where agent worktrees are not added to `additionalWorkingDirectories`,
+/// so every Edit/Write in a worktree triggers a permission prompt even in `acceptEdits` mode.
+/// This works around it by auto-approving edits within the worktree when the cwd is clearly
+/// a Claude-created agent worktree.
+fn handle_file_permission_request(
+    input: &PermissionRequestInput,
+) -> Option<PermissionRequestOutput> {
+    let file_path = input.get_file_path();
+    if file_path.is_empty() {
+        return None;
+    }
+
+    // Resolve the file path (may be relative to cwd) and clean .. components
+    let joined = if Path::new(&file_path).is_absolute() {
+        std::path::PathBuf::from(&file_path)
+    } else {
+        Path::new(&input.cwd).join(&file_path)
+    };
+    let resolved = clean_path(&joined);
+
+    if !is_worktree_context(&resolved, &input.cwd) {
+        return None;
+    }
+
+    // Don't auto-approve edits to AI config files even in worktrees
+    let config = crate::config::load();
+    if is_guarded(&resolved, &config.file_guards) {
+        return None;
+    }
+
+    // Auto-approve and add the worktree cwd to session permissions
+    // so subsequent edits in the same worktree don't prompt again
+    Some(PermissionRequestOutput::allow_with_directories(vec![
+        input.cwd.clone(),
+    ]))
+}
+
+/// Check if we're in an agent worktree context and the file is within it.
+///
+/// Returns true when the cwd is under a `.claude/worktrees/` directory
+/// (indicating a Claude-created agent worktree) and the file path is
+/// within that cwd.
+fn is_worktree_context(resolved_path: &Path, cwd: &str) -> bool {
+    let cwd_path = Path::new(cwd);
+
+    // Check if cwd is inside a .claude/worktrees/ directory
+    for ancestor in cwd_path.ancestors() {
+        let dir_name = match ancestor.file_name().and_then(|n| n.to_str()) {
+            Some(n) => n,
+            None => continue,
+        };
+        if dir_name == "worktrees" {
+            if let Some(parent) = ancestor.parent() {
+                if parent.file_name().and_then(|n| n.to_str()) == Some(".claude") {
+                    // cwd is under .claude/worktrees/, check file is within cwd
+                    return resolved_path.starts_with(cwd_path);
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Resolve `.` and `..` components without filesystem access.
+fn clean_path(p: &Path) -> std::path::PathBuf {
+    let mut out = std::path::PathBuf::new();
+    for component in p.components() {
+        match component {
+            std::path::Component::ParentDir => {
+                out.pop();
+            }
+            std::path::Component::CurDir => {}
+            other => out.push(other),
+        }
+    }
+    out
 }
 
 fn output_to_decision(output: HookOutput) -> (Decision, Option<String>) {
@@ -204,11 +293,14 @@ mod tests {
     }
 
     #[test]
-    fn test_non_bash_passes_through() {
+    fn test_non_bash_non_file_passes_through() {
         let mut input = make_input("anything", None);
-        input.tool_name = "Write".to_string();
+        input.tool_name = "Glob".to_string();
         let result = handle_permission_request(&input);
-        assert!(result.is_none(), "Should pass through for non-Bash tools");
+        assert!(
+            result.is_none(),
+            "Should pass through for non-Bash/non-file tools"
+        );
     }
 
     #[test]
@@ -365,6 +457,191 @@ mod tests {
         assert!(
             !json.contains("file.txt"),
             "should NOT contain the file name in directory permissions, got: {json}"
+        );
+    }
+
+    // === Worktree Edit/Write tests ===
+
+    fn make_file_input(tool_name: &str, file_path: &str, cwd: &str) -> PermissionRequestInput {
+        PermissionRequestInput {
+            hook_event_name: "PermissionRequest".to_string(),
+            tool_name: tool_name.to_string(),
+            cwd: cwd.to_string(),
+            permission_mode: "acceptEdits".to_string(),
+            tool_input: ToolInputVariant::Map({
+                let mut map = serde_json::Map::new();
+                map.insert(
+                    "file_path".to_string(),
+                    serde_json::Value::String(file_path.to_string()),
+                );
+                map
+            }),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn test_write_in_worktree_approves() {
+        let input = make_file_input(
+            "Write",
+            "/project/.claude/worktrees/agent-abc123/src/main.rs",
+            "/project/.claude/worktrees/agent-abc123",
+        );
+        let result = handle_permission_request(&input);
+        assert!(result.is_some(), "Should approve Write in agent worktree");
+        let json = serde_json::to_string(&result.unwrap()).unwrap();
+        assert!(json.contains("allow"), "Should be an allow decision");
+        assert!(
+            json.contains("agent-abc123"),
+            "Should add worktree cwd to session permissions"
+        );
+    }
+
+    #[test]
+    fn test_edit_in_worktree_approves() {
+        let input = make_file_input(
+            "Edit",
+            "/project/.claude/worktrees/agent-abc123/frontend/src/Component.tsx",
+            "/project/.claude/worktrees/agent-abc123",
+        );
+        let result = handle_permission_request(&input);
+        assert!(result.is_some(), "Should approve Edit in agent worktree");
+    }
+
+    #[test]
+    fn test_write_outside_worktree_passes_through() {
+        // Normal cwd (not a worktree) should pass through
+        let input = make_file_input("Write", "/project/src/main.rs", "/project");
+        let result = handle_permission_request(&input);
+        assert!(
+            result.is_none(),
+            "Should pass through for Write outside worktree context"
+        );
+    }
+
+    #[test]
+    fn test_write_to_guarded_file_in_worktree_passes_through() {
+        // AI config files should NOT be auto-approved even in worktrees
+        let input = make_file_input(
+            "Write",
+            "/project/.claude/worktrees/agent-abc123/CLAUDE.md",
+            "/project/.claude/worktrees/agent-abc123",
+        );
+        let result = handle_permission_request(&input);
+        assert!(
+            result.is_none(),
+            "Should pass through for guarded file in worktree"
+        );
+    }
+
+    #[test]
+    fn test_write_outside_worktree_cwd_passes_through() {
+        // File outside the worktree's cwd should not be auto-approved
+        let input = make_file_input(
+            "Write",
+            "/other/project/src/main.rs",
+            "/project/.claude/worktrees/agent-abc123",
+        );
+        let result = handle_permission_request(&input);
+        assert!(
+            result.is_none(),
+            "Should pass through for file outside worktree cwd"
+        );
+    }
+
+    #[test]
+    fn test_edit_with_relative_path_in_worktree_approves() {
+        // Relative paths should be resolved against cwd
+        let input = make_file_input(
+            "Edit",
+            "src/lib.rs",
+            "/project/.claude/worktrees/agent-abc123",
+        );
+        let result = handle_permission_request(&input);
+        assert!(
+            result.is_some(),
+            "Should approve Edit with relative path in worktree"
+        );
+    }
+
+    #[test]
+    fn test_worktree_context_detection() {
+        // Positive cases
+        assert!(is_worktree_context(
+            Path::new("/project/.claude/worktrees/agent-abc/src/main.rs"),
+            "/project/.claude/worktrees/agent-abc",
+        ));
+        assert!(is_worktree_context(
+            Path::new("/home/user/repo/.claude/worktrees/task-123/deep/nested/file.ts"),
+            "/home/user/repo/.claude/worktrees/task-123",
+        ));
+
+        // Negative cases
+        assert!(!is_worktree_context(
+            Path::new("/project/src/main.rs"),
+            "/project",
+        ));
+        assert!(!is_worktree_context(
+            Path::new("/other/path/file.rs"),
+            "/project/.claude/worktrees/agent-abc",
+        ));
+        // Just having "worktrees" in the path isn't enough without ".claude" parent
+        assert!(!is_worktree_context(
+            Path::new("/project/worktrees/main/src/lib.rs"),
+            "/project/worktrees/main",
+        ));
+    }
+
+    #[test]
+    fn test_write_to_settings_json_in_worktree_passes_through() {
+        // .claude/settings.json is a guarded config file
+        let input = make_file_input(
+            "Write",
+            "/project/.claude/worktrees/agent-abc123/.claude/settings.json",
+            "/project/.claude/worktrees/agent-abc123",
+        );
+        let result = handle_permission_request(&input);
+        assert!(
+            result.is_none(),
+            "Should pass through for .claude/settings.json in worktree"
+        );
+    }
+
+    #[test]
+    fn test_path_traversal_blocked() {
+        // ../../etc/passwd should not be auto-approved even from a worktree cwd
+        let input = make_file_input(
+            "Write",
+            "../../etc/passwd",
+            "/project/.claude/worktrees/agent-abc123",
+        );
+        let result = handle_permission_request(&input);
+        assert!(
+            result.is_none(),
+            "Path traversal outside worktree should pass through"
+        );
+    }
+
+    #[test]
+    fn test_empty_file_path_passes_through() {
+        let input = make_file_input("Write", "", "/project/.claude/worktrees/agent-abc123");
+        let result = handle_permission_request(&input);
+        assert!(result.is_none(), "Empty file_path should pass through");
+    }
+
+    #[test]
+    fn test_edit_in_worktree_default_mode_approves() {
+        // Should approve regardless of permission_mode
+        let mut input = make_file_input(
+            "Edit",
+            "/project/.claude/worktrees/agent-abc123/src/lib.rs",
+            "/project/.claude/worktrees/agent-abc123",
+        );
+        input.permission_mode = "default".to_string();
+        let result = handle_permission_request(&input);
+        assert!(
+            result.is_some(),
+            "Should approve Edit in worktree regardless of permission mode"
         );
     }
 }

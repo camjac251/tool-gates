@@ -6,7 +6,7 @@
 //! - **Glob/Grep/MCP tools**: Configurable tool blocking
 //!
 //! Supports Claude Code and Gemini CLI hook systems:
-//! - Claude Code: `PreToolUse`, `PermissionRequest`, `PostToolUse` (tool_name: "Bash")
+//! - Claude Code: `PreToolUse`, `PermissionRequest`, `PostToolUse` (Bash, Write, Edit)
 //! - Gemini CLI: `BeforeTool`, `AfterTool` (tool_name: "run_shell_command")
 //!
 //! Configuration: `~/.config/tool-gates/config.toml`
@@ -410,8 +410,10 @@ fn handle_permission_request_hook(input: &str) {
         }
     };
 
-    // Only process shell command tools
-    if !Client::is_shell_tool(&perm_input.tool_name) {
+    // Only process shell command tools and file tools (Edit/Write for worktree approval)
+    if !Client::is_shell_tool(&perm_input.tool_name)
+        && !Client::is_write_tool(&perm_input.tool_name)
+    {
         // Don't output anything - let normal prompt show
         return;
     }
@@ -525,6 +527,9 @@ const PRE_TOOL_USE_MATCHER: &str = "Bash|Read|Write|Edit|Glob|Grep|Skill";
 /// Matches all MCP tool calls; block rules in config decide what to deny.
 const MCP_TOOL_USE_MATCHER: &str = "mcp__.*";
 
+/// PermissionRequest matcher for Bash (command approval) + file tools (worktree approval).
+const PERMISSION_REQUEST_MATCHER: &str = "Bash|Write|Edit";
+
 /// PostToolUse matcher for Bash (approval tracking) + file tools (security reminders).
 const POST_TOOL_USE_MATCHER: &str = "Bash|Write|Edit";
 
@@ -541,7 +546,7 @@ fn generate_hooks_json(binary_path: &str) -> serde_json::Value {
             generate_hook_entry(binary_path, PRE_TOOL_USE_MATCHER),
             generate_hook_entry(binary_path, MCP_TOOL_USE_MATCHER),
         ],
-        "PermissionRequest": [generate_hook_entry(binary_path, "Bash")],
+        "PermissionRequest": [generate_hook_entry(binary_path, PERMISSION_REQUEST_MATCHER)],
         "PostToolUse": [
             generate_hook_entry(binary_path, POST_TOOL_USE_MATCHER),
         ]
@@ -661,7 +666,7 @@ fn install_hooks(scope: &str, dry_run: bool) {
     let hooks = settings.get_mut("hooks").unwrap();
     let pre_tool_use_entry = generate_hook_entry(&binary_path, PRE_TOOL_USE_MATCHER);
     let mcp_tool_use_entry = generate_hook_entry(&binary_path, MCP_TOOL_USE_MATCHER);
-    let bash_entry = generate_hook_entry(&binary_path, "Bash");
+    let perm_request_entry = generate_hook_entry(&binary_path, PERMISSION_REQUEST_MATCHER);
     let post_tool_use_entry = generate_hook_entry(&binary_path, POST_TOOL_USE_MATCHER);
     let mut changes = Vec::new();
 
@@ -679,7 +684,7 @@ fn install_hooks(scope: &str, dry_run: bool) {
         eprintln!("+ Adding PreToolUse hooks (built-in tools + MCP)");
     }
 
-    // Check and add PermissionRequest (Bash only)
+    // Check and add PermissionRequest (Bash + Write/Edit for worktree approval)
     if hooks.get("PermissionRequest").is_none() {
         hooks["PermissionRequest"] = serde_json::json!([]);
     }
@@ -689,7 +694,7 @@ fn install_hooks(scope: &str, dry_run: bool) {
         hooks["PermissionRequest"]
             .as_array_mut()
             .unwrap()
-            .push(bash_entry.clone());
+            .push(perm_request_entry);
         changes.push("PermissionRequest");
         eprintln!("+ Adding PermissionRequest hook");
     }
@@ -744,7 +749,7 @@ fn install_hooks(scope: &str, dry_run: bool) {
             eprintln!("\nHooks added: {}", changes.join(", "));
             eprintln!("\nAll three hooks are required:");
             eprintln!("  - PreToolUse: Command safety for main session");
-            eprintln!("  - PermissionRequest: Safe commands work in subagents");
+            eprintln!("  - PermissionRequest: Safe commands + worktree edits work in subagents");
             eprintln!("  - PostToolUse: Track successful commands for approval learning");
         }
         Err(e) => {

@@ -27,7 +27,7 @@ tool-gates supports Claude Code and Gemini CLI hook systems:
 | Hook | Purpose | When it runs |
 |------|---------|--------------|
 | **PreToolUse** | Route all tool types (Bash, file ops, Glob/Grep, MCP, Skill), block dangerous operations, allow safe ones, provide hints, auto-approve skills, track "ask" decisions | Before any permission check |
-| **PermissionRequest** | Approve safe commands for subagents | After internal checks decide to "ask" |
+| **PermissionRequest** | Approve safe commands and worktree edits for subagents | After internal checks decide to "ask" |
 | **PostToolUse** | Detect successful execution, add to pending approval queue | After command completes |
 
 **Gemini CLI** (tool names: `run_shell_command`, `read_file`, `write_file`, `replace`, `glob`, `grep_search`, `activate_skill`, `mcp_*`):
@@ -56,7 +56,7 @@ The client is auto-detected from `hook_event_name`. No configuration needed. Out
 
 **Why three hooks for Claude?**
 - PreToolUse handles command safety for the main session and tracks commands that return "ask"
-- PermissionRequest makes those same decisions work for subagents (where PreToolUse's `allow` is ignored)
+- PermissionRequest makes those same decisions work for subagents (where PreToolUse's `allow` is ignored), and auto-approves Edit/Write in agent worktrees
 - PostToolUse detects when "ask" commands complete successfully and queues them for permanent approval
 
 ## Project Structure
@@ -101,7 +101,7 @@ src/
 ├── pending.rs           # Pending approval queue (JSONL format)
 ├── patterns.rs          # Pattern suggestion algorithm
 ├── post_tool_use.rs     # PostToolUse handler
-├── permission_request.rs # PermissionRequest hook handler (subagent approval)
+├── permission_request.rs # PermissionRequest hook handler (subagent + worktree approval)
 ├── settings_writer.rs   # Write rules to Claude settings files
 ├── config.rs            # User configuration (~/.config/tool-gates/config.toml)
 ├── file_guards.rs       # Symlink guard for AI config files (Read/Write/Edit)
@@ -171,6 +171,14 @@ Most gate behavior is defined in TOML; custom handlers in Rust cover cases TOML 
 
 Runs when Claude Code's internal checks decide to show a permission prompt. Critical for **subagents**, where PreToolUse's `allow` is ignored.
 
+**For Edit/Write tools (worktree approval):**
+1. Extract and resolve `file_path` from tool input (clean `..` components)
+2. Check if `cwd` is under a `.claude/worktrees/` directory (agent worktree context)
+3. Check file is within the worktree cwd and not a guarded AI config file
+4. If both hold -> return `allow` with `addDirectories` for the worktree cwd
+5. Otherwise -> return nothing (let normal prompt show)
+
+**For Bash tools (command approval):**
 1. Re-check the command with our gates (same logic as PreToolUse)
 2. If allowed by gates -> return `allow` with optional `updatedPermissions` to add blocked path to session
 3. If blocked by gates -> return `deny` with reason

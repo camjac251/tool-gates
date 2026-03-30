@@ -523,6 +523,19 @@ pub struct PermissionRequestInput {
 }
 
 impl PermissionRequestInput {
+    /// Extract file_path from `tool_input` (for Write/Edit tools)
+    pub fn get_file_path(&self) -> String {
+        match &self.tool_input {
+            ToolInputVariant::Structured(ti) => ti.file_path.clone().unwrap_or_default(),
+            ToolInputVariant::Map(m) => m
+                .get("file_path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            ToolInputVariant::Empty => String::new(),
+        }
+    }
+
     /// Extract command string from `tool_input`
     pub fn get_command(&self) -> String {
         match &self.tool_input {

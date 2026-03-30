@@ -77,7 +77,7 @@ const CONFIG_EXTENSIONS: &[&str] = &[".md", ".mdc", ".yml", ".yaml", ".json"];
 /// Check if a path looks like an AI coding config file.
 ///
 /// Uses built-in lists merged with any user-configured extras.
-fn is_guarded(path: &Path, extra: &FileGuardsConfig) -> bool {
+pub(crate) fn is_guarded(path: &Path, extra: &FileGuardsConfig) -> bool {
     let name = match path.file_name().and_then(|n| n.to_str()) {
         Some(n) => n.to_ascii_lowercase(),
         None => return false,
