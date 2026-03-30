@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.8.0](https://github.com/camjac251/tool-gates/compare/v1.7.3...v1.8.0) - 2026-03-30
+
+### Added
+
+- *(permission_request)* auto-approve Edit/Write in agent worktrees
+
+### Fixed
+
+- *(router)* let gate-allowed commands participate in compound settings approval
+
+### Other
+
+- *(git)* clarify branch allow rule covers create too
+
 ## [1.7.3](https://github.com/camjac251/tool-gates/compare/v1.7.2...v1.7.3) - 2026-03-28
 
 ### Other
