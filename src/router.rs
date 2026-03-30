@@ -290,6 +290,11 @@ fn check_subcommands_denied(settings: &Settings, command_string: &str) -> bool {
 /// "cd /tmp && npm install".
 ///
 /// Strictness: Deny > Ask > Allow > NoMatch
+///
+/// When a sub-command has no settings rule but the gate engine allows it
+/// (e.g. `echo`, `head`, `true`), it counts as covered rather than NoMatch.
+/// This lets gate-safe commands participate in compound settings approval
+/// without needing explicit settings rules for every safe utility.
 fn check_settings_with_subcommands(settings: &Settings, command_string: &str) -> SettingsDecision {
     // Try full string first (handles exact patterns and simple commands)
     let full_result = settings.check_command_excluding_deny(command_string);
@@ -304,7 +309,7 @@ fn check_settings_with_subcommands(settings: &Settings, command_string: &str) ->
     }
 
     let mut has_ask = false;
-    let mut has_allow = false;
+    let mut has_settings_allow = false;
     let mut has_no_match = false;
 
     for cmd in &commands {
@@ -313,18 +318,27 @@ fn check_settings_with_subcommands(settings: &Settings, command_string: &str) ->
                 unreachable!("check_command_excluding_deny never returns Deny")
             }
             SettingsDecision::Ask => has_ask = true,
-            SettingsDecision::Allow => has_allow = true,
-            SettingsDecision::NoMatch => has_no_match = true,
+            SettingsDecision::Allow => has_settings_allow = true,
+            SettingsDecision::NoMatch => {
+                // If the gate engine allows this command, treat it as covered.
+                // This bridges gate-safe commands (echo, head, cat, true, cd)
+                // into compound settings approval without needing individual
+                // settings rules for every safe utility.
+                let gate_result = check_single_command(cmd);
+                if gate_result.decision != Decision::Allow {
+                    has_no_match = true;
+                }
+            }
         }
     }
 
     // Strictest wins: Ask > Allow > NoMatch.
-    // Only return Allow when ALL sub-commands matched a settings rule.
-    // A partial match (some Allow, some NoMatch) must fall through to gate results
-    // so unrecognized sub-commands aren't silently auto-approved.
+    // Only return Allow when ALL sub-commands are covered (by settings or gates)
+    // AND at least one segment matched a settings rule. If all segments are only
+    // gate-allowed, fall through to the gate result which has a more accurate reason.
     if has_ask {
         SettingsDecision::Ask
-    } else if has_allow && !has_no_match {
+    } else if has_settings_allow && !has_no_match {
         SettingsDecision::Allow
     } else {
         SettingsDecision::NoMatch
@@ -3384,12 +3398,13 @@ mod tests {
         // --- Allow checks ---
 
         #[test]
-        fn test_partial_match_returns_nomatch() {
-            // cd doesn't match any settings rule, so partial match falls through
-            // to gate result (gate allows cd, asks for npm install -> ask)
+        fn test_gate_allowed_segment_counts_as_covered() {
+            // cd has no settings rule but is gate-allowed (safe command).
+            // Gate-allowed segments count as covered, so both segments are
+            // resolved and the settings Allow for npm install wins.
             let settings = make_settings(&["Bash(npm install:*)"], &[], &[]);
             let result = check_settings_with_subcommands(&settings, "cd /tmp && npm install");
-            assert_eq!(result, SettingsDecision::NoMatch);
+            assert_eq!(result, SettingsDecision::Allow);
         }
 
         #[test]
@@ -3401,13 +3416,15 @@ mod tests {
         }
 
         #[test]
-        fn test_partial_match_after_cd_returns_nomatch() {
+        fn test_gate_allowed_cd_with_settings_allow_cargo() {
+            // cd is gate-allowed, cargo build matches settings allow rule.
+            // Both segments covered -> Allow.
             let settings = make_settings(&["Bash(cargo build:*)"], &[], &[]);
             let result = check_settings_with_subcommands(
                 &settings,
                 "cd /home/user/project && cargo build --release",
             );
-            assert_eq!(result, SettingsDecision::NoMatch);
+            assert_eq!(result, SettingsDecision::Allow);
         }
 
         #[test]
@@ -3423,7 +3440,10 @@ mod tests {
         }
 
         #[test]
-        fn test_no_match_returns_nomatch() {
+        fn test_all_gate_allowed_falls_through() {
+            // Both cd and cargo build are gate-allowed, but no settings rule
+            // matches either. Falls through to NoMatch so the gate result
+            // (also Allow) provides a more accurate reason.
             let settings = make_settings(&["Bash(npm:*)"], &[], &[]);
             let result =
                 check_settings_with_subcommands(&settings, "cd /tmp && cargo build --release");
@@ -3456,6 +3476,34 @@ mod tests {
             let settings = make_settings(&["Bash(git log:*)"], &[], &[]);
             let result = check_settings_with_subcommands(&settings, "git log | head -10");
             assert_eq!(result, SettingsDecision::Allow);
+        }
+
+        #[test]
+        fn test_echo_pipe_to_settings_allowed_script() {
+            // echo is gate-allowed, the script matches a settings allow rule.
+            // Both segments covered -> Allow.
+            let settings = make_settings(
+                &["Bash(/home/user/.claude/skills/my-skill/scripts/tool *)"],
+                &[],
+                &[],
+            );
+            let result = check_settings_with_subcommands(
+                &settings,
+                "echo 'query text' | /home/user/.claude/skills/my-skill/scripts/tool search -n 3",
+            );
+            assert_eq!(result, SettingsDecision::Allow);
+        }
+
+        #[test]
+        fn test_gate_ask_segment_still_blocks_compound_allow() {
+            // curl POST is gate-ask (not gate-allowed), so it counts as
+            // has_no_match and prevents the compound from being auto-approved.
+            let settings = make_settings(&["Bash(awk:*)"], &[], &[]);
+            let result = check_settings_with_subcommands(
+                &settings,
+                "curl -sk -X POST https://example.com | awk '{print $1}'",
+            );
+            assert_eq!(result, SettingsDecision::NoMatch);
         }
 
         // --- Single command skips sub-command check ---
