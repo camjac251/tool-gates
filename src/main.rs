@@ -610,23 +610,69 @@ fn get_settings_path(scope: &str) -> std::path::PathBuf {
     }
 }
 
-/// Check if tool-gates hook already exists in a hook array.
-/// Detects any entry whose command points to tool-gates or bash-gates.
+/// Check if a single hook entry contains a tool-gates (or bash-gates) command.
+fn is_tool_gates_entry(entry: &serde_json::Value) -> bool {
+    entry
+        .get("hooks")
+        .and_then(|h| h.as_array())
+        .is_some_and(|hooks| {
+            hooks.iter().any(|hook| {
+                hook.get("command")
+                    .and_then(|c| c.as_str())
+                    .is_some_and(|cmd| cmd.contains("tool-gates") || cmd.contains("bash-gates"))
+            })
+        })
+}
+
+/// Check if any entry in a hook array contains a tool-gates command.
 fn has_tool_gates_hook(hooks_array: &serde_json::Value) -> bool {
-    if let Some(arr) = hooks_array.as_array() {
-        for entry in arr {
-            if let Some(hooks) = entry.get("hooks").and_then(|h| h.as_array()) {
-                for hook in hooks {
-                    if let Some(cmd) = hook.get("command").and_then(|c| c.as_str()) {
-                        if cmd.contains("tool-gates") || cmd.contains("bash-gates") {
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
+    hooks_array
+        .as_array()
+        .is_some_and(|arr| arr.iter().any(is_tool_gates_entry))
+}
+
+/// Sync tool-gates hook entries for a hook event.
+/// Replaces existing tool-gates entries with expected ones if matchers differ.
+/// Returns None if unchanged, or a description of what changed.
+fn sync_hook_entries(
+    hooks_array: &mut serde_json::Value,
+    expected: &[serde_json::Value],
+) -> Option<String> {
+    let arr = hooks_array.as_array_mut().unwrap();
+    let old_matchers: Vec<String> = arr
+        .iter()
+        .filter(|e| is_tool_gates_entry(e))
+        .filter_map(|e| e.get("matcher").and_then(|m| m.as_str()).map(String::from))
+        .collect();
+
+    let new_matchers: Vec<&str> = expected
+        .iter()
+        .filter_map(|e| e.get("matcher").and_then(|m| m.as_str()))
+        .collect();
+
+    if old_matchers.len() == new_matchers.len()
+        && old_matchers
+            .iter()
+            .zip(new_matchers.iter())
+            .all(|(a, b)| a.as_str() == *b)
+    {
+        return None;
     }
-    false
+
+    arr.retain(|entry| !is_tool_gates_entry(entry));
+    for entry in expected {
+        arr.push(entry.clone());
+    }
+
+    if old_matchers.is_empty() {
+        Some("added".to_string())
+    } else {
+        Some(format!(
+            "{} -> {}",
+            old_matchers.join(", "),
+            new_matchers.join(", ")
+        ))
+    }
 }
 
 /// Install hooks into settings.json
@@ -670,52 +716,59 @@ fn install_hooks(scope: &str, dry_run: bool) {
     let post_tool_use_entry = generate_hook_entry(&binary_path, POST_TOOL_USE_MATCHER);
     let mut changes = Vec::new();
 
-    // Check and add PreToolUse (built-in tools + MCP tools as separate entries)
+    // Sync PreToolUse hooks (built-in tools + MCP tools as separate entries)
     if hooks.get("PreToolUse").is_none() {
         hooks["PreToolUse"] = serde_json::json!([]);
     }
-    if has_tool_gates_hook(&hooks["PreToolUse"]) {
-        eprintln!("✓ PreToolUse hook already configured");
-    } else {
-        let arr = hooks["PreToolUse"].as_array_mut().unwrap();
-        arr.push(pre_tool_use_entry);
-        arr.push(mcp_tool_use_entry);
-        changes.push("PreToolUse");
-        eprintln!("+ Adding PreToolUse hooks (built-in tools + MCP)");
+    match sync_hook_entries(
+        &mut hooks["PreToolUse"],
+        &[pre_tool_use_entry, mcp_tool_use_entry],
+    ) {
+        None => eprintln!("✓ PreToolUse hooks up to date"),
+        Some(ref change) if change == "added" => {
+            changes.push("PreToolUse");
+            eprintln!("+ Adding PreToolUse hooks (built-in tools + MCP)");
+        }
+        Some(change) => {
+            changes.push("PreToolUse");
+            eprintln!("~ Updating PreToolUse matchers ({})", change);
+        }
     }
 
-    // Check and add PermissionRequest (Bash + Write/Edit for worktree approval)
+    // Sync PermissionRequest hook (Bash + Write/Edit for worktree approval)
     if hooks.get("PermissionRequest").is_none() {
         hooks["PermissionRequest"] = serde_json::json!([]);
     }
-    if has_tool_gates_hook(&hooks["PermissionRequest"]) {
-        eprintln!("✓ PermissionRequest hook already configured");
-    } else {
-        hooks["PermissionRequest"]
-            .as_array_mut()
-            .unwrap()
-            .push(perm_request_entry);
-        changes.push("PermissionRequest");
-        eprintln!("+ Adding PermissionRequest hook");
+    match sync_hook_entries(&mut hooks["PermissionRequest"], &[perm_request_entry]) {
+        None => eprintln!("✓ PermissionRequest hook up to date"),
+        Some(ref change) if change == "added" => {
+            changes.push("PermissionRequest");
+            eprintln!("+ Adding PermissionRequest hook");
+        }
+        Some(change) => {
+            changes.push("PermissionRequest");
+            eprintln!("~ Updating PermissionRequest matcher ({})", change);
+        }
     }
 
-    // Check and add PostToolUse (Bash tracking + file security reminders)
+    // Sync PostToolUse hook (Bash tracking + file security reminders)
     if hooks.get("PostToolUse").is_none() {
         hooks["PostToolUse"] = serde_json::json!([]);
     }
-    if has_tool_gates_hook(&hooks["PostToolUse"]) {
-        eprintln!("✓ PostToolUse hook already configured");
-    } else {
-        hooks["PostToolUse"]
-            .as_array_mut()
-            .unwrap()
-            .push(post_tool_use_entry);
-        changes.push("PostToolUse");
-        eprintln!("+ Adding PostToolUse hook (Bash tracking + file security)");
+    match sync_hook_entries(&mut hooks["PostToolUse"], &[post_tool_use_entry]) {
+        None => eprintln!("✓ PostToolUse hook up to date"),
+        Some(ref change) if change == "added" => {
+            changes.push("PostToolUse");
+            eprintln!("+ Adding PostToolUse hook (Bash tracking + file security)");
+        }
+        Some(change) => {
+            changes.push("PostToolUse");
+            eprintln!("~ Updating PostToolUse matcher ({})", change);
+        }
     }
 
     if changes.is_empty() {
-        eprintln!("\nNo changes needed - tool-gates already installed.");
+        eprintln!("\nAll hooks up to date.");
         return;
     }
 
@@ -746,11 +799,7 @@ fn install_hooks(scope: &str, dry_run: bool) {
     ) {
         Ok(_) => {
             eprintln!("\n✓ Installed to {}", settings_path.display());
-            eprintln!("\nHooks added: {}", changes.join(", "));
-            eprintln!("\nAll three hooks are required:");
-            eprintln!("  - PreToolUse: Command safety for main session");
-            eprintln!("  - PermissionRequest: Safe commands + worktree edits work in subagents");
-            eprintln!("  - PostToolUse: Track successful commands for approval learning");
+            eprintln!("\nHooks updated: {}", changes.join(", "));
         }
         Err(e) => {
             eprintln!("Error: Failed to write {}: {}", settings_path.display(), e);
@@ -814,22 +863,25 @@ fn install_gemini_hooks(scope: &str, dry_run: bool) {
         if hooks.get(event).is_none() {
             hooks[event] = serde_json::json!([]);
         }
-        if has_tool_gates_hook(&hooks[event]) {
-            eprintln!("✓ {} hook already configured", event);
-        } else {
-            if let Some(entries) = gemini_hooks[event].as_array() {
-                let arr = hooks[event].as_array_mut().unwrap();
-                for entry in entries {
-                    arr.push(entry.clone());
-                }
+        let expected: Vec<serde_json::Value> = gemini_hooks[event]
+            .as_array()
+            .map(|a| a.to_vec())
+            .unwrap_or_default();
+        match sync_hook_entries(&mut hooks[event], &expected) {
+            None => eprintln!("✓ {} hook up to date", event),
+            Some(ref change) if change == "added" => {
+                changes.push(event);
+                eprintln!("+ Adding {} hook(s)", event);
             }
-            changes.push(event);
-            eprintln!("+ Adding {} hook(s)", event);
+            Some(change) => {
+                changes.push(event);
+                eprintln!("~ Updating {} matchers ({})", event, change);
+            }
         }
     }
 
     if changes.is_empty() {
-        eprintln!("\nNo changes needed - tool-gates already installed.");
+        eprintln!("\nAll hooks up to date.");
         return;
     }
 
