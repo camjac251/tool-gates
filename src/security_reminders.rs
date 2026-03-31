@@ -1466,12 +1466,12 @@ mod coverage_gap_tests {
 
     #[test]
     fn test_check_security_reminders_env_file_tier3_still_fires() {
-        let map = make_map(r#"{"file_path": "/project/.env", "content": "Math.random()"}"#);
-        let config = SecurityRemindersConfig::default();
-        let session = unique_session("env-tier3");
-        let result = check_security_reminders("Write", &map, &config, &session);
+        // Test via scan_content directly to avoid global dedup tracker state.
+        // The full check_security_reminders path deduplicates Tier 3 warnings
+        // per rule name globally, so this test verifies the rule matches .env files.
+        let matches = scan_content("/project/.env", "Math.random()");
         assert!(
-            result.is_some(),
+            matches.iter().any(|m| m.tier == Tier::Warn),
             "Tier 3 warns should still fire on .env files"
         );
     }
@@ -1655,10 +1655,11 @@ mod doc_file_secret_tests {
     #[test]
     fn test_post_tool_use_warns_tier1_for_doc_files() {
         let content = fake_aws_content();
-        let json_str = format!(r#"{{"file_path": "/project/README.md", "content": "{content}"}}"#);
+        let session = unique_session("doc-post-warn");
+        let path = format!("/project/README-{session}.md");
+        let json_str = format!(r#"{{"file_path": "{path}", "content": "{content}"}}"#);
         let map = make_map(&json_str);
         let config = SecurityRemindersConfig::default();
-        let session = unique_session("doc-post-warn");
         let result = check_security_reminders_post("Write", &map, &config, &session);
         assert!(
             result.is_some(),
@@ -1705,10 +1706,11 @@ mod doc_file_secret_tests {
     #[test]
     fn test_doc_file_secret_warn_deduped() {
         let content = fake_aws_content();
-        let json_str = format!(r#"{{"file_path": "/project/docs.txt", "content": "{content}"}}"#);
+        let session = unique_session("doc-dedup");
+        let path = format!("/project/docs-{session}.txt");
+        let json_str = format!(r#"{{"file_path": "{path}", "content": "{content}"}}"#);
         let map = make_map(&json_str);
         let config = SecurityRemindersConfig::default();
-        let session = unique_session("doc-dedup");
 
         let r1 = check_security_reminders_post("Write", &map, &config, &session);
         assert!(r1.is_some(), "First doc secret should warn");
@@ -1720,10 +1722,11 @@ mod doc_file_secret_tests {
     #[test]
     fn test_html_doc_file_secret_warns_not_denies() {
         let content = fake_aws_content();
-        let json_str = format!(r#"{{"file_path": "/project/guide.html", "content": "{content}"}}"#);
+        let session = unique_session("html-doc");
+        let path = format!("/project/guide-{session}.html");
+        let json_str = format!(r#"{{"file_path": "{path}", "content": "{content}"}}"#);
         let map = make_map(&json_str);
         let config = SecurityRemindersConfig::default();
-        let session = unique_session("html-doc");
         let pre = check_security_reminders("Write", &map, &config, &session);
         assert!(pre.is_none(), "PreToolUse should skip for .html doc files");
 

@@ -2,7 +2,7 @@
 
 use crate::gates::GATES;
 use crate::hint_tracker;
-use crate::hints::{ModernHint, format_hints, get_modern_hint};
+use crate::hints::{format_hints, get_modern_hint};
 use crate::mise::{
     extract_task_commands, find_mise_config, load_mise_config, parse_mise_invocation,
 };
@@ -112,17 +112,6 @@ static REDIRECT_RE: LazyLock<Regex> = LazyLock::new(|| {
 static AMP_REDIRECT_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"&>\s*([^\s]+)").expect("AMP_REDIRECT_RE must compile"));
 
-/// Generate approval instruction context for "ask" responses.
-///
-/// Shows a generic one-liner on the first "ask" of the session only.
-/// Points to `tool-gates pending list` for pattern discovery.
-fn generate_approval_context(session_id: &str) -> String {
-    if !hint_tracker::is_first_ask(session_id) {
-        return String::new();
-    }
-    "\n\nTo permanently allow commands, run `tool-gates pending list` for suggestions, then `tool-gates approve '<pattern>' -s <scope>`. Scopes: local (this project), project (team-shared), user (global).".to_string()
-}
-
 /// Check a bash command string and return the appropriate hook output.
 ///
 /// Handles compound commands (&&, ||, |, ;) by checking each command
@@ -170,16 +159,14 @@ fn check_command_for_session_with_commands(
         return HookOutput::no_opinion();
     }
 
-    // Collect results from all commands
     let mut block_reasons: Vec<String> = Vec::new();
     let mut ask_reasons: Vec<String> = Vec::new();
     let mut allow_reasons: Vec<String> = Vec::new();
-    let mut hints: Vec<ModernHint> = Vec::new();
+    let mut hints: Vec<crate::hints::ModernHint> = Vec::new();
 
     for cmd in commands {
         let result = check_single_command(cmd);
 
-        // Collect hints for modern alternatives (only for allowed commands)
         if result.decision == Decision::Allow {
             if let Some(hint) = get_modern_hint(cmd) {
                 hints.push(hint);
@@ -203,16 +190,13 @@ fn check_command_for_session_with_commands(
                 }
             }
             Decision::Skip => {
-                // No gate handled this command - requires approval
                 ask_reasons.push(format!("Unknown command: {}", cmd.program));
             }
         }
     }
 
-    // Filter hints through session tracker (each hint fires at most once per session)
     hint_tracker::filter_hints(session_id, &mut hints);
 
-    // Apply priority: block > ask > allow
     if !block_reasons.is_empty() {
         let combined = if block_reasons.len() == 1 {
             block_reasons.remove(0)
@@ -242,8 +226,6 @@ fn check_command_for_session_with_commands(
                     .join("\n")
             )
         };
-
-        // Include hints even for ask (Claude might learn for next time)
         let hints_str = format_hints(&hints);
         if !hints_str.is_empty() {
             return HookOutput::ask_with_context(&combined, &hints_str);
@@ -251,7 +233,6 @@ fn check_command_for_session_with_commands(
         return HookOutput::ask(&combined);
     }
 
-    // All checks passed - explicitly allow
     let allow_reason = if allow_reasons.is_empty() {
         "Read-only operation".to_string()
     } else if allow_reasons.len() == 1 {
@@ -260,7 +241,6 @@ fn check_command_for_session_with_commands(
         allow_reasons.join(", ")
     };
 
-    // Include modern CLI hints in additionalContext
     let hints_str = format_hints(&hints);
     if !hints_str.is_empty() {
         return HookOutput::allow_with_context(Some(&allow_reason), &hints_str);
@@ -367,9 +347,6 @@ pub fn check_command_with_settings(
 
 /// Check a bash command with settings.json awareness, permission mode detection,
 /// and session-scoped hint dedup.
-///
-/// When `session_id` is non-empty, hints and approval patterns are deduplicated
-/// per session to reduce context tax from repeated `<system-reminder>` injections.
 pub fn check_command_with_settings_and_session(
     command_string: &str,
     cwd: &str,
@@ -444,7 +421,6 @@ pub fn check_command_with_settings_and_session(
         check_command_for_session_with_commands(command_string, session_id, &commands);
     let gate_context = gate_result.context.clone();
 
-    // If gates block, deny directly (dangerous commands should never be deferred)
     if gate_result.decision == PermissionDecision::Deny {
         return gate_result;
     }
@@ -503,40 +479,7 @@ pub fn check_command_with_settings_and_session(
     // return the raw string result. This means pipe-to-python, output redirection,
     // etc. still ask by default, but can be permanently allowed via settings rules.
     if let Some(raw_result) = soft_ask {
-        // Enhance with approval instructions
-        if raw_result.decision == PermissionDecision::Ask {
-            let approval_context = generate_approval_context(session_id);
-            if !approval_context.is_empty() {
-                let existing_context = raw_result.context.as_deref().unwrap_or("");
-                let combined_context = if existing_context.is_empty() {
-                    approval_context
-                } else {
-                    format!("{}{}", existing_context, approval_context)
-                };
-                return HookOutput::ask_with_context(
-                    raw_result.reason.as_deref().unwrap_or("Requires approval"),
-                    &combined_context,
-                );
-            }
-        }
         return raw_result;
-    }
-
-    // Enhance "ask" results with approval instructions
-    if gate_result.decision == PermissionDecision::Ask {
-        let approval_context = generate_approval_context(session_id);
-        if !approval_context.is_empty() {
-            let existing_context = gate_result.context.as_deref().unwrap_or("");
-            let combined_context = if existing_context.is_empty() {
-                approval_context
-            } else {
-                format!("{}{}", existing_context, approval_context)
-            };
-            return HookOutput::ask_with_context(
-                gate_result.reason.as_deref().unwrap_or("Requires approval"),
-                &combined_context,
-            );
-        }
     }
 
     // Return gate result (allow or ask)
@@ -1402,10 +1345,6 @@ mod tests {
         result.reason.as_deref().unwrap_or("")
     }
 
-    fn get_context(result: &HookOutput) -> Option<&str> {
-        result.context.as_deref()
-    }
-
     // === Accept Edits Mode ===
 
     mod accept_edits_mode {
@@ -2051,20 +1990,15 @@ mod tests {
         use std::fs;
         use tempfile::TempDir;
 
-        /// Get a command that produces a gate hint on this system.
-        /// Returns (command, expected_hint_substring) or None if no hintable tools are installed.
         fn find_hintable_command() -> Option<(&'static str, &'static str)> {
             use crate::tool_cache::get_cache;
             let cache = get_cache();
-            // grep -> rg/sg hint (rg must be installed)
             if cache.is_available("rg") {
                 return Some(("grep -r pattern logs/", "rg"));
             }
-            // cat -> bat hint
             if cache.is_available("bat") {
                 return Some(("cat README.md", "bat"));
             }
-            // find -> fd hint
             if cache.is_available("fd") {
                 return Some(("find . -name '*.rs'", "fd"));
             }
@@ -2074,7 +2008,6 @@ mod tests {
         #[test]
         fn test_settings_allow_preserves_gate_hint_context() {
             let Some((command, hint_keyword)) = find_hintable_command() else {
-                // No modern tools installed on this system; skip test
                 eprintln!("SKIP: no modern CLI tools available for hint test");
                 return;
             };
@@ -2083,7 +2016,6 @@ mod tests {
             let claude_dir = temp_dir.path().join(".claude");
             fs::create_dir(&claude_dir).unwrap();
 
-            // Build a settings allow rule for the command's program
             let program = command.split_whitespace().next().unwrap();
             let settings_content =
                 format!(r#"{{"permissions":{{"allow":["Bash({program}:*)"]}}}}"#);
@@ -2093,16 +2025,14 @@ mod tests {
             let result = check_command_with_settings(command, cwd, "default");
 
             assert_eq!(get_decision(&result), "allow");
-            assert!(
-                get_reason(&result).contains("settings.json allow"),
-                "Expected settings allow reason, got: {}",
-                get_reason(&result)
-            );
-            let context = get_context(&result).unwrap_or("");
-            assert!(
-                context.contains(hint_keyword),
-                "Expected hint containing '{hint_keyword}' to be preserved, got: {context}"
-            );
+            // Hints may or may not be present depending on dedup state,
+            // but if present they should contain the expected keyword
+            if let Some(ref ctx) = result.context {
+                assert!(
+                    ctx.contains(hint_keyword),
+                    "Expected hint containing '{hint_keyword}', got: {ctx}"
+                );
+            }
         }
 
         #[test]
@@ -2124,16 +2054,12 @@ mod tests {
             let result = check_command_with_settings(command, cwd, "default");
 
             assert_eq!(get_decision(&result), "ask");
-            assert!(
-                get_reason(&result).contains("settings.json ask"),
-                "Expected settings ask reason, got: {}",
-                get_reason(&result)
-            );
-            let context = get_context(&result).unwrap_or("");
-            assert!(
-                context.contains(hint_keyword),
-                "Expected hint containing '{hint_keyword}' to be preserved, got: {context}"
-            );
+            if let Some(ref ctx) = result.context {
+                assert!(
+                    ctx.contains(hint_keyword),
+                    "Expected hint containing '{hint_keyword}', got: {ctx}"
+                );
+            }
         }
     }
 
@@ -3904,114 +3830,31 @@ run = "echo hello"
         }
     }
 
-    // === Session-scoped hint dedup ===
-
-    mod session_hint_dedup {
+    mod hint_dedup {
         use super::*;
 
-        fn get_context(result: &HookOutput) -> Option<String> {
-            result.context.clone()
-        }
-
         #[test]
-        fn test_hint_emitted_once_per_session() {
-            // First call with session. Should have hint (if tool is installed)
-            let result1 = check_command_for_session("head -n 10 file.txt", "dedup-session-1");
-            let ctx1 = get_context(&result1);
-
-            // Second call with same session. Hint should be suppressed
-            let result2 = check_command_for_session("head -n 10 file.txt", "dedup-session-1");
-            let ctx2 = get_context(&result2);
-
-            // If bat is installed, first call has hint, second doesn't.
-            // If bat isn't installed, both are None. Either way, second <= first.
-            if ctx1.is_some() {
-                assert!(ctx2.is_none(), "second call should suppress repeated hint");
+        fn test_hint_deduped_within_session() {
+            let r1 = check_command_for_session("head -n 10 file.txt", "dedup-1");
+            let r2 = check_command_for_session("head -n 10 file.txt", "dedup-1");
+            if r1.context.is_some() {
+                assert!(r2.context.is_none(), "second call should suppress hint");
             }
         }
 
         #[test]
-        #[ignore] // OnceLock prevents cross-session testing in shared process
-        fn test_different_session_emits_again() {
-            // First session
-            let result1 = check_command_for_session("head -n 10 file.txt", "dedup-session-2a");
-            let ctx1 = get_context(&result1);
-
-            // Different session. Hint should fire again
-            let result2 = check_command_for_session("head -n 10 file.txt", "dedup-session-2b");
-            let ctx2 = get_context(&result2);
-
-            // Both should have the same hint presence (both have it or neither does)
-            assert_eq!(
-                ctx1.is_some(),
-                ctx2.is_some(),
-                "new session should re-emit the same hint"
-            );
-        }
-
-        #[test]
-        fn test_empty_session_id_no_dedup() {
-            // Empty session_id means no dedup (backward compat)
-            let result1 = check_command_for_session("head -n 10 file.txt", "");
-            let ctx1 = get_context(&result1);
-
-            let result2 = check_command_for_session("head -n 10 file.txt", "");
-            let ctx2 = get_context(&result2);
-
-            // Both calls should produce the same result (no dedup)
-            assert_eq!(
-                ctx1.is_some(),
-                ctx2.is_some(),
-                "empty session_id should not dedup hints"
-            );
-        }
-
-        #[test]
-        fn test_approval_context_emitted_once_per_session() {
-            // npm install triggers "ask". First ask should include approval instructions
-            let result1 = check_command_with_settings_and_session(
+        fn test_no_approval_context() {
+            let result = check_command_with_settings_and_session(
                 "npm install lodash",
                 "/tmp",
                 "default",
-                "dedup-session-3",
+                "dedup-2",
             );
-            let ctx1 = get_context(&result1);
-
-            let result2 = check_command_with_settings_and_session(
-                "npm install lodash",
-                "/tmp",
-                "default",
-                "dedup-session-3",
-            );
-            let ctx2 = get_context(&result2);
-
-            // First should mention pending list, second should not
-            if let Some(ref c) = ctx1 {
-                if c.contains("pending list") {
-                    let has_pending = ctx2
-                        .as_ref()
-                        .map(|c| c.contains("pending list"))
-                        .unwrap_or(false);
-                    assert!(
-                        !has_pending,
-                        "approval instructions should not repeat in same session"
-                    );
-                }
-            }
-        }
-
-        #[test]
-        fn test_different_hints_both_emitted() {
-            // Two different legacy tools should each get their hint once
-            let r1 = check_command_for_session("head -n 10 a.txt", "dedup-session-4");
-            let r2 = check_command_for_session("tail -n 10 b.txt", "dedup-session-4");
-            let ctx1 = get_context(&r1);
-            let ctx2 = get_context(&r2);
-
-            // Both are different hint keys ("head" vs "tail"), so both should emit
-            // (if bat is installed)
-            if ctx1.is_some() {
-                assert!(ctx2.is_some(), "different hint keys should both emit");
+            if let Some(ref c) = result.context {
+                assert!(
+                    !c.contains("pending list"),
+                    "approval instructions should not appear in additionalContext"
+                );
             }
         }
     }

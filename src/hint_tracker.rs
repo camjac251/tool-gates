@@ -1,11 +1,10 @@
-//! Session-scoped hint dedup tracker.
+//! Session-scoped dedup tracker for hints and security warnings.
 //!
-//! Tracks which hints and approval patterns have been emitted during the current
-//! Claude Code session. Each hint fires at most once per session, reducing the
+//! Tracks which hints and warnings have been emitted during the current
+//! session. Each entry fires at most once per session, reducing the
 //! context tax from repeated `<system-reminder>` injections.
 //!
 //! File: `~/.cache/tool-gates/hint-tracker.json`
-//! Single-session scope: resets when session_id changes.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -16,7 +15,7 @@ use std::sync::{Mutex, OnceLock};
 /// Global tracker. Loaded once per process, mutated in-place.
 static TRACKER: OnceLock<Mutex<HintTracker>> = OnceLock::new();
 
-/// Session-scoped hint/approval dedup state.
+/// Session-scoped dedup state.
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct HintTracker {
     /// Current session ID (resets tracker when session changes)
@@ -24,9 +23,6 @@ pub struct HintTracker {
     /// Hint keys already emitted (e.g. "cat", "grep", "find")
     #[serde(default)]
     pub hints: HashSet<String>,
-    /// Whether the first-ask approval message has been shown this session
-    #[serde(default)]
-    pub first_ask_shown: bool,
     /// Security warning keys already shown (e.g. "/tmp/f.js-eval_injection")
     #[serde(default)]
     pub security_warnings: HashSet<String>,
@@ -43,7 +39,6 @@ impl HintTracker {
                 return tracker;
             }
         }
-        // New session or no file. Start fresh
         HintTracker {
             session_id: session_id.to_string(),
             ..Default::default()
@@ -51,7 +46,6 @@ impl HintTracker {
     }
 
     /// Check if a hint key is new for this session. Records it if so.
-    /// Returns `true` if the hint should be emitted (first time).
     pub fn is_hint_new(&mut self, hint_key: &str) -> bool {
         if self.hints.contains(hint_key) {
             return false;
@@ -61,19 +55,7 @@ impl HintTracker {
         true
     }
 
-    /// Check if this is the first "ask" decision this session.
-    /// Returns `true` on first call, `false` thereafter.
-    pub fn is_first_ask(&mut self) -> bool {
-        if self.first_ask_shown {
-            return false;
-        }
-        self.first_ask_shown = true;
-        self.dirty = true;
-        true
-    }
-
     /// Check if a security warning key is new for this session.
-    /// Returns `true` if the warning should fire (first time).
     pub fn is_security_warning_new(&mut self, key: &str) -> bool {
         if self.security_warnings.contains(key) {
             return false;
@@ -92,19 +74,16 @@ impl HintTracker {
     }
 }
 
-/// Get the cache file path.
 fn tracker_path() -> Option<PathBuf> {
     Some(crate::cache::cache_dir().join("hint-tracker.json"))
 }
 
-/// Load tracker from disk.
 fn load_from_disk() -> Option<HintTracker> {
     let path = tracker_path()?;
     let content = fs::read_to_string(&path).ok()?;
     serde_json::from_str(&content).ok()
 }
 
-/// Save tracker to disk.
 fn save_to_disk(tracker: &HintTracker) -> Result<(), std::io::Error> {
     let path = tracker_path().ok_or_else(|| {
         std::io::Error::new(
@@ -122,16 +101,14 @@ fn save_to_disk(tracker: &HintTracker) -> Result<(), std::io::Error> {
     Ok(())
 }
 
-/// Get the global tracker for a session. Initializes on first call.
+/// Get the global tracker. Initializes on first call.
 pub fn get(session_id: &str) -> std::sync::MutexGuard<'static, HintTracker> {
     let mutex = TRACKER.get_or_init(|| Mutex::new(HintTracker::load(session_id)));
     mutex.lock().unwrap()
 }
 
-/// Filter hints through the session tracker, saving state to disk.
-///
-/// Retains only hints that haven't been emitted this session.
-/// Saves the tracker to disk if any new hints were recorded.
+/// Filter hints, retaining only those not yet shown this session.
+/// Empty `session_id` skips filtering (backward compat).
 pub fn filter_hints(session_id: &str, hints: &mut Vec<crate::hints::ModernHint>) {
     if session_id.is_empty() || hints.is_empty() {
         return;
@@ -141,26 +118,10 @@ pub fn filter_hints(session_id: &str, hints: &mut Vec<crate::hints::ModernHint>)
     tracker.save_if_dirty();
 }
 
-/// Check if this is the first "ask" decision for the session.
-///
-/// Returns `true` on first call per session, `false` thereafter.
-/// Saves the tracker to disk if state changed.
-pub fn is_first_ask(session_id: &str) -> bool {
-    if session_id.is_empty() {
-        return true; // No session tracking, always show
-    }
-    let mut tracker = get(session_id);
-    let first = tracker.is_first_ask();
-    tracker.save_if_dirty();
-    first
-}
-
-/// Check if a security warning is new for this session.
-///
-/// Returns `true` on first call per key per session. Persists to disk.
+/// Check if a security warning is new for this session. Persists to disk.
 pub fn is_security_warning_new(session_id: &str, key: &str) -> bool {
     if session_id.is_empty() {
-        return true; // No session tracking, always show
+        return true;
     }
     let mut tracker = get(session_id);
     let is_new = tracker.is_security_warning_new(key);
@@ -171,10 +132,8 @@ pub fn is_security_warning_new(session_id: &str, key: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
-    use tempfile::TempDir;
 
-    fn fresh_tracker(session_id: &str) -> HintTracker {
+    fn fresh(session_id: &str) -> HintTracker {
         HintTracker {
             session_id: session_id.to_string(),
             ..Default::default()
@@ -183,244 +142,86 @@ mod tests {
 
     #[test]
     fn test_hint_first_time_is_new() {
-        let mut tracker = fresh_tracker("session-1");
-        assert!(tracker.is_hint_new("cat"));
-        assert!(tracker.is_hint_new("grep"));
+        let mut t = fresh("s1");
+        assert!(t.is_hint_new("cat"));
+        assert!(t.is_hint_new("grep"));
     }
 
     #[test]
-    fn test_hint_second_time_is_not_new() {
-        let mut tracker = fresh_tracker("session-1");
-        assert!(tracker.is_hint_new("cat"));
-        assert!(!tracker.is_hint_new("cat"));
+    fn test_hint_second_time_suppressed() {
+        let mut t = fresh("s1");
+        assert!(t.is_hint_new("cat"));
+        assert!(!t.is_hint_new("cat"));
     }
 
     #[test]
-    fn test_first_ask_returns_true_once() {
-        let mut tracker = fresh_tracker("session-1");
-        assert!(tracker.is_first_ask());
-        assert!(!tracker.is_first_ask());
-        assert!(!tracker.is_first_ask());
+    fn test_warning_first_time_is_new() {
+        let mut t = fresh("s1");
+        assert!(t.is_security_warning_new("/tmp/f.js-eval_injection"));
     }
 
     #[test]
-    fn test_session_change_resets() {
-        let mut tracker = fresh_tracker("session-1");
-        tracker.is_hint_new("cat");
-        assert!(!tracker.is_hint_new("cat"));
-
-        // New session resets state
-        let mut tracker2 = fresh_tracker("session-2");
-        assert!(tracker2.is_hint_new("cat"));
+    fn test_warning_second_time_suppressed() {
+        let mut t = fresh("s1");
+        assert!(t.is_security_warning_new("key"));
+        assert!(!t.is_security_warning_new("key"));
     }
 
     #[test]
-    fn test_dirty_tracking() {
-        let mut tracker = fresh_tracker("session-1");
-        assert!(!tracker.dirty);
-
-        tracker.is_hint_new("cat");
-        assert!(tracker.dirty);
+    fn test_dirty_on_new_entry() {
+        let mut t = fresh("s1");
+        assert!(!t.dirty);
+        t.is_hint_new("cat");
+        assert!(t.dirty);
     }
 
     #[test]
     fn test_not_dirty_on_duplicate() {
-        let mut tracker = fresh_tracker("session-1");
-        tracker.is_hint_new("cat");
-        tracker.dirty = false; // reset
+        let mut t = fresh("s1");
+        t.is_hint_new("cat");
+        t.dirty = false;
+        t.is_hint_new("cat");
+        assert!(!t.dirty);
+    }
 
-        tracker.is_hint_new("cat"); // already seen
-        assert!(!tracker.dirty);
+    #[test]
+    fn test_session_change_resets() {
+        let mut t = fresh("s1");
+        t.is_hint_new("cat");
+        assert!(!t.is_hint_new("cat"));
+
+        let mut t2 = fresh("s2");
+        assert!(t2.is_hint_new("cat"));
     }
 
     #[test]
     fn test_serialization_roundtrip() {
-        let mut tracker = fresh_tracker("session-1");
-        tracker.is_hint_new("cat");
-        tracker.is_hint_new("grep");
-        tracker.is_first_ask();
+        let mut t = fresh("s1");
+        t.is_hint_new("cat");
+        t.is_security_warning_new("k1");
 
-        let json = serde_json::to_string(&tracker).unwrap();
+        let json = serde_json::to_string(&t).unwrap();
         let loaded: HintTracker = serde_json::from_str(&json).unwrap();
-
-        assert_eq!(loaded.session_id, "session-1");
+        assert_eq!(loaded.session_id, "s1");
         assert!(loaded.hints.contains("cat"));
-        assert!(loaded.hints.contains("grep"));
-        assert!(loaded.first_ask_shown);
-        assert!(!loaded.dirty); // dirty is skipped in serde
+        assert!(loaded.security_warnings.contains("k1"));
     }
 
     #[test]
-    fn test_save_persists_to_disk() {
-        let tmp = TempDir::new().unwrap();
-        let path = tmp.path().join("hint-tracker.json");
-
-        // Save tracker to disk
-        let mut tracker = fresh_tracker("persist-test");
-        tracker.is_hint_new("cat");
-        tracker.is_hint_new("grep");
-        tracker.is_first_ask();
-        tracker.dirty = true;
-
-        let content = serde_json::to_string(&tracker).unwrap();
-        fs::write(&path, &content).unwrap();
-
-        // Read back and verify
-        let loaded_content = fs::read_to_string(&path).unwrap();
-        let loaded: HintTracker = serde_json::from_str(&loaded_content).unwrap();
-        assert_eq!(loaded.session_id, "persist-test");
-        assert!(loaded.hints.contains("cat"));
-        assert!(loaded.hints.contains("grep"));
-        assert!(loaded.first_ask_shown);
-    }
-
-    #[test]
-    fn test_load_resets_on_session_mismatch() {
-        let tmp = TempDir::new().unwrap();
-        let path = tmp.path().join("hint-tracker.json");
-
-        // Write a tracker for session-1
-        let mut tracker = fresh_tracker("session-1");
-        tracker.is_hint_new("cat");
-        tracker.is_hint_new("grep");
-        tracker.is_first_ask();
-        let content = serde_json::to_string(&tracker).unwrap();
-        fs::write(&path, &content).unwrap();
-
-        // Load with different session_id. Should start fresh
-        let loaded_content = fs::read_to_string(&path).unwrap();
-        let loaded: HintTracker = serde_json::from_str(&loaded_content).unwrap();
-
-        // Simulate what HintTracker::load does: check session_id match
-        let result = if loaded.session_id == "session-2" {
-            loaded
-        } else {
-            HintTracker {
-                session_id: "session-2".to_string(),
-                ..Default::default()
-            }
-        };
-
-        assert_eq!(result.session_id, "session-2");
-        assert!(
-            result.hints.is_empty(),
-            "should be empty after session reset"
-        );
-        assert!(
-            !result.first_ask_shown,
-            "should be false after session reset"
-        );
-    }
-
-    #[test]
-    fn test_save_if_dirty_skips_when_clean() {
-        let tracker = fresh_tracker("session-1");
-        assert!(!tracker.dirty);
-        // save_if_dirty should be a no-op (no disk write attempted)
-        tracker.save_if_dirty();
-        // If it tried to write without a valid path, it would fail silently.
-        // The point is it doesn't panic or error.
-    }
-
-    #[test]
-    fn test_filter_hints_empty_session_id_passes_through() {
+    fn test_filter_hints_empty_session_passes_through() {
         use crate::hints::ModernHint;
-
-        let mut hints = vec![
-            ModernHint {
-                legacy_command: "cat",
-                modern_command: "bat",
-                hint: "Use bat".to_string(),
-            },
-            ModernHint {
-                legacy_command: "grep",
-                modern_command: "rg",
-                hint: "Use rg".to_string(),
-            },
-        ];
-
-        // Empty session_id should not filter anything
+        let mut hints = vec![ModernHint {
+            legacy_command: "cat",
+            modern_command: "bat",
+            hint: "Use bat".to_string(),
+        }];
         filter_hints("", &mut hints);
-        assert_eq!(
-            hints.len(),
-            2,
-            "empty session_id should pass all hints through"
-        );
+        assert_eq!(hints.len(), 1);
     }
 
     #[test]
-    fn test_is_first_ask_empty_session_always_true() {
-        // Empty session_id means no tracking, always show
-        assert!(is_first_ask(""));
-        assert!(is_first_ask(""));
-    }
-
-    #[test]
-    fn test_security_warning_first_time_is_new() {
-        let mut tracker = fresh_tracker("sec-session-1");
-        assert!(tracker.is_security_warning_new("/tmp/f.js-eval_injection"));
-    }
-
-    #[test]
-    fn test_security_warning_second_time_is_not_new() {
-        let mut tracker = fresh_tracker("sec-session-2");
-        assert!(tracker.is_security_warning_new("/tmp/f.js-eval_injection"));
-        assert!(!tracker.is_security_warning_new("/tmp/f.js-eval_injection"));
-    }
-
-    #[test]
-    fn test_security_warning_different_key_is_new() {
-        let mut tracker = fresh_tracker("sec-session-3");
-        tracker.is_security_warning_new("/tmp/f.js-eval_injection");
-        assert!(tracker.is_security_warning_new("/tmp/g.py-pickle_deserialization"));
-    }
-
-    #[test]
-    fn test_security_warning_session_reset_clears() {
-        let mut tracker = fresh_tracker("sec-session-4");
-        tracker.is_security_warning_new("/tmp/f.js-eval_injection");
-        assert!(!tracker.is_security_warning_new("/tmp/f.js-eval_injection"));
-
-        // Simulate session change
-        let mut tracker2 = fresh_tracker("sec-session-5");
-        assert!(tracker2.is_security_warning_new("/tmp/f.js-eval_injection"));
-    }
-
-    #[test]
-    fn test_security_warning_sets_dirty() {
-        let mut tracker = fresh_tracker("sec-session-6");
-        assert!(!tracker.dirty);
-        tracker.is_security_warning_new("key");
-        assert!(tracker.dirty);
-    }
-
-    #[test]
-    fn test_security_warning_no_dirty_on_duplicate() {
-        let mut tracker = fresh_tracker("sec-session-7");
-        tracker.is_security_warning_new("key");
-        tracker.dirty = false;
-        tracker.is_security_warning_new("key");
-        assert!(!tracker.dirty);
-    }
-
-    #[test]
-    fn test_security_warning_serialization_roundtrip() {
-        let mut tracker = fresh_tracker("sec-session-8");
-        tracker.is_security_warning_new("key1");
-        tracker.is_security_warning_new("key2");
-
-        let json = serde_json::to_string(&tracker).unwrap();
-        let loaded: HintTracker = serde_json::from_str(&json).unwrap();
-        assert!(loaded.security_warnings.contains("key1"));
-        assert!(loaded.security_warnings.contains("key2"));
-    }
-
-    #[test]
-    fn test_security_warning_backwards_compat_missing_field() {
-        // Old JSON without security_warnings field. Should deserialize with empty set
-        let json = r#"{"session_id":"old","hints":["cat"],"first_ask_shown":false}"#;
-        let loaded: HintTracker = serde_json::from_str(json).unwrap();
-        assert!(loaded.security_warnings.is_empty());
-        assert!(loaded.hints.contains("cat"));
+    fn test_security_warning_empty_session_always_new() {
+        assert!(is_security_warning_new("", "key"));
+        assert!(is_security_warning_new("", "key"));
     }
 }
