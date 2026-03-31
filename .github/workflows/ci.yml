@@ -105,7 +105,3 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
-      - name: Trigger release workflow
-        run: gh workflow run release.yml --repo ${{ github.repository }}
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}

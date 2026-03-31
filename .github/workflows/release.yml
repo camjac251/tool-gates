@@ -48,7 +48,7 @@ jobs:
 
   release:
     name: Release
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.tag == '')
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
