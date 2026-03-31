@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.9.0](https://github.com/camjac251/tool-gates/compare/v1.8.0...v1.9.0) - 2026-03-31
+
+### Added
+
+- *(hooks)* detect and update stale matchers on hooks add
+
 ## [1.8.0](https://github.com/camjac251/tool-gates/compare/v1.7.3...v1.8.0) - 2026-03-30
 
 ### Added
