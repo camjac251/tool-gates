@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.9.2](https://github.com/camjac251/tool-gates/compare/v1.9.1...v1.9.2) - 2026-03-31
+
+### Fixed
+
+- *(ci)* remove redundant workflow_dispatch that races with push
+
 ## [1.9.1](https://github.com/camjac251/tool-gates/compare/v1.9.0...v1.9.1) - 2026-03-31
 
 ### Fixed
