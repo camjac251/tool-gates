@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.9.1](https://github.com/camjac251/tool-gates/compare/v1.9.0...v1.9.1) - 2026-03-31
+
+### Fixed
+
+- *(router)* remove approval context from additionalContext
+
 ## [1.9.0](https://github.com/camjac251/tool-gates/compare/v1.8.0...v1.9.0) - 2026-03-31
 
 ### Added
