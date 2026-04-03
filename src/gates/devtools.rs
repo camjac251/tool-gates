@@ -696,6 +696,46 @@ mod tests {
         assert_eq!(result.decision, Decision::Ask);
     }
 
+    // === Ty (Python type checker) ===
+
+    #[test]
+    fn test_ty_check_allows() {
+        let result = check_devtools(&cmd("ty", &["check"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_ty_bare_allows() {
+        let result = check_devtools(&cmd("ty", &[]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_ty_add_ignore_asks() {
+        let result = check_devtools(&cmd("ty", &["check", "--add-ignore"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    // === Markdownlint ===
+
+    #[test]
+    fn test_markdownlint_allows() {
+        let result = check_devtools(&cmd("markdownlint", &["**/*.md"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_markdownlint_fix_asks() {
+        let result = check_devtools(&cmd("markdownlint", &["--fix", "README.md"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    #[test]
+    fn test_markdownlint_f_short_asks() {
+        let result = check_devtools(&cmd("markdownlint", &["-f", "README.md"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
     // === Non-devtools ===
 
     #[test]

@@ -1087,3 +1087,31 @@ reason = "Authenticating"
 [[programs.ask]]
 subcommand = "pages"
 reason = "Pages operation"
+
+# =============================================================================
+# TY (Astral Python type checker - read-only)
+# =============================================================================
+
+[[programs]]
+name = "ty"
+unknown_action = "allow"
+
+# --add-ignore inserts ty: ignore comments into source files
+[[programs.ask]]
+reason = "Adding ignore comments to source files"
+if_flags_any = ["--add-ignore"]
+accept_edits_auto_allow = true
+
+# =============================================================================
+# MARKDOWNLINT (Markdown linter - read-only)
+# =============================================================================
+
+[[programs]]
+name = "markdownlint"
+unknown_action = "allow"
+
+# --fix / -f modifies files in-place
+[[programs.ask]]
+reason = "Auto-fixing markdown"
+if_flags_any = ["--fix", "-f"]
+accept_edits_auto_allow = true

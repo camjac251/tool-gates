@@ -1043,7 +1043,7 @@ fn should_auto_allow_in_accept_edits(commands: &[CommandInfo], allowed_dirs: &[S
     if commands.is_empty() {
         return false;
     }
-    let all_file_edits = commands.iter().all(is_file_editing_command);
+    let all_file_edits = commands.iter().all(is_file_editing_command_or_wrapper);
     let any_sensitive = commands.iter().any(targets_sensitive_path);
     let any_outside = commands
         .iter()
@@ -1330,7 +1330,96 @@ fn is_under_any_dir(path: &str, allowed_dirs: &[String]) -> bool {
 
 // File-editing detection is now generated from TOML rules with accept_edits_auto_allow = true.
 // See src/generated/rules.rs for the generated is_file_editing_command function.
-use crate::generated::rules::is_file_editing_command;
+use crate::generated::rules::{FILE_EDITING_PROGRAMS, is_file_editing_command};
+
+/// Wrapper-aware file-editing detection for acceptEdits mode.
+///
+/// When a command like `uv run ruff format .` or `pnpm biome check --write .`
+/// is checked, `is_file_editing_command` only sees the outer program (uv/pnpm)
+/// which isn't in FILE_EDITING_PROGRAMS. This function resolves through known
+/// wrapper commands to check the inner tool.
+fn is_file_editing_command_or_wrapper(cmd: &CommandInfo) -> bool {
+    // Direct match first
+    if is_file_editing_command(cmd) {
+        return true;
+    }
+
+    // Try resolving wrapper commands to their inner tool
+    if let Some(inner) = resolve_wrapper_inner_command(cmd) {
+        return is_file_editing_command(&inner);
+    }
+
+    false
+}
+
+/// Extract the inner tool command from a wrapper invocation.
+///
+/// Handles:
+/// - `uv run [flags] <tool> <args>` (and poetry/pipx/pdm/hatch run)
+/// - `pnpm <devtool> <args>` / `npm exec <tool>` / `npx <tool>` / `bunx <tool>`
+fn resolve_wrapper_inner_command(cmd: &CommandInfo) -> Option<CommandInfo> {
+    let base = cmd.program.rsplit('/').next().unwrap_or(&cmd.program);
+
+    match base {
+        // Local-env Python runners: uv run, poetry run, pdm run, hatch run.
+        // These execute tools from the project's virtual environment (local deps).
+        //
+        // NOT included: pipx run (downloads to isolated env, like npx).
+        "uv" | "poetry" | "pdm" | "hatch" => {
+            if cmd.args.first().map(|s| s.as_str()) != Some("run") {
+                return None;
+            }
+            // Skip flags after "run" (same logic as check_python_run_command)
+            let mut idx = 1;
+            while idx < cmd.args.len() && cmd.args[idx].starts_with('-') {
+                idx += 1;
+                // Handle flags with values like --python 3.11
+                if idx < cmd.args.len() && !cmd.args[idx].starts_with('-') {
+                    let prev = &cmd.args[idx - 1];
+                    if matches!(prev.as_str(), "--python" | "-p" | "--with" | "--env" | "-e") {
+                        idx += 1;
+                    }
+                }
+            }
+            if idx >= cmd.args.len() {
+                return None;
+            }
+            Some(CommandInfo {
+                raw: cmd.raw.clone(),
+                program: cmd.args[idx].clone(),
+                args: cmd.args[idx + 1..].to_vec(),
+            })
+        }
+        // JS package managers: direct devtool invocation only.
+        // e.g. "pnpm biome check --write ." runs local node_modules/.bin/biome.
+        //
+        // NOT resolved: exec/dlx/npx/bunx. These download and execute arbitrary
+        // packages from npm, so even a known tool name could be a typosquatted
+        // malicious package. Those must always prompt for approval.
+        "pnpm" | "npm" | "yarn" | "bun" => {
+            if cmd.args.is_empty() {
+                return None;
+            }
+            let first = cmd.args[0].as_str();
+            // Never resolve exec/dlx (network fetch + execute)
+            if matches!(first, "exec" | "dlx") {
+                return None;
+            }
+            // Direct devtool: "pnpm biome ..." only if biome is a known file editor
+            if FILE_EDITING_PROGRAMS.contains(first) {
+                return Some(CommandInfo {
+                    raw: cmd.raw.clone(),
+                    program: cmd.args[0].clone(),
+                    args: cmd.args[1..].to_vec(),
+                });
+            }
+            None
+        }
+        // npx/bunx/pipx: NOT resolved. These download from registries and execute
+        // arbitrary code. Even "npx prettier" could run a malicious typosquat.
+        _ => None,
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -1783,6 +1872,106 @@ mod tests {
                 "acceptEdits",
             );
             assert_eq!(get_decision(&result), "ask");
+        }
+
+        // === Wrapper commands in acceptEdits mode ===
+        // Package managers wrapping file-editing tools should be auto-allowed.
+
+        #[test]
+        fn test_uv_run_ruff_format_allowed_in_accept_edits() {
+            let result = check_command_with_settings("uv run ruff format .", "/tmp", "acceptEdits");
+            assert_eq!(get_decision(&result), "allow");
+        }
+
+        #[test]
+        fn test_uv_run_ruff_check_fix_allowed_in_accept_edits() {
+            let result =
+                check_command_with_settings("uv run ruff check --fix .", "/tmp", "acceptEdits");
+            assert_eq!(get_decision(&result), "allow");
+        }
+
+        #[test]
+        fn test_uv_run_ruff_check_readonly_allows() {
+            // ruff check without --fix is read-only, allowed by gate directly
+            let result = check_command_with_settings("uv run ruff check .", "/tmp", "acceptEdits");
+            assert_eq!(get_decision(&result), "allow");
+        }
+
+        #[test]
+        fn test_uv_run_black_allowed_in_accept_edits() {
+            let result = check_command_with_settings("uv run black .", "/tmp", "acceptEdits");
+            assert_eq!(get_decision(&result), "allow");
+        }
+
+        #[test]
+        fn test_uv_run_with_flags_allowed_in_accept_edits() {
+            // uv run with flags before the tool name
+            let result = check_command_with_settings(
+                "uv run --only-dev ruff format .",
+                "/tmp",
+                "acceptEdits",
+            );
+            assert_eq!(get_decision(&result), "allow");
+        }
+
+        #[test]
+        fn test_pnpm_biome_check_write_allowed_in_accept_edits() {
+            let result =
+                check_command_with_settings("pnpm biome check --write .", "/tmp", "acceptEdits");
+            assert_eq!(get_decision(&result), "allow");
+        }
+
+        #[test]
+        fn test_pnpm_biome_format_write_allowed_in_accept_edits() {
+            let result =
+                check_command_with_settings("pnpm biome format --write .", "/tmp", "acceptEdits");
+            assert_eq!(get_decision(&result), "allow");
+        }
+
+        #[test]
+        fn test_pnpm_eslint_fix_allowed_in_accept_edits() {
+            let result =
+                check_command_with_settings("pnpm eslint --fix src/", "/tmp", "acceptEdits");
+            assert_eq!(get_decision(&result), "allow");
+        }
+
+        #[test]
+        fn test_npx_prettier_write_still_asks_in_accept_edits() {
+            // npx downloads from npm, so even known tools must prompt
+            let result =
+                check_command_with_settings("npx prettier --write .", "/tmp", "acceptEdits");
+            assert_eq!(get_decision(&result), "ask");
+        }
+
+        #[test]
+        fn test_uv_run_non_editor_still_asks() {
+            // uv run with a non-file-editing tool should still ask
+            let result =
+                check_command_with_settings("uv run some-unknown-tool", "/tmp", "acceptEdits");
+            assert_eq!(get_decision(&result), "ask");
+        }
+
+        // === Scoped npm packages must NOT be treated as known file editors ===
+
+        #[test]
+        fn test_scoped_npm_package_not_auto_allowed() {
+            // @evil/prettier should NOT match "prettier" in FILE_EDITING_PROGRAMS
+            let cmd = CommandInfo {
+                program: "@evil/prettier".to_string(),
+                args: vec!["--write".to_string(), ".".to_string()],
+                raw: "@evil/prettier --write .".to_string(),
+            };
+            assert!(!is_file_editing_command(&cmd));
+        }
+
+        #[test]
+        fn test_scoped_npm_biome_not_auto_allowed() {
+            let cmd = CommandInfo {
+                program: "@malicious/biome".to_string(),
+                args: vec!["check".to_string(), "--write".to_string(), ".".to_string()],
+                raw: "@malicious/biome check --write .".to_string(),
+            };
+            assert!(!is_file_editing_command(&cmd));
         }
     }
 

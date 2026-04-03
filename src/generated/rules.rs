@@ -5733,6 +5733,70 @@ pub fn check_wrangler_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     Some(GateResult::ask(format!("wrangler: {}", subcmd_single)))
 }
 
+// === TY (from devtools.toml) ===
+
+/// Check ty commands declaratively
+pub fn check_ty_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["ty"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    // Check ask rules with flag/prefix conditions
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--add-ignore"].contains(&a.as_str()))
+    {
+        return Some(GateResult::ask("Adding ignore comments to source files"));
+    }
+
+    Some(GateResult::allow())
+}
+
+// === MARKDOWNLINT (from devtools.toml) ===
+
+/// Check markdownlint commands declaratively
+pub fn check_markdownlint_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["markdownlint"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    // Check ask rules with flag/prefix conditions
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--fix", "-f"].contains(&a.as_str()))
+    {
+        return Some(GateResult::ask("Auto-fixing markdown"));
+    }
+
+    Some(GateResult::allow())
+}
+
 // === PYTHON3 (from runtimes.toml) ===
 
 /// Check python3 commands declaratively
@@ -10481,6 +10545,12 @@ pub fn check_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if let Some(result) = check_wrangler_declarative(cmd) {
         return Some(result);
     }
+    if let Some(result) = check_ty_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_markdownlint_declarative(cmd) {
+        return Some(result);
+    }
     if let Some(result) = check_python3_declarative(cmd) {
         return Some(result);
     }
@@ -11001,7 +11071,7 @@ pub fn check_tool_gates_gate(cmd: &CommandInfo) -> GateResult {
 /// Programs handled by the tool_gates gate
 pub static TOOL_GATES_PROGRAMS: &[&str] = &["tool-gates", "bash-gates"];
 
-/// Generated gate for devtools - handles: sd, sad, ast-grep, sg, yq, jq, semgrep, comby, grit, watchexec, biome, prettier, eslint, ruff, black, isort, shellcheck, hadolint, golangci-lint, gci, air, actionlint, gitleaks, lefthook, vite, vitest, jest, mocha, tsc, tsup, esbuild, turbo, nx, knip, oxlint, gofmt, gofumpt, goimports, shfmt, rustfmt, stylua, clang-format, autopep8, rubocop, standardrb, patch, dos2unix, unix2dos, stylelint, mix, perltidy, dartfmt, dart, elm-format, scalafmt, ktlint, swiftformat, buf, pytest, py.test, mypy, pyright, basedpyright, pylint, flake8, bandit, coverage, tox, nox, autoflake, tsx, ts-node, webpack, webpack-cli, rollup, swc, parcel, playwright, cypress, wrangler
+/// Generated gate for devtools - handles: sd, sad, ast-grep, sg, yq, jq, semgrep, comby, grit, watchexec, biome, prettier, eslint, ruff, black, isort, shellcheck, hadolint, golangci-lint, gci, air, actionlint, gitleaks, lefthook, vite, vitest, jest, mocha, tsc, tsup, esbuild, turbo, nx, knip, oxlint, gofmt, gofumpt, goimports, shfmt, rustfmt, stylua, clang-format, autopep8, rubocop, standardrb, patch, dos2unix, unix2dos, stylelint, mix, perltidy, dartfmt, dart, elm-format, scalafmt, ktlint, swiftformat, buf, pytest, py.test, mypy, pyright, basedpyright, pylint, flake8, bandit, coverage, tox, nox, autoflake, tsx, ts-node, webpack, webpack-cli, rollup, swc, parcel, playwright, cypress, wrangler, ty, markdownlint
 /// Custom handlers needed for: ["sd"]
 pub fn check_devtools_gate(cmd: &CommandInfo) -> GateResult {
     match cmd.program.as_str() {
@@ -11085,6 +11155,8 @@ pub fn check_devtools_gate(cmd: &CommandInfo) -> GateResult {
         "playwright" => check_playwright_declarative(cmd).unwrap_or_else(GateResult::skip),
         "cypress" => check_cypress_declarative(cmd).unwrap_or_else(GateResult::skip),
         "wrangler" => check_wrangler_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "ty" => check_ty_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "markdownlint" => check_markdownlint_declarative(cmd).unwrap_or_else(GateResult::skip),
         _ => GateResult::skip(),
     }
 }
@@ -11171,6 +11243,8 @@ pub static DEVTOOLS_PROGRAMS: &[&str] = &[
     "playwright",
     "cypress",
     "wrangler",
+    "ty",
+    "markdownlint",
 ];
 
 /// Generated gate for runtimes - handles: python3, python, python3.11, python3.12, python3.13, python3.14, node, ruby, deno, php, lua, luajit, lua5.1, lua5.2, lua5.3, lua5.4, java, javac, dotnet, swift, elixir, iex
@@ -11534,6 +11608,7 @@ pub static FILE_EDITING_PROGRAMS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "grit",
         "isort",
         "ktlint",
+        "markdownlint",
         "mix",
         "mkdir",
         "perltidy",
@@ -11554,6 +11629,7 @@ pub static FILE_EDITING_PROGRAMS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "swiftformat",
         "terraform",
         "tofu",
+        "ty",
         "unix2dos",
         "yq",
     ]
@@ -11565,6 +11641,12 @@ pub static FILE_EDITING_PROGRAMS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 /// Returns true if the command should be auto-allowed in acceptEdits mode.
 pub fn is_file_editing_command(cmd: &CommandInfo) -> bool {
     let base_program = cmd.program.rsplit('/').next().unwrap_or(&cmd.program);
+
+    // Reject scoped npm packages: @scope/tool should not match bare "tool".
+    // rsplit('/') strips the scope, which would let @evil/prettier match "prettier".
+    if cmd.program.starts_with('@') && base_program != cmd.program {
+        return false;
+    }
 
     // Quick check: is this a known file-editing program?
     if !FILE_EDITING_PROGRAMS.contains(base_program) {
@@ -11638,6 +11720,10 @@ pub fn is_file_editing_command(cmd: &CommandInfo) -> bool {
             .args
             .iter()
             .any(|a| ["-F", "--format"].contains(&a.as_str())),
+        "markdownlint" => cmd
+            .args
+            .iter()
+            .any(|a| ["--fix", "-f"].contains(&a.as_str())),
         "mix" => cmd.args.first().is_some_and(|a| a == "format"),
         "mkdir" => {
             // Bare rule: always file-editing
@@ -11698,6 +11784,10 @@ pub fn is_file_editing_command(cmd: &CommandInfo) -> bool {
         }
         "terraform" => cmd.args.first().is_some_and(|a| a == "fmt"),
         "tofu" => cmd.args.first().is_some_and(|a| a == "fmt"),
+        "ty" => cmd
+            .args
+            .iter()
+            .any(|a| ["--add-ignore"].contains(&a.as_str())),
         "unix2dos" => {
             // Bare rule: always file-editing
             true
