@@ -181,6 +181,15 @@ safe_commands = [
     "xxh64sum",
     "xxh128sum",
 
+    # Markdown/document renderers (read-only)
+    "glow",
+
+    # CLI output converters (read-only, stdin->stdout)
+    "jc",
+
+    # Temp file creation (safe, creates in $TMPDIR)
+    "mktemp",
+
     # Help/docs
     "man",
     "info",

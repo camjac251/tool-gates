@@ -863,6 +863,56 @@ subcommand = "fmt"
 [[programs.allow]]
 subcommand = "clean"
 
+# Extended cargo subcommands (common plugins)
+# Read-only analysis tools
+[[programs.allow]]
+subcommand = "nextest"
+
+[[programs.allow]]
+subcommand = "audit"
+
+[[programs.allow]]
+subcommand = "deny"
+
+[[programs.allow]]
+subcommand = "expand"
+
+[[programs.allow]]
+subcommand = "semver-checks"
+
+[[programs.allow]]
+subcommand = "llvm-cov"
+
+[[programs.allow]]
+subcommand = "outdated"
+
+[[programs.allow]]
+subcommand = "bloat"
+
+[[programs.allow]]
+subcommand = "machete"
+
+[[programs.allow]]
+subcommand = "depgraph"
+
+# Tools that modify files
+[[programs.ask]]
+subcommand = "insta"
+reason = "Snapshot testing"
+if_flags_any = ["review", "accept", "reject"]
+
+[[programs.allow]]
+subcommand = "insta"
+unless_flags = ["review", "accept", "reject"]
+
+[[programs.ask]]
+subcommand = "watch"
+reason = "Running commands on file changes"
+
+[[programs.ask]]
+subcommand = "mutants"
+reason = "Mutation testing (modifies source files)"
+
 # Risky commands
 [[programs.ask]]
 subcommand = "install"

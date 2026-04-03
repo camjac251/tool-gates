@@ -223,3 +223,60 @@ reason = "HTTPie: DELETE request"
 [[programs.ask]]
 subcommand = "PATCH"
 reason = "HTTPie: PATCH request"
+
+# =============================================================================
+# NMAP (port scanner - all usage requires approval)
+# =============================================================================
+
+[[programs]]
+name = "nmap"
+unknown_action = "ask"
+
+[[programs.allow]]
+subcommand = "--version"
+
+[[programs.allow]]
+subcommand = "-V"
+
+[[programs.allow]]
+subcommand = "--help"
+
+[[programs.allow]]
+subcommand = "-h"
+
+[[programs.ask]]
+reason = "Port scanning"
+
+# =============================================================================
+# SOCAT (network relay/tunnel)
+# =============================================================================
+
+[[programs]]
+name = "socat"
+unknown_action = "ask"
+
+[[programs.allow]]
+subcommand = "--version"
+
+[[programs.allow]]
+subcommand = "-V"
+
+[[programs.allow]]
+subcommand = "--help"
+
+[[programs.allow]]
+subcommand = "-h"
+
+[[programs.ask]]
+reason = "Network relay"
+
+# =============================================================================
+# TELNET (network connection)
+# =============================================================================
+
+[[programs]]
+name = "telnet"
+unknown_action = "ask"
+
+[[programs.ask]]
+reason = "Network connection"

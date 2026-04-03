@@ -1,0 +1,416 @@
+# Language Runtimes Permission Gate
+#
+# Handles language runtime invocations:
+# - Python: python3, python
+# - Node.js: node
+# - Ruby: ruby
+# - Deno: deno
+# - PHP: php
+# - Lua: lua, luajit
+# - Java: java, javac
+# - .NET: dotnet
+# - Swift: swift
+# - Elixir: elixir, iex
+# - Perl: perl (handled in filesystem gate for -i, here for general use)
+#
+# Pattern:
+# - Version/help flags are always safe
+# - Code execution (-c, -e, scripts) requires approval
+# - Language-specific read-only subcommands are safe
+
+[meta]
+name = "runtimes"
+description = "Language runtime permission gate"
+priority = 27
+
+# =============================================================================
+# PYTHON3 / PYTHON
+# =============================================================================
+
+[[programs]]
+name = "python3"
+aliases = ["python", "python3.11", "python3.12", "python3.13", "python3.14"]
+unknown_action = "ask"
+
+# Read-only flags
+[[programs.allow]]
+if_flags_any = ["--version", "-V", "-VV"]
+
+[[programs.allow]]
+if_flags_any = ["--help", "-h"]
+
+[[programs.ask]]
+reason = "Executing Python code"
+if_flags_any = ["-c"]
+
+[[programs.ask]]
+reason = "Running Python module"
+if_flags_any = ["-m"]
+
+[[programs.ask]]
+reason = "Running Python script"
+
+# =============================================================================
+# NODE
+# =============================================================================
+
+[[programs]]
+name = "node"
+unknown_action = "ask"
+
+# Read-only flags
+[[programs.allow]]
+if_flags_any = ["--version", "-v"]
+
+[[programs.allow]]
+if_flags_any = ["--help", "-h"]
+
+# Syntax check is safe (no execution)
+[[programs.allow]]
+if_flags_any = ["-c", "--check"]
+
+[[programs.ask]]
+reason = "Executing JavaScript"
+if_flags_any = ["-e", "--eval", "-p", "--print"]
+
+[[programs.ask]]
+reason = "Running Node.js script"
+
+# =============================================================================
+# RUBY
+# =============================================================================
+
+[[programs]]
+name = "ruby"
+unknown_action = "ask"
+
+[[programs.allow]]
+if_flags_any = ["--version", "-v"]
+
+[[programs.allow]]
+if_flags_any = ["--help", "-h"]
+
+# Syntax check is safe (no execution)
+[[programs.allow]]
+if_flags_any = ["-c"]
+
+[[programs.ask]]
+reason = "Executing Ruby code"
+if_flags_any = ["-e"]
+
+[[programs.ask]]
+reason = "Running Ruby script"
+
+# =============================================================================
+# DENO
+# =============================================================================
+
+[[programs]]
+name = "deno"
+unknown_action = "ask"
+
+# Read-only commands
+[[programs.allow]]
+subcommand = "--version"
+
+[[programs.allow]]
+subcommand = "-V"
+
+[[programs.allow]]
+subcommand = "--help"
+
+[[programs.allow]]
+subcommand = "-h"
+
+[[programs.allow]]
+subcommand = "check"
+
+[[programs.allow]]
+subcommand = "lint"
+
+[[programs.allow]]
+subcommand = "doc"
+
+[[programs.allow]]
+subcommand = "info"
+
+[[programs.allow]]
+subcommand = "types"
+
+[[programs.allow]]
+subcommand = "completions"
+
+[[programs.allow]]
+subcommand = "help"
+
+# Read-only when --check is present
+[[programs.allow]]
+subcommand = "fmt"
+if_flags_any = ["--check"]
+
+# Test runner (read-only execution)
+[[programs.allow]]
+subcommand = "test"
+
+[[programs.allow]]
+subcommand = "bench"
+
+# Write/execute commands
+[[programs.ask]]
+subcommand = "run"
+reason = "Running Deno script"
+
+[[programs.ask]]
+subcommand = "serve"
+reason = "Starting Deno server"
+
+[[programs.ask]]
+subcommand = "fmt"
+reason = "Formatting files"
+accept_edits_auto_allow = true
+
+[[programs.ask]]
+subcommand = "compile"
+reason = "Compiling to binary"
+
+[[programs.ask]]
+subcommand = "install"
+reason = "Installing package/script"
+
+[[programs.ask]]
+subcommand = "uninstall"
+reason = "Uninstalling package/script"
+
+[[programs.ask]]
+subcommand = "task"
+reason = "Running task"
+
+[[programs.ask]]
+subcommand = "upgrade"
+reason = "Upgrading Deno"
+
+[[programs.ask]]
+subcommand = "add"
+reason = "Adding dependency"
+
+[[programs.ask]]
+subcommand = "remove"
+reason = "Removing dependency"
+
+[[programs.ask]]
+subcommand = "publish"
+reason = "Publishing module"
+
+# =============================================================================
+# PHP
+# =============================================================================
+
+[[programs]]
+name = "php"
+unknown_action = "ask"
+
+[[programs.allow]]
+if_flags_any = ["--version", "-v"]
+
+[[programs.allow]]
+if_flags_any = ["--help", "-h"]
+
+[[programs.allow]]
+if_flags_any = ["--info", "-i"]
+
+# Syntax check is read-only
+[[programs.allow]]
+if_flags_any = ["-l", "--syntax-check"]
+
+# List modules is safe
+[[programs.allow]]
+if_flags_any = ["-m"]
+
+[[programs.ask]]
+reason = "Executing PHP code"
+if_flags_any = ["-r"]
+
+[[programs.ask]]
+reason = "Running PHP script"
+
+# =============================================================================
+# LUA / LUAJIT
+# =============================================================================
+
+[[programs]]
+name = "lua"
+aliases = ["luajit", "lua5.1", "lua5.2", "lua5.3", "lua5.4"]
+unknown_action = "ask"
+
+[[programs.allow]]
+if_flags_any = ["-v"]
+
+[[programs.ask]]
+reason = "Executing Lua code"
+if_flags_any = ["-e"]
+
+[[programs.ask]]
+reason = "Running Lua script"
+
+# =============================================================================
+# JAVA / JAVAC
+# =============================================================================
+
+[[programs]]
+name = "java"
+unknown_action = "ask"
+
+[[programs.allow]]
+if_flags_any = ["--version", "-version", "--help", "-help", "-h"]
+
+[[programs.ask]]
+reason = "Running Java application"
+
+[[programs]]
+name = "javac"
+unknown_action = "ask"
+
+[[programs.allow]]
+if_flags_any = ["--version", "-version", "--help", "-help"]
+
+[[programs.ask]]
+reason = "Compiling Java source"
+
+# =============================================================================
+# DOTNET (.NET CLI)
+# =============================================================================
+
+[[programs]]
+name = "dotnet"
+unknown_action = "ask"
+
+# Read-only
+[[programs.allow]]
+if_flags_any = ["--version", "--info", "--list-sdks", "--list-runtimes"]
+
+[[programs.allow]]
+subcommand = "--help"
+
+[[programs.allow]]
+subcommand = "-h"
+
+[[programs.allow]]
+subcommand = "help"
+
+# Local build/test (safe)
+[[programs.allow]]
+subcommand = "build"
+
+[[programs.allow]]
+subcommand = "test"
+
+[[programs.allow]]
+subcommand = "run"
+
+[[programs.allow]]
+subcommand = "clean"
+
+[[programs.allow]]
+subcommand = "restore"
+
+# Read-only inspection
+[[programs.allow]]
+subcommand = "list"
+
+[[programs.allow]]
+subcommand = "sln"
+
+# Mutation commands
+[[programs.ask]]
+subcommand = "publish"
+reason = "Publishing application"
+
+[[programs.ask]]
+subcommand = "new"
+reason = "Creating project"
+
+[[programs.ask]]
+subcommand = "add"
+reason = "Adding reference/package"
+
+[[programs.ask]]
+subcommand = "remove"
+reason = "Removing reference/package"
+
+[[programs.ask]]
+subcommand = "nuget"
+reason = "NuGet operation"
+
+[[programs.ask]]
+subcommand = "tool"
+reason = "Tool management"
+
+[[programs.ask]]
+subcommand = "pack"
+reason = "Creating NuGet package"
+
+# Format --check is read-only
+[[programs.allow]]
+subcommand = "format"
+if_flags_any = ["--check", "--verify-no-changes"]
+
+[[programs.ask]]
+subcommand = "format"
+reason = "Formatting code"
+accept_edits_auto_allow = true
+
+# =============================================================================
+# SWIFT (Swift compiler/package manager)
+# =============================================================================
+
+[[programs]]
+name = "swift"
+unknown_action = "ask"
+
+[[programs.allow]]
+if_flags_any = ["--version", "--help", "-h"]
+
+[[programs.allow]]
+subcommand = "build"
+
+[[programs.allow]]
+subcommand = "test"
+
+[[programs.ask]]
+subcommand = "run"
+reason = "Running Swift package"
+
+[[programs.ask]]
+subcommand = "package"
+reason = "Package operation"
+
+# =============================================================================
+# ELIXIR / IEX
+# =============================================================================
+
+[[programs]]
+name = "elixir"
+unknown_action = "ask"
+
+[[programs.allow]]
+if_flags_any = ["--version", "-v"]
+
+[[programs.allow]]
+if_flags_any = ["--help", "-h"]
+
+[[programs.ask]]
+reason = "Executing Elixir code"
+if_flags_any = ["-e"]
+
+[[programs.ask]]
+reason = "Running Elixir script"
+
+[[programs]]
+name = "iex"
+unknown_action = "ask"
+
+[[programs.allow]]
+if_flags_any = ["--version", "-v"]
+
+[[programs.ask]]
+reason = "Starting Elixir REPL"

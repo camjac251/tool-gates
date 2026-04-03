@@ -74,7 +74,7 @@ The client is auto-detected from `hook_event_name`. No configuration needed. Out
 │       ├── review/SKILL.md
 │       └── test-gate/SKILL.md
 ├── rules/           # Declarative gate definitions (13 TOML files)
-│   ├── basics.toml, tool_gates.toml, beads.toml, cloud.toml, devtools.toml, ...
+│   ├── basics.toml, tool_gates.toml, beads.toml, cloud.toml, devtools.toml, runtimes.toml, ...
 ├── tests/fixtures/  # Test fixtures
 ├── tests/config_fixtures/  # Config TOML test fixtures
 ├── lefthook.yml     # Git hooks
@@ -125,11 +125,12 @@ src/
     ├── git.rs           # Git commands
     ├── shortcut.rs      # Shortcut.com CLI (short)
     ├── cloud.rs         # AWS, gcloud, terraform, kubectl, docker, helm, pulumi, az
-    ├── network.rs       # curl, wget, ssh, scp, rsync, netcat
+    ├── network.rs       # curl, wget, ssh, scp, rsync, netcat, nmap, socat, telnet
     ├── filesystem.rs    # rm, rmdir, mv, cp, chmod, tar, zip
-    ├── devtools.rs      # sd, ast-grep, yq, jq, semgrep, biome, prettier
+    ├── devtools.rs      # sd, ast-grep, semgrep, biome, prettier, pytest, mypy, playwright, cypress, tsx, webpack
     ├── package_managers.rs  # npm, pnpm, yarn, pip, uv, cargo, rustc, rustup, go, bun
-    └── system.rs        # psql, mysql, make, sudo, systemctl, kill, crontab
+    ├── runtimes.rs      # python3, node, ruby, deno, php, lua, java, dotnet, swift, elixir
+    └── system.rs        # psql, mysql, make, sudo, systemctl, kill, crontab, openssl, gpg, ssh-keygen
 ```
 
 ### Build Pipeline

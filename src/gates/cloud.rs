@@ -440,6 +440,260 @@ mod tests {
         );
     }
 
+    // === Docker buildx ===
+
+    #[test]
+    fn test_docker_buildx_ls_allows() {
+        let result = check_cloud(&docker(&["buildx", "ls"]));
+        assert_eq!(
+            result.decision,
+            Decision::Allow,
+            "docker buildx ls should allow"
+        );
+    }
+
+    #[test]
+    fn test_docker_buildx_build_asks() {
+        let result = check_cloud(&docker(&["buildx", "build", "."]));
+        assert_eq!(
+            result.decision,
+            Decision::Ask,
+            "docker buildx build should ask"
+        );
+    }
+
+    #[test]
+    fn test_docker_buildx_prune_asks() {
+        let result = check_cloud(&docker(&["buildx", "prune"]));
+        assert_eq!(
+            result.decision,
+            Decision::Ask,
+            "docker buildx prune should ask"
+        );
+    }
+
+    // === Docker scout ===
+
+    #[test]
+    fn test_docker_scout_quickview_allows() {
+        let result = check_cloud(&docker(&["scout", "quickview"]));
+        assert_eq!(
+            result.decision,
+            Decision::Allow,
+            "docker scout quickview should allow"
+        );
+    }
+
+    #[test]
+    fn test_docker_scout_cves_allows() {
+        let result = check_cloud(&docker(&["scout", "cves"]));
+        assert_eq!(
+            result.decision,
+            Decision::Allow,
+            "docker scout cves should allow"
+        );
+    }
+
+    #[test]
+    fn test_docker_scout_enroll_asks() {
+        let result = check_cloud(&docker(&["scout", "enroll"]));
+        assert_eq!(
+            result.decision,
+            Decision::Ask,
+            "docker scout enroll should ask"
+        );
+    }
+
+    // === Docker context ===
+
+    #[test]
+    fn test_docker_context_ls_allows() {
+        let result = check_cloud(&docker(&["context", "ls"]));
+        assert_eq!(
+            result.decision,
+            Decision::Allow,
+            "docker context ls should allow"
+        );
+    }
+
+    #[test]
+    fn test_docker_context_use_asks() {
+        let result = check_cloud(&docker(&["context", "use", "remote"]));
+        assert_eq!(
+            result.decision,
+            Decision::Ask,
+            "docker context use should ask"
+        );
+    }
+
+    // === Docker manifest ===
+
+    #[test]
+    fn test_docker_manifest_inspect_allows() {
+        let result = check_cloud(&docker(&["manifest", "inspect", "myimage:latest"]));
+        assert_eq!(
+            result.decision,
+            Decision::Allow,
+            "docker manifest inspect should allow"
+        );
+    }
+
+    #[test]
+    fn test_docker_manifest_push_asks() {
+        let result = check_cloud(&docker(&["manifest", "push", "myimage:latest"]));
+        assert_eq!(
+            result.decision,
+            Decision::Ask,
+            "docker manifest push should ask"
+        );
+    }
+
+    // === Docker image ===
+
+    #[test]
+    fn test_docker_image_ls_allows() {
+        let result = check_cloud(&docker(&["image", "ls"]));
+        assert_eq!(
+            result.decision,
+            Decision::Allow,
+            "docker image ls should allow"
+        );
+    }
+
+    #[test]
+    fn test_docker_image_rm_asks() {
+        let result = check_cloud(&docker(&["image", "rm", "myimage"]));
+        assert_eq!(result.decision, Decision::Ask, "docker image rm should ask");
+    }
+
+    // === Docker container ===
+
+    #[test]
+    fn test_docker_container_ls_allows() {
+        let result = check_cloud(&docker(&["container", "ls"]));
+        assert_eq!(
+            result.decision,
+            Decision::Allow,
+            "docker container ls should allow"
+        );
+    }
+
+    #[test]
+    fn test_docker_container_logs_allows() {
+        let result = check_cloud(&docker(&["container", "logs", "mycontainer"]));
+        assert_eq!(
+            result.decision,
+            Decision::Allow,
+            "docker container logs should allow"
+        );
+    }
+
+    #[test]
+    fn test_docker_container_rm_asks() {
+        let result = check_cloud(&docker(&["container", "rm", "mycontainer"]));
+        assert_eq!(
+            result.decision,
+            Decision::Ask,
+            "docker container rm should ask"
+        );
+    }
+
+    // === kubectl additional ===
+
+    #[test]
+    fn test_kubectl_diff_allows() {
+        let result = check_cloud(&kubectl(&["diff", "-f", "file.yaml"]));
+        assert_eq!(
+            result.decision,
+            Decision::Allow,
+            "kubectl diff should allow"
+        );
+    }
+
+    #[test]
+    fn test_kubectl_kustomize_allows() {
+        let result = check_cloud(&kubectl(&["kustomize", "."]));
+        assert_eq!(
+            result.decision,
+            Decision::Allow,
+            "kubectl kustomize should allow"
+        );
+    }
+
+    #[test]
+    fn test_kubectl_wait_allows() {
+        let result = check_cloud(&kubectl(&["wait", "--for=condition=ready", "pod/mypod"]));
+        assert_eq!(
+            result.decision,
+            Decision::Allow,
+            "kubectl wait should allow"
+        );
+    }
+
+    #[test]
+    fn test_kubectl_debug_asks() {
+        let result = check_cloud(&kubectl(&["debug", "mypod", "--image=busybox"]));
+        assert_eq!(result.decision, Decision::Ask, "kubectl debug should ask");
+    }
+
+    // === terraform additional ===
+
+    #[test]
+    fn test_terraform_workspace_show_allows() {
+        let result = check_cloud(&terraform(&["workspace", "show"]));
+        assert_eq!(
+            result.decision,
+            Decision::Allow,
+            "terraform workspace show should allow"
+        );
+    }
+
+    #[test]
+    fn test_terraform_workspace_list_allows() {
+        let result = check_cloud(&terraform(&["workspace", "list"]));
+        assert_eq!(
+            result.decision,
+            Decision::Allow,
+            "terraform workspace list should allow"
+        );
+    }
+
+    #[test]
+    fn test_terraform_test_asks() {
+        let result = check_cloud(&terraform(&["test"]));
+        assert_eq!(result.decision, Decision::Ask, "terraform test should ask");
+    }
+
+    #[test]
+    fn test_terraform_console_asks() {
+        let result = check_cloud(&terraform(&["console"]));
+        assert_eq!(
+            result.decision,
+            Decision::Ask,
+            "terraform console should ask"
+        );
+    }
+
+    #[test]
+    fn test_terraform_force_unlock_asks() {
+        let result = check_cloud(&terraform(&["force-unlock", "12345"]));
+        assert_eq!(
+            result.decision,
+            Decision::Ask,
+            "terraform force-unlock should ask"
+        );
+    }
+
+    #[test]
+    fn test_terraform_fmt_check_allows() {
+        let result = check_cloud(&terraform(&["fmt", "-check"]));
+        assert_eq!(
+            result.decision,
+            Decision::Allow,
+            "terraform fmt -check should allow"
+        );
+    }
+
     // === Non-cloud ===
 
     #[test]

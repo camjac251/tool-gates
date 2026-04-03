@@ -32,7 +32,7 @@ A hook for [Claude Code](https://code.claude.com/docs/en/hooks) and [Gemini CLI]
 | **Security First**       | Catches pipe-to-shell, eval, command injection patterns                                                |
 | **Unknown Protection**   | Unrecognized commands require approval                                                                 |
 | **Claude Code Plugin**   | Install as a plugin with the `/tool-gates:review` skill for interactive approval management            |
-| **300+ Commands**        | 12 specialized gates with comprehensive coverage                                                       |
+| **400+ Commands**        | 13 specialized gates with comprehensive coverage                                                       |
 | **File Guards**          | Blocks symlinked AI config files (CLAUDE.md, .cursorrules, etc.) to prevent confused reads/edits       |
 | **Security Reminders**   | Scans Write/Edit content for 26 anti-patterns (secrets, XSS, injection, etc.) across 3 tiers |
 | **Tool Blocking**        | Configurable rules to block tools (Glob, Grep, firecrawl on GitHub) with domain filtering              |
@@ -521,7 +521,7 @@ tool-gates recognizes its own CLI commands:
 
 ### Basics
 
-~130+ safe read-only commands: `echo`, `cat`, `ls`, `grep`, `rg`, `awk`, `sed` (no -i), `ps`, `whoami`, `date`, `jq`, `yq`, `bat`, `fd`, `tokei`, `hexdump`, and more. Custom handlers for `xargs` (safe only with known-safe targets) and `bash -c`/`sh -c` (parses inner script).
+~180 safe read-only commands: `echo`, `cat`, `ls`, `grep`, `rg`, `awk`, `sed` (no -i), `ps`, `whoami`, `date`, `jq`, `yq`, `bat`, `fd`, `tokei`, `hexdump`, `glow`, `jc`, `mktemp`, and more. Custom handlers for `xargs` (safe only with known-safe targets) and `bash -c`/`sh -c` (parses inner script).
 
 ### Beads Issue Tracker
 
@@ -559,11 +559,15 @@ AWS, gcloud, terraform, kubectl, docker, podman, az, helm, pulumi
 | --------------------------------------------- | ------------------------------------------ | ------------------------------------------ |
 | `describe-*`, `list-*`, `get`, `show`, `plan` | `create`, `delete`, `apply`, `run`, `exec` | `iam delete-user`, `delete ns kube-system` |
 
+Docker extended: `buildx ls/inspect` allow, `buildx build/prune` ask. `scout quickview/cves` allow. `context/manifest/image/container` read subcommands allow, mutations ask.
+
+kubectl: `diff`, `kustomize`, `wait` allow. `debug` asks. terraform: `workspace show` allow. `test`, `console`, `force-unlock` ask.
+
 ### Network
 
-| Allow                         | Ask                                    | Block                   |
-| ----------------------------- | -------------------------------------- | ----------------------- |
-| `curl` (GET), `wget --spider` | `curl -X POST`, `wget`, `ssh`, `rsync` | `nc -e` (reverse shell) |
+| Allow                         | Ask                                                  | Block                                    |
+| ----------------------------- | ---------------------------------------------------- | ---------------------------------------- |
+| `curl` (GET), `wget --spider` | `curl -X POST`, `wget`, `ssh`, `rsync`, `nmap`, `socat`, `telnet` | `nc -e/-c/--exec` (reverse shell) |
 
 ### Filesystem
 
@@ -571,14 +575,31 @@ AWS, gcloud, terraform, kubectl, docker, podman, az, helm, pulumi
 | --------------------- | ----------------------------------- | ---------------------- |
 | `tar -tf`, `unzip -l` | `rm`, `mv`, `cp`, `chmod`, `sed -i` | `rm -rf /`, `rm -rf ~` |
 
+### Language Runtimes
+
+python3/python, node, ruby, deno, php, lua/luajit, java/javac, dotnet, swift, elixir/iex
+
+| Allow                                                     | Ask                                                |
+| --------------------------------------------------------- | -------------------------------------------------- |
+| `--version`, `--help`, syntax check (`node -c`, `ruby -c`, `php -l`) | `-c`/`-e`/`-m` (code execution), running scripts  |
+
+deno: `check`, `lint`, `test`, `fmt --check` allow. `run`, `fmt`, `install`, `publish` ask. dotnet: `build`, `test`, `run` allow. `publish`, `new`, `add` ask.
+
 ### Developer Tools
 
-~50+ tools with write-flag detection: `jq`, `shellcheck`, `hadolint`, `vite`, `vitest`, `jest`, `tsc`, `esbuild`, `turbo`, `nx`
+~77 tools with write-flag detection.
 
-| Safe by default                                                                                                         | Ask with flags                                          |
-| ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `ast-grep`, `yq`, `semgrep`, `sad`, `prettier`, `eslint`, `biome`, `ruff`, `black`, `gofmt`, `rustfmt`, `golangci-lint` | `-U`, `-i`, `--fix`, `--write`, `--commit`, `--autofix` |
-| `sd` (pipe mode safe, ask with file args), always ask: `watchexec` (runs commands), `dos2unix`                          |                                                         |
+**Linters/type checkers (read-only, always allow):** `eslint`, `biome`, `ruff`, `pylint`, `flake8`, `mypy`, `pyright`, `bandit`, `shellcheck`, `hadolint`, `golangci-lint`, `oxlint`, `stylelint`
+
+**Test runners (allow):** `jest`, `vitest`, `mocha`, `pytest`, `playwright test`, `cypress run`
+
+**Formatters (allow with check flags, ask with write flags):** `prettier`, `black`, `isort`, `ruff format`, `biome format`, `gofmt`, `rustfmt`, `shfmt`, `autopep8`, `clang-format`
+
+**Build tools (allow):** `vite`, `esbuild`, `tsup`, `turbo`, `nx`, `webpack`, `rollup`, `swc`, `tsc`
+
+**Code execution (ask):** `tsx`, `ts-node`, `watchexec`, `tox`, `nox`
+
+**Other:** `sd` (pipe mode safe, file args ask), `coverage report` allow / `coverage run/html/json` ask, `wrangler whoami` allow / `wrangler dev/deploy` ask
 
 ### Package Managers
 
@@ -588,16 +609,21 @@ npm, pnpm, yarn, pip, uv, cargo, go, bun, conda, poetry, pipx, mise
 | -------------------------------------- | -------------------------------------------- |
 | `list`, `show`, `test`, `build`, `dev` | `install`, `add`, `remove`, `publish`, `run` |
 
+cargo extended: `nextest`, `audit`, `deny check`, `expand`, `semver-checks`, `llvm-cov`, `outdated`, `bloat` allow. `watch`, `mutants`, `insta review/accept` ask.
+
 ### System
 
 **Database CLIs:** psql, mysql, sqlite3, mongosh, redis-cli
 **Build tools:** make, cmake, ninja, just, gradle, maven, bazel
 **OS Package managers:** apt, brew, pacman, nix, dnf, zypper, flatpak, snap
+**Crypto tools:** openssl, gpg/gpg2, ssh-keygen, age
 **Other:** sudo, systemctl, crontab, kill
 
 | Allow                                           | Ask                               | Block                                                             |
 | ----------------------------------------------- | --------------------------------- | ----------------------------------------------------------------- |
 | `psql -l`, `make test`, `sudo -l`, `apt search` | `make deploy`, `sudo apt install` | `shutdown`, `reboot`, `mkfs`, `dd`, `fdisk`, `iptables`, `passwd` |
+
+openssl: `version`, `x509`, `s_client`, `dgst`, `verify` allow. `genrsa`, `req`, `enc` ask. gpg: `--list-keys`, `--verify` allow. `--sign`, `--encrypt`, `--gen-key` ask. ssh-keygen: `-l` (fingerprint) allow. Key generation asks.
 
 ---
 
@@ -826,17 +852,18 @@ src/
     ├── mod.rs           # Gate registry (ordered by priority)
     ├── helpers.rs       # Common gate helper functions
     ├── tool_gates.rs    # tool-gates CLI itself
-    ├── basics.rs        # Safe commands (~130+)
+    ├── basics.rs        # Safe commands (~180)
     ├── beads.rs         # Beads issue tracker (bd) - github.com/steveyegge/beads
     ├── gh.rs            # GitHub CLI
     ├── git.rs           # Git
     ├── shortcut.rs      # Shortcut CLI (short) - github.com/shortcut-cli/shortcut-cli
     ├── cloud.rs         # AWS, gcloud, terraform, kubectl, docker, podman, az, helm, pulumi
-    ├── network.rs       # curl, wget, ssh, rsync, netcat, HTTPie
+    ├── network.rs       # curl, wget, ssh, rsync, netcat, HTTPie, nmap, socat, telnet
     ├── filesystem.rs    # rm, mv, cp, chmod, tar, zip
-    ├── devtools.rs      # sd, ast-grep, yq, semgrep, biome, prettier, eslint, ruff, black
+    ├── devtools.rs      # sd, ast-grep, semgrep, biome, prettier, eslint, ruff, pytest, mypy, playwright, cypress, tsx, webpack
     ├── package_managers.rs  # npm, pnpm, yarn, pip, uv, cargo, go, bun, conda, poetry, pipx, mise
-    └── system.rs        # psql, mysql, make, sudo, systemctl, OS pkg managers, build tools
+    ├── runtimes.rs      # python3, node, ruby, deno, php, lua, java, dotnet, swift, elixir
+    └── system.rs        # psql, mysql, make, sudo, systemctl, OS pkg managers, build tools, openssl, gpg
 ```
 
 ---

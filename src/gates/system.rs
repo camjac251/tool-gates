@@ -6,19 +6,20 @@
 //! - Complex blocked commands (shutdown, mkfs, etc.)
 
 use crate::generated::rules::{
-    check_alembic_declarative, check_ansible_declarative, check_apt_cache_declarative,
-    check_apt_declarative, check_apt_mark_declarative, check_bazel_declarative,
-    check_brew_declarative, check_cmake_declarative, check_createdb_declarative,
-    check_dbmate_declarative, check_dd_declarative, check_dnf_declarative, check_dpkg_declarative,
-    check_dropdb_declarative, check_flyway_declarative, check_goose_declarative,
+    check_age_declarative, check_alembic_declarative, check_ansible_declarative,
+    check_apt_cache_declarative, check_apt_declarative, check_apt_mark_declarative,
+    check_bazel_declarative, check_brew_declarative, check_cmake_declarative,
+    check_createdb_declarative, check_dbmate_declarative, check_dd_declarative,
+    check_dnf_declarative, check_dpkg_declarative, check_dropdb_declarative,
+    check_flyway_declarative, check_goose_declarative, check_gpg_declarative,
     check_gradle_declarative, check_hyperfine_declarative, check_just_declarative,
     check_kill_declarative, check_killall_declarative, check_make_declarative,
     check_meson_declarative, check_migrate_declarative, check_mongosh_declarative,
     check_mvn_declarative, check_mysql_declarative, check_ninja_declarative,
-    check_pacman_declarative, check_pactl_declarative, check_pg_dump_declarative,
-    check_pg_restore_declarative, check_pkill_declarative, check_psql_declarative,
-    check_systemctl_declarative, check_task_declarative, check_vagrant_declarative,
-    check_xkill_declarative,
+    check_openssl_declarative, check_pacman_declarative, check_pactl_declarative,
+    check_pg_dump_declarative, check_pg_restore_declarative, check_pkill_declarative,
+    check_psql_declarative, check_ssh_keygen_declarative, check_systemctl_declarative,
+    check_task_declarative, check_vagrant_declarative, check_xkill_declarative,
 };
 use crate::models::{CommandInfo, Decision, GateResult};
 
@@ -124,6 +125,17 @@ pub fn check_system(cmd: &CommandInfo) -> GateResult {
         "dd" => check_dd_declarative(cmd)
             .unwrap_or_else(|| GateResult::block("dd: Low-level disk operation blocked")),
         "crontab" => check_crontab(cmd),
+
+        // Crypto/security tools
+        "openssl" => check_openssl_declarative(cmd)
+            .unwrap_or_else(|| GateResult::ask("openssl: Crypto operation")),
+        "gpg" | "gpg2" => {
+            check_gpg_declarative(cmd).unwrap_or_else(|| GateResult::ask("gpg: Key operation"))
+        }
+        "ssh-keygen" => check_ssh_keygen_declarative(cmd)
+            .unwrap_or_else(|| GateResult::ask("ssh-keygen: Generating/modifying SSH key")),
+        "age" | "age-keygen" => check_age_declarative(cmd)
+            .unwrap_or_else(|| GateResult::ask("age: Encrypting/decrypting")),
 
         _ => GateResult::skip(),
     }
@@ -539,6 +551,94 @@ mod tests {
     #[test]
     fn test_crontab_edit_asks() {
         let result = check_system(&cmd("crontab", &["-e"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    // === openssl ===
+
+    #[test]
+    fn test_openssl_version_allows() {
+        let result = check_system(&cmd("openssl", &["version"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_openssl_x509_allows() {
+        let result = check_system(&cmd(
+            "openssl",
+            &["x509", "-text", "-noout", "-in", "cert.pem"],
+        ));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_openssl_x509_req_asks() {
+        let result = check_system(&cmd(
+            "openssl",
+            &[
+                "x509", "-req", "-in", "cert.csr", "-signkey", "key.pem", "-out", "cert.pem",
+            ],
+        ));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    #[test]
+    fn test_openssl_rand_stdout_allows() {
+        let result = check_system(&cmd("openssl", &["rand", "-base64", "32"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_openssl_rand_out_asks() {
+        let result = check_system(&cmd("openssl", &["rand", "-out", "random.bin", "1024"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    #[test]
+    fn test_openssl_genrsa_asks() {
+        let result = check_system(&cmd("openssl", &["genrsa", "-out", "key.pem", "2048"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    // === gpg ===
+
+    #[test]
+    fn test_gpg_list_keys_allows() {
+        let result = check_system(&cmd("gpg", &["--list-keys"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_gpg_sign_asks() {
+        let result = check_system(&cmd("gpg", &["--sign", "file.txt"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    #[test]
+    fn test_gpg_gen_key_asks() {
+        let result = check_system(&cmd("gpg", &["--gen-key"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    // === ssh-keygen ===
+
+    #[test]
+    fn test_ssh_keygen_fingerprint_allows() {
+        let result = check_system(&cmd("ssh-keygen", &["-l", "-f", "key.pub"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_ssh_keygen_generate_asks() {
+        let result = check_system(&cmd("ssh-keygen", &["-t", "ed25519"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    // === age ===
+
+    #[test]
+    fn test_age_asks() {
+        let result = check_system(&cmd("age", &["--encrypt", "-r", "age1key", "file.txt"]));
         assert_eq!(result.decision, Decision::Ask);
     }
 

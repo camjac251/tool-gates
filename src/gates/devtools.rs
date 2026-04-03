@@ -314,6 +314,388 @@ mod tests {
         assert_eq!(result.decision, Decision::Ask);
     }
 
+    // === pytest ===
+
+    #[test]
+    fn test_pytest_allows() {
+        let result = check_devtools(&cmd("pytest", &["-v", "tests/"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_pytest_collect_only_allows() {
+        let result = check_devtools(&cmd("pytest", &["--collect-only"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_py_test_alias_allows() {
+        let result = check_devtools(&cmd("py.test", &["tests/"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    // === mypy ===
+
+    #[test]
+    fn test_mypy_allows() {
+        let result = check_devtools(&cmd("mypy", &["src/"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    // === pyright ===
+
+    #[test]
+    fn test_pyright_allows() {
+        let result = check_devtools(&cmd("pyright", &["src/"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_basedpyright_alias_allows() {
+        let result = check_devtools(&cmd("basedpyright", &["src/"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_pyright_writebaseline_allows() {
+        // unknown_action = "allow", so unknown flags still allow
+        let result = check_devtools(&cmd("pyright", &["--writebaseline"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    // === pylint ===
+
+    #[test]
+    fn test_pylint_allows() {
+        let result = check_devtools(&cmd("pylint", &["src/"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    // === flake8 ===
+
+    #[test]
+    fn test_flake8_allows() {
+        let result = check_devtools(&cmd("flake8", &["src/"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    // === bandit ===
+
+    #[test]
+    fn test_bandit_allows() {
+        let result = check_devtools(&cmd("bandit", &["-r", "src/"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    // === coverage ===
+
+    #[test]
+    fn test_coverage_report_allows() {
+        let result = check_devtools(&cmd("coverage", &["report"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_coverage_run_asks() {
+        let result = check_devtools(&cmd("coverage", &["run", "-m", "pytest"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    #[test]
+    fn test_coverage_html_asks() {
+        let result = check_devtools(&cmd("coverage", &["html"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    #[test]
+    fn test_coverage_json_asks() {
+        let result = check_devtools(&cmd("coverage", &["json"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    #[test]
+    fn test_coverage_xml_asks() {
+        let result = check_devtools(&cmd("coverage", &["xml"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    #[test]
+    fn test_coverage_lcov_asks() {
+        let result = check_devtools(&cmd("coverage", &["lcov"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    #[test]
+    fn test_coverage_erase_asks() {
+        let result = check_devtools(&cmd("coverage", &["erase"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    // === tox ===
+
+    #[test]
+    fn test_tox_list_flag_allows() {
+        let result = check_devtools(&cmd("tox", &["-l"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_tox_list_long_flag_allows() {
+        let result = check_devtools(&cmd("tox", &["--list"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_tox_bare_asks() {
+        let result = check_devtools(&cmd("tox", &[]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    #[test]
+    fn test_tox_run_env_asks() {
+        let result = check_devtools(&cmd("tox", &["-e", "py39"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    // === nox ===
+
+    #[test]
+    fn test_nox_list_allows() {
+        let result = check_devtools(&cmd("nox", &["--list"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_nox_list_short_allows() {
+        let result = check_devtools(&cmd("nox", &["-l"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_nox_bare_asks() {
+        let result = check_devtools(&cmd("nox", &[]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    #[test]
+    fn test_nox_session_asks() {
+        let result = check_devtools(&cmd("nox", &["-s", "tests"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    // === autoflake ===
+
+    #[test]
+    fn test_autoflake_check_allows() {
+        let result = check_devtools(&cmd("autoflake", &["--check", "src/"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_autoflake_in_place_asks() {
+        let result = check_devtools(&cmd("autoflake", &["--in-place", "src/"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    #[test]
+    fn test_autoflake_bare_asks() {
+        // unknown_action = "ask", bare invocation asks
+        let result = check_devtools(&cmd("autoflake", &["src/"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    // === tsx ===
+
+    #[test]
+    fn test_tsx_script_asks() {
+        let result = check_devtools(&cmd("tsx", &["script.ts"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    #[test]
+    fn test_tsx_version_allows() {
+        let result = check_devtools(&cmd("tsx", &["--version"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    // === ts-node ===
+
+    #[test]
+    fn test_ts_node_script_asks() {
+        let result = check_devtools(&cmd("ts-node", &["script.ts"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    #[test]
+    fn test_ts_node_version_allows() {
+        let result = check_devtools(&cmd("ts-node", &["--version"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_ts_node_help_allows() {
+        let result = check_devtools(&cmd("ts-node", &["--help"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    // === webpack ===
+
+    #[test]
+    fn test_webpack_allows() {
+        let result = check_devtools(&cmd("webpack", &["--config", "webpack.config.js"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_webpack_cli_alias_allows() {
+        let result = check_devtools(&cmd("webpack-cli", &["build"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    // === rollup ===
+
+    #[test]
+    fn test_rollup_allows() {
+        let result = check_devtools(&cmd("rollup", &["-c"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    // === swc ===
+
+    #[test]
+    fn test_swc_allows() {
+        let result = check_devtools(&cmd("swc", &["src/"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    // === parcel ===
+
+    #[test]
+    fn test_parcel_build_allows() {
+        let result = check_devtools(&cmd("parcel", &["build"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_parcel_serve_asks() {
+        let result = check_devtools(&cmd("parcel", &["serve"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    #[test]
+    fn test_parcel_version_allows() {
+        let result = check_devtools(&cmd("parcel", &["--version"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_parcel_watch_asks() {
+        let result = check_devtools(&cmd("parcel", &["watch"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    // === playwright ===
+
+    #[test]
+    fn test_playwright_test_allows() {
+        let result = check_devtools(&cmd("playwright", &["test"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_playwright_show_report_allows() {
+        let result = check_devtools(&cmd("playwright", &["show-report"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_playwright_show_trace_allows() {
+        let result = check_devtools(&cmd("playwright", &["show-trace"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_playwright_install_asks() {
+        let result = check_devtools(&cmd("playwright", &["install"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    #[test]
+    fn test_playwright_codegen_asks() {
+        let result = check_devtools(&cmd("playwright", &["codegen"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    // === cypress ===
+
+    #[test]
+    fn test_cypress_run_allows() {
+        let result = check_devtools(&cmd("cypress", &["run"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_cypress_open_asks() {
+        let result = check_devtools(&cmd("cypress", &["open"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    #[test]
+    fn test_cypress_info_allows() {
+        let result = check_devtools(&cmd("cypress", &["info"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_cypress_verify_allows() {
+        let result = check_devtools(&cmd("cypress", &["verify"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_cypress_install_asks() {
+        let result = check_devtools(&cmd("cypress", &["install"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    // === wrangler ===
+
+    #[test]
+    fn test_wrangler_whoami_allows() {
+        let result = check_devtools(&cmd("wrangler", &["whoami"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_wrangler_tail_allows() {
+        let result = check_devtools(&cmd("wrangler", &["tail"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_wrangler_dev_asks() {
+        let result = check_devtools(&cmd("wrangler", &["dev"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    #[test]
+    fn test_wrangler_deploy_asks() {
+        let result = check_devtools(&cmd("wrangler", &["deploy"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    #[test]
+    fn test_wrangler_publish_asks() {
+        let result = check_devtools(&cmd("wrangler", &["publish"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    #[test]
+    fn test_wrangler_login_asks() {
+        let result = check_devtools(&cmd("wrangler", &["login"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
     // === Non-devtools ===
 
     #[test]

@@ -66,6 +66,7 @@ pub static SAFE_COMMANDS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "fzf",
         "getconf",
         "getfacl",
+        "glow",
         "glxinfo",
         "grep",
         "gron",
@@ -84,6 +85,7 @@ pub static SAFE_COMMANDS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "info",
         "iostat",
         "ip",
+        "jc",
         "join",
         "jq",
         "less",
@@ -101,6 +103,7 @@ pub static SAFE_COMMANDS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "lsusb",
         "man",
         "md5sum",
+        "mktemp",
         "more",
         "mtr",
         "netstat",
@@ -1061,6 +1064,7 @@ pub static TERRAFORM_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "state list",
         "state show",
         "workspace list",
+        "workspace show",
     ]
     .into_iter()
     .collect()
@@ -1068,6 +1072,15 @@ pub static TERRAFORM_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 
 pub static TERRAFORM_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
+        (
+            "test",
+            "Terraform: Running tests (may create infrastructure)",
+        ),
+        ("console", "Terraform: Interactive REPL"),
+        (
+            "force-unlock",
+            "Terraform: Force-unlocking state (dangerous)",
+        ),
         ("apply", "Terraform: Applying changes"),
         ("destroy", "Terraform: Destroying infrastructure"),
         ("import", "Terraform: Importing resource"),
@@ -1144,6 +1157,9 @@ pub static KUBECTL_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "config get-clusters",
         "auth can-i",
         "auth whoami",
+        "diff",
+        "kustomize",
+        "wait",
     ]
     .into_iter()
     .collect()
@@ -1151,6 +1167,7 @@ pub static KUBECTL_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 
 pub static KUBECTL_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
+        ("debug", "Creating debug container"),
         ("apply", "Applying resources"),
         ("create", "Creating resources"),
         ("delete", "Deleting resources"),
@@ -1251,6 +1268,28 @@ pub static DOCKER_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "volume inspect",
         "system df",
         "system info",
+        "buildx ls",
+        "buildx inspect",
+        "buildx version",
+        "scout quickview",
+        "scout cves",
+        "scout recommendations",
+        "scout compare",
+        "context ls",
+        "context list",
+        "context show",
+        "context inspect",
+        "manifest inspect",
+        "image ls",
+        "image list",
+        "image inspect",
+        "image history",
+        "container ls",
+        "container list",
+        "container inspect",
+        "container logs",
+        "container top",
+        "container stats",
         "compose ps",
         "compose logs",
         "compose config",
@@ -1265,6 +1304,29 @@ pub static DOCKER_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 
 pub static DOCKER_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
+        ("buildx build", "Docker: Building image (buildx)"),
+        ("buildx create", "Docker: Creating builder"),
+        ("buildx rm", "Docker: Removing builder"),
+        ("buildx use", "Docker: Switching builder"),
+        ("buildx stop", "Docker: Stopping builder"),
+        ("buildx prune", "Docker: Pruning build cache"),
+        ("scout enroll", "Docker: Enrolling in Scout"),
+        ("context create", "Docker: Creating context"),
+        ("context rm", "Docker: Removing context"),
+        ("context use", "Docker: Switching context"),
+        ("manifest create", "Docker: Creating manifest"),
+        ("manifest push", "Docker: Pushing manifest"),
+        ("manifest annotate", "Docker: Annotating manifest"),
+        ("image rm", "Docker: Removing image"),
+        ("image prune", "Docker: Pruning images"),
+        ("image tag", "Docker: Tagging image"),
+        ("image push", "Docker: Pushing image"),
+        ("image pull", "Docker: Pulling image"),
+        ("container rm", "Docker: Removing container"),
+        ("container start", "Docker: Starting container"),
+        ("container stop", "Docker: Stopping container"),
+        ("container kill", "Docker: Killing container"),
+        ("container prune", "Docker: Pruning containers"),
         ("compose up", "Compose: Starting services"),
         ("compose down", "Compose: Stopping services"),
         ("compose start", "Compose: Starting services"),
@@ -2195,6 +2257,16 @@ pub static CARGO_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "bench",
         "fmt",
         "clean",
+        "nextest",
+        "audit",
+        "deny",
+        "expand",
+        "semver-checks",
+        "llvm-cov",
+        "outdated",
+        "bloat",
+        "machete",
+        "depgraph",
     ]
     .into_iter()
     .collect()
@@ -2202,6 +2274,8 @@ pub static CARGO_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 
 pub static CARGO_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
+        ("watch", "Running commands on file changes"),
+        ("mutants", "Mutation testing (modifies source files)"),
         ("install", "Installing"),
         ("uninstall", "Uninstalling"),
         ("new", "Creating project"),
@@ -2239,6 +2313,14 @@ pub fn check_cargo_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if subcmd_single == "clippy" && cmd.args.iter().any(|a| ["--fix"].contains(&a.as_str())) {
         return Some(GateResult::ask("Auto-fixing lint suggestions"));
     }
+    if subcmd_single == "insta"
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["review", "accept", "reject"].contains(&a.as_str()))
+    {
+        return Some(GateResult::ask("Snapshot testing"));
+    }
 
     if CARGO_ALLOW.contains(subcmd.as_str()) || CARGO_ALLOW.contains(subcmd_single) {
         return Some(GateResult::allow());
@@ -2246,6 +2328,14 @@ pub fn check_cargo_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
     // Check conditional allow rules
     if subcmd_single == "clippy" && !cmd.args.iter().any(|a| ["--fix"].contains(&a.as_str())) {
+        return Some(GateResult::allow());
+    }
+    if subcmd_single == "insta"
+        && !cmd
+            .args
+            .iter()
+            .any(|a| ["review", "accept", "reject"].contains(&a.as_str()))
+    {
         return Some(GateResult::allow());
     }
 
@@ -5021,6 +5111,1241 @@ pub fn check_buf_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     Some(GateResult::ask(format!("buf: {}", subcmd_single)))
 }
 
+// === PYTEST (from devtools.toml) ===
+
+/// Check pytest commands declaratively
+pub fn check_pytest_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["pytest", "py.test"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    Some(GateResult::allow())
+}
+
+// === MYPY (from devtools.toml) ===
+
+/// Check mypy commands declaratively
+pub fn check_mypy_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["mypy"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    Some(GateResult::allow())
+}
+
+// === PYRIGHT (from devtools.toml) ===
+
+/// Check pyright commands declaratively
+pub fn check_pyright_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["pyright", "basedpyright"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    Some(GateResult::allow())
+}
+
+// === PYLINT (from devtools.toml) ===
+
+/// Check pylint commands declaratively
+pub fn check_pylint_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["pylint"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    Some(GateResult::allow())
+}
+
+// === FLAKE8 (from devtools.toml) ===
+
+/// Check flake8 commands declaratively
+pub fn check_flake8_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["flake8"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    Some(GateResult::allow())
+}
+
+// === BANDIT (from devtools.toml) ===
+
+/// Check bandit commands declaratively
+pub fn check_bandit_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["bandit"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    Some(GateResult::allow())
+}
+
+// === COVERAGE (from devtools.toml) ===
+
+pub static COVERAGE_ALLOW: LazyLock<HashSet<&str>> =
+    LazyLock::new(|| ["report", "--version", "--help"].into_iter().collect());
+
+pub static COVERAGE_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
+    [
+        ("run", "Running code with coverage"),
+        ("html", "Generating HTML coverage report"),
+        ("json", "Writing coverage.json"),
+        ("xml", "Writing coverage.xml"),
+        ("lcov", "Writing coverage.lcov"),
+        ("erase", "Erasing coverage data"),
+        ("combine", "Combining coverage data"),
+    ]
+    .into_iter()
+    .collect()
+});
+
+/// Check coverage commands declaratively
+pub fn check_coverage_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["coverage"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    if COVERAGE_ALLOW.contains(subcmd.as_str()) || COVERAGE_ALLOW.contains(subcmd_single) {
+        return Some(GateResult::allow());
+    }
+
+    if let Some(reason) = COVERAGE_ASK
+        .get(subcmd.as_str())
+        .or_else(|| COVERAGE_ASK.get(subcmd_single))
+    {
+        return Some(GateResult::ask(format!("coverage: {}", reason)));
+    }
+
+    Some(GateResult::ask(format!("coverage: {}", subcmd_single)))
+}
+
+// === TOX (from devtools.toml) ===
+
+pub static TOX_ALLOW: LazyLock<HashSet<&str>> =
+    LazyLock::new(|| ["--version", "--help"].into_iter().collect());
+
+/// Check tox commands declaratively
+pub fn check_tox_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["tox"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    if TOX_ALLOW.contains(subcmd.as_str()) || TOX_ALLOW.contains(subcmd_single) {
+        return Some(GateResult::allow());
+    }
+
+    // Check conditional allow rules
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["-l", "--list", "--listenvs"].contains(&a.as_str()))
+    {
+        return Some(GateResult::allow());
+    }
+
+    // Bare ask rule - any tox invocation asks
+    Some(GateResult::ask("tox: Running test environments"))
+}
+
+// === NOX (from devtools.toml) ===
+
+pub static NOX_ALLOW: LazyLock<HashSet<&str>> =
+    LazyLock::new(|| ["--version", "--help"].into_iter().collect());
+
+/// Check nox commands declaratively
+pub fn check_nox_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["nox"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    if NOX_ALLOW.contains(subcmd.as_str()) || NOX_ALLOW.contains(subcmd_single) {
+        return Some(GateResult::allow());
+    }
+
+    // Check conditional allow rules
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["-l", "--list"].contains(&a.as_str()))
+    {
+        return Some(GateResult::allow());
+    }
+
+    // Bare ask rule - any nox invocation asks
+    Some(GateResult::ask("nox: Running session"))
+}
+
+// === AUTOFLAKE (from devtools.toml) ===
+
+/// Check autoflake commands declaratively
+pub fn check_autoflake_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["autoflake"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    // Check ask rules with flag/prefix conditions
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--in-place", "-i"].contains(&a.as_str()))
+    {
+        return Some(GateResult::ask("Removing unused imports"));
+    }
+
+    // Check conditional allow rules
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--check", "--check-diff"].contains(&a.as_str()))
+    {
+        return Some(GateResult::allow());
+    }
+
+    Some(GateResult::ask(format!("autoflake: {}", subcmd_single)))
+}
+
+// === TSX (from devtools.toml) ===
+
+pub static TSX_ALLOW: LazyLock<HashSet<&str>> =
+    LazyLock::new(|| ["--version", "--help"].into_iter().collect());
+
+/// Check tsx commands declaratively
+pub fn check_tsx_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["tsx"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    if TSX_ALLOW.contains(subcmd.as_str()) || TSX_ALLOW.contains(subcmd_single) {
+        return Some(GateResult::allow());
+    }
+
+    // Bare ask rule - any tsx invocation asks
+    Some(GateResult::ask("tsx: Executing TypeScript"))
+}
+
+// === TS-NODE (from devtools.toml) ===
+
+pub static TS_NODE_ALLOW: LazyLock<HashSet<&str>> =
+    LazyLock::new(|| ["--version", "--help"].into_iter().collect());
+
+/// Check ts-node commands declaratively
+pub fn check_ts_node_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["ts-node"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    if TS_NODE_ALLOW.contains(subcmd.as_str()) || TS_NODE_ALLOW.contains(subcmd_single) {
+        return Some(GateResult::allow());
+    }
+
+    // Bare ask rule - any ts-node invocation asks
+    Some(GateResult::ask("ts-node: Executing TypeScript"))
+}
+
+// === WEBPACK (from devtools.toml) ===
+
+/// Check webpack commands declaratively
+pub fn check_webpack_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["webpack", "webpack-cli"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    Some(GateResult::allow())
+}
+
+// === ROLLUP (from devtools.toml) ===
+
+/// Check rollup commands declaratively
+pub fn check_rollup_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["rollup"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    Some(GateResult::allow())
+}
+
+// === SWC (from devtools.toml) ===
+
+/// Check swc commands declaratively
+pub fn check_swc_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["swc"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    Some(GateResult::allow())
+}
+
+// === PARCEL (from devtools.toml) ===
+
+pub static PARCEL_ALLOW: LazyLock<HashSet<&str>> =
+    LazyLock::new(|| ["build", "--version", "--help"].into_iter().collect());
+
+pub static PARCEL_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
+    [
+        ("serve", "Starting dev server"),
+        ("watch", "Watching files"),
+    ]
+    .into_iter()
+    .collect()
+});
+
+/// Check parcel commands declaratively
+pub fn check_parcel_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["parcel"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    if PARCEL_ALLOW.contains(subcmd.as_str()) || PARCEL_ALLOW.contains(subcmd_single) {
+        return Some(GateResult::allow());
+    }
+
+    if let Some(reason) = PARCEL_ASK
+        .get(subcmd.as_str())
+        .or_else(|| PARCEL_ASK.get(subcmd_single))
+    {
+        return Some(GateResult::ask(format!("parcel: {}", reason)));
+    }
+
+    Some(GateResult::ask(format!("parcel: {}", subcmd_single)))
+}
+
+// === PLAYWRIGHT (from devtools.toml) ===
+
+pub static PLAYWRIGHT_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
+    ["test", "show-report", "show-trace", "--version", "--help"]
+        .into_iter()
+        .collect()
+});
+
+pub static PLAYWRIGHT_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
+    [
+        ("install", "Installing browsers"),
+        ("codegen", "Generating test code"),
+    ]
+    .into_iter()
+    .collect()
+});
+
+/// Check playwright commands declaratively
+pub fn check_playwright_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["playwright"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    if PLAYWRIGHT_ALLOW.contains(subcmd.as_str()) || PLAYWRIGHT_ALLOW.contains(subcmd_single) {
+        return Some(GateResult::allow());
+    }
+
+    if let Some(reason) = PLAYWRIGHT_ASK
+        .get(subcmd.as_str())
+        .or_else(|| PLAYWRIGHT_ASK.get(subcmd_single))
+    {
+        return Some(GateResult::ask(format!("playwright: {}", reason)));
+    }
+
+    Some(GateResult::ask(format!("playwright: {}", subcmd_single)))
+}
+
+// === CYPRESS (from devtools.toml) ===
+
+pub static CYPRESS_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
+    ["run", "verify", "version", "info", "--version", "--help"]
+        .into_iter()
+        .collect()
+});
+
+pub static CYPRESS_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
+    [
+        ("open", "Opening Cypress GUI"),
+        ("install", "Installing Cypress"),
+    ]
+    .into_iter()
+    .collect()
+});
+
+/// Check cypress commands declaratively
+pub fn check_cypress_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["cypress"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    if CYPRESS_ALLOW.contains(subcmd.as_str()) || CYPRESS_ALLOW.contains(subcmd_single) {
+        return Some(GateResult::allow());
+    }
+
+    if let Some(reason) = CYPRESS_ASK
+        .get(subcmd.as_str())
+        .or_else(|| CYPRESS_ASK.get(subcmd_single))
+    {
+        return Some(GateResult::ask(format!("cypress: {}", reason)));
+    }
+
+    Some(GateResult::ask(format!("cypress: {}", subcmd_single)))
+}
+
+// === WRANGLER (from devtools.toml) ===
+
+pub static WRANGLER_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
+    ["whoami", "--version", "--help", "tail"]
+        .into_iter()
+        .collect()
+});
+
+pub static WRANGLER_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
+    [
+        ("dev", "Starting local dev server"),
+        ("deploy", "Deploying worker"),
+        ("publish", "Publishing worker"),
+        ("login", "Authenticating"),
+        ("pages", "Pages operation"),
+    ]
+    .into_iter()
+    .collect()
+});
+
+/// Check wrangler commands declaratively
+pub fn check_wrangler_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["wrangler"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    if WRANGLER_ALLOW.contains(subcmd.as_str()) || WRANGLER_ALLOW.contains(subcmd_single) {
+        return Some(GateResult::allow());
+    }
+
+    if let Some(reason) = WRANGLER_ASK
+        .get(subcmd.as_str())
+        .or_else(|| WRANGLER_ASK.get(subcmd_single))
+    {
+        return Some(GateResult::ask(format!("wrangler: {}", reason)));
+    }
+
+    Some(GateResult::ask(format!("wrangler: {}", subcmd_single)))
+}
+
+// === PYTHON3 (from runtimes.toml) ===
+
+/// Check python3 commands declaratively
+pub fn check_python3_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if ![
+        "python3",
+        "python",
+        "python3.11",
+        "python3.12",
+        "python3.13",
+        "python3.14",
+    ]
+    .contains(&cmd.program.as_str())
+    {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    // Check ask rules with flag/prefix conditions
+    if true && cmd.args.iter().any(|a| ["-c"].contains(&a.as_str())) {
+        return Some(GateResult::ask("Executing Python code"));
+    }
+    if true && cmd.args.iter().any(|a| ["-m"].contains(&a.as_str())) {
+        return Some(GateResult::ask("Running Python module"));
+    }
+
+    // Check conditional allow rules
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--version", "-V", "-VV"].contains(&a.as_str()))
+    {
+        return Some(GateResult::allow());
+    }
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--help", "-h"].contains(&a.as_str()))
+    {
+        return Some(GateResult::allow());
+    }
+
+    // Bare ask rule - any python3 invocation asks
+    Some(GateResult::ask("python3: Running Python script"))
+}
+
+// === NODE (from runtimes.toml) ===
+
+/// Check node commands declaratively
+pub fn check_node_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["node"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    // Check ask rules with flag/prefix conditions
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["-e", "--eval", "-p", "--print"].contains(&a.as_str()))
+    {
+        return Some(GateResult::ask("Executing JavaScript"));
+    }
+
+    // Check conditional allow rules
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--version", "-v"].contains(&a.as_str()))
+    {
+        return Some(GateResult::allow());
+    }
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--help", "-h"].contains(&a.as_str()))
+    {
+        return Some(GateResult::allow());
+    }
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["-c", "--check"].contains(&a.as_str()))
+    {
+        return Some(GateResult::allow());
+    }
+
+    // Bare ask rule - any node invocation asks
+    Some(GateResult::ask("node: Running Node.js script"))
+}
+
+// === RUBY (from runtimes.toml) ===
+
+/// Check ruby commands declaratively
+pub fn check_ruby_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["ruby"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    // Check ask rules with flag/prefix conditions
+    if true && cmd.args.iter().any(|a| ["-e"].contains(&a.as_str())) {
+        return Some(GateResult::ask("Executing Ruby code"));
+    }
+
+    // Check conditional allow rules
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--version", "-v"].contains(&a.as_str()))
+    {
+        return Some(GateResult::allow());
+    }
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--help", "-h"].contains(&a.as_str()))
+    {
+        return Some(GateResult::allow());
+    }
+    if true && cmd.args.iter().any(|a| ["-c"].contains(&a.as_str())) {
+        return Some(GateResult::allow());
+    }
+
+    // Bare ask rule - any ruby invocation asks
+    Some(GateResult::ask("ruby: Running Ruby script"))
+}
+
+// === DENO (from runtimes.toml) ===
+
+pub static DENO_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
+    [
+        "--version",
+        "-V",
+        "--help",
+        "-h",
+        "check",
+        "lint",
+        "doc",
+        "info",
+        "types",
+        "completions",
+        "help",
+        "test",
+        "bench",
+    ]
+    .into_iter()
+    .collect()
+});
+
+pub static DENO_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
+    [
+        ("run", "Running Deno script"),
+        ("serve", "Starting Deno server"),
+        ("fmt", "Formatting files"),
+        ("compile", "Compiling to binary"),
+        ("install", "Installing package/script"),
+        ("uninstall", "Uninstalling package/script"),
+        ("task", "Running task"),
+        ("upgrade", "Upgrading Deno"),
+        ("add", "Adding dependency"),
+        ("remove", "Removing dependency"),
+        ("publish", "Publishing module"),
+    ]
+    .into_iter()
+    .collect()
+});
+
+/// Check deno commands declaratively
+pub fn check_deno_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["deno"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    if DENO_ALLOW.contains(subcmd.as_str()) || DENO_ALLOW.contains(subcmd_single) {
+        return Some(GateResult::allow());
+    }
+
+    // Check conditional allow rules
+    if subcmd_single == "fmt" && cmd.args.iter().any(|a| ["--check"].contains(&a.as_str())) {
+        return Some(GateResult::allow());
+    }
+
+    if let Some(reason) = DENO_ASK
+        .get(subcmd.as_str())
+        .or_else(|| DENO_ASK.get(subcmd_single))
+    {
+        return Some(GateResult::ask(format!("deno: {}", reason)));
+    }
+
+    Some(GateResult::ask(format!("deno: {}", subcmd_single)))
+}
+
+// === PHP (from runtimes.toml) ===
+
+/// Check php commands declaratively
+pub fn check_php_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["php"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    // Check ask rules with flag/prefix conditions
+    if true && cmd.args.iter().any(|a| ["-r"].contains(&a.as_str())) {
+        return Some(GateResult::ask("Executing PHP code"));
+    }
+
+    // Check conditional allow rules
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--version", "-v"].contains(&a.as_str()))
+    {
+        return Some(GateResult::allow());
+    }
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--help", "-h"].contains(&a.as_str()))
+    {
+        return Some(GateResult::allow());
+    }
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--info", "-i"].contains(&a.as_str()))
+    {
+        return Some(GateResult::allow());
+    }
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["-l", "--syntax-check"].contains(&a.as_str()))
+    {
+        return Some(GateResult::allow());
+    }
+    if true && cmd.args.iter().any(|a| ["-m"].contains(&a.as_str())) {
+        return Some(GateResult::allow());
+    }
+
+    // Bare ask rule - any php invocation asks
+    Some(GateResult::ask("php: Running PHP script"))
+}
+
+// === LUA (from runtimes.toml) ===
+
+/// Check lua commands declaratively
+pub fn check_lua_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["lua", "luajit", "lua5.1", "lua5.2", "lua5.3", "lua5.4"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    // Check ask rules with flag/prefix conditions
+    if true && cmd.args.iter().any(|a| ["-e"].contains(&a.as_str())) {
+        return Some(GateResult::ask("Executing Lua code"));
+    }
+
+    // Check conditional allow rules
+    if true && cmd.args.iter().any(|a| ["-v"].contains(&a.as_str())) {
+        return Some(GateResult::allow());
+    }
+
+    // Bare ask rule - any lua invocation asks
+    Some(GateResult::ask("lua: Running Lua script"))
+}
+
+// === JAVA (from runtimes.toml) ===
+
+/// Check java commands declaratively
+pub fn check_java_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["java"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    // Check conditional allow rules
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--version", "-version", "--help", "-help", "-h"].contains(&a.as_str()))
+    {
+        return Some(GateResult::allow());
+    }
+
+    // Bare ask rule - any java invocation asks
+    Some(GateResult::ask("java: Running Java application"))
+}
+
+// === JAVAC (from runtimes.toml) ===
+
+/// Check javac commands declaratively
+pub fn check_javac_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["javac"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    // Check conditional allow rules
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--version", "-version", "--help", "-help"].contains(&a.as_str()))
+    {
+        return Some(GateResult::allow());
+    }
+
+    // Bare ask rule - any javac invocation asks
+    Some(GateResult::ask("javac: Compiling Java source"))
+}
+
+// === DOTNET (from runtimes.toml) ===
+
+pub static DOTNET_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
+    [
+        "--help", "-h", "help", "build", "test", "run", "clean", "restore", "list", "sln",
+    ]
+    .into_iter()
+    .collect()
+});
+
+pub static DOTNET_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
+    [
+        ("publish", "Publishing application"),
+        ("new", "Creating project"),
+        ("add", "Adding reference/package"),
+        ("remove", "Removing reference/package"),
+        ("nuget", "NuGet operation"),
+        ("tool", "Tool management"),
+        ("pack", "Creating NuGet package"),
+        ("format", "Formatting code"),
+    ]
+    .into_iter()
+    .collect()
+});
+
+/// Check dotnet commands declaratively
+pub fn check_dotnet_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["dotnet"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    if DOTNET_ALLOW.contains(subcmd.as_str()) || DOTNET_ALLOW.contains(subcmd_single) {
+        return Some(GateResult::allow());
+    }
+
+    // Check conditional allow rules
+    if true
+        && cmd.args.iter().any(|a| {
+            ["--version", "--info", "--list-sdks", "--list-runtimes"].contains(&a.as_str())
+        })
+    {
+        return Some(GateResult::allow());
+    }
+    if subcmd_single == "format"
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--check", "--verify-no-changes"].contains(&a.as_str()))
+    {
+        return Some(GateResult::allow());
+    }
+
+    if let Some(reason) = DOTNET_ASK
+        .get(subcmd.as_str())
+        .or_else(|| DOTNET_ASK.get(subcmd_single))
+    {
+        return Some(GateResult::ask(format!("dotnet: {}", reason)));
+    }
+
+    Some(GateResult::ask(format!("dotnet: {}", subcmd_single)))
+}
+
+// === SWIFT (from runtimes.toml) ===
+
+pub static SWIFT_ALLOW: LazyLock<HashSet<&str>> =
+    LazyLock::new(|| ["build", "test"].into_iter().collect());
+
+pub static SWIFT_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
+    [
+        ("run", "Running Swift package"),
+        ("package", "Package operation"),
+    ]
+    .into_iter()
+    .collect()
+});
+
+/// Check swift commands declaratively
+pub fn check_swift_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["swift"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    if SWIFT_ALLOW.contains(subcmd.as_str()) || SWIFT_ALLOW.contains(subcmd_single) {
+        return Some(GateResult::allow());
+    }
+
+    // Check conditional allow rules
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--version", "--help", "-h"].contains(&a.as_str()))
+    {
+        return Some(GateResult::allow());
+    }
+
+    if let Some(reason) = SWIFT_ASK
+        .get(subcmd.as_str())
+        .or_else(|| SWIFT_ASK.get(subcmd_single))
+    {
+        return Some(GateResult::ask(format!("swift: {}", reason)));
+    }
+
+    Some(GateResult::ask(format!("swift: {}", subcmd_single)))
+}
+
+// === ELIXIR (from runtimes.toml) ===
+
+/// Check elixir commands declaratively
+pub fn check_elixir_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["elixir"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    // Check ask rules with flag/prefix conditions
+    if true && cmd.args.iter().any(|a| ["-e"].contains(&a.as_str())) {
+        return Some(GateResult::ask("Executing Elixir code"));
+    }
+
+    // Check conditional allow rules
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--version", "-v"].contains(&a.as_str()))
+    {
+        return Some(GateResult::allow());
+    }
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--help", "-h"].contains(&a.as_str()))
+    {
+        return Some(GateResult::allow());
+    }
+
+    // Bare ask rule - any elixir invocation asks
+    Some(GateResult::ask("elixir: Running Elixir script"))
+}
+
+// === IEX (from runtimes.toml) ===
+
+/// Check iex commands declaratively
+pub fn check_iex_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["iex"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    // Check conditional allow rules
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--version", "-v"].contains(&a.as_str()))
+    {
+        return Some(GateResult::allow());
+    }
+
+    // Bare ask rule - any iex invocation asks
+    Some(GateResult::ask("iex: Starting Elixir REPL"))
+}
+
 // === RM (from filesystem.toml) ===
 
 pub static RM_BLOCK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -5655,6 +6980,89 @@ pub fn check_http_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     Some(GateResult::ask(format!("http: {}", subcmd_single)))
+}
+
+// === NMAP (from network.toml) ===
+
+pub static NMAP_ALLOW: LazyLock<HashSet<&str>> =
+    LazyLock::new(|| ["--version", "-V", "--help", "-h"].into_iter().collect());
+
+/// Check nmap commands declaratively
+pub fn check_nmap_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["nmap"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    if NMAP_ALLOW.contains(subcmd.as_str()) || NMAP_ALLOW.contains(subcmd_single) {
+        return Some(GateResult::allow());
+    }
+
+    // Bare ask rule - any nmap invocation asks
+    Some(GateResult::ask("nmap: Port scanning"))
+}
+
+// === SOCAT (from network.toml) ===
+
+pub static SOCAT_ALLOW: LazyLock<HashSet<&str>> =
+    LazyLock::new(|| ["--version", "-V", "--help", "-h"].into_iter().collect());
+
+/// Check socat commands declaratively
+pub fn check_socat_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["socat"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    if SOCAT_ALLOW.contains(subcmd.as_str()) || SOCAT_ALLOW.contains(subcmd_single) {
+        return Some(GateResult::allow());
+    }
+
+    // Bare ask rule - any socat invocation asks
+    Some(GateResult::ask("socat: Network relay"))
+}
+
+// === TELNET (from network.toml) ===
+
+/// Check telnet commands declaratively
+pub fn check_telnet_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["telnet"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    // Bare ask rule - any telnet invocation asks
+    Some(GateResult::ask("telnet: Network connection"))
 }
 
 // === SHUTDOWN (from system.toml) ===
@@ -8244,6 +9652,299 @@ pub fn check_pactl_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     Some(GateResult::ask(format!("pactl: {}", subcmd_single)))
 }
 
+// === OPENSSL (from system.toml) ===
+
+pub static OPENSSL_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
+    [
+        "version",
+        "s_client",
+        "dgst",
+        "md5",
+        "sha1",
+        "sha256",
+        "sha512",
+        "verify",
+        "ciphers",
+        "list",
+        "asn1parse",
+        "speed",
+        "prime",
+    ]
+    .into_iter()
+    .collect()
+});
+
+pub static OPENSSL_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
+    [
+        ("s_server", "Starting TLS server"),
+        ("genrsa", "Generating RSA key"),
+        ("genpkey", "Generating private key"),
+        ("req", "Creating certificate request"),
+        ("ca", "Certificate authority operation"),
+        ("pkcs12", "PKCS12 operation"),
+        ("enc", "Encrypting/decrypting"),
+        ("smime", "S/MIME operation"),
+        ("cms", "CMS operation"),
+        ("rsautl", "RSA operation"),
+        ("pkeyutl", "Key operation"),
+        ("ecparam", "Generating EC parameters"),
+    ]
+    .into_iter()
+    .collect()
+});
+
+/// Check openssl commands declaratively
+pub fn check_openssl_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["openssl"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    // Check ask rules with flag/prefix conditions
+    if subcmd_single == "x509" && cmd.args.iter().any(|a| ["-req"].contains(&a.as_str())) {
+        return Some(GateResult::ask("Signing certificate"));
+    }
+    if subcmd_single == "rand" && cmd.args.iter().any(|a| ["-out"].contains(&a.as_str())) {
+        return Some(GateResult::ask("Writing random data to file"));
+    }
+
+    if OPENSSL_ALLOW.contains(subcmd.as_str()) || OPENSSL_ALLOW.contains(subcmd_single) {
+        return Some(GateResult::allow());
+    }
+
+    // Check conditional allow rules
+    if subcmd_single == "x509" && !cmd.args.iter().any(|a| ["-req"].contains(&a.as_str())) {
+        return Some(GateResult::allow());
+    }
+    if subcmd_single == "rand" && !cmd.args.iter().any(|a| ["-out"].contains(&a.as_str())) {
+        return Some(GateResult::allow());
+    }
+
+    if let Some(reason) = OPENSSL_ASK
+        .get(subcmd.as_str())
+        .or_else(|| OPENSSL_ASK.get(subcmd_single))
+    {
+        return Some(GateResult::ask(format!("openssl: {}", reason)));
+    }
+
+    Some(GateResult::ask(format!("openssl: {}", subcmd_single)))
+}
+
+// === GPG (from system.toml) ===
+
+/// Check gpg commands declaratively
+pub fn check_gpg_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["gpg", "gpg2"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    // Check ask rules with flag/prefix conditions
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--sign", "-s", "--clearsign", "--detach-sign", "-b"].contains(&a.as_str()))
+    {
+        return Some(GateResult::ask("Signing data"));
+    }
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--encrypt", "-e", "--symmetric", "-c"].contains(&a.as_str()))
+    {
+        return Some(GateResult::ask("Encrypting data"));
+    }
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--decrypt", "-d"].contains(&a.as_str()))
+    {
+        return Some(GateResult::ask("Decrypting data"));
+    }
+    if true && cmd.args.iter().any(|a| ["--import"].contains(&a.as_str())) {
+        return Some(GateResult::ask("Importing key"));
+    }
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--export", "--export-secret-keys"].contains(&a.as_str()))
+    {
+        return Some(GateResult::ask("Exporting key"));
+    }
+    if true
+        && cmd.args.iter().any(|a| {
+            [
+                "--delete-key",
+                "--delete-secret-key",
+                "--delete-secret-and-public-key",
+            ]
+            .contains(&a.as_str())
+        })
+    {
+        return Some(GateResult::ask("Deleting key"));
+    }
+    if true
+        && cmd.args.iter().any(|a| {
+            [
+                "--gen-key",
+                "--generate-key",
+                "--full-gen-key",
+                "--full-generate-key",
+                "--quick-gen-key",
+            ]
+            .contains(&a.as_str())
+        })
+    {
+        return Some(GateResult::ask("Generating key"));
+    }
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--edit-key"].contains(&a.as_str()))
+    {
+        return Some(GateResult::ask("Editing key"));
+    }
+
+    // Check conditional allow rules
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--list-keys", "-k", "--list-secret-keys", "-K"].contains(&a.as_str()))
+    {
+        return Some(GateResult::allow());
+    }
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--fingerprint"].contains(&a.as_str()))
+    {
+        return Some(GateResult::allow());
+    }
+    if true && cmd.args.iter().any(|a| ["--verify"].contains(&a.as_str())) {
+        return Some(GateResult::allow());
+    }
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--list-packets"].contains(&a.as_str()))
+    {
+        return Some(GateResult::allow());
+    }
+    if true && cmd.args.iter().any(|a| ["--version"].contains(&a.as_str())) {
+        return Some(GateResult::allow());
+    }
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--help", "-h"].contains(&a.as_str()))
+    {
+        return Some(GateResult::allow());
+    }
+
+    Some(GateResult::ask(format!("gpg: {}", subcmd_single)))
+}
+
+// === SSH-KEYGEN (from system.toml) ===
+
+/// Check ssh-keygen commands declaratively
+pub fn check_ssh_keygen_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["ssh-keygen"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    // Check ask rules with flag/prefix conditions
+    if true && cmd.args.iter().any(|a| ["-R"].contains(&a.as_str())) {
+        return Some(GateResult::ask("Removing host key"));
+    }
+
+    // Check conditional allow rules
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["-l", "-lf", "-lv"].contains(&a.as_str()))
+    {
+        return Some(GateResult::allow());
+    }
+    if true && cmd.args.iter().any(|a| ["-F"].contains(&a.as_str())) {
+        return Some(GateResult::allow());
+    }
+    if true && cmd.args.iter().any(|a| ["-B"].contains(&a.as_str())) {
+        return Some(GateResult::allow());
+    }
+
+    // Bare ask rule - any ssh-keygen invocation asks
+    Some(GateResult::ask("ssh-keygen: Generating/modifying SSH key"))
+}
+
+// === AGE (from system.toml) ===
+
+/// Check age commands declaratively
+pub fn check_age_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["age", "age-keygen"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    // Check conditional allow rules
+    if true && cmd.args.iter().any(|a| ["--version"].contains(&a.as_str())) {
+        return Some(GateResult::allow());
+    }
+
+    // Bare ask rule - any age invocation asks
+    Some(GateResult::ask("age: Encrypting/decrypting"))
+}
+
 // === SHORT (from shortcut.toml) ===
 
 pub static SHORT_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
@@ -8723,6 +10424,99 @@ pub fn check_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if let Some(result) = check_buf_declarative(cmd) {
         return Some(result);
     }
+    if let Some(result) = check_pytest_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_mypy_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_pyright_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_pylint_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_flake8_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_bandit_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_coverage_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_tox_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_nox_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_autoflake_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_tsx_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_ts_node_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_webpack_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_rollup_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_swc_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_parcel_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_playwright_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_cypress_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_wrangler_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_python3_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_node_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_ruby_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_deno_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_php_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_lua_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_java_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_javac_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_dotnet_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_swift_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_elixir_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_iex_declarative(cmd) {
+        return Some(result);
+    }
     if let Some(result) = check_rm_declarative(cmd) {
         return Some(result);
     }
@@ -8787,6 +10581,15 @@ pub fn check_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(result);
     }
     if let Some(result) = check_http_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_nmap_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_socat_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_telnet_declarative(cmd) {
         return Some(result);
     }
     if let Some(result) = check_shutdown_declarative(cmd) {
@@ -9044,6 +10847,18 @@ pub fn check_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if let Some(result) = check_pactl_declarative(cmd) {
         return Some(result);
     }
+    if let Some(result) = check_openssl_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_gpg_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_ssh_keygen_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_age_declarative(cmd) {
+        return Some(result);
+    }
     if let Some(result) = check_short_declarative(cmd) {
         return Some(result);
     }
@@ -9186,7 +11001,7 @@ pub fn check_tool_gates_gate(cmd: &CommandInfo) -> GateResult {
 /// Programs handled by the tool_gates gate
 pub static TOOL_GATES_PROGRAMS: &[&str] = &["tool-gates", "bash-gates"];
 
-/// Generated gate for devtools - handles: sd, sad, ast-grep, sg, yq, jq, semgrep, comby, grit, watchexec, biome, prettier, eslint, ruff, black, isort, shellcheck, hadolint, golangci-lint, gci, air, actionlint, gitleaks, lefthook, vite, vitest, jest, mocha, tsc, tsup, esbuild, turbo, nx, knip, oxlint, gofmt, gofumpt, goimports, shfmt, rustfmt, stylua, clang-format, autopep8, rubocop, standardrb, patch, dos2unix, unix2dos, stylelint, mix, perltidy, dartfmt, dart, elm-format, scalafmt, ktlint, swiftformat, buf
+/// Generated gate for devtools - handles: sd, sad, ast-grep, sg, yq, jq, semgrep, comby, grit, watchexec, biome, prettier, eslint, ruff, black, isort, shellcheck, hadolint, golangci-lint, gci, air, actionlint, gitleaks, lefthook, vite, vitest, jest, mocha, tsc, tsup, esbuild, turbo, nx, knip, oxlint, gofmt, gofumpt, goimports, shfmt, rustfmt, stylua, clang-format, autopep8, rubocop, standardrb, patch, dos2unix, unix2dos, stylelint, mix, perltidy, dartfmt, dart, elm-format, scalafmt, ktlint, swiftformat, buf, pytest, py.test, mypy, pyright, basedpyright, pylint, flake8, bandit, coverage, tox, nox, autoflake, tsx, ts-node, webpack, webpack-cli, rollup, swc, parcel, playwright, cypress, wrangler
 /// Custom handlers needed for: ["sd"]
 pub fn check_devtools_gate(cmd: &CommandInfo) -> GateResult {
     match cmd.program.as_str() {
@@ -9247,6 +11062,29 @@ pub fn check_devtools_gate(cmd: &CommandInfo) -> GateResult {
         "ktlint" => check_ktlint_declarative(cmd).unwrap_or_else(GateResult::skip),
         "swiftformat" => check_swiftformat_declarative(cmd).unwrap_or_else(GateResult::skip),
         "buf" => check_buf_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "pytest" | "py.test" => check_pytest_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "mypy" => check_mypy_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "pyright" | "basedpyright" => {
+            check_pyright_declarative(cmd).unwrap_or_else(GateResult::skip)
+        }
+        "pylint" => check_pylint_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "flake8" => check_flake8_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "bandit" => check_bandit_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "coverage" => check_coverage_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "tox" => check_tox_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "nox" => check_nox_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "autoflake" => check_autoflake_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "tsx" => check_tsx_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "ts-node" => check_ts_node_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "webpack" | "webpack-cli" => {
+            check_webpack_declarative(cmd).unwrap_or_else(GateResult::skip)
+        }
+        "rollup" => check_rollup_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "swc" => check_swc_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "parcel" => check_parcel_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "playwright" => check_playwright_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "cypress" => check_cypress_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "wrangler" => check_wrangler_declarative(cmd).unwrap_or_else(GateResult::skip),
         _ => GateResult::skip(),
     }
 }
@@ -9311,6 +11149,78 @@ pub static DEVTOOLS_PROGRAMS: &[&str] = &[
     "ktlint",
     "swiftformat",
     "buf",
+    "pytest",
+    "py.test",
+    "mypy",
+    "pyright",
+    "basedpyright",
+    "pylint",
+    "flake8",
+    "bandit",
+    "coverage",
+    "tox",
+    "nox",
+    "autoflake",
+    "tsx",
+    "ts-node",
+    "webpack",
+    "webpack-cli",
+    "rollup",
+    "swc",
+    "parcel",
+    "playwright",
+    "cypress",
+    "wrangler",
+];
+
+/// Generated gate for runtimes - handles: python3, python, python3.11, python3.12, python3.13, python3.14, node, ruby, deno, php, lua, luajit, lua5.1, lua5.2, lua5.3, lua5.4, java, javac, dotnet, swift, elixir, iex
+/// Custom handlers needed for: []
+pub fn check_runtimes_gate(cmd: &CommandInfo) -> GateResult {
+    match cmd.program.as_str() {
+        "python3" | "python" | "python3.11" | "python3.12" | "python3.13" | "python3.14" => {
+            check_python3_declarative(cmd).unwrap_or_else(GateResult::skip)
+        }
+        "node" => check_node_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "ruby" => check_ruby_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "deno" => check_deno_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "php" => check_php_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "lua" | "luajit" | "lua5.1" | "lua5.2" | "lua5.3" | "lua5.4" => {
+            check_lua_declarative(cmd).unwrap_or_else(GateResult::skip)
+        }
+        "java" => check_java_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "javac" => check_javac_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "dotnet" => check_dotnet_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "swift" => check_swift_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "elixir" => check_elixir_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "iex" => check_iex_declarative(cmd).unwrap_or_else(GateResult::skip),
+        _ => GateResult::skip(),
+    }
+}
+
+/// Programs handled by the runtimes gate
+pub static RUNTIMES_PROGRAMS: &[&str] = &[
+    "python3",
+    "python",
+    "python3.11",
+    "python3.12",
+    "python3.13",
+    "python3.14",
+    "node",
+    "ruby",
+    "deno",
+    "php",
+    "lua",
+    "luajit",
+    "lua5.1",
+    "lua5.2",
+    "lua5.3",
+    "lua5.4",
+    "java",
+    "javac",
+    "dotnet",
+    "swift",
+    "elixir",
+    "iex",
 ];
 
 /// Generated gate for filesystem - handles: rm, mv, cp, mkdir, rmdir, touch, chmod, chown, chgrp, ln, perl, tar, unzip, zip
@@ -9341,7 +11251,7 @@ pub static FILESYSTEM_PROGRAMS: &[&str] = &[
     "unzip", "zip",
 ];
 
-/// Generated gate for network - handles: curl, wget, ssh, scp, sftp, rsync, nc, ncat, netcat, http, https, xh
+/// Generated gate for network - handles: curl, wget, ssh, scp, sftp, rsync, nc, ncat, netcat, http, https, xh, nmap, socat, telnet
 /// Custom handlers needed for: ["curl", "http", "nc", "rsync", "wget"]
 pub fn check_network_gate(cmd: &CommandInfo) -> GateResult {
     match cmd.program.as_str() {
@@ -9353,6 +11263,9 @@ pub fn check_network_gate(cmd: &CommandInfo) -> GateResult {
         "rsync" => GateResult::skip(), // custom handler: check_rsync
         "nc" | "ncat" | "netcat" => GateResult::skip(), // custom handler: check_netcat
         "http" | "https" | "xh" => GateResult::skip(), // custom handler: check_httpie
+        "nmap" => check_nmap_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "socat" => check_socat_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "telnet" => check_telnet_declarative(cmd).unwrap_or_else(GateResult::skip),
         _ => GateResult::skip(),
     }
 }
@@ -9360,9 +11273,10 @@ pub fn check_network_gate(cmd: &CommandInfo) -> GateResult {
 /// Programs handled by the network gate
 pub static NETWORK_PROGRAMS: &[&str] = &[
     "curl", "wget", "ssh", "scp", "sftp", "rsync", "nc", "ncat", "netcat", "http", "https", "xh",
+    "nmap", "socat", "telnet",
 ];
 
-/// Generated gate for system - handles: shutdown, reboot, poweroff, halt, init, mkfs, fdisk, parted, gdisk, dd, shred, wipe, mke2fs, mkswap, wipefs, hdparm, insmod, rmmod, modprobe, grub-install, update-grub, useradd, userdel, usermod, passwd, chsh, iptables, ufw, firewall-cmd, chattr, mount, umount, swapoff, swapon, lvremove, vgremove, pvremove, psql, createdb, dropdb, pg_dump, pg_restore, migrate, goose, dbmate, flyway, alembic, mysql, sqlite3, mongosh, mongo, redis-cli, kill, pkill, killall, xkill, make, cmake, ninja, just, task, gradle, gradlew, ./gradlew, mvn, maven, ./mvnw, mvnw, bazel, bazelisk, meson, ansible, ansible-playbook, ansible-galaxy, ansible-vault, vagrant, hyperfine, sudo, doas, systemctl, service, crontab, apt, apt-get, apt-cache, dnf, yum, pacman, yay, paru, brew, zypper, apk, nix, nix-env, nix-shell, flatpak, snap, dpkg, apt-mark, pactl
+/// Generated gate for system - handles: shutdown, reboot, poweroff, halt, init, mkfs, fdisk, parted, gdisk, dd, shred, wipe, mke2fs, mkswap, wipefs, hdparm, insmod, rmmod, modprobe, grub-install, update-grub, useradd, userdel, usermod, passwd, chsh, iptables, ufw, firewall-cmd, chattr, mount, umount, swapoff, swapon, lvremove, vgremove, pvremove, psql, createdb, dropdb, pg_dump, pg_restore, migrate, goose, dbmate, flyway, alembic, mysql, sqlite3, mongosh, mongo, redis-cli, kill, pkill, killall, xkill, make, cmake, ninja, just, task, gradle, gradlew, ./gradlew, mvn, maven, ./mvnw, mvnw, bazel, bazelisk, meson, ansible, ansible-playbook, ansible-galaxy, ansible-vault, vagrant, hyperfine, sudo, doas, systemctl, service, crontab, apt, apt-get, apt-cache, dnf, yum, pacman, yay, paru, brew, zypper, apk, nix, nix-env, nix-shell, flatpak, snap, dpkg, apt-mark, pactl, openssl, gpg, gpg2, ssh-keygen, age, age-keygen
 /// Custom handlers needed for: ["apt", "brew", "crontab", "dnf", "kill", "make", "mysql", "pacman", "pkill", "psql", "sudo", "systemctl"]
 pub fn check_system_gate(cmd: &CommandInfo) -> GateResult {
     match cmd.program.as_str() {
@@ -9457,6 +11371,10 @@ pub fn check_system_gate(cmd: &CommandInfo) -> GateResult {
         "dpkg" => check_dpkg_declarative(cmd).unwrap_or_else(GateResult::skip),
         "apt-mark" => check_apt_mark_declarative(cmd).unwrap_or_else(GateResult::skip),
         "pactl" => check_pactl_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "openssl" => check_openssl_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "gpg" | "gpg2" => check_gpg_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "ssh-keygen" => check_ssh_keygen_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "age" | "age-keygen" => check_age_declarative(cmd).unwrap_or_else(GateResult::skip),
         _ => GateResult::skip(),
     }
 }
@@ -9564,6 +11482,12 @@ pub static SYSTEM_PROGRAMS: &[&str] = &[
     "dpkg",
     "apt-mark",
     "pactl",
+    "openssl",
+    "gpg",
+    "gpg2",
+    "ssh-keygen",
+    "age",
+    "age-keygen",
 ];
 
 /// Generated gate for shortcut - handles: short
@@ -9586,6 +11510,7 @@ pub static SHORTCUT_PROGRAMS: &[&str] = &["short"];
 pub static FILE_EDITING_PROGRAMS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
     [
         "ast-grep",
+        "autoflake",
         "autopep8",
         "biome",
         "black",
@@ -9595,7 +11520,9 @@ pub static FILE_EDITING_PROGRAMS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "comby",
         "dart",
         "dartfmt",
+        "deno",
         "dos2unix",
+        "dotnet",
         "elm-format",
         "eslint",
         "gci",
@@ -9649,6 +11576,10 @@ pub fn is_file_editing_command(cmd: &CommandInfo) -> bool {
             .args
             .iter()
             .any(|a| ["-U", "--update-all"].contains(&a.as_str())),
+        "autoflake" => cmd
+            .args
+            .iter()
+            .any(|a| ["--in-place", "-i"].contains(&a.as_str())),
         "autopep8" => cmd
             .args
             .iter()
@@ -9681,10 +11612,12 @@ pub fn is_file_editing_command(cmd: &CommandInfo) -> bool {
             // Bare rule: always file-editing
             true
         }
+        "deno" => cmd.args.first().is_some_and(|a| a == "fmt"),
         "dos2unix" => {
             // Bare rule: always file-editing
             true
         }
+        "dotnet" => cmd.args.first().is_some_and(|a| a == "format"),
         "elm-format" => {
             // Bare rule: always file-editing
             true

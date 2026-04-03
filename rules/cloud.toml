@@ -458,12 +458,28 @@ subcommand = "state show"
 [[programs.allow]]
 subcommand = "workspace list"
 
+[[programs.allow]]
+subcommand = "workspace show"
+
+# test with command=apply (default) creates real infrastructure
+[[programs.ask]]
+subcommand = "test"
+reason = "Terraform: Running tests (may create infrastructure)"
+
 # fmt -check is read-only (just checks, doesn't modify)
 [[programs.allow]]
 subcommand = "fmt"
 if_flags_any = ["-check"]
 
 # Write commands
+[[programs.ask]]
+subcommand = "console"
+reason = "Terraform: Interactive REPL"
+
+[[programs.ask]]
+subcommand = "force-unlock"
+reason = "Terraform: Force-unlocking state (dangerous)"
+
 [[programs.ask]]
 subcommand = "apply"
 reason = "Terraform: Applying changes"
@@ -595,7 +611,21 @@ subcommand = "auth can-i"
 [[programs.allow]]
 subcommand = "auth whoami"
 
+# Read-only dry-run/utility commands
+[[programs.allow]]
+subcommand = "diff"
+
+[[programs.allow]]
+subcommand = "kustomize"
+
+[[programs.allow]]
+subcommand = "wait"
+
 # Write commands
+[[programs.ask]]
+subcommand = "debug"
+reason = "Creating debug container"
+
 [[programs.ask]]
 subcommand = "apply"
 reason = "Applying resources"
@@ -772,6 +802,170 @@ subcommand = "system df"
 
 [[programs.allow]]
 subcommand = "system info"
+
+# buildx subcommands
+[[programs.allow]]
+subcommand = "buildx ls"
+
+[[programs.allow]]
+subcommand = "buildx inspect"
+
+[[programs.allow]]
+subcommand = "buildx version"
+
+[[programs.ask]]
+subcommand = "buildx build"
+reason = "Docker: Building image (buildx)"
+
+[[programs.ask]]
+subcommand = "buildx create"
+reason = "Docker: Creating builder"
+
+[[programs.ask]]
+subcommand = "buildx rm"
+reason = "Docker: Removing builder"
+
+[[programs.ask]]
+subcommand = "buildx use"
+reason = "Docker: Switching builder"
+
+[[programs.ask]]
+subcommand = "buildx stop"
+reason = "Docker: Stopping builder"
+
+[[programs.ask]]
+subcommand = "buildx prune"
+reason = "Docker: Pruning build cache"
+
+# scout subcommands (vulnerability scanning)
+[[programs.allow]]
+subcommand = "scout quickview"
+
+[[programs.allow]]
+subcommand = "scout cves"
+
+[[programs.allow]]
+subcommand = "scout recommendations"
+
+[[programs.allow]]
+subcommand = "scout compare"
+
+[[programs.ask]]
+subcommand = "scout enroll"
+reason = "Docker: Enrolling in Scout"
+
+# context subcommands
+[[programs.allow]]
+subcommand = "context ls"
+
+[[programs.allow]]
+subcommand = "context list"
+
+[[programs.allow]]
+subcommand = "context show"
+
+[[programs.allow]]
+subcommand = "context inspect"
+
+[[programs.ask]]
+subcommand = "context create"
+reason = "Docker: Creating context"
+
+[[programs.ask]]
+subcommand = "context rm"
+reason = "Docker: Removing context"
+
+[[programs.ask]]
+subcommand = "context use"
+reason = "Docker: Switching context"
+
+# manifest subcommands
+[[programs.allow]]
+subcommand = "manifest inspect"
+
+[[programs.ask]]
+subcommand = "manifest create"
+reason = "Docker: Creating manifest"
+
+[[programs.ask]]
+subcommand = "manifest push"
+reason = "Docker: Pushing manifest"
+
+[[programs.ask]]
+subcommand = "manifest annotate"
+reason = "Docker: Annotating manifest"
+
+# image subcommands (aliases for top-level commands)
+[[programs.allow]]
+subcommand = "image ls"
+
+[[programs.allow]]
+subcommand = "image list"
+
+[[programs.allow]]
+subcommand = "image inspect"
+
+[[programs.allow]]
+subcommand = "image history"
+
+[[programs.ask]]
+subcommand = "image rm"
+reason = "Docker: Removing image"
+
+[[programs.ask]]
+subcommand = "image prune"
+reason = "Docker: Pruning images"
+
+[[programs.ask]]
+subcommand = "image tag"
+reason = "Docker: Tagging image"
+
+[[programs.ask]]
+subcommand = "image push"
+reason = "Docker: Pushing image"
+
+[[programs.ask]]
+subcommand = "image pull"
+reason = "Docker: Pulling image"
+
+# container subcommands (aliases for top-level commands)
+[[programs.allow]]
+subcommand = "container ls"
+
+[[programs.allow]]
+subcommand = "container list"
+
+[[programs.allow]]
+subcommand = "container inspect"
+
+[[programs.allow]]
+subcommand = "container logs"
+
+[[programs.allow]]
+subcommand = "container top"
+
+[[programs.allow]]
+subcommand = "container stats"
+
+[[programs.ask]]
+subcommand = "container rm"
+reason = "Docker: Removing container"
+
+[[programs.ask]]
+subcommand = "container start"
+reason = "Docker: Starting container"
+
+[[programs.ask]]
+subcommand = "container stop"
+reason = "Docker: Stopping container"
+
+[[programs.ask]]
+subcommand = "container kill"
+reason = "Docker: Killing container"
+
+[[programs.ask]]
+subcommand = "container prune"
+reason = "Docker: Pruning containers"
 
 # docker compose (new docker CLI plugin, equivalent to docker-compose)
 [[programs.allow]]

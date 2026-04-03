@@ -2093,3 +2093,224 @@ reason = "Unloading PulseAudio module"
 [[programs.ask]]
 subcommand = "exit"
 reason = "Terminating PulseAudio daemon"
+
+# =============================================================================
+# OPENSSL (crypto toolkit - inspection safe, key generation asks)
+# =============================================================================
+
+[[programs]]
+name = "openssl"
+unknown_action = "ask"
+
+# Read-only inspection commands
+[[programs.allow]]
+subcommand = "version"
+
+# x509 with -req is a signing operation (writes files)
+[[programs.ask]]
+subcommand = "x509"
+reason = "Signing certificate"
+if_flags_any = ["-req"]
+
+# x509 without -req is read-only inspection
+[[programs.allow]]
+subcommand = "x509"
+unless_flags = ["-req"]
+
+[[programs.allow]]
+subcommand = "s_client"
+
+[[programs.ask]]
+subcommand = "s_server"
+reason = "Starting TLS server"
+
+[[programs.allow]]
+subcommand = "dgst"
+
+[[programs.allow]]
+subcommand = "md5"
+
+[[programs.allow]]
+subcommand = "sha1"
+
+[[programs.allow]]
+subcommand = "sha256"
+
+[[programs.allow]]
+subcommand = "sha512"
+
+[[programs.allow]]
+subcommand = "verify"
+
+[[programs.allow]]
+subcommand = "ciphers"
+
+[[programs.allow]]
+subcommand = "list"
+
+[[programs.allow]]
+subcommand = "asn1parse"
+
+[[programs.allow]]
+subcommand = "speed"
+
+[[programs.allow]]
+subcommand = "prime"
+
+# rand with -out writes to file
+[[programs.ask]]
+subcommand = "rand"
+reason = "Writing random data to file"
+if_flags_any = ["-out"]
+
+# rand without -out goes to stdout
+[[programs.allow]]
+subcommand = "rand"
+unless_flags = ["-out"]
+
+# Key/cert generation
+[[programs.ask]]
+subcommand = "genrsa"
+reason = "Generating RSA key"
+
+[[programs.ask]]
+subcommand = "genpkey"
+reason = "Generating private key"
+
+[[programs.ask]]
+subcommand = "req"
+reason = "Creating certificate request"
+
+[[programs.ask]]
+subcommand = "ca"
+reason = "Certificate authority operation"
+
+[[programs.ask]]
+subcommand = "pkcs12"
+reason = "PKCS12 operation"
+
+[[programs.ask]]
+subcommand = "enc"
+reason = "Encrypting/decrypting"
+
+[[programs.ask]]
+subcommand = "smime"
+reason = "S/MIME operation"
+
+[[programs.ask]]
+subcommand = "cms"
+reason = "CMS operation"
+
+[[programs.ask]]
+subcommand = "rsautl"
+reason = "RSA operation"
+
+[[programs.ask]]
+subcommand = "pkeyutl"
+reason = "Key operation"
+
+[[programs.ask]]
+subcommand = "ecparam"
+reason = "Generating EC parameters"
+
+# =============================================================================
+# GPG / GPG2 (GNU Privacy Guard)
+# =============================================================================
+
+[[programs]]
+name = "gpg"
+aliases = ["gpg2"]
+unknown_action = "ask"
+
+# Read-only operations
+[[programs.allow]]
+if_flags_any = ["--list-keys", "-k", "--list-secret-keys", "-K"]
+
+[[programs.allow]]
+if_flags_any = ["--fingerprint"]
+
+[[programs.allow]]
+if_flags_any = ["--verify"]
+
+[[programs.allow]]
+if_flags_any = ["--list-packets"]
+
+[[programs.allow]]
+if_flags_any = ["--version"]
+
+[[programs.allow]]
+if_flags_any = ["--help", "-h"]
+
+# Key operations (ask)
+[[programs.ask]]
+reason = "Signing data"
+if_flags_any = ["--sign", "-s", "--clearsign", "--detach-sign", "-b"]
+
+[[programs.ask]]
+reason = "Encrypting data"
+if_flags_any = ["--encrypt", "-e", "--symmetric", "-c"]
+
+[[programs.ask]]
+reason = "Decrypting data"
+if_flags_any = ["--decrypt", "-d"]
+
+[[programs.ask]]
+reason = "Importing key"
+if_flags_any = ["--import"]
+
+[[programs.ask]]
+reason = "Exporting key"
+if_flags_any = ["--export", "--export-secret-keys"]
+
+[[programs.ask]]
+reason = "Deleting key"
+if_flags_any = ["--delete-key", "--delete-secret-key", "--delete-secret-and-public-key"]
+
+[[programs.ask]]
+reason = "Generating key"
+if_flags_any = ["--gen-key", "--generate-key", "--full-gen-key", "--full-generate-key", "--quick-gen-key"]
+
+[[programs.ask]]
+reason = "Editing key"
+if_flags_any = ["--edit-key"]
+
+# =============================================================================
+# SSH-KEYGEN (key management)
+# =============================================================================
+
+[[programs]]
+name = "ssh-keygen"
+unknown_action = "ask"
+
+# Read-only operations (fingerprint, display)
+[[programs.allow]]
+if_flags_any = ["-l", "-lf", "-lv"]
+
+[[programs.allow]]
+if_flags_any = ["-F"]
+
+[[programs.allow]]
+if_flags_any = ["-B"]
+
+# Mutation operations
+[[programs.ask]]
+reason = "Removing host key"
+if_flags_any = ["-R"]
+
+[[programs.ask]]
+reason = "Generating/modifying SSH key"
+
+# =============================================================================
+# AGE (modern encryption tool)
+# =============================================================================
+
+[[programs]]
+name = "age"
+aliases = ["age-keygen"]
+unknown_action = "ask"
+
+[[programs.allow]]
+if_flags_any = ["--version"]
+
+[[programs.ask]]
+reason = "Encrypting/decrypting"

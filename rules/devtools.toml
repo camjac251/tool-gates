@@ -745,3 +745,345 @@ subcommand = "--version"
 subcommand = "format"
 reason = "Formatting files"
 accept_edits_auto_allow = true
+
+# =============================================================================
+# PYTEST / PY.TEST (Python test runner - read-only)
+# =============================================================================
+
+[[programs]]
+name = "pytest"
+aliases = ["py.test"]
+unknown_action = "allow"
+
+# =============================================================================
+# MYPY (Python type checker - read-only)
+# =============================================================================
+
+[[programs]]
+name = "mypy"
+unknown_action = "allow"
+
+# =============================================================================
+# PYRIGHT / BASEDPYRIGHT (Python type checker - read-only)
+# =============================================================================
+
+[[programs]]
+name = "pyright"
+aliases = ["basedpyright"]
+unknown_action = "allow"
+
+# =============================================================================
+# PYLINT (Python linter - read-only)
+# =============================================================================
+
+[[programs]]
+name = "pylint"
+unknown_action = "allow"
+
+# =============================================================================
+# FLAKE8 (Python linter - read-only)
+# =============================================================================
+
+[[programs]]
+name = "flake8"
+unknown_action = "allow"
+
+# =============================================================================
+# BANDIT (Python security scanner - read-only)
+# =============================================================================
+
+[[programs]]
+name = "bandit"
+unknown_action = "allow"
+
+# =============================================================================
+# COVERAGE (Python code coverage)
+# =============================================================================
+
+[[programs]]
+name = "coverage"
+unknown_action = "ask"
+
+# Read-only reporting (stdout only)
+[[programs.allow]]
+subcommand = "report"
+
+[[programs.allow]]
+subcommand = "--version"
+
+[[programs.allow]]
+subcommand = "--help"
+
+# Commands that run code or write files
+[[programs.ask]]
+subcommand = "run"
+reason = "Running code with coverage"
+
+[[programs.ask]]
+subcommand = "html"
+reason = "Generating HTML coverage report"
+
+[[programs.ask]]
+subcommand = "json"
+reason = "Writing coverage.json"
+
+[[programs.ask]]
+subcommand = "xml"
+reason = "Writing coverage.xml"
+
+[[programs.ask]]
+subcommand = "lcov"
+reason = "Writing coverage.lcov"
+
+[[programs.ask]]
+subcommand = "erase"
+reason = "Erasing coverage data"
+
+[[programs.ask]]
+subcommand = "combine"
+reason = "Combining coverage data"
+
+# =============================================================================
+# TOX (Python test automation - runs arbitrary commands from tox.ini)
+# =============================================================================
+
+[[programs]]
+name = "tox"
+unknown_action = "ask"
+
+[[programs.allow]]
+subcommand = "--version"
+
+[[programs.allow]]
+subcommand = "--help"
+
+[[programs.allow]]
+if_flags_any = ["-l", "--list", "--listenvs"]
+
+[[programs.ask]]
+reason = "Running test environments"
+
+# =============================================================================
+# NOX (Python test automation - runs arbitrary commands from noxfile.py)
+# =============================================================================
+
+[[programs]]
+name = "nox"
+unknown_action = "ask"
+
+[[programs.allow]]
+subcommand = "--version"
+
+[[programs.allow]]
+subcommand = "--help"
+
+[[programs.allow]]
+if_flags_any = ["-l", "--list"]
+
+[[programs.ask]]
+reason = "Running session"
+
+# =============================================================================
+# AUTOFLAKE (removes unused imports - --check safe, --in-place asks)
+# =============================================================================
+
+[[programs]]
+name = "autoflake"
+unknown_action = "ask"
+
+[[programs.allow]]
+if_flags_any = ["--check", "--check-diff"]
+
+[[programs.ask]]
+reason = "Removing unused imports"
+if_flags_any = ["--in-place", "-i"]
+accept_edits_auto_allow = true
+
+# =============================================================================
+# TSX (TypeScript execute - runs code, always needs approval)
+# =============================================================================
+
+[[programs]]
+name = "tsx"
+unknown_action = "ask"
+
+[[programs.allow]]
+subcommand = "--version"
+
+[[programs.allow]]
+subcommand = "--help"
+
+[[programs.ask]]
+reason = "Executing TypeScript"
+
+# =============================================================================
+# TS-NODE (TypeScript execute - runs code, always needs approval)
+# =============================================================================
+
+[[programs]]
+name = "ts-node"
+unknown_action = "ask"
+
+[[programs.allow]]
+subcommand = "--version"
+
+[[programs.allow]]
+subcommand = "--help"
+
+[[programs.ask]]
+reason = "Executing TypeScript"
+
+# =============================================================================
+# WEBPACK (JavaScript bundler - local build)
+# =============================================================================
+
+[[programs]]
+name = "webpack"
+aliases = ["webpack-cli"]
+unknown_action = "allow"
+
+# =============================================================================
+# ROLLUP (JavaScript bundler - local build)
+# =============================================================================
+
+[[programs]]
+name = "rollup"
+unknown_action = "allow"
+
+# =============================================================================
+# SWC (Fast compiler - local build)
+# =============================================================================
+
+[[programs]]
+name = "swc"
+unknown_action = "allow"
+
+# =============================================================================
+# PARCEL (Web bundler - build safe, serve asks)
+# =============================================================================
+
+[[programs]]
+name = "parcel"
+unknown_action = "ask"
+
+[[programs.allow]]
+subcommand = "build"
+
+[[programs.allow]]
+subcommand = "--version"
+
+[[programs.allow]]
+subcommand = "--help"
+
+[[programs.ask]]
+subcommand = "serve"
+reason = "Starting dev server"
+
+[[programs.ask]]
+subcommand = "watch"
+reason = "Watching files"
+
+# =============================================================================
+# PLAYWRIGHT (browser testing)
+# =============================================================================
+
+[[programs]]
+name = "playwright"
+unknown_action = "ask"
+
+[[programs.allow]]
+subcommand = "test"
+
+[[programs.allow]]
+subcommand = "show-report"
+
+[[programs.allow]]
+subcommand = "show-trace"
+
+[[programs.allow]]
+subcommand = "--version"
+
+[[programs.allow]]
+subcommand = "--help"
+
+[[programs.ask]]
+subcommand = "install"
+reason = "Installing browsers"
+
+[[programs.ask]]
+subcommand = "codegen"
+reason = "Generating test code"
+
+# =============================================================================
+# CYPRESS (browser testing)
+# =============================================================================
+
+[[programs]]
+name = "cypress"
+unknown_action = "ask"
+
+[[programs.allow]]
+subcommand = "run"
+
+[[programs.allow]]
+subcommand = "verify"
+
+[[programs.allow]]
+subcommand = "version"
+
+[[programs.allow]]
+subcommand = "info"
+
+[[programs.allow]]
+subcommand = "--version"
+
+[[programs.allow]]
+subcommand = "--help"
+
+[[programs.ask]]
+subcommand = "open"
+reason = "Opening Cypress GUI"
+
+[[programs.ask]]
+subcommand = "install"
+reason = "Installing Cypress"
+
+# =============================================================================
+# WRANGLER (Cloudflare Workers CLI)
+# =============================================================================
+
+[[programs]]
+name = "wrangler"
+unknown_action = "ask"
+
+[[programs.allow]]
+subcommand = "whoami"
+
+[[programs.allow]]
+subcommand = "--version"
+
+[[programs.allow]]
+subcommand = "--help"
+
+[[programs.allow]]
+subcommand = "tail"
+
+[[programs.ask]]
+subcommand = "dev"
+reason = "Starting local dev server"
+
+[[programs.ask]]
+subcommand = "deploy"
+reason = "Deploying worker"
+
+[[programs.ask]]
+subcommand = "publish"
+reason = "Publishing worker"
+
+[[programs.ask]]
+subcommand = "login"
+reason = "Authenticating"
+
+[[programs.ask]]
+subcommand = "pages"
+reason = "Pages operation"

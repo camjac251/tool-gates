@@ -4,8 +4,9 @@
 
 use crate::gates::helpers::{get_flag_value, has_any_flag};
 use crate::generated::rules::{
-    check_curl_declarative, check_nc_declarative, check_rsync_declarative, check_scp_declarative,
-    check_sftp_declarative, check_ssh_declarative, check_wget_declarative,
+    check_curl_declarative, check_nc_declarative, check_nmap_declarative, check_rsync_declarative,
+    check_scp_declarative, check_sftp_declarative, check_socat_declarative, check_ssh_declarative,
+    check_telnet_declarative, check_wget_declarative,
 };
 use crate::models::{CommandInfo, GateResult};
 
@@ -22,6 +23,14 @@ pub fn check_network(cmd: &CommandInfo) -> GateResult {
         "rsync" => check_rsync(cmd),
         "nc" | "ncat" | "netcat" => check_netcat(cmd),
         "http" | "https" | "xh" => check_httpie(cmd),
+        "nmap" => {
+            check_nmap_declarative(cmd).unwrap_or_else(|| GateResult::ask("nmap: Port scanning"))
+        }
+        "socat" => {
+            check_socat_declarative(cmd).unwrap_or_else(|| GateResult::ask("socat: Network relay"))
+        }
+        "telnet" => check_telnet_declarative(cmd)
+            .unwrap_or_else(|| GateResult::ask("telnet: Network connection")),
         _ => GateResult::skip(),
     }
 }
@@ -50,8 +59,10 @@ fn check_curl(cmd: &CommandInfo) -> GateResult {
         "--data-raw",
         "--data-binary",
         "--data-urlencode",
+        "--data-ascii",
         "-F",
         "--form",
+        "--form-string",
         "-T",
         "--upload-file",
         "--json",
@@ -150,8 +161,12 @@ fn check_netcat(cmd: &CommandInfo) -> GateResult {
     let args = &cmd.args;
 
     // Execute mode - blocked (reverse shell pattern)
-    if args.iter().any(|a| a == "-e") {
-        return GateResult::block("Netcat -e blocked (reverse shell risk)");
+    // -e, -c/--sh-exec, --exec, --lua-exec all execute commands
+    if args
+        .iter()
+        .any(|a| a == "-e" || a == "-c" || a == "--sh-exec" || a == "--exec" || a == "--lua-exec")
+    {
+        return GateResult::block("Netcat execute mode blocked (reverse shell risk)");
     }
 
     // Use declarative for blocks
@@ -306,6 +321,36 @@ mod tests {
     }
 
     #[test]
+    fn test_netcat_sh_exec_blocked() {
+        let result = check_network(&nc(&["-c", "/bin/bash", "host", "1234"]));
+        assert_eq!(result.decision, Decision::Block);
+    }
+
+    #[test]
+    fn test_netcat_exec_flag_blocked() {
+        let result = check_network(&nc(&["--exec", "/bin/bash", "host", "1234"]));
+        assert_eq!(result.decision, Decision::Block);
+    }
+
+    #[test]
+    fn test_netcat_lua_exec_blocked() {
+        let result = check_network(&nc(&["--lua-exec", "script.lua", "host", "1234"]));
+        assert_eq!(result.decision, Decision::Block);
+    }
+
+    #[test]
+    fn test_curl_form_string_asks() {
+        let result = check_network(&curl(&["--form-string", "key=val", "https://example.com"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    #[test]
+    fn test_curl_data_ascii_asks() {
+        let result = check_network(&curl(&["--data-ascii", "data", "https://example.com"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    #[test]
     fn test_netcat_listen_asks() {
         let result = check_network(&nc(&["-l", "1234"]));
         assert_eq!(result.decision, Decision::Ask);
@@ -314,6 +359,38 @@ mod tests {
     #[test]
     fn test_netcat_connect_asks() {
         let result = check_network(&nc(&["host", "1234"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    // === Non-network ===
+
+    // === nmap ===
+
+    #[test]
+    fn test_nmap_asks() {
+        let result = check_network(&make_cmd("nmap", &["-sV", "192.0.2.1"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    #[test]
+    fn test_nmap_version_allows() {
+        let result = check_network(&make_cmd("nmap", &["--version"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    // === socat ===
+
+    #[test]
+    fn test_socat_asks() {
+        let result = check_network(&make_cmd("socat", &["TCP:192.0.2.1:80", "STDOUT"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    // === telnet ===
+
+    #[test]
+    fn test_telnet_asks() {
+        let result = check_network(&make_cmd("telnet", &["192.0.2.1", "80"]));
         assert_eq!(result.decision, Decision::Ask);
     }
 

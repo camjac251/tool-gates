@@ -345,6 +345,19 @@ fn check_cargo(cmd: &CommandInfo) -> GateResult {
                     "doc",
                     "tree",
                     "metadata",
+                    "nextest",
+                    "audit",
+                    "deny",
+                    "expand",
+                    "semver-checks",
+                    "llvm-cov",
+                    "outdated",
+                    "bloat",
+                    "machete",
+                    "depgraph",
+                    "insta",
+                    "bench",
+                    "clean",
                     "--version",
                     "-V",
                     "--help",
@@ -1495,6 +1508,152 @@ mod tests {
                 result.decision,
                 Decision::Ask,
                 "cargo clippy --fix should ask"
+            );
+        }
+
+        // === Cargo extended subcommands ===
+
+        #[test]
+        fn test_cargo_nextest_run_allows() {
+            let result = check_package_managers(&cmd("cargo", &["nextest", "run"]));
+            assert_eq!(
+                result.decision,
+                Decision::Allow,
+                "cargo nextest run should allow"
+            );
+        }
+
+        #[test]
+        fn test_cargo_audit_allows() {
+            let result = check_package_managers(&cmd("cargo", &["audit"]));
+            assert_eq!(result.decision, Decision::Allow, "cargo audit should allow");
+        }
+
+        #[test]
+        fn test_cargo_deny_check_allows() {
+            let result = check_package_managers(&cmd("cargo", &["deny", "check"]));
+            assert_eq!(
+                result.decision,
+                Decision::Allow,
+                "cargo deny check should allow"
+            );
+        }
+
+        #[test]
+        fn test_cargo_expand_allows() {
+            let result = check_package_managers(&cmd("cargo", &["expand"]));
+            assert_eq!(
+                result.decision,
+                Decision::Allow,
+                "cargo expand should allow"
+            );
+        }
+
+        #[test]
+        fn test_cargo_semver_checks_allows() {
+            let result = check_package_managers(&cmd("cargo", &["semver-checks"]));
+            assert_eq!(
+                result.decision,
+                Decision::Allow,
+                "cargo semver-checks should allow"
+            );
+        }
+
+        #[test]
+        fn test_cargo_llvm_cov_allows() {
+            let result = check_package_managers(&cmd("cargo", &["llvm-cov"]));
+            assert_eq!(
+                result.decision,
+                Decision::Allow,
+                "cargo llvm-cov should allow"
+            );
+        }
+
+        #[test]
+        fn test_cargo_outdated_allows() {
+            let result = check_package_managers(&cmd("cargo", &["outdated"]));
+            assert_eq!(
+                result.decision,
+                Decision::Allow,
+                "cargo outdated should allow"
+            );
+        }
+
+        #[test]
+        fn test_cargo_bloat_allows() {
+            let result = check_package_managers(&cmd("cargo", &["bloat"]));
+            assert_eq!(result.decision, Decision::Allow, "cargo bloat should allow");
+        }
+
+        #[test]
+        fn test_cargo_machete_allows() {
+            let result = check_package_managers(&cmd("cargo", &["machete"]));
+            assert_eq!(
+                result.decision,
+                Decision::Allow,
+                "cargo machete should allow"
+            );
+        }
+
+        #[test]
+        fn test_cargo_depgraph_allows() {
+            let result = check_package_managers(&cmd("cargo", &["depgraph"]));
+            assert_eq!(
+                result.decision,
+                Decision::Allow,
+                "cargo depgraph should allow"
+            );
+        }
+
+        #[test]
+        fn test_cargo_watch_asks() {
+            let result = check_package_managers(&cmd("cargo", &["watch", "-x", "test"]));
+            assert_eq!(result.decision, Decision::Ask, "cargo watch should ask");
+        }
+
+        #[test]
+        fn test_cargo_mutants_asks() {
+            let result = check_package_managers(&cmd("cargo", &["mutants"]));
+            assert_eq!(result.decision, Decision::Ask, "cargo mutants should ask");
+        }
+
+        #[test]
+        fn test_cargo_insta_test_allows() {
+            let result = check_package_managers(&cmd("cargo", &["insta", "test"]));
+            assert_eq!(
+                result.decision,
+                Decision::Allow,
+                "cargo insta test should allow"
+            );
+        }
+
+        #[test]
+        fn test_cargo_insta_review_asks() {
+            let result = check_package_managers(&cmd("cargo", &["insta", "review"]));
+            assert_eq!(
+                result.decision,
+                Decision::Ask,
+                "cargo insta review should ask"
+            );
+        }
+
+        #[test]
+        fn test_cargo_insta_accept_asks() {
+            let result = check_package_managers(&cmd("cargo", &["insta", "accept"]));
+            assert_eq!(
+                result.decision,
+                Decision::Ask,
+                "cargo insta accept should ask"
+            );
+        }
+
+        #[test]
+        fn test_cargo_insta_reject_asks() {
+            let result = check_package_managers(&cmd("cargo", &["insta", "reject"]));
+            assert_eq!(
+                result.decision,
+                Decision::Ask,
+                "cargo insta reject should ask"
             );
         }
 

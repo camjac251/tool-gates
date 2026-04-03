@@ -14,6 +14,7 @@ pub mod git;
 pub mod helpers;
 pub mod network;
 pub mod package_managers;
+pub mod runtimes;
 pub mod shortcut;
 pub mod system;
 pub mod tool_gates;
@@ -30,6 +31,7 @@ pub use gh::check_gh;
 pub use git::check_git;
 pub use network::check_network;
 pub use package_managers::check_package_managers;
+pub use runtimes::check_runtimes;
 pub use shortcut::check_shortcut;
 pub use system::check_system;
 pub use tool_gates::check_tool_gates;
@@ -52,6 +54,7 @@ pub static GATES: &[(&str, GateCheckFn)] = &[
     ("filesystem", check_filesystem),
     ("devtools", check_devtools),
     ("package_managers", check_package_managers),
+    ("runtimes", check_runtimes),
     ("system", check_system),
     ("basics", check_basics),
 ];
