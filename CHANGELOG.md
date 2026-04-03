@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.11.0](https://github.com/camjac251/tool-gates/compare/v1.10.0...v1.11.0) - 2026-04-03
+
+### Added
+
+- *(gates)* acceptEdits wrapper resolution for package manager invocations
+
 ## [1.10.0](https://github.com/camjac251/tool-gates/compare/v1.9.2...v1.10.0) - 2026-04-03
 
 ### Added
