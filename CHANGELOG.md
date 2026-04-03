@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.10.0](https://github.com/camjac251/tool-gates/compare/v1.9.2...v1.10.0) - 2026-04-03
+
+### Added
+
+- *(gates)* add runtimes gate, expand coverage across all gates
+
 ## [1.9.2](https://github.com/camjac251/tool-gates/compare/v1.9.1...v1.9.2) - 2026-03-31
 
 ### Fixed
