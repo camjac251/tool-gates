@@ -115,7 +115,7 @@ impl Client {
 
     /// Check if a tool_name represents a shell command tool
     pub fn is_shell_tool(tool_name: &str) -> bool {
-        tool_name == "Bash" || tool_name == "run_shell_command"
+        tool_name == "Bash" || tool_name == "Monitor" || tool_name == "run_shell_command"
     }
 
     /// Check if a tool_name represents a file operation tool (read, write, edit)
@@ -875,6 +875,7 @@ mod tests {
     #[test]
     fn test_is_shell_tool() {
         assert!(Client::is_shell_tool("Bash"));
+        assert!(Client::is_shell_tool("Monitor"));
         assert!(Client::is_shell_tool("run_shell_command"));
         assert!(!Client::is_shell_tool("read_file"));
         assert!(!Client::is_shell_tool("write_file"));

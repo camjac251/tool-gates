@@ -1,12 +1,12 @@
 //! Tool Gates - Intelligent tool permission gate for AI coding assistants.
 //!
 //! Formerly `bash-gates`. Single binary that handles all tool types:
-//! - **Bash**: AST-parsed command gating (13 ordered gates, settings.json integration)
+//! - **Bash/Monitor**: AST-parsed command gating (13 ordered gates, settings.json integration)
 //! - **Read/Write/Edit**: Symlink guard for AI config files
 //! - **Glob/Grep/MCP tools**: Configurable tool blocking
 //!
 //! Supports Claude Code and Gemini CLI hook systems:
-//! - Claude Code: `PreToolUse`, `PermissionRequest`, `PostToolUse` (Bash, Write, Edit)
+//! - Claude Code: `PreToolUse`, `PermissionRequest`, `PostToolUse` (Bash, Monitor, Write, Edit)
 //! - Gemini CLI: `BeforeTool`, `AfterTool` (tool_name: "run_shell_command")
 //!
 //! Configuration: `~/.config/tool-gates/config.toml`
@@ -195,7 +195,7 @@ fn handle_pre_tool_use_hook(input: &str, client: Client) {
     // Route by tool type (handles both Claude and Gemini tool names)
     let tool_name = hook_input.tool_name.as_str();
     if Client::is_shell_tool(tool_name) {
-        // Bash / run_shell_command: full gate engine
+        // Bash / Monitor / run_shell_command: full gate engine
         if !config.features.bash_gates {
             print_no_opinion_for(client);
             return;
@@ -521,17 +521,17 @@ fn get_binary_path() -> String {
 
 /// PreToolUse matcher for built-in tools (exact match mode).
 /// Bash (gate engine), Read/Write/Edit (file guards), Glob/Grep (block rules).
-const PRE_TOOL_USE_MATCHER: &str = "Bash|Read|Write|Edit|Glob|Grep|Skill";
+const PRE_TOOL_USE_MATCHER: &str = "Bash|Monitor|Read|Write|Edit|Glob|Grep|Skill";
 
 /// PreToolUse matcher for MCP tools (regex mode).
 /// Matches all MCP tool calls; block rules in config decide what to deny.
 const MCP_TOOL_USE_MATCHER: &str = "mcp__.*";
 
 /// PermissionRequest matcher for Bash (command approval) + file tools (worktree approval).
-const PERMISSION_REQUEST_MATCHER: &str = "Bash|Write|Edit";
+const PERMISSION_REQUEST_MATCHER: &str = "Bash|Monitor|Write|Edit";
 
 /// PostToolUse matcher for Bash (approval tracking) + file tools (security reminders).
-const POST_TOOL_USE_MATCHER: &str = "Bash|Write|Edit";
+const POST_TOOL_USE_MATCHER: &str = "Bash|Monitor|Write|Edit";
 
 fn generate_hook_entry(binary_path: &str, matcher: &str) -> serde_json::Value {
     serde_json::json!({

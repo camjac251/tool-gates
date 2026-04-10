@@ -97,4 +97,4 @@ claude --plugin-dir /path/to/tool-gates/claude-plugin
 
 ## Note on hooks
 
-This plugin does not ship hooks. The `tool-gates` binary handles hook installation via `tool-gates hooks add`, which registers PreToolUse (Bash gates + file guards + security scanning + MCP tool blocking), PermissionRequest (subagent approval), and PostToolUse (Bash approval tracking + security anti-pattern reminders) hooks in your Claude Code settings. See the [main README](https://github.com/camjac251/tool-gates#configure-claude-code) for details.
+This plugin does not ship hooks. The `tool-gates` binary handles hook installation via `tool-gates hooks add`, which registers PreToolUse (Bash/Monitor gates + file guards + security scanning + MCP tool blocking), PermissionRequest (subagent approval), and PostToolUse (Bash/Monitor approval tracking + security anti-pattern reminders) hooks in your Claude Code settings. See the [main README](https://github.com/camjac251/tool-gates#configure-claude-code) for details.

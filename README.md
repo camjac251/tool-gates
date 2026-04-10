@@ -48,7 +48,7 @@ A hook for [Claude Code](https://code.claude.com/docs/en/hooks) and [Gemini CLI]
 ```mermaid
 flowchart TD
     CC[Claude Code] --> TOOL{Tool Type}
-    TOOL -->|Bash| CMD[Bash Command]
+    TOOL -->|Bash/Monitor| CMD[Shell Command]
     TOOL -->|Write/Edit| FILE[File Operation]
 
     subgraph PTU [PreToolUse Hook]
@@ -106,9 +106,9 @@ flowchart TD
 
 **Why three hooks? (Claude Code)**
 
-- **PreToolUse**: Gates Bash commands, blocks secrets in Write/Edit, provides CLI hints
+- **PreToolUse**: Gates Bash/Monitor commands, blocks secrets in Write/Edit, provides CLI hints
 - **PermissionRequest**: Gates commands for subagents (where PreToolUse's `allow` is ignored)
-- **PostToolUse**: Tracks successful Bash execution for approval learning; scans Write/Edit content for security anti-patterns and nudges Claude via `additionalContext`
+- **PostToolUse**: Tracks successful Bash/Monitor execution for approval learning; scans Write/Edit content for security anti-patterns and nudges Claude via `additionalContext`
 
 **Gemini CLI** uses two hooks (`BeforeTool`/`AfterTool`) with the same gate engine. The client is auto-detected from `hook_event_name`. Key differences:
 
@@ -383,9 +383,9 @@ tool-gates hooks add --gemini --dry-run
 
 **All three hooks are installed:**
 
-- `PreToolUse` - Gates Bash commands, blocks secrets in Write/Edit, file guards, CLI hints, MCP tool blocking, Skill auto-approval
+- `PreToolUse` - Gates Bash/Monitor commands, blocks secrets in Write/Edit, file guards, CLI hints, MCP tool blocking, Skill auto-approval
 - `PermissionRequest` - Gates commands for subagents (where PreToolUse's allow is ignored)
-- `PostToolUse` - Tracks Bash execution for approval learning; scans Write/Edit for security anti-patterns
+- `PostToolUse` - Tracks Bash/Monitor execution for approval learning; scans Write/Edit for security anti-patterns
 
 <details>
 <summary>Manual installation</summary>
@@ -397,7 +397,7 @@ Add to `~/.claude/settings.json`:
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash|Read|Write|Edit|Glob|Grep|Skill",
+        "matcher": "Bash|Monitor|Read|Write|Edit|Glob|Grep|Skill",
         "hooks": [{ "type": "command", "command": "~/.local/bin/tool-gates", "timeout": 10 }]
       },
       {
@@ -407,13 +407,13 @@ Add to `~/.claude/settings.json`:
     ],
     "PermissionRequest": [
       {
-        "matcher": "Bash",
+        "matcher": "Bash|Monitor",
         "hooks": [{ "type": "command", "command": "~/.local/bin/tool-gates", "timeout": 10 }]
       }
     ],
     "PostToolUse": [
       {
-        "matcher": "Bash|Write|Edit",
+        "matcher": "Bash|Monitor|Write|Edit",
         "hooks": [{ "type": "command", "command": "~/.local/bin/tool-gates", "timeout": 10 }]
       }
     ]

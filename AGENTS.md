@@ -1,6 +1,6 @@
 # Tool Gates (formerly `bash-gates`) - AI Coding Assistant Permission Hook (Rust)
 
-Intelligent tool permission gate using tree-sitter AST parsing. Handles Bash commands, Read/Write/Edit file operations, Glob/Grep searches, and MCP tools. Auto-allows known safe operations, asks for writes and unknown commands, blocks dangerous patterns.
+Intelligent tool permission gate using tree-sitter AST parsing. Handles Bash/Monitor commands, Read/Write/Edit file operations, Glob/Grep searches, and MCP tools. Auto-allows known safe operations, asks for writes and unknown commands, blocks dangerous patterns.
 
 **Claude Code:** Use as PreToolUse + PermissionRequest + PostToolUse hooks (native integration)
 **Gemini CLI:** Use as BeforeTool + AfterTool hooks (requires v0.36.0+ for `ask` decision support)
@@ -22,11 +22,11 @@ echo '{"tool_name": "Bash", "tool_input": {"command": "git status"}}' | tool-gat
 
 tool-gates supports Claude Code and Gemini CLI hook systems:
 
-**Claude Code** (tool_name: `Bash`):
+**Claude Code** (tool_name: `Bash`, `Monitor`):
 
 | Hook | Purpose | When it runs |
 |------|---------|--------------|
-| **PreToolUse** | Route all tool types (Bash, file ops, Glob/Grep, MCP, Skill), block dangerous operations, allow safe ones, provide hints, auto-approve skills, track "ask" decisions | Before any permission check |
+| **PreToolUse** | Route all tool types (Bash/Monitor, file ops, Glob/Grep, MCP, Skill), block dangerous operations, allow safe ones, provide hints, auto-approve skills, track "ask" decisions | Before any permission check |
 | **PermissionRequest** | Approve safe commands and worktree edits for subagents | After internal checks decide to "ask" |
 | **PostToolUse** | Detect successful execution, add to pending approval queue | After command completes |
 
@@ -45,7 +45,7 @@ The client is auto-detected from `hook_event_name`. No configuration needed. Out
 
 | Claude | Gemini | Category |
 |--------|--------|----------|
-| `Bash` | `run_shell_command` | Shell commands |
+| `Bash`, `Monitor` | `run_shell_command` | Shell commands |
 | `Read` | `read_file`, `read_many_files` | File read |
 | `Write` | `write_file` | File write |
 | `Edit` | `replace` | File edit |
@@ -148,7 +148,7 @@ Most gate behavior is defined in TOML; custom handlers in Rust cover cases TOML 
 2. **Load config**: Read user configuration from `~/.config/tool-gates/config.toml`
 3. **Configurable block rules**: Check `[[block_tools]]` rules against all tool types. Blocks matching tools with a deny message
 4. **Route by tool_name**:
-   - **Bash** -> Bash gate engine (steps 5-13 below)
+   - **Bash/Monitor** -> Bash gate engine (steps 5-13 below)
    - **Read/Write/Edit** -> File guards (symlink detection for AI config files)
    - **Glob/Grep/MCP tools** -> Handled by block rules in step 3; pass through if not blocked
    - **Skill** -> Auto-approve based on `[[auto_approve_skills]]` config rules
