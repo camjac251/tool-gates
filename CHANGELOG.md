@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.12.0](https://github.com/camjac251/tool-gates/compare/v1.11.0...v1.12.0) - 2026-04-10
+
+### Added
+
+- add Monitor tool support
+
 ## [1.11.0](https://github.com/camjac251/tool-gates/compare/v1.10.0...v1.11.0) - 2026-04-03
 
 ### Added
