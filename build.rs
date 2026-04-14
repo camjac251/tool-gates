@@ -1609,8 +1609,12 @@ fn generate_file_editing_code(rule_files: &[(String, RuleFile)]) -> String {
         "    let base_program = cmd.program.rsplit('/').next().unwrap_or(&cmd.program);\n",
     );
     output.push_str("    \n");
-    output.push_str("    // Reject scoped npm packages: @scope/tool should not match bare \"tool\".\n");
-    output.push_str("    // rsplit('/') strips the scope, which would let @evil/prettier match \"prettier\".\n");
+    output.push_str(
+        "    // Reject scoped npm packages: @scope/tool should not match bare \"tool\".\n",
+    );
+    output.push_str(
+        "    // rsplit('/') strips the scope, which would let @evil/prettier match \"prettier\".\n",
+    );
     output.push_str("    if cmd.program.starts_with('@') && base_program != cmd.program {\n");
     output.push_str("        return false;\n");
     output.push_str("    }\n\n");

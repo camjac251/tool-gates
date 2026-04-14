@@ -44,8 +44,8 @@ jobs:
       - name: Build (generates code via build.rs)
         run: cargo build
 
-      - name: Format (including generated code)
-        run: cargo fmt
+      - name: Format check (including generated code)
+        run: cargo fmt -- --check
 
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings

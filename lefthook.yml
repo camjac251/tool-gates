@@ -9,11 +9,12 @@ pre-commit:
       glob: "{**/*.rs,rules/**/*.toml,build.rs,Cargo.toml}"
       stage_fixed: true
       priority: 1
-    # Format generated code (including freshly generated files)
+    # Format generated code (including freshly generated files).
+    # `git add -u '*.rs'` catches crate-wide rewrites that `stage_fixed` misses
+    # (stage_fixed only re-adds files already in the commit's staged set).
     fmt:
-      run: cargo fmt
+      run: cargo fmt && git add -u '*.rs'
       glob: "**/*.rs"
-      stage_fixed: true
       priority: 2
     # Then check with clippy
     clippy:
