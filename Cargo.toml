@@ -48,6 +48,7 @@ crossterm = "0.29"
 [dev-dependencies]
 proptest = "1"  # Property-based/fuzz testing
 tempfile = "3"  # Temporary directories for settings.json tests
+serial_test = "3"  # Serialize tests that mutate process-global env vars
 
 [build-dependencies]
 serde = { version = "1", features = ["derive"] }

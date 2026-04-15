@@ -1119,11 +1119,12 @@ fn targets_sensitive_path(cmd: &CommandInfo) -> bool {
             continue;
         }
 
-        // Expand ~ to detect home directory paths
-        let expanded = if arg.starts_with("~/") {
-            format!("/home/user{}", &arg[1..])
-        } else {
-            arg.clone()
+        // Expand ~, $HOME, $USER via the shared helper. If a recognized
+        // variable is present but can't be resolved, fail closed: we can't
+        // verify the target isn't sensitive, so treat it as if it were.
+        let expanded = match crate::gates::helpers::expand_path_vars(arg) {
+            Some(e) => e,
+            None => return true,
         };
 
         // Check system directory prefixes (always blocked)
@@ -1191,18 +1192,15 @@ fn targets_outside_allowed_dirs(cmd: &CommandInfo, allowed_dirs: &[String]) -> b
             continue;
         }
 
-        // Tilde paths - expand and check against allowed dirs
-        if arg.starts_with("~/") || arg == "~" {
-            let expanded = if let Some(home) = dirs::home_dir() {
-                if arg == "~" {
-                    home.to_string_lossy().to_string()
-                } else {
-                    home.join(&arg[2..]).to_string_lossy().to_string()
-                }
-            } else {
-                return true; // Can't expand. Fail closed
+        // Tilde or home/user-variable paths: expand and check against
+        // allowed dirs. Fail closed if expansion is impossible.
+        let needs_expand =
+            arg.starts_with("~/") || arg == "~" || arg.contains("$HOME") || arg.contains("$USER");
+        if needs_expand {
+            let expanded = match crate::gates::helpers::expand_path_vars(arg) {
+                Some(e) => e,
+                None => return true, // Fail closed on unresolvable vars
             };
-            // Resolve symlinks in the expanded path
             let resolved = resolve_path(&expanded);
             if !is_under_any_dir(&resolved, &normalized_dirs) {
                 return true;
@@ -2074,6 +2072,62 @@ mod tests {
             ));
         }
 
+        // === $HOME / $USER expansion parity with tilde ===
+
+        #[test]
+        fn test_dollar_home_outside_allowed_dirs() {
+            let allowed = vec!["/tmp/some-project".to_string()];
+            let result = targets_outside_allowed_dirs(
+                &cmd("sd", &["old", "new", "$HOME/other/file.txt"]),
+                &allowed,
+            );
+            assert!(
+                result,
+                "$HOME path outside allowed directories should be rejected"
+            );
+        }
+
+        #[test]
+        fn test_dollar_home_inside_allowed_dirs() {
+            let home = dirs::home_dir().unwrap().to_string_lossy().to_string();
+            let allowed = vec![format!("{}/projects", home)];
+            let result = targets_outside_allowed_dirs(
+                &cmd("sd", &["old", "new", "$HOME/projects/file.txt"]),
+                &allowed,
+            );
+            assert!(
+                !result,
+                "$HOME path inside allowed directory should be accepted"
+            );
+        }
+
+        #[test]
+        fn test_braced_home_inside_allowed_dirs() {
+            let home = dirs::home_dir().unwrap().to_string_lossy().to_string();
+            let allowed = vec![format!("{}/projects", home)];
+            let result = targets_outside_allowed_dirs(
+                &cmd("sd", &["old", "new", "${HOME}/projects/file.txt"]),
+                &allowed,
+            );
+            assert!(
+                !result,
+                "{{HOME}} path inside allowed directory should be accepted"
+            );
+        }
+
+        #[test]
+        fn test_slash_home_user_outside() {
+            let allowed = vec!["/tmp/some-project".to_string()];
+            let result = targets_outside_allowed_dirs(
+                &cmd("sd", &["old", "new", "/home/$USER/other/file.txt"]),
+                &allowed,
+            );
+            assert!(
+                result,
+                "/home/$USER/other outside allowed directories should be rejected"
+            );
+        }
+
         /// Test that settings.json deny rules take precedence over acceptEdits mode.
         /// Regression test for bug: acceptEdits override was happening BEFORE settings.json
         /// deny rules were checked, allowing denied commands to bypass user's explicit deny rules.
@@ -2403,6 +2457,49 @@ mod tests {
             assert!(
                 targets_sensitive_path(&cmd("sd", &["old", "new", ".git/info/attributes"])),
                 ".git/info/attributes should be blocked (inside .git/ directory)"
+            );
+        }
+
+        // === Home-equivalent forms must be detected identically ===
+
+        #[test]
+        fn test_dollar_home_ssh_blocked() {
+            assert!(
+                targets_sensitive_path(&cmd("sd", &["old", "new", "$HOME/.ssh/id_rsa"])),
+                "$HOME/.ssh/id_rsa should be blocked"
+            );
+        }
+
+        #[test]
+        fn test_braced_home_aws_blocked() {
+            assert!(
+                targets_sensitive_path(&cmd("sd", &["old", "new", "${HOME}/.aws/credentials"])),
+                "{{HOME}}/.aws/credentials should be blocked"
+            );
+        }
+
+        #[test]
+        fn test_absolute_home_ssh_blocked() {
+            let home = dirs::home_dir()
+                .expect("HOME must be set for this test")
+                .to_string_lossy()
+                .into_owned();
+            let path = format!("{home}/.ssh/id_rsa");
+            assert!(
+                targets_sensitive_path(&cmd("sd", &["old", "new", &path])),
+                "{path} should be blocked"
+            );
+        }
+
+        #[test]
+        fn test_slash_home_user_ssh_blocked() {
+            assert!(
+                targets_sensitive_path(&cmd("sd", &["old", "new", "/home/$USER/.ssh/id_rsa"])),
+                "/home/$USER/.ssh/id_rsa should be blocked"
+            );
+            assert!(
+                targets_sensitive_path(&cmd("sd", &["old", "new", "/home/${USER}/.ssh/id_rsa"])),
+                "/home/{{USER}}/.ssh/id_rsa should be blocked"
             );
         }
 
@@ -3689,6 +3786,38 @@ mod tests {
     fn test_rm_rf_root_blocks() {
         let result = check_command("rm -rf /");
         assert_eq!(get_decision(&result), "deny");
+    }
+
+    /// Integration coverage through the full check_command pipeline
+    /// (parser, router, gates, settings) for every home-equivalent form
+    /// of `rm`. Unit tests bypass the tree-sitter parser, so a quoting or
+    /// expansion surprise there could mask these forms.
+    #[test]
+    fn test_rm_rf_home_variants_all_deny() {
+        for cmd_str in [
+            "rm -rf $HOME",
+            "rm -rf ${HOME}",
+            "rm -rf /home/$USER",
+            "rm -rf /home/${USER}",
+            "rm -rf $HOME/.ssh",
+            "rm -rf ${HOME}/.aws/credentials",
+            "rm -rf $HOME/.gnupg",
+        ] {
+            let result = check_command(cmd_str);
+            assert_eq!(
+                get_decision(&result),
+                "deny",
+                "expected deny for: {cmd_str}"
+            );
+        }
+    }
+
+    /// Negative integration test: benign subdirectories under home must
+    /// still pass through to ask, not block.
+    #[test]
+    fn test_rm_rf_benign_home_subdir_asks() {
+        let result = check_command("rm -rf $HOME/projects/foo");
+        assert_eq!(get_decision(&result), "ask");
     }
 
     #[test]

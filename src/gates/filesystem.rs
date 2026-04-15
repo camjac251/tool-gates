@@ -4,7 +4,9 @@
 //! - Path normalization and traversal detection (security critical)
 //! - tar flag parsing (combined flags like -xzf)
 
-use crate::gates::helpers::{is_suspicious_path, normalize_path};
+use crate::gates::helpers::{
+    BLOCKED_SECURITY_DIRS_UNDER_HOME, expand_path_vars, is_suspicious_path, normalize_path,
+};
 use crate::generated::rules::{
     check_chmod_declarative, check_cp_declarative, check_ln_declarative, check_mkdir_declarative,
     check_mv_declarative, check_perl_declarative, check_rm_declarative, check_rmdir_declarative,
@@ -53,17 +55,85 @@ fn check_rm(cmd: &CommandInfo) -> GateResult {
         }
     }
 
-    // Catastrophic paths - blocked (with normalization)
-    let catastrophic_paths = ["/", "/*", "~", "~/"];
+    // Literal catastrophic forms - blocked even when HOME is unset.
+    let literal_catastrophic = ["/", "/*", "~", "~/"];
+
+    // Runtime catastrophic set. Can't be const because it depends on the
+    // resolved home directory and the security-critical dotdirs under it.
+    //
+    // Two parallel lists:
+    // - `resolved_catastrophic`: paths to match exactly (or with `/*` glob)
+    // - `resolved_catastrophic_prefix`: directory roots; any path AT or
+    //   UNDER one is blocked. Used so `rm -rf $HOME/.aws/credentials`
+    //   also blocks, not just `rm -rf $HOME/.aws`.
+    let mut resolved_catastrophic: Vec<String> = Vec::new();
+    let mut resolved_catastrophic_prefix: Vec<String> = Vec::new();
+    if let Some(home) = dirs::home_dir() {
+        let home_str = home.to_string_lossy().into_owned();
+        resolved_catastrophic.push(home_str.clone());
+        resolved_catastrophic.push(format!("{home_str}/*"));
+        for dotdir in BLOCKED_SECURITY_DIRS_UNDER_HOME {
+            let dir_path = format!("{home_str}{dotdir}");
+            resolved_catastrophic.push(dir_path.clone());
+            resolved_catastrophic.push(format!("{dir_path}/*"));
+            resolved_catastrophic_prefix.push(dir_path);
+        }
+    }
+
     for arg in args {
-        let normalized = normalize_path(arg);
-        if catastrophic_paths.contains(&arg.as_str())
-            || catastrophic_paths.contains(&normalized.as_str())
-        {
+        // Skip flags. The recursive-flag check below handles -r/-rf.
+        if arg.starts_with('-') {
+            continue;
+        }
+
+        // 1. Literal symbolic match (works even without HOME).
+        if literal_catastrophic.contains(&arg.as_str()) {
             return GateResult::block(format!("rm '{arg}' blocked (catastrophic data loss)"));
         }
 
-        if is_suspicious_path(arg) {
+        // 2. Fail closed on unresolvable home/user vars in rm targets.
+        let expanded = match expand_path_vars(arg) {
+            Some(e) => e,
+            None => {
+                return GateResult::block(format!(
+                    "rm '{arg}' blocked (unresolvable home/user variable, failing closed)"
+                ));
+            }
+        };
+
+        // 3. Normalize both the raw arg and the expanded form.
+        let arg_normalized = normalize_path(arg);
+        let expanded_normalized = normalize_path(&expanded);
+
+        // Check the literal catastrophic set against the normalized arg
+        // (catches // , /./ , /// etc.).
+        if literal_catastrophic.contains(&arg_normalized.as_str()) {
+            return GateResult::block(format!("rm '{arg}' blocked (catastrophic data loss)"));
+        }
+
+        // Check the runtime catastrophic set against both the expanded
+        // form and its normalized variant.
+        for cat in &resolved_catastrophic {
+            if expanded == *cat
+                || expanded_normalized == *cat
+                || expanded_normalized.trim_end_matches('/') == cat.trim_end_matches('/')
+            {
+                return GateResult::block(format!("rm '{arg}' blocked (catastrophic data loss)"));
+            }
+        }
+
+        // Anything AT OR UNDER a security-critical directory is catastrophic
+        // for rm. Catches files inside the dotdir like
+        // `$HOME/.aws/credentials` or `$HOME/.ssh/id_rsa`.
+        for prefix in &resolved_catastrophic_prefix {
+            let p_with_slash = format!("{prefix}/");
+            if expanded_normalized == *prefix || expanded_normalized.starts_with(&p_with_slash) {
+                return GateResult::block(format!("rm '{arg}' blocked (security-critical path)"));
+            }
+        }
+
+        // /tmp/../ style traversal.
+        if is_suspicious_path(arg) || is_suspicious_path(&expanded) {
             return GateResult::block(format!("rm '{arg}' blocked (path traversal to root)"));
         }
     }
@@ -172,6 +242,157 @@ mod tests {
     fn test_rm_recursive_asks() {
         let result = check_filesystem(&cmd("rm", &["-rf", "dir"]));
         assert_eq!(result.decision, Decision::Ask);
+    }
+
+    // === home-equivalent catastrophic rm forms (plan sites 1, regression guard) ===
+
+    use crate::gates::test_utils::{real_home, real_user};
+
+    #[test]
+    fn test_rm_dollar_home_blocks() {
+        for arg in ["$HOME", "${HOME}"] {
+            let result = check_filesystem(&cmd("rm", &["-rf", arg]));
+            assert_eq!(
+                result.decision,
+                Decision::Block,
+                "rm -rf {arg} should block"
+            );
+        }
+    }
+
+    #[test]
+    fn test_rm_absolute_home_blocks() {
+        let home = real_home();
+        for path in [home.clone(), format!("{home}/"), format!("{home}/*")] {
+            let result = check_filesystem(&cmd("rm", &["-rf", &path]));
+            assert_eq!(
+                result.decision,
+                Decision::Block,
+                "rm -rf {path} should block"
+            );
+        }
+    }
+
+    #[test]
+    fn test_rm_home_user_var_blocks() {
+        let user = real_user();
+        for path in [
+            format!("/home/{user}"),
+            format!("/home/{user}/"),
+            "/home/$USER".to_string(),
+            "/home/${USER}".to_string(),
+        ] {
+            let result = check_filesystem(&cmd("rm", &["-rf", &path]));
+            assert_eq!(
+                result.decision,
+                Decision::Block,
+                "rm -rf {path} should block"
+            );
+        }
+    }
+
+    #[test]
+    fn test_rm_security_dotdir_blocks() {
+        let home = real_home();
+        let forms = [
+            "~/.ssh".to_string(),
+            "~/.gnupg".to_string(),
+            "$HOME/.aws".to_string(),
+            "${HOME}/.kube".to_string(),
+            format!("{home}/.docker"),
+            format!("{home}/.config/gh"),
+            format!("{home}/.password-store"),
+            format!("{home}/.vault-token"),
+        ];
+        for arg in forms {
+            let result = check_filesystem(&cmd("rm", &["-rf", &arg]));
+            assert_eq!(
+                result.decision,
+                Decision::Block,
+                "rm -rf {arg} should block (security dotdir)"
+            );
+        }
+    }
+
+    #[test]
+    fn test_rm_benign_paths_still_ask() {
+        // Subdirectories under home that are NOT security-critical must
+        // still be ask (not block), so legitimate project cleanup works.
+        let home = real_home();
+        let benign = format!("{home}/projects/foo");
+        let result = check_filesystem(&cmd("rm", &["-rf", &benign]));
+        assert_eq!(
+            result.decision,
+            Decision::Ask,
+            "rm -rf {benign} should still just ask"
+        );
+    }
+
+    #[test]
+    fn test_rm_security_dotdir_glob_blocks() {
+        // The runtime catastrophic set includes both `dir` and `dir/*`
+        // forms. Confirm the glob form blocks for every variable shape.
+        let forms = [
+            "$HOME/.ssh/*",
+            "${HOME}/.aws/*",
+            "/home/$USER/.gnupg/*",
+            "/home/${USER}/.kube/*",
+        ];
+        for arg in forms {
+            let result = check_filesystem(&cmd("rm", &["-rf", arg]));
+            assert_eq!(
+                result.decision,
+                Decision::Block,
+                "rm -rf {arg} should block (glob over security dir)"
+            );
+        }
+    }
+
+    #[test]
+    fn test_rm_security_dotdir_file_blocks() {
+        // Files under a security-critical dotdir must also block, not just
+        // the dir itself. Catches paths the runtime catastrophic set
+        // doesn't enumerate (e.g. .aws/credentials, .ssh/id_rsa).
+        let home = real_home();
+        let forms = [
+            format!("{home}/.aws/credentials"),
+            format!("{home}/.ssh/id_rsa"),
+            format!("{home}/.gnupg/private-keys-v1.d/abc.key"),
+            format!("{home}/.kube/config"),
+            "$HOME/.aws/credentials".to_string(),
+            "${HOME}/.ssh/id_ed25519".to_string(),
+        ];
+        for arg in forms {
+            let result = check_filesystem(&cmd("rm", &["-f", &arg]));
+            assert_eq!(
+                result.decision,
+                Decision::Block,
+                "rm -f {arg} should block (file under security dir)"
+            );
+        }
+    }
+
+    #[test]
+    fn test_rm_multi_arg_blocks_on_any_catastrophic() {
+        // check_rm iterates all args. A catastrophic arg anywhere in the
+        // arg list must block, even if a benign arg precedes it.
+        let result = check_filesystem(&cmd("rm", &["-rf", "file.txt", "$HOME"]));
+        assert_eq!(
+            result.decision,
+            Decision::Block,
+            "Multi-arg rm with catastrophic second arg should block"
+        );
+    }
+
+    #[test]
+    fn test_rm_multi_arg_all_benign_asks() {
+        // Negative case: multi-arg rm with all benign targets still asks.
+        let result = check_filesystem(&cmd("rm", &["-rf", "a.txt", "b.txt", "c.txt"]));
+        assert_eq!(
+            result.decision,
+            Decision::Ask,
+            "Multi-arg rm with only benign args should ask, not block"
+        );
     }
 
     #[test]

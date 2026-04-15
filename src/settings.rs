@@ -278,14 +278,25 @@ impl Settings {
         }
     }
 
-    /// Expand $HOME in a pattern to the actual home directory.
+    /// Expand `~`, `$HOME`, `${HOME}`, `$USER`, `${USER}` in a pattern to
+    /// their concrete values, so settings.json rules written with any
+    /// of these forms match real commands.
+    ///
+    /// Uses the lossy variant: if a recognized variable can't be resolved,
+    /// the pattern is left unchanged. A non-matching pattern is the safe
+    /// side for deny rules (they simply won't match rather than crash),
+    /// and for allow rules the conservative default is "no match" which
+    /// preserves today's behavior.
     fn expand_pattern(pattern: &str) -> Cow<'_, str> {
-        if pattern.contains("$HOME") {
-            if let Some(home) = dirs::home_dir() {
-                return Cow::Owned(pattern.replace("$HOME", &home.to_string_lossy()));
-            }
+        if !pattern.contains('$') && !pattern.contains('~') {
+            return Cow::Borrowed(pattern);
         }
-        Cow::Borrowed(pattern)
+        let expanded = crate::gates::helpers::expand_path_vars_lossy(pattern);
+        if expanded == pattern {
+            Cow::Borrowed(pattern)
+        } else {
+            Cow::Owned(expanded)
+        }
     }
 
     /// Specificity score for a pattern match. Higher = more specific.
@@ -833,6 +844,54 @@ mod tests {
             "$HOME/bin/tool",
             "/usr/bin/tool"
         ));
+    }
+
+    #[test]
+    fn test_braced_home_expansion_in_deny_pattern() {
+        let home = dirs::home_dir().expect("HOME must be set for this test");
+        let home_str = home.to_string_lossy();
+
+        let settings = Settings {
+            permissions: Permissions {
+                deny: vec!["Bash(rm ${HOME}/.ssh/*)".to_string()],
+                ..Default::default()
+            },
+        };
+
+        let cmd = format!("rm {home_str}/.ssh/id_rsa");
+        assert_eq!(settings.check_command(&cmd), SettingsDecision::Deny);
+    }
+
+    #[test]
+    fn test_dollar_user_expansion_in_deny_pattern() {
+        let home = dirs::home_dir().expect("HOME must be set for this test");
+        let home_str = home.to_string_lossy();
+
+        let settings = Settings {
+            permissions: Permissions {
+                deny: vec!["Bash(rm /home/$USER/.ssh/*)".to_string()],
+                ..Default::default()
+            },
+        };
+
+        let cmd = format!("rm {home_str}/.ssh/id_rsa");
+        assert_eq!(settings.check_command(&cmd), SettingsDecision::Deny);
+    }
+
+    #[test]
+    fn test_tilde_expansion_in_allow_pattern() {
+        let home = dirs::home_dir().expect("HOME must be set for this test");
+        let home_str = home.to_string_lossy();
+
+        let settings = Settings {
+            permissions: Permissions {
+                allow: vec!["Bash(mytool run ~/scripts/*)".to_string()],
+                ..Default::default()
+            },
+        };
+
+        let cmd = format!("mytool run {home_str}/scripts/deploy.sh");
+        assert_eq!(settings.check_command(&cmd), SettingsDecision::Allow);
     }
 
     #[test]
