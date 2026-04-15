@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.12.1](https://github.com/camjac251/tool-gates/compare/v1.12.0...v1.12.1) - 2026-04-15
+
+### Fixed
+
+- *(security)* unify home-directory path handling across gates
+- *(ci)* enforce cargo fmt --check and restage crate-wide fmt
+
+### Other
+
+- *(pending)* use generic user in fixtures
+
 ## [1.12.0](https://github.com/camjac251/tool-gates/compare/v1.11.0...v1.12.0) - 2026-04-10
 
 ### Added
