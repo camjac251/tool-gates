@@ -580,7 +580,7 @@ mod tests {
 
     #[test]
     fn test_display_project_path_uses_cwd_when_available() {
-        let entry = make_approval_with_cwd("cmd", "-home-cam-my-project", "/home/cam/my-project");
+        let entry = make_approval_with_cwd("cmd", "-home-user-my-project", "/home/user/my-project");
         // Should use the real cwd, not try to decode project_id
         let display = display_project_path(&entry);
         assert!(
@@ -597,10 +597,10 @@ mod tests {
     #[test]
     fn test_display_project_path_falls_back_to_project_id_for_old_entries() {
         // Old entries without cwd field (empty string from #[serde(default)])
-        let entry = make_approval_with_cwd("cmd", "-home-cam-my-project", "");
+        let entry = make_approval_with_cwd("cmd", "-home-user-my-project", "");
         let display = display_project_path(&entry);
         assert_eq!(
-            display, "-home-cam-my-project",
+            display, "-home-user-my-project",
             "old entries without cwd should show project_id as-is"
         );
     }
@@ -616,24 +616,24 @@ mod tests {
     fn test_serde_round_trip_with_cwd() {
         let approval = make_approval_with_cwd(
             "npm install",
-            "-home-cam-my-project",
-            "/home/cam/my-project",
+            "-home-user-my-project",
+            "/home/user/my-project",
         );
         let json = serde_json::to_string(&approval).unwrap();
         let restored: PendingApproval = serde_json::from_str(&json).unwrap();
-        assert_eq!(restored.cwd, "/home/cam/my-project");
-        assert_eq!(restored.project_id, "-home-cam-my-project");
+        assert_eq!(restored.cwd, "/home/user/my-project");
+        assert_eq!(restored.project_id, "-home-user-my-project");
     }
 
     #[test]
     fn test_serde_backwards_compat_missing_cwd() {
         // Simulate an old JSONL entry that lacks the cwd field
-        let json = r#"{"id":"test-id","command":"npm install","patterns":[],"breakdown":[],"project_id":"-home-cam-my-project","session_id":"s","count":1,"first_seen":"2025-01-01T00:00:00Z","last_seen":"2025-01-01T00:00:00Z"}"#;
+        let json = r#"{"id":"test-id","command":"npm install","patterns":[],"breakdown":[],"project_id":"-home-user-my-project","session_id":"s","count":1,"first_seen":"2025-01-01T00:00:00Z","last_seen":"2025-01-01T00:00:00Z"}"#;
         let entry: PendingApproval = serde_json::from_str(json).unwrap();
         assert_eq!(entry.cwd, "", "missing cwd should default to empty string");
-        assert_eq!(entry.project_id, "-home-cam-my-project");
+        assert_eq!(entry.project_id, "-home-user-my-project");
         // display_project_path should fall back gracefully
         let display = display_project_path(&entry);
-        assert_eq!(display, "-home-cam-my-project");
+        assert_eq!(display, "-home-user-my-project");
     }
 }
