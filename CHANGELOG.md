@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.13.0](https://github.com/camjac251/tool-gates/compare/v1.12.1...v1.13.0) - 2026-04-21
+
+### Added
+
+- *(auto-mode)* integrate with Claude Code classifier
+
 ## [1.12.1](https://github.com/camjac251/tool-gates/compare/v1.12.0...v1.12.1) - 2026-04-15
 
 ### Fixed
