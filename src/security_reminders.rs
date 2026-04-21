@@ -433,34 +433,34 @@ pub fn scan_content(file_path: &str, content: &str) -> Vec<PatternMatch> {
         let skip_content = is_doc && !rule.always_check;
 
         match &rule.check {
-            CheckType::PathBased { path_fn } => {
-                if path_fn(file_path) && has_gha_injection(content) {
-                    matches.push(PatternMatch {
-                        rule_name: rule.name,
-                        tier: rule.tier,
-                        message: rule.message,
-                    });
-                }
+            CheckType::PathBased { path_fn }
+                if path_fn(file_path) && has_gha_injection(content) =>
+            {
+                matches.push(PatternMatch {
+                    rule_name: rule.name,
+                    tier: rule.tier,
+                    message: rule.message,
+                });
             }
-            CheckType::Substring { patterns } if !skip_content => {
-                if patterns.iter().any(|p| content.contains(p)) {
-                    matches.push(PatternMatch {
-                        rule_name: rule.name,
-                        tier: rule.tier,
-                        message: rule.message,
-                    });
-                }
+            CheckType::Substring { patterns }
+                if !skip_content && patterns.iter().any(|p| content.contains(p)) =>
+            {
+                matches.push(PatternMatch {
+                    rule_name: rule.name,
+                    tier: rule.tier,
+                    message: rule.message,
+                });
             }
-            CheckType::SubstringUnless { patterns, unless } if !skip_content => {
-                if patterns.iter().any(|p| content.contains(p))
-                    && !unless.iter().any(|u| content.contains(u))
-                {
-                    matches.push(PatternMatch {
-                        rule_name: rule.name,
-                        tier: rule.tier,
-                        message: rule.message,
-                    });
-                }
+            CheckType::SubstringUnless { patterns, unless }
+                if !skip_content
+                    && patterns.iter().any(|p| content.contains(p))
+                    && !unless.iter().any(|u| content.contains(u)) =>
+            {
+                matches.push(PatternMatch {
+                    rule_name: rule.name,
+                    tier: rule.tier,
+                    message: rule.message,
+                });
             }
             CheckType::ContentRegex { pattern: _ } if !skip_content => {
                 if let Some((_, re)) = compiled.iter().find(|(name, _)| *name == rule.name) {

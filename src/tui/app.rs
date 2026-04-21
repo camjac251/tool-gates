@@ -927,10 +927,8 @@ where
                         _ => {}
                     }
                 }
-                Event::Mouse(mouse) => {
-                    if mouse.kind == MouseEventKind::Down(MouseButton::Left) {
-                        app.handle_mouse_click(mouse.column, mouse.row);
-                    }
+                Event::Mouse(mouse) if mouse.kind == MouseEventKind::Down(MouseButton::Left) => {
+                    app.handle_mouse_click(mouse.column, mouse.row);
                 }
                 _ => {}
             }

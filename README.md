@@ -26,6 +26,7 @@ A hook for [Claude Code](https://code.claude.com/docs/en/hooks) and [Gemini CLI]
 | **Approval Learning**    | Tracks approved commands and saves patterns to settings.json via TUI or CLI                            |
 | **Settings Integration** | Respects your `settings.json` allow/deny/ask rules - won't bypass your explicit permissions            |
 | **Accept Edits Mode**    | Auto-allows file-editing commands (`sd`, `prettier --write`, etc.) when in acceptEdits mode            |
+| **Auto Mode Support**    | Integrates with Claude Code auto mode: deterministic deny floor for dangerous patterns, classifier retry hints |
 | **Modern CLI Hints**     | Suggests modern alternatives (`bat`, `rg`, `fd`, etc.) via `additionalContext` for Claude to learn     |
 | **AST Parsing**          | Uses [tree-sitter-bash](https://github.com/tree-sitter/tree-sitter-bash) for accurate command analysis |
 | **Compound Commands**    | Handles `&&`, `\|\|`, `\|`, `;` chains correctly                                                       |
@@ -104,10 +105,11 @@ flowchart TD
     REVIEW --> SETTINGS[settings.json]
 ```
 
-**Why three hooks? (Claude Code)**
+**Why four hooks? (Claude Code)**
 
 - **PreToolUse**: Gates Bash/Monitor commands, blocks secrets in Write/Edit, provides CLI hints
 - **PermissionRequest**: Gates commands for subagents (where PreToolUse's `allow` is ignored)
+- **PermissionDenied**: Fires when the auto-mode classifier denies. If tool-gates would allow the same command, emits a `retry: true` hint so the model gets a second shot
 - **PostToolUse**: Tracks successful Bash/Monitor execution for approval learning; scans Write/Edit content for security anti-patterns and nudges Claude via `additionalContext`
 
 **Gemini CLI** uses two hooks (`BeforeTool`/`AfterTool`) with the same gate engine. The client is auto-detected from `hook_event_name`. Key differences:
@@ -172,6 +174,27 @@ eslint --fix src/                 # Linting with fix
 - Git operations: `git push`, `git commit`
 - Deletions: `rm`, `mv`
 - Blocked commands: `rm -rf /` still denied
+
+### Auto Mode
+
+_Requires Claude Code 2.1.89+ for the `PermissionDenied` retry hook. Earlier auto-mode-capable builds still get the deny-promotion, pattern narrowing, and pending queue guard._
+
+When Claude Code runs in `auto` permission mode, a server-side classifier decides `ask` calls instead of prompting. tool-gates layers in as a deterministic pre-filter and safety floor:
+
+| tool-gates decision | Behavior under auto mode |
+|---------------------|--------------------------|
+| `allow` (e.g. `git status`, `cargo check`) | Classifier skipped, action executes |
+| `ask` (e.g. `cargo install foo`) | Classifier runs, decides allow/deny |
+| `deny` (e.g. `rm -rf /`, `\| bash`) | Hard floor, classifier bypassed |
+
+**What changes under auto mode:**
+
+- **Pipe-to-shell and `eval` escalate from ask to deny.** These patterns have no legitimate use case, so they stay in the deterministic floor rather than routing to the classifier.
+- **Pending queue only tracks human approvals.** Under auto mode the classifier decides silently, so nothing goes into `pending.jsonl` -- the review queue stays focused on patterns you explicitly approved.
+- **Classifier denials get retry hints.** If the classifier denies a command tool-gates would allow (e.g. `cargo check`), the `PermissionDenied` hook tells the model it may retry.
+- **Skill auto-approval still fires.** `[[auto_approve_skills]]` rules are explicit trust declarations and aren't revoked by opting into auto mode.
+
+Configure the Claude Code classifier via `autoMode.{environment,allow,soft_deny}` in settings.json. Inspect the merged config with `claude auto-mode config`.
 
 ### Modern CLI Hints
 
@@ -381,10 +404,11 @@ tool-gates hooks add --gemini --dry-run
 | `project` | `.claude/settings.json` | Share with team |
 | `local` | `.claude/settings.local.json` | Personal project overrides |
 
-**All three hooks are installed:**
+**All four hooks are installed:**
 
 - `PreToolUse` - Gates Bash/Monitor commands, blocks secrets in Write/Edit, file guards, CLI hints, MCP tool blocking, Skill auto-approval
 - `PermissionRequest` - Gates commands for subagents (where PreToolUse's allow is ignored)
+- `PermissionDenied` - Emits retry hints when the auto-mode classifier denies a command tool-gates would allow
 - `PostToolUse` - Tracks Bash/Monitor execution for approval learning; scans Write/Edit for security anti-patterns
 
 <details>
@@ -406,6 +430,12 @@ Add to `~/.claude/settings.json`:
       }
     ],
     "PermissionRequest": [
+      {
+        "matcher": "Bash|Monitor",
+        "hooks": [{ "type": "command", "command": "~/.local/bin/tool-gates", "timeout": 10 }]
+      }
+    ],
+    "PermissionDenied": [
       {
         "matcher": "Bash|Monitor",
         "hooks": [{ "type": "command", "command": "~/.local/bin/tool-gates", "timeout": 10 }]

@@ -25,7 +25,8 @@ use std::io::{self, Read};
 use tool_gates::config;
 use tool_gates::file_guards::check_file_guard;
 use tool_gates::models::{
-    Client, HookInput, HookOutput, PermissionDecision, PermissionRequestInput, PostToolUseInput,
+    Client, HookInput, HookOutput, PermissionDecision, PermissionDeniedInput,
+    PermissionDeniedOutput, PermissionRequestInput, PostToolUseInput, is_auto_mode,
 };
 use tool_gates::patterns::suggest_patterns;
 use tool_gates::pending::{clear_pending, pending_count, read_pending};
@@ -147,10 +148,77 @@ fn main() {
         Some("PostToolUse") | Some("AfterTool") => {
             handle_post_tool_use_hook(&input, client);
         }
+        Some("PermissionDenied") => {
+            handle_permission_denied_hook(&input);
+        }
         _ => {
             // Default: PreToolUse (Claude) or BeforeTool (Gemini) or unspecified
             handle_pre_tool_use_hook(&input, client);
         }
+    }
+}
+
+/// Handle PermissionDenied hook (Claude auto mode only).
+///
+/// Fires when the auto-mode classifier denies a tool call. If tool-gates would
+/// have allowed the same command, emit `retry: true` so the model gets a second
+/// shot -- this closes the loop on classifier false positives where tool-gates
+/// has stronger domain knowledge (e.g. "cargo check" is clearly safe, but the
+/// classifier denied it because it lacked user intent context).
+fn handle_permission_denied_hook(input: &str) {
+    let pd_input: PermissionDeniedInput = match serde_json::from_str(input) {
+        Ok(pi) => pi,
+        Err(e) => {
+            eprintln!("Error: Invalid PermissionDenied JSON: {e}");
+            return;
+        }
+    };
+
+    // Only act on shell tools for now -- that's where tool-gates has the
+    // deepest gate knowledge. File tools and MCP calls don't benefit.
+    if !Client::is_shell_tool(&pd_input.tool_name) {
+        return;
+    }
+
+    // Defensive: this hook is documented to fire only on auto-mode classifier
+    // denials. If Claude Code ever broadens firing criteria (user deny, plan
+    // mode, future mode variants), retry:true would push the model to retry
+    // commands the user or system explicitly rejected. Fail closed.
+    if !is_auto_mode(&pd_input.permission_mode) {
+        return;
+    }
+
+    // Respect the bash_gates opt-out so users who disabled the gate engine
+    // don't get retry hints driven by the engine they turned off.
+    if !config::load().features.bash_gates {
+        return;
+    }
+
+    let command = pd_input.get_command();
+    if command.is_empty() {
+        return;
+    }
+
+    // Re-check under "default" mode (not "auto") so hard-ask promotion to deny
+    // doesn't fire -- we want to know what tool-gates' own floor says, and
+    // "default" gives us the Allow / Ask / Deny signal we need.
+    let gate_result = check_command_with_settings_and_session(
+        &command,
+        &pd_input.cwd,
+        "default",
+        &pd_input.session_id,
+    );
+
+    // Only suggest retry if tool-gates clearly allows. If our own floor would
+    // ask or deny, defer to the classifier's decision.
+    if gate_result.decision != PermissionDecision::Allow {
+        return;
+    }
+
+    let output = PermissionDeniedOutput::retry();
+    match serde_json::to_string(&output) {
+        Ok(json) => println!("{json}"),
+        Err(e) => eprintln!("Error serializing PermissionDenied output: {e}"),
     }
 }
 
@@ -246,7 +314,14 @@ fn handle_pre_tool_use_hook(input: &str, client: Client) {
         }
         // No output = allow (pass through)
     } else if Client::is_skill_tool(tool_name) {
-        // Skill / activate_skill: auto-approve based on config rules
+        // Skill / activate_skill: auto-approve based on config rules.
+        //
+        // Auto mode note: rules here fire regardless of permission_mode.
+        // `[[auto_approve_skills]]` entries are explicit trust declarations
+        // by the user, and auto mode opts into classifier review for unknown
+        // commands -- it shouldn't revoke rules the user deliberately added.
+        // If stricter auto-mode behavior is desired later, add a feature flag
+        // rather than changing the default.
         if !config.auto_approve_skills.is_empty() {
             let skill_name = tool_input_map
                 .get("skill")
@@ -308,10 +383,15 @@ fn handle_bash_pre_tool_use(hook_input: &HookInput, client: Client) {
     );
 
     // If the result is "ask", track it for PostToolUse correlation (Claude only,
-    // Gemini doesn't provide tool_use_id)
+    // Gemini doesn't provide tool_use_id).
+    //
+    // Under auto mode, tool-gates "ask" does NOT surface a user prompt -- the
+    // Claude Code classifier decides silently. Pending-queue entries there
+    // represent classifier decisions, not human approvals, so skip tracking.
     if client == Client::Claude
         && output.decision == PermissionDecision::Ask
         && !hook_input.tool_use_id.is_empty()
+        && !is_auto_mode(&hook_input.permission_mode)
     {
         let commands = tool_gates::parser::extract_commands(&command);
 
@@ -530,6 +610,12 @@ const MCP_TOOL_USE_MATCHER: &str = "mcp__.*";
 /// PermissionRequest matcher for Bash (command approval) + file tools (worktree approval).
 const PERMISSION_REQUEST_MATCHER: &str = "Bash|Monitor|Write|Edit";
 
+/// PermissionDenied matcher for classifier denials in auto mode.
+/// Scoped to shell tools -- that's where tool-gates has gate knowledge deep
+/// enough to judge whether to suggest a retry. File tools and MCP calls are
+/// handled by the classifier alone.
+const PERMISSION_DENIED_MATCHER: &str = "Bash|Monitor";
+
 /// PostToolUse matcher for Bash (approval tracking) + file tools (security reminders).
 const POST_TOOL_USE_MATCHER: &str = "Bash|Monitor|Write|Edit";
 
@@ -547,6 +633,7 @@ fn generate_hooks_json(binary_path: &str) -> serde_json::Value {
             generate_hook_entry(binary_path, MCP_TOOL_USE_MATCHER),
         ],
         "PermissionRequest": [generate_hook_entry(binary_path, PERMISSION_REQUEST_MATCHER)],
+        "PermissionDenied": [generate_hook_entry(binary_path, PERMISSION_DENIED_MATCHER)],
         "PostToolUse": [
             generate_hook_entry(binary_path, POST_TOOL_USE_MATCHER),
         ]
@@ -713,6 +800,7 @@ fn install_hooks(scope: &str, dry_run: bool) {
     let pre_tool_use_entry = generate_hook_entry(&binary_path, PRE_TOOL_USE_MATCHER);
     let mcp_tool_use_entry = generate_hook_entry(&binary_path, MCP_TOOL_USE_MATCHER);
     let perm_request_entry = generate_hook_entry(&binary_path, PERMISSION_REQUEST_MATCHER);
+    let perm_denied_entry = generate_hook_entry(&binary_path, PERMISSION_DENIED_MATCHER);
     let post_tool_use_entry = generate_hook_entry(&binary_path, POST_TOOL_USE_MATCHER);
     let mut changes = Vec::new();
 
@@ -748,6 +836,22 @@ fn install_hooks(scope: &str, dry_run: bool) {
         Some(change) => {
             changes.push("PermissionRequest");
             eprintln!("~ Updating PermissionRequest matcher ({})", change);
+        }
+    }
+
+    // Sync PermissionDenied hook (auto-mode classifier retry guidance)
+    if hooks.get("PermissionDenied").is_none() {
+        hooks["PermissionDenied"] = serde_json::json!([]);
+    }
+    match sync_hook_entries(&mut hooks["PermissionDenied"], &[perm_denied_entry]) {
+        None => eprintln!("✓ PermissionDenied hook up to date"),
+        Some(ref change) if change == "added" => {
+            changes.push("PermissionDenied");
+            eprintln!("+ Adding PermissionDenied hook (auto-mode retry)");
+        }
+        Some(change) => {
+            changes.push("PermissionDenied");
+            eprintln!("~ Updating PermissionDenied matcher ({change})");
         }
     }
 
@@ -1029,7 +1133,12 @@ fn handle_hooks_status() {
         ("project", get_settings_path("project")),
         ("local", get_settings_path("local")),
     ];
-    let claude_hooks = ["PreToolUse", "PermissionRequest", "PostToolUse"];
+    let claude_hooks = [
+        "PreToolUse",
+        "PermissionRequest",
+        "PermissionDenied",
+        "PostToolUse",
+    ];
     for (scope, path) in &claude_scopes {
         check_settings_hooks(scope, path, &claude_hooks);
     }
@@ -1720,19 +1829,26 @@ fn handle_doctor_subcommand() {
             .get("PermissionRequest")
             .map(has_tool_gates_hook)
             .unwrap_or(false);
+        let has_perm_denied = hooks
+            .get("PermissionDenied")
+            .map(has_tool_gates_hook)
+            .unwrap_or(false);
         let has_post = hooks
             .get("PostToolUse")
             .map(has_tool_gates_hook)
             .unwrap_or(false);
 
-        let count = [has_pre, has_perm, has_post].iter().filter(|&&x| x).count();
+        let count = [has_pre, has_perm, has_perm_denied, has_post]
+            .iter()
+            .filter(|&&x| x)
+            .count();
         if count == 0 {
             continue;
         }
 
         any_installed = true;
-        if count == 3 {
-            eprintln!("  ✓ Hooks ({}): all 3 installed", scope);
+        if count == 4 {
+            eprintln!("  ✓ Hooks ({}): all 4 installed", scope);
             ok_count += 1;
         } else {
             let mut missing = Vec::new();
@@ -1742,12 +1858,15 @@ fn handle_doctor_subcommand() {
             if !has_perm {
                 missing.push("PermissionRequest");
             }
+            if !has_perm_denied {
+                missing.push("PermissionDenied");
+            }
             if !has_post {
                 missing.push("PostToolUse");
             }
             let msg = format!("Missing hooks in {}: {}", scope, missing.join(", "));
             eprintln!(
-                "  ⚠ Hooks ({}): {}/3 (missing {})",
+                "  ⚠ Hooks ({}): {}/4 (missing {})",
                 scope,
                 count,
                 missing.join(", ")

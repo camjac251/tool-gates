@@ -2,7 +2,7 @@
 
 Intelligent tool permission gate using tree-sitter AST parsing. Handles Bash/Monitor commands, Read/Write/Edit file operations, Glob/Grep searches, and MCP tools. Auto-allows known safe operations, asks for writes and unknown commands, blocks dangerous patterns.
 
-**Claude Code:** Use as PreToolUse + PermissionRequest + PostToolUse hooks (native integration)
+**Claude Code:** Use as PreToolUse + PermissionRequest + PermissionDenied + PostToolUse hooks (native integration)
 **Gemini CLI:** Use as BeforeTool + AfterTool hooks (requires v0.36.0+ for `ask` decision support)
 
 ## Quick Reference
@@ -28,6 +28,7 @@ tool-gates supports Claude Code and Gemini CLI hook systems:
 |------|---------|--------------|
 | **PreToolUse** | Route all tool types (Bash/Monitor, file ops, Glob/Grep, MCP, Skill), block dangerous operations, allow safe ones, provide hints, auto-approve skills, track "ask" decisions | Before any permission check |
 | **PermissionRequest** | Approve safe commands and worktree edits for subagents | After internal checks decide to "ask" |
+| **PermissionDenied** | Re-check classifier-denied commands; emit `retry: true` when tool-gates would have allowed | After auto-mode classifier denies a tool call |
 | **PostToolUse** | Detect successful execution, add to pending approval queue | After command completes |
 
 **Gemini CLI** (tool names: `run_shell_command`, `read_file`, `write_file`, `replace`, `glob`, `grep_search`, `activate_skill`, `mcp_*`):
@@ -54,9 +55,10 @@ The client is auto-detected from `hook_event_name`. No configuration needed. Out
 | `Skill` | `activate_skill` | Skills/extensions |
 | `mcp__server__tool` | `mcp_server_tool` | MCP tools |
 
-**Why three hooks for Claude?**
+**Why four hooks for Claude?**
 - PreToolUse handles command safety for the main session and tracks commands that return "ask"
 - PermissionRequest makes those same decisions work for subagents (where PreToolUse's `allow` is ignored), and auto-approves Edit/Write in agent worktrees
+- PermissionDenied fires when the auto-mode classifier denies a command. If tool-gates would allow the same command, emits `retry: true` so the model can try again
 - PostToolUse detects when "ask" commands complete successfully and queues them for permanent approval
 
 ## Project Structure
@@ -258,6 +260,41 @@ When `permission_mode` is `acceptEdits`, file-editing commands are auto-allowed 
 3. The target files are not sensitive system paths or credentials
 
 Non-file-editing commands (package managers, git, network) still require approval even in acceptEdits mode.
+
+### Auto Mode (Claude Code 2.1.89+)
+
+_The `PermissionDenied` hook shipped in 2.1.89. Earlier auto-mode-capable builds still benefit from hard-ask -> deny promotion, pattern narrowing, and the pending queue guard; only the classifier retry hint needs 2.1.89+._
+
+When `permission_mode == "auto"`, Claude Code runs a server-side classifier on tool calls the hook returns `ask` for. tool-gates acts as a fast deterministic pre-filter for the classifier:
+
+| tool-gates decision | Behavior under auto mode |
+|---------------------|--------------------------|
+| `allow` (e.g. `git status`, `cargo check`) | Classifier skipped, action executes |
+| `ask` (e.g. `cargo install foo`) | Classifier runs, decides allow/deny |
+| `deny` (e.g. `rm -rf /`, `\| bash`) | Hard floor, classifier bypassed |
+
+Claude Code also strips broad "allow" rules from `settings.json` on auto mode entry if they match dangerous interpreter patterns (`Bash(bash:*)`, `Bash(npm run:*)`, `Bash(python:*)`, etc.). Narrow rules like `Bash(git status:*)` survive.
+
+**Auto-mode-aware behavior in tool-gates:**
+
+- **Hard-ask -> deny promotion** (`router.rs`). Patterns with no legitimate use case (pipe-to-shell, `eval`, unsafe command substitution) return `deny` instead of `ask` when `permission_mode == "auto"`. The classifier is reasoning-blind to tool-gates' rationale and has a non-trivial false-negative rate on overeager actions, so these patterns belong in the deterministic floor.
+- **Pending queue guard** (`main.rs`). Under auto mode, tool-gates `ask` does not prompt the user -- the classifier decides silently. Tracking is skipped so `pending.jsonl` only accumulates genuine human approvals.
+- **PermissionDenied hook** (`main.rs`). Registered at `PERMISSION_DENIED_MATCHER`. When the classifier denies a shell command that tool-gates would have allowed, the hook emits `{"hookSpecificOutput":{"hookEventName":"PermissionDenied","retry":true}}` so the model gets a second attempt. Closes the loop on classifier false positives.
+- **Skill auto-approval** (`main.rs`). `[[auto_approve_skills]]` rules fire regardless of permission mode. These are explicit trust declarations by the user; auto mode opts into classifier review for unknown commands, not into revoking existing rules.
+
+**Classifier configuration** (Claude Code, not tool-gates) lives under `autoMode` in settings.json:
+
+```json
+{
+  "autoMode": {
+    "environment": ["trusted domains, buckets, git remotes"],
+    "allow": ["Bash(cargo check:*)"],
+    "soft_deny": ["Bash(rm:*)"]
+  }
+}
+```
+
+`allow` defines classifier exceptions, `soft_deny` adds block rules. Inspect the merged config with `claude auto-mode {defaults,config,critique}`.
 
 ## Security Checks
 

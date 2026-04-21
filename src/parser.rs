@@ -175,16 +175,15 @@ fn extract_command(cursor: &mut TreeCursor, source: &str) -> Option<CommandInfo>
                         parts.push(text);
                     }
                 }
-                "command_name" => {
+                "command_name"
                     // Command name can contain word or string
-                    if cursor.goto_first_child() {
+                    if cursor.goto_first_child() => {
                         let name_node = cursor.node();
                         if let Ok(text) = name_node.utf8_text(source.as_bytes()) {
                             parts.push(unquote(text));
                         }
                         cursor.goto_parent();
                     }
-                }
                 _ => {}
             }
             if !cursor.goto_next_sibling() {

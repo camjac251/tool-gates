@@ -14,6 +14,15 @@ fn sanitize_path(path: &str) -> String {
         .collect()
 }
 
+/// True if Claude Code's `permission_mode` signals auto mode. Normalizes
+/// whitespace and ASCII case so minor contract drift (` auto `, `Auto`,
+/// `AUTO`) still takes the safety-floor path rather than silently
+/// falling back to ask. Exact-match failure on a safety-floor gate is
+/// worst-case behavior for a defensive layer.
+pub fn is_auto_mode(mode: &str) -> bool {
+    mode.trim().eq_ignore_ascii_case("auto")
+}
+
 /// Permission decision types with priority: Block > Ask > Allow > Skip
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Decision {
@@ -708,6 +717,82 @@ impl PostToolUseInput {
     }
 }
 
+// === PermissionDenied Hook Types ===
+
+/// Input received by `PermissionDenied` hook.
+///
+/// Fires only when the auto-mode classifier denies a tool call. Schema
+/// matches Claude Code's hook input contract: common base fields plus
+/// `tool_name`, `tool_input`, `tool_use_id`, and the classifier `reason`.
+#[derive(Debug, Deserialize, Default)]
+#[allow(dead_code)]
+pub struct PermissionDeniedInput {
+    #[serde(default)]
+    pub hook_event_name: String,
+    #[serde(default)]
+    pub session_id: String,
+    #[serde(default)]
+    pub cwd: String,
+    #[serde(default)]
+    pub permission_mode: String,
+    #[serde(default)]
+    pub tool_name: String,
+    #[serde(default)]
+    pub tool_input: ToolInputVariant,
+    #[serde(default)]
+    pub tool_use_id: String,
+    /// Classifier denial reason string
+    #[serde(default)]
+    pub reason: String,
+}
+
+impl PermissionDeniedInput {
+    /// Extract command string from `tool_input` (for Bash-style tools)
+    pub fn get_command(&self) -> String {
+        match &self.tool_input {
+            ToolInputVariant::Structured(ti) => ti.command.clone(),
+            ToolInputVariant::Map(m) => m
+                .get("command")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            ToolInputVariant::Empty => String::new(),
+        }
+    }
+}
+
+/// Hook-specific output for `PermissionDenied`.
+///
+/// Only `retry` is honored by Claude Code. When `retry: true`, Claude
+/// appends a meta message telling the model it may retry the blocked
+/// tool call.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PermissionDeniedSpecificOutput {
+    pub hook_event_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub retry: Option<bool>,
+}
+
+/// Output format for PermissionDenied hooks
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PermissionDeniedOutput {
+    pub hook_specific_output: PermissionDeniedSpecificOutput,
+}
+
+impl PermissionDeniedOutput {
+    /// Tell Claude Code the model may retry this tool call.
+    pub fn retry() -> Self {
+        Self {
+            hook_specific_output: PermissionDeniedSpecificOutput {
+                hook_event_name: "PermissionDenied".to_string(),
+                retry: Some(true),
+            },
+        }
+    }
+}
+
 /// Hook-specific output for `PostToolUse`
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1015,6 +1100,65 @@ mod tests {
         assert!(Client::is_grep_tool("Grep"));
         assert!(Client::is_grep_tool("grep_search"));
         assert!(!Client::is_grep_tool("Glob"));
+    }
+
+    #[test]
+    fn test_permission_denied_output_serializes_camel_case() {
+        // Claude Code expects exact camelCase: hookSpecificOutput.hookEventName, retry.
+        let output = PermissionDeniedOutput::retry();
+        let json = serde_json::to_string(&output).expect("should serialize");
+        assert!(
+            json.contains("\"hookSpecificOutput\""),
+            "missing hookSpecificOutput: {json}"
+        );
+        assert!(
+            json.contains("\"hookEventName\":\"PermissionDenied\""),
+            "missing hookEventName: {json}"
+        );
+        assert!(
+            json.contains("\"retry\":true"),
+            "missing retry:true: {json}"
+        );
+    }
+
+    #[test]
+    fn test_permission_denied_input_parses() {
+        let input = serde_json::json!({
+            "hook_event_name": "PermissionDenied",
+            "session_id": "abc",
+            "cwd": "/repo",
+            "permission_mode": "auto",
+            "tool_name": "Bash",
+            "tool_input": {"command": "cargo check"},
+            "tool_use_id": "tc_123",
+            "reason": "classifier denied",
+        });
+        let parsed: PermissionDeniedInput = serde_json::from_value(input).unwrap();
+        assert_eq!(parsed.tool_name, "Bash");
+        assert_eq!(parsed.get_command(), "cargo check");
+        assert_eq!(parsed.reason, "classifier denied");
+        assert_eq!(parsed.permission_mode, "auto");
+    }
+
+    #[test]
+    fn test_is_auto_mode_normalizes_case_and_whitespace() {
+        // Exact match
+        assert!(is_auto_mode("auto"));
+        // Whitespace trim -- hook payload variations
+        assert!(is_auto_mode(" auto "));
+        assert!(is_auto_mode("auto\n"));
+        assert!(is_auto_mode("\tauto"));
+        // Case insensitive
+        assert!(is_auto_mode("AUTO"));
+        assert!(is_auto_mode("Auto"));
+        assert!(is_auto_mode("aUtO"));
+        // Non-matches
+        assert!(!is_auto_mode(""));
+        assert!(!is_auto_mode("default"));
+        assert!(!is_auto_mode("auto-safe"));
+        assert!(!is_auto_mode("auto_v2"));
+        assert!(!is_auto_mode("plan"));
+        assert!(!is_auto_mode("acceptEdits"));
     }
 
     #[test]
