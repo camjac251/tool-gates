@@ -268,6 +268,54 @@ pub fn has_any_flag(args: &[String], flags: &[&str]) -> bool {
     args.iter().any(|a| flags.contains(&a.as_str()))
 }
 
+/// Find the first `http(s)://` URL in a list of command arguments.
+///
+/// Strips a single pair of surrounding quotes if present (bash parsing already
+/// drops shell quotes, but `xh` / `curl` copy-pastes sometimes include them
+/// inside a single quoted token).
+pub fn find_http_url(args: &[String]) -> Option<&str> {
+    args.iter().find_map(|a| {
+        let s = a.trim_matches(|c| c == '"' || c == '\'');
+        if s.starts_with("http://") || s.starts_with("https://") {
+            Some(s)
+        } else {
+            None
+        }
+    })
+}
+
+/// Return true when `url` points at GitHub-hosted file content or metadata
+/// that `gh api` would serve more reliably (auth, rate limits, private repos).
+///
+/// Covered shapes:
+/// - `raw.githubusercontent.com/*`
+/// - `gist.githubusercontent.com/*`
+/// - `api.github.com/*`
+/// - `github.com/OWNER/REPO/{blob,raw}/*`
+///
+/// Regular `github.com/OWNER/REPO` landing pages are intentionally NOT matched
+/// here - those are fine to view in a browser or hand to a user-facing tool.
+pub fn is_github_content_url(url: &str) -> bool {
+    let after_scheme = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))
+        .unwrap_or(url);
+    let host = after_scheme.split('/').next().unwrap_or("");
+    let host = host.rsplit('@').next().unwrap_or(host);
+    let host = host.split(':').next().unwrap_or(host);
+
+    match host {
+        "raw.githubusercontent.com" | "gist.githubusercontent.com" | "api.github.com" => true,
+        "github.com" | "www.github.com" => {
+            let path = after_scheme.split_once('/').map(|(_, p)| p).unwrap_or("");
+            let mut parts = path.splitn(4, '/');
+            let (_, _, segment) = (parts.next(), parts.next(), parts.next());
+            matches!(segment, Some("blob") | Some("raw"))
+        }
+        _ => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -506,5 +554,93 @@ mod tests {
             .collect();
         assert!(has_any_flag(&args, &["--dry-run", "-n"]));
         assert!(!has_any_flag(&args, &["--force", "-f"]));
+    }
+
+    // === find_http_url ===
+
+    fn to_args(vs: &[&str]) -> Vec<String> {
+        vs.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn test_find_http_url_positional() {
+        let args = to_args(&["-sL", "https://example.com/path"]);
+        assert_eq!(find_http_url(&args), Some("https://example.com/path"));
+    }
+
+    #[test]
+    fn test_find_http_url_strips_quotes() {
+        let args = to_args(&["\"https://example.com/path\""]);
+        assert_eq!(find_http_url(&args), Some("https://example.com/path"));
+    }
+
+    #[test]
+    fn test_find_http_url_none() {
+        let args = to_args(&["-sL", "/tmp/file"]);
+        assert_eq!(find_http_url(&args), None);
+    }
+
+    // === is_github_content_url ===
+
+    #[test]
+    fn test_is_github_content_url_raw() {
+        assert!(is_github_content_url(
+            "https://raw.githubusercontent.com/OWNER/REPO/main/file"
+        ));
+    }
+
+    #[test]
+    fn test_is_github_content_url_gist_raw() {
+        assert!(is_github_content_url(
+            "https://gist.githubusercontent.com/OWNER/ID/raw/HASH/file"
+        ));
+    }
+
+    #[test]
+    fn test_is_github_content_url_api() {
+        assert!(is_github_content_url(
+            "https://api.github.com/repos/OWNER/REPO/contents/path"
+        ));
+    }
+
+    #[test]
+    fn test_is_github_content_url_blob_form() {
+        assert!(is_github_content_url(
+            "https://github.com/OWNER/REPO/blob/main/path/to/file"
+        ));
+    }
+
+    #[test]
+    fn test_is_github_content_url_raw_form() {
+        assert!(is_github_content_url(
+            "https://github.com/OWNER/REPO/raw/main/path/to/file"
+        ));
+    }
+
+    #[test]
+    fn test_is_github_content_url_www_blob_form() {
+        assert!(is_github_content_url(
+            "https://www.github.com/OWNER/REPO/blob/main/f"
+        ));
+    }
+
+    #[test]
+    fn test_is_github_content_url_landing_page_is_not_content() {
+        assert!(!is_github_content_url("https://github.com/OWNER/REPO"));
+    }
+
+    #[test]
+    fn test_is_github_content_url_other_host() {
+        assert!(!is_github_content_url("https://example.com/OWNER/REPO"));
+        assert!(!is_github_content_url(
+            "https://githubusercontent.example.com/x"
+        ));
+    }
+
+    #[test]
+    fn test_is_github_content_url_handles_port_and_userinfo() {
+        assert!(is_github_content_url(
+            "https://user@api.github.com:443/repos/OWNER/REPO"
+        ));
     }
 }

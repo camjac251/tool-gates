@@ -2,13 +2,19 @@
 //!
 //! Uses declarative rules for simple cases, custom logic for complex flag parsing.
 
-use crate::gates::helpers::{get_flag_value, has_any_flag};
+use crate::gates::helpers::{find_http_url, get_flag_value, has_any_flag, is_github_content_url};
 use crate::generated::rules::{
     check_curl_declarative, check_nc_declarative, check_nmap_declarative, check_rsync_declarative,
     check_scp_declarative, check_sftp_declarative, check_socat_declarative, check_ssh_declarative,
     check_telnet_declarative, check_wget_declarative,
 };
 use crate::models::{CommandInfo, GateResult};
+
+/// Ask reason emitted when a GET-ish network command targets GitHub-hosted
+/// content. `gh api` is strictly better there: it authenticates, follows the
+/// rate-limit budget (5000/hr vs 60/hr anonymous), and works on private repos
+/// without hitting 404.
+const GH_API_REASON: &str = "Use `gh api repos/OWNER/REPO/contents/PATH` (or `gh release download TAG` for release assets) instead - preserves auth, rate limits, and works on private repos";
 
 /// Check network commands.
 pub fn check_network(cmd: &CommandInfo) -> GateResult {
@@ -82,6 +88,13 @@ fn check_curl(cmd: &CommandInfo) -> GateResult {
     // Downloading to file
     if has_any_flag(args, &["-o", "--output", "-O", "--remote-name"]) {
         return GateResult::ask("curl: Downloading file");
+    }
+
+    // GitHub raw/API content - nudge toward `gh api` before falling through
+    if let Some(url) = find_http_url(args) {
+        if is_github_content_url(url) {
+            return GateResult::ask(GH_API_REASON);
+        }
     }
 
     // Simple GET - allow
@@ -209,6 +222,13 @@ fn check_httpie(cmd: &CommandInfo) -> GateResult {
     // Check for download
     if args.iter().any(|a| a == "-d" || a == "--download") {
         return GateResult::ask("httpie: Downloading file");
+    }
+
+    // GitHub raw/API content - nudge toward `gh api` before falling through
+    if let Some(url) = find_http_url(args) {
+        if is_github_content_url(url) {
+            return GateResult::ask(GH_API_REASON);
+        }
     }
 
     // Simple GET - allow
@@ -400,5 +420,85 @@ mod tests {
     fn test_non_network_skips() {
         let result = check_network(&make_cmd("git", &["status"]));
         assert_eq!(result.decision, Decision::Skip);
+    }
+
+    // === github content URL guards (curl, xh) ===
+
+    #[test]
+    fn test_curl_github_raw_asks() {
+        let urls = [
+            "https://raw.githubusercontent.com/OWNER/REPO/main/f",
+            "https://api.github.com/repos/OWNER/REPO/contents/p",
+            "https://github.com/OWNER/REPO/blob/main/p",
+            "https://github.com/OWNER/REPO/raw/main/p",
+            "https://gist.githubusercontent.com/OWNER/ID/raw/HASH/f",
+        ];
+        for url in urls {
+            let result = check_network(&curl(&[url]));
+            assert_eq!(result.decision, Decision::Ask, "expected Ask for {url}");
+            assert!(
+                result.reason.as_deref().unwrap_or("").contains("gh api"),
+                "reason should mention `gh api` for {url}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_curl_github_silent_follow_asks() {
+        // Common in the wild: `curl -sL <url>` for fetching a raw file.
+        let result = check_network(&curl(&[
+            "-sL",
+            "https://raw.githubusercontent.com/OWNER/REPO/main/f",
+        ]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    #[test]
+    fn test_curl_github_head_still_allows() {
+        // HEAD is cheap and just checks reachability - no content leak.
+        let result = check_network(&curl(&[
+            "-I",
+            "https://raw.githubusercontent.com/OWNER/REPO/main/f",
+        ]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_curl_non_github_get_still_allows() {
+        let result = check_network(&curl(&["https://example.com/path"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_curl_github_landing_page_allows() {
+        // Non-content github.com landing pages are fine.
+        let result = check_network(&curl(&["https://github.com/OWNER/REPO"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_xh_github_raw_asks() {
+        let result = check_network(&make_cmd(
+            "xh",
+            &["https://raw.githubusercontent.com/OWNER/REPO/main/f"],
+        ));
+        assert_eq!(result.decision, Decision::Ask);
+        assert!(result.reason.as_deref().unwrap_or("").contains("gh api"));
+    }
+
+    #[test]
+    fn test_xh_get_subcommand_github_asks() {
+        // `xh GET <url>` form.
+        let result = check_network(&make_cmd(
+            "xh",
+            &["GET", "https://raw.githubusercontent.com/OWNER/REPO/main/f"],
+        ));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    #[test]
+    fn test_xh_non_github_allows() {
+        let result = check_network(&make_cmd("xh", &["https://example.com/path"]));
+        assert_eq!(result.decision, Decision::Allow);
     }
 }

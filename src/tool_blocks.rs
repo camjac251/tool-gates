@@ -202,6 +202,87 @@ mod tests {
         assert!(result.is_some());
     }
 
+    // === Default block rules exercised end-to-end ===
+    //
+    // These tests drive through Config::default() + check_tool_block so a
+    // future edit to the default rule list can't silently stop matching the
+    // tools we expect to cover.
+
+    #[test]
+    fn test_default_rules_block_firecrawl_api_github() {
+        let rules = crate::config::Config::default().block_rules().to_vec();
+        let input = input_with_url("https://api.github.com/repos/OWNER/REPO");
+        let result = check_tool_block("mcp__firecrawl__firecrawl_scrape", &input, &rules);
+        assert!(
+            result.is_some(),
+            "api.github.com via firecrawl should be denied"
+        );
+    }
+
+    #[test]
+    fn test_default_rules_block_firecrawl_gist_raw() {
+        let rules = crate::config::Config::default().block_rules().to_vec();
+        let input = input_with_url("https://gist.githubusercontent.com/OWNER/ID/raw/HASH/f");
+        let result = check_tool_block("mcp__firecrawl__firecrawl_scrape", &input, &rules);
+        assert!(
+            result.is_some(),
+            "raw gist content via firecrawl should be denied"
+        );
+    }
+
+    #[test]
+    fn test_default_rules_block_ref_read_url_github() {
+        let rules = crate::config::Config::default().block_rules().to_vec();
+        let input = input_with_url("https://raw.githubusercontent.com/OWNER/REPO/main/README.md");
+        // Claude-style name
+        let result_claude = check_tool_block("mcp__ref__ref_read_url", &input, &rules);
+        assert!(
+            result_claude.is_some(),
+            "ref_read_url against github should be denied (Claude namespace)"
+        );
+        // Gemini-style name (single underscore)
+        let result_gemini = check_tool_block("mcp_ref_ref_read_url", &input, &rules);
+        assert!(
+            result_gemini.is_some(),
+            "ref_read_url against github should be denied (Gemini namespace)"
+        );
+    }
+
+    #[test]
+    fn test_default_rules_block_crawling_exa_github() {
+        let rules = crate::config::Config::default().block_rules().to_vec();
+        let input = input_with_url("https://github.com/OWNER/REPO/blob/main/src/lib.rs");
+        let result = check_tool_block("mcp__exa__crawling_exa", &input, &rules);
+        assert!(
+            result.is_some(),
+            "crawling_exa against github blob URL should be denied"
+        );
+    }
+
+    #[test]
+    fn test_default_rules_do_not_block_non_github_for_ref_and_exa() {
+        let rules = crate::config::Config::default().block_rules().to_vec();
+        let input = input_with_url("https://example.com/docs/page");
+        assert!(check_tool_block("mcp__ref__ref_read_url", &input, &rules).is_none());
+        assert!(check_tool_block("mcp__exa__crawling_exa", &input, &rules).is_none());
+    }
+
+    #[test]
+    fn test_default_rules_do_not_block_unrelated_ref_and_exa_tools() {
+        // Search-shaped tools in the same MCP namespaces should NOT be caught
+        // even with a github URL (they don't take URLs as primary input).
+        let rules = crate::config::Config::default().block_rules().to_vec();
+        let input = input_with_url("https://raw.githubusercontent.com/OWNER/REPO/main/f");
+        assert!(
+            check_tool_block("mcp__ref__ref_search_documentation", &input, &rules).is_none(),
+            "ref_search_documentation should not be caught by the ref_read_url rule"
+        );
+        assert!(
+            check_tool_block("mcp__exa__web_search_exa", &input, &rules).is_none(),
+            "web_search_exa should not be caught by the crawling_exa rule"
+        );
+    }
+
     #[test]
     fn test_domain_block_no_url_passes() {
         let rules = vec![domain_rule("*firecrawl*", "blocked", &["github.com"])];

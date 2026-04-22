@@ -36,7 +36,7 @@ A hook for [Claude Code](https://code.claude.com/docs/en/hooks) and [Gemini CLI]
 | **400+ Commands**        | 13 specialized gates with comprehensive coverage                                                       |
 | **File Guards**          | Blocks symlinked AI config files (CLAUDE.md, .cursorrules, etc.) to prevent confused reads/edits       |
 | **Security Reminders**   | Scans Write/Edit content for 26 anti-patterns (secrets, XSS, injection, etc.) across 3 tiers |
-| **Tool Blocking**        | Configurable rules to block tools (Glob, Grep, firecrawl on GitHub) with domain filtering              |
+| **Tool Blocking**        | Configurable rules to block tools (Glob, Grep, and firecrawl/ref/exa MCP calls to GitHub) with domain filtering |
 | **Skill Auto-Approval**  | Auto-approve Skill tool calls based on project directory conditions. No external hook scripts needed  |
 | **Configuration**        | `~/.config/tool-gates/config.toml` for feature toggles, custom block rules, and file guard extensions  |
 | **Health Check**         | `tool-gates doctor` verifies config, hooks, cache files, and flags legacy remnants                     |
@@ -228,6 +228,7 @@ When Claude uses legacy commands, tool-gates suggests modern alternatives via `a
 | `du`                          | `dust`             | Always                               |
 | `ps`                          | `procs`            | With `aux`, `-e`, `-A` flags         |
 | `curl`, `wget`                | `xh`               | JSON APIs or verbose mode            |
+| `curl`, `wget`, `xh`          | `gh`               | GitHub content URLs (raw/api/blob/gist) |
 | `diff`                        | `delta`            | Two-file comparisons                 |
 | `xxd`, `hexdump`              | `hexyl`            | Always                               |
 | `cloc`                        | `tokei`            | Always                               |
@@ -597,7 +598,7 @@ kubectl: `diff`, `kustomize`, `wait` allow. `debug` asks. terraform: `workspace 
 
 | Allow                         | Ask                                                  | Block                                    |
 | ----------------------------- | ---------------------------------------------------- | ---------------------------------------- |
-| `curl` (GET), `wget --spider` | `curl -X POST`, `wget`, `ssh`, `rsync`, `nmap`, `socat`, `telnet` | `nc -e/-c/--exec` (reverse shell) |
+| `curl` (GET non-GitHub), `wget --spider` | `curl -X POST`, `wget`, `ssh`, `rsync`, `nmap`, `socat`, `telnet`, `curl/xh` against GitHub content URLs | `nc -e/-c/--exec` (reverse shell) |
 
 ### Filesystem
 
@@ -783,7 +784,7 @@ disable_rules = ["eval_injection", "pickle_deserialization"]  # skip individual 
 ### Tool Blocking
 
 ```toml
-# Override built-in block rules (Glob, Grep, firecrawl+GitHub).
+# Override built-in block rules (Glob, Grep, and firecrawl/ref/exa blocked for GitHub).
 # Omit entirely to use defaults. Set to [] to disable all blocking.
 [[block_tools]]
 tool = "Glob"

@@ -8,8 +8,9 @@
 //!
 //! ## Block tools
 //!
-//! If `[[block_tools]]` is omitted, built-in defaults apply (Glob, Grep,
-//! firecrawl+GitHub). If present (even empty), only those rules are used.
+//! If `[[block_tools]]` is omitted, built-in defaults apply (Glob, Grep, and
+//! MCP URL-fetchers like firecrawl/ref/exa blocked for GitHub content hosts).
+//! If present (even empty), only those rules are used.
 //!
 //! ```toml
 //! [[block_tools]]
@@ -325,6 +326,28 @@ impl BlockRule {
     }
 }
 
+/// GitHub-hosted hosts a URL-scraping tool should route through `gh api`
+/// instead of fetching directly. Covers repo content, REST API, and gist raw
+/// content. Landing pages (github.com/OWNER/REPO) are left out deliberately -
+/// those are legitimately scraped by doc tools.
+const GITHUB_CONTENT_DOMAINS: &[&str] = &[
+    "raw.githubusercontent.com",
+    "gist.githubusercontent.com",
+    "api.github.com",
+    "gist.github.com",
+    "github.com",
+    "www.github.com",
+];
+
+fn github_content_domains_owned() -> Vec<String> {
+    GITHUB_CONTENT_DOMAINS
+        .iter()
+        .map(|d| (*d).to_string())
+        .collect()
+}
+
+const GITHUB_BLOCK_MESSAGE: &str = "GitHub URL blocked - use `gh api repos/OWNER/REPO/contents/PATH` (or `gh release download TAG` for release assets) instead. Preserves auth, rate limits, and private-repo access.";
+
 /// Built-in default block rules (used when config omits `[[block_tools]]`).
 static DEFAULT_BLOCK_RULES: std::sync::LazyLock<Vec<BlockRule>> = std::sync::LazyLock::new(|| {
     vec![
@@ -356,16 +379,25 @@ static DEFAULT_BLOCK_RULES: std::sync::LazyLock<Vec<BlockRule>> = std::sync::Laz
             block_domains: vec![],
             requires_tool: Some("rg".to_string()),
         },
+        // MCP URL-fetchers that should route GitHub URLs through `gh api`.
+        // Each rule is scoped narrowly by tool-name glob so unrelated MCPs
+        // (search, research, docs) aren't caught even if they share a server.
         BlockRule {
             tool: "*firecrawl*".to_string(),
-            message: "Firecrawl blocked for GitHub. Use: gh api repos/OWNER/REPO/contents/PATH"
-                .to_string(),
-            block_domains: vec![
-                "github.com".to_string(),
-                "www.github.com".to_string(),
-                "gist.github.com".to_string(),
-                "raw.githubusercontent.com".to_string(),
-            ],
+            message: GITHUB_BLOCK_MESSAGE.to_string(),
+            block_domains: github_content_domains_owned(),
+            requires_tool: Some("gh".to_string()),
+        },
+        BlockRule {
+            tool: "*ref_read_url*".to_string(),
+            message: GITHUB_BLOCK_MESSAGE.to_string(),
+            block_domains: github_content_domains_owned(),
+            requires_tool: Some("gh".to_string()),
+        },
+        BlockRule {
+            tool: "*crawling_exa*".to_string(),
+            message: GITHUB_BLOCK_MESSAGE.to_string(),
+            block_domains: github_content_domains_owned(),
             requires_tool: Some("gh".to_string()),
         },
     ]
@@ -425,7 +457,7 @@ mod tests {
     fn test_default_block_rules() {
         let config = Config::default();
         let rules = config.block_rules();
-        assert_eq!(rules.len(), 5);
+        assert_eq!(rules.len(), 7);
         // Claude + Gemini Glob rules
         assert_eq!(rules[0].tool, "Glob");
         assert_eq!(rules[0].requires_tool.as_deref(), Some("fd"));
@@ -436,9 +468,20 @@ mod tests {
         assert_eq!(rules[2].requires_tool.as_deref(), Some("rg"));
         assert_eq!(rules[3].tool, "grep_search");
         assert_eq!(rules[3].requires_tool.as_deref(), Some("rg"));
-        // Firecrawl (same pattern for both clients)
+        // Firecrawl + ref + exa URL-fetchers, same github domain list
         assert_eq!(rules[4].tool, "*firecrawl*");
         assert_eq!(rules[4].requires_tool.as_deref(), Some("gh"));
+        assert_eq!(rules[5].tool, "*ref_read_url*");
+        assert_eq!(rules[5].requires_tool.as_deref(), Some("gh"));
+        assert_eq!(rules[6].tool, "*crawling_exa*");
+        assert_eq!(rules[6].requires_tool.as_deref(), Some("gh"));
+        // All three MCP rules share the same domain list
+        for rule in &rules[4..=6] {
+            let has = |d: &str| rule.block_domains.iter().any(|x| x == d);
+            assert!(has("raw.githubusercontent.com"));
+            assert!(has("api.github.com"));
+            assert!(has("gist.githubusercontent.com"));
+        }
     }
 
     #[test]
@@ -450,7 +493,7 @@ file_guards = false
         let config: Config = toml::from_str(toml).unwrap();
         assert!(!config.features.file_guards);
         assert!(config.block_tools.is_none());
-        assert_eq!(config.block_rules().len(), 5);
+        assert_eq!(config.block_rules().len(), 7);
     }
 
     #[test]
@@ -576,7 +619,7 @@ requires_tool = "gh"
         let config: Config = toml::from_str("").unwrap();
         assert!(config.features.bash_gates);
         assert!(config.features.file_guards);
-        assert_eq!(config.block_rules().len(), 5);
+        assert_eq!(config.block_rules().len(), 7);
     }
 
     #[test]

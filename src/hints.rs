@@ -64,6 +64,7 @@ pub fn get_modern_hint(cmd: &CommandInfo) -> Option<ModernHint> {
         // Network (for API exploration)
         "curl" => hint_curl(cmd),
         "wget" => hint_wget(cmd),
+        "http" | "https" | "xh" => hint_httpie(cmd),
         // Diff & hex (code understanding)
         "diff" => hint_diff(cmd),
         "xxd" | "hexdump" => Some(hint_hex(cmd)),
@@ -453,6 +454,23 @@ fn hint_ps(cmd: &CommandInfo) -> Option<ModernHint> {
 }
 
 fn hint_curl(cmd: &CommandInfo) -> Option<ModernHint> {
+    // GitHub-hosted content - nudge toward `gh api` regardless of other flags.
+    // Fires even when the gate ends up allowing (e.g. HEAD requests), so the
+    // next invocation of a similar shape learns the better pattern.
+    if cmd.args.iter().any(|a| {
+        let s = a.trim_matches(|c| c == '"' || c == '\'');
+        (s.starts_with("http://") || s.starts_with("https://"))
+            && crate::gates::helpers::is_github_content_url(s)
+    }) {
+        return Some(ModernHint {
+            legacy_command: "curl",
+            modern_command: "gh",
+            hint:
+                "Use `gh api repos/OWNER/REPO/contents/PATH` (or `gh release download TAG` for release assets) instead of `curl` for GitHub content. Preserves auth, rate limits, and private-repo access."
+                    .to_string(),
+        });
+    }
+
     // Check for JSON APIs or verbose flags
     let has_json = cmd
         .args
@@ -473,6 +491,21 @@ fn hint_curl(cmd: &CommandInfo) -> Option<ModernHint> {
 }
 
 fn hint_wget(cmd: &CommandInfo) -> Option<ModernHint> {
+    // GitHub-hosted content - same nudge as curl.
+    if cmd.args.iter().any(|a| {
+        let s = a.trim_matches(|c| c == '"' || c == '\'');
+        (s.starts_with("http://") || s.starts_with("https://"))
+            && crate::gates::helpers::is_github_content_url(s)
+    }) {
+        return Some(ModernHint {
+            legacy_command: "wget",
+            modern_command: "gh",
+            hint:
+                "Use `gh api repos/OWNER/REPO/contents/PATH` (or `gh release download TAG` for release assets) instead of `wget` for GitHub content. Preserves auth, rate limits, and private-repo access."
+                    .to_string(),
+        });
+    }
+
     // wget for file downloads (-O, -P, -r, -c) is the right tool. Only hint for simple fetches.
     let is_download = cmd.args.iter().any(|a| {
         a == "-O"
@@ -493,6 +526,32 @@ fn hint_wget(cmd: &CommandInfo) -> Option<ModernHint> {
         modern_command: "xh",
         hint:
             "Use `xh <url>` instead of `wget` for HTTP requests. For file downloads, wget is fine."
+                .to_string(),
+    })
+}
+
+fn hint_httpie(cmd: &CommandInfo) -> Option<ModernHint> {
+    // Only hint when a GitHub content URL is in args. Plain HTTPie calls are
+    // already fine and don't need a nudge.
+    if !cmd.args.iter().any(|a| {
+        let s = a.trim_matches(|c| c == '"' || c == '\'');
+        (s.starts_with("http://") || s.starts_with("https://"))
+            && crate::gates::helpers::is_github_content_url(s)
+    }) {
+        return None;
+    }
+
+    let legacy: &'static str = match cmd.program.as_str() {
+        "http" => "http",
+        "https" => "https",
+        _ => "xh",
+    };
+
+    Some(ModernHint {
+        legacy_command: legacy,
+        modern_command: "gh",
+        hint:
+            "Use `gh api repos/OWNER/REPO/contents/PATH` (or `gh release download TAG` for release assets) instead for GitHub content. Preserves auth, rate limits, and private-repo access."
                 .to_string(),
     })
 }
