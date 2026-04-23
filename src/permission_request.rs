@@ -45,20 +45,35 @@ fn is_path_based_reason(reason: &Option<String>) -> bool {
     }
 }
 
-/// Handle a PermissionRequest hook.
-///
-/// Strategy:
-/// 1. For Edit/Write tools: check if we're in a worktree context and auto-approve
-/// 2. For Bash tools: re-check command policy using the same settings-aware path as PreToolUse
-/// 3. If our gates say "allow" AND the reason is path-based, approve it
-/// 4. If our gates say "deny", deny it
-/// 5. Otherwise, pass through (return None to let normal prompt show)
 pub fn handle_permission_request(
     input: &PermissionRequestInput,
+    tool_input_map: &serde_json::Map<String, serde_json::Value>,
 ) -> Option<PermissionRequestOutput> {
     // Edit/Write tools: auto-approve in worktree contexts
     if Client::is_write_tool(&input.tool_name) {
         return handle_file_permission_request(input);
+    }
+
+    // Block rules run first: dangerous tools (e.g. firecrawl on GitHub URLs)
+    // must be denied even for subagents. Mirrors the ordering in
+    // handle_pre_tool_use_hook; docs claim block rules always win and that
+    // guarantee must hold on the subagent path too.
+    let config = crate::config::load();
+    if let Some(hook_output) =
+        crate::tool_blocks::check_tool_block(&input.tool_name, tool_input_map, config.block_rules())
+    {
+        let reason = hook_output
+            .reason
+            .unwrap_or_else(|| "Blocked by tool-gates".to_string());
+        return Some(PermissionRequestOutput::deny(&reason));
+    }
+
+    // MCP tools in acceptEdits mode: consult `[[accept_edits_mcp]]` rules.
+    // Subagents need this because PreToolUse's `allow` decision is ignored
+    // for subagent tool calls -- PermissionRequest is the only hook where
+    // an approval actually lands.
+    if let Some(output) = handle_mcp_accept_edits(input) {
+        return Some(output);
     }
 
     // Only handle shell command tools (Bash for Claude, run_shell_command for Gemini)
@@ -173,6 +188,71 @@ fn handle_file_permission_request(
     ]))
 }
 
+/// Handle PermissionRequest for MCP tools under `acceptEdits` mode.
+///
+/// Claude Code never extends acceptEdits to MCP tools natively -- every MCP
+/// tool's internal `checkPermissions` returns passthrough regardless of mode.
+/// This handler is the subagent-side counterpart to the MCP branch in
+/// `handle_pre_tool_use_hook`: both check the same `[[accept_edits_mcp]]`
+/// rule list, but this one fires for subagents where PreToolUse's `allow`
+/// is ignored.
+///
+/// Returns Some(allow) when a rule matches and all directory conditions are
+/// met. Returns None otherwise (pass through to whatever the next handler
+/// decides -- typically the shell-tool branch or normal permission prompt).
+///
+/// All three None branches (wrong mode / non-MCP tool / no matching rule)
+/// are indistinguishable from outside -- callers should not rely on which
+/// branch was taken.
+fn handle_mcp_accept_edits(input: &PermissionRequestInput) -> Option<PermissionRequestOutput> {
+    let config = crate::config::load();
+
+    let project_dir = std::env::var("CLAUDE_PROJECT_DIR")
+        .or_else(|_| std::env::var("GEMINI_PROJECT_DIR"))
+        .unwrap_or_default();
+
+    match_mcp_rule(
+        &config.accept_edits_mcp,
+        &input.tool_name,
+        &input.permission_mode,
+        &project_dir,
+    )
+    .map(|_rule| {
+        // The subagent PermissionRequest `allow` wire format has no reason
+        // slot, so `rule.reason` is intentionally dropped here. See the
+        // doc comment on McpApprovalRule.reason in config.rs.
+        PermissionRequestOutput::allow()
+    })
+}
+
+/// Pure rule-matching for MCP accept-edits approval.
+///
+/// Returns the first matching rule, or None. All inputs are data; no I/O.
+/// Split out from `handle_mcp_accept_edits` so the matching logic can be
+/// unit-tested without touching the filesystem or env vars.
+///
+/// Exact-match on `permission_mode` is intentional here. Unlike
+/// `is_auto_mode` in router.rs which normalizes whitespace/case because
+/// failing-closed on a safety-floor deny is unsafe, this allow-path
+/// fails-closed to "prompt" when the mode string drifts — which is the
+/// correct default for an approval rule.
+pub(crate) fn match_mcp_rule<'a>(
+    rules: &'a [crate::config::McpApprovalRule],
+    tool_name: &str,
+    permission_mode: &str,
+    project_dir: &str,
+) -> Option<&'a crate::config::McpApprovalRule> {
+    if permission_mode != "acceptEdits" {
+        return None;
+    }
+    if !Client::is_mcp_tool(tool_name) {
+        return None;
+    }
+    rules
+        .iter()
+        .find(|r| r.matches_tool(tool_name) && r.conditions_met(project_dir))
+}
+
 /// Check if we're in an agent worktree context and the file is within it.
 ///
 /// Returns true when the cwd is under a `.claude/worktrees/` directory
@@ -254,7 +334,7 @@ mod tests {
             "rg pattern /outside/path",
             Some("Path is outside allowed working directories"),
         );
-        let result = handle_permission_request(&input);
+        let result = handle_permission_request(&input, &serde_json::Map::new());
         assert!(
             result.is_some(),
             "Should approve safe command with path reason"
@@ -264,7 +344,7 @@ mod tests {
     #[test]
     fn test_safe_command_with_other_reason_approves() {
         let input = make_input("git status", Some("Some other reason"));
-        let result = handle_permission_request(&input);
+        let result = handle_permission_request(&input, &serde_json::Map::new());
         assert!(result.is_some(), "Should approve safe command");
     }
 
@@ -274,7 +354,7 @@ mod tests {
             "rm -rf /",
             Some("Path is outside allowed working directories"),
         );
-        let result = handle_permission_request(&input);
+        let result = handle_permission_request(&input, &serde_json::Map::new());
         assert!(result.is_some(), "Should return a result");
         // The result should be a deny
         let json = serde_json::to_string(&result.unwrap()).unwrap();
@@ -287,19 +367,22 @@ mod tests {
             "npm install",
             Some("Path is outside allowed working directories"),
         );
-        let result = handle_permission_request(&input);
+        let result = handle_permission_request(&input, &serde_json::Map::new());
         // npm install returns Ask from our gates, so we pass through
         assert!(result.is_none(), "Should pass through for ask commands");
     }
 
     #[test]
     fn test_non_bash_non_file_passes_through() {
+        // Use a tool name that isn't blocked by default rules (Glob/Grep are
+        // in the defaults). "TodoWrite" is a plausible Claude tool that
+        // tool-gates has no opinion on.
         let mut input = make_input("anything", None);
-        input.tool_name = "Glob".to_string();
-        let result = handle_permission_request(&input);
+        input.tool_name = "TodoWrite".to_string();
+        let result = handle_permission_request(&input, &serde_json::Map::new());
         assert!(
             result.is_none(),
-            "Should pass through for non-Bash/non-file tools"
+            "Should pass through for non-Bash/non-file tools without block rules"
         );
     }
 
@@ -309,7 +392,7 @@ mod tests {
         input.blocked_path = None;
         input.decision_reason = None;
 
-        let result = handle_permission_request(&input);
+        let result = handle_permission_request(&input, &serde_json::Map::new());
         assert!(result.is_some(), "safe command should still be approved");
 
         let json = serde_json::to_string(&result.unwrap()).unwrap();
@@ -336,7 +419,7 @@ mod tests {
         let mut input = make_input("grep foo file.txt", Some("Some other reason"));
         input.cwd = temp_dir.path().to_string_lossy().to_string();
 
-        let result = handle_permission_request(&input);
+        let result = handle_permission_request(&input, &serde_json::Map::new());
         assert!(result.is_some(), "settings allow should approve");
     }
 
@@ -357,7 +440,7 @@ mod tests {
         let mut input = make_input("grep foo file.txt", Some("Some other reason"));
         input.cwd = temp_dir.path().to_string_lossy().to_string();
 
-        let result = handle_permission_request(&input);
+        let result = handle_permission_request(&input, &serde_json::Map::new());
         assert!(result.is_none(), "settings ask should pass through");
     }
 
@@ -409,7 +492,7 @@ mod tests {
             Some("Path is outside allowed working directories"),
             Some("/"),
         );
-        let result = handle_permission_request(&input);
+        let result = handle_permission_request(&input, &serde_json::Map::new());
         assert!(result.is_some(), "Should approve safe command");
         let json = serde_json::to_string(&result.unwrap()).unwrap();
         assert!(
@@ -426,7 +509,7 @@ mod tests {
             Some("Path is outside allowed working directories"),
             Some("/outside/mydir"),
         );
-        let result = handle_permission_request(&input);
+        let result = handle_permission_request(&input, &serde_json::Map::new());
         assert!(result.is_some(), "Should approve safe command");
         let json = serde_json::to_string(&result.unwrap()).unwrap();
         assert!(
@@ -447,7 +530,7 @@ mod tests {
             Some("Path is outside allowed working directories"),
             Some("/outside/dir/file.txt"),
         );
-        let result = handle_permission_request(&input);
+        let result = handle_permission_request(&input, &serde_json::Map::new());
         assert!(result.is_some(), "Should approve safe command");
         let json = serde_json::to_string(&result.unwrap()).unwrap();
         assert!(
@@ -487,7 +570,7 @@ mod tests {
             "/project/.claude/worktrees/agent-abc123/src/main.rs",
             "/project/.claude/worktrees/agent-abc123",
         );
-        let result = handle_permission_request(&input);
+        let result = handle_permission_request(&input, &serde_json::Map::new());
         assert!(result.is_some(), "Should approve Write in agent worktree");
         let json = serde_json::to_string(&result.unwrap()).unwrap();
         assert!(json.contains("allow"), "Should be an allow decision");
@@ -504,7 +587,7 @@ mod tests {
             "/project/.claude/worktrees/agent-abc123/frontend/src/Component.tsx",
             "/project/.claude/worktrees/agent-abc123",
         );
-        let result = handle_permission_request(&input);
+        let result = handle_permission_request(&input, &serde_json::Map::new());
         assert!(result.is_some(), "Should approve Edit in agent worktree");
     }
 
@@ -512,7 +595,7 @@ mod tests {
     fn test_write_outside_worktree_passes_through() {
         // Normal cwd (not a worktree) should pass through
         let input = make_file_input("Write", "/project/src/main.rs", "/project");
-        let result = handle_permission_request(&input);
+        let result = handle_permission_request(&input, &serde_json::Map::new());
         assert!(
             result.is_none(),
             "Should pass through for Write outside worktree context"
@@ -527,7 +610,7 @@ mod tests {
             "/project/.claude/worktrees/agent-abc123/CLAUDE.md",
             "/project/.claude/worktrees/agent-abc123",
         );
-        let result = handle_permission_request(&input);
+        let result = handle_permission_request(&input, &serde_json::Map::new());
         assert!(
             result.is_none(),
             "Should pass through for guarded file in worktree"
@@ -542,7 +625,7 @@ mod tests {
             "/other/project/src/main.rs",
             "/project/.claude/worktrees/agent-abc123",
         );
-        let result = handle_permission_request(&input);
+        let result = handle_permission_request(&input, &serde_json::Map::new());
         assert!(
             result.is_none(),
             "Should pass through for file outside worktree cwd"
@@ -557,7 +640,7 @@ mod tests {
             "src/lib.rs",
             "/project/.claude/worktrees/agent-abc123",
         );
-        let result = handle_permission_request(&input);
+        let result = handle_permission_request(&input, &serde_json::Map::new());
         assert!(
             result.is_some(),
             "Should approve Edit with relative path in worktree"
@@ -600,7 +683,7 @@ mod tests {
             "/project/.claude/worktrees/agent-abc123/.claude/settings.json",
             "/project/.claude/worktrees/agent-abc123",
         );
-        let result = handle_permission_request(&input);
+        let result = handle_permission_request(&input, &serde_json::Map::new());
         assert!(
             result.is_none(),
             "Should pass through for .claude/settings.json in worktree"
@@ -615,7 +698,7 @@ mod tests {
             "../../etc/passwd",
             "/project/.claude/worktrees/agent-abc123",
         );
-        let result = handle_permission_request(&input);
+        let result = handle_permission_request(&input, &serde_json::Map::new());
         assert!(
             result.is_none(),
             "Path traversal outside worktree should pass through"
@@ -625,7 +708,7 @@ mod tests {
     #[test]
     fn test_empty_file_path_passes_through() {
         let input = make_file_input("Write", "", "/project/.claude/worktrees/agent-abc123");
-        let result = handle_permission_request(&input);
+        let result = handle_permission_request(&input, &serde_json::Map::new());
         assert!(result.is_none(), "Empty file_path should pass through");
     }
 
@@ -638,10 +721,203 @@ mod tests {
             "/project/.claude/worktrees/agent-abc123",
         );
         input.permission_mode = "default".to_string();
-        let result = handle_permission_request(&input);
+        let result = handle_permission_request(&input, &serde_json::Map::new());
         assert!(
             result.is_some(),
             "Should approve Edit in worktree regardless of permission mode"
         );
+    }
+
+    // === accept_edits_mcp tests ===
+
+    fn make_mcp_input(tool_name: &str, mode: &str) -> PermissionRequestInput {
+        PermissionRequestInput {
+            hook_event_name: "PermissionRequest".to_string(),
+            tool_name: tool_name.to_string(),
+            cwd: "/tmp".to_string(),
+            permission_mode: mode.to_string(),
+            tool_input: ToolInputVariant::Map(serde_json::Map::new()),
+            ..Default::default()
+        }
+    }
+
+    /// Config is loaded from disk via OnceLock, so these tests run against the
+    /// actual user config. They only assert fall-through behavior that must
+    /// hold regardless of what the user has configured.
+    #[test]
+    fn test_mcp_accept_edits_default_mode_passes_through() {
+        // Default mode: MCP rules must never fire
+        let input = make_mcp_input("mcp__serena__replace_symbol_body", "default");
+        let result = handle_permission_request(&input, &serde_json::Map::new());
+        assert!(
+            result.is_none(),
+            "MCP tool in default mode should pass through"
+        );
+    }
+
+    #[test]
+    fn test_bash_in_accept_edits_routes_through_shell_branch() {
+        // Bash under acceptEdits must NOT trigger the MCP branch:
+        // git status routes through shell-tool policy, not MCP.
+        let mut input = make_input("git status", None);
+        input.permission_mode = "acceptEdits".to_string();
+        let result = handle_permission_request(&input, &serde_json::Map::new());
+        // git status is allowed by our gates; whatever the outcome, it must
+        // not be handled by the MCP branch. Assert it's approved (Allow path).
+        assert!(
+            result.is_some(),
+            "Bash in acceptEdits should route normally"
+        );
+    }
+
+    #[test]
+    fn test_mcp_accept_edits_gemini_namespace_detected() {
+        // With no user rules configured, a Gemini MCP tool in acceptEdits mode
+        // must reach the MCP branch and fall through to None (no match).
+        // Skip if the user has rules — we can't assert the outcome deterministically then.
+        if crate::config::load().accept_edits_mcp.is_empty() {
+            let input = make_mcp_input("mcp_serena_find_symbol", "acceptEdits");
+            assert!(
+                handle_permission_request(&input, &serde_json::Map::new()).is_none(),
+                "With no MCP rules configured, acceptEdits Gemini MCP must pass through"
+            );
+        }
+    }
+
+    #[test]
+    fn test_mcp_accept_edits_respects_block_rules() {
+        // Block rules MUST fire before the MCP accept-edits allow rules
+        // so default blocks (firecrawl on GitHub URLs) can't be bypassed
+        // by a rule the user added to accept_edits_mcp.
+        //
+        // Only run when the user's config still uses the default block rules
+        // (i.e. they haven't customized `block_tools`). Otherwise we can't
+        // assume firecrawl is still blocked.
+        if crate::config::load().block_tools.is_some() {
+            return;
+        }
+
+        // The production handler receives tool_input_map as a separate parameter
+        // (re-parsed from the raw JSON in main.rs), so we pass the same map here.
+        let mut map = serde_json::Map::new();
+        map.insert(
+            "url".to_string(),
+            serde_json::Value::String(
+                "https://raw.githubusercontent.com/example/repo/main/file.txt".to_string(),
+            ),
+        );
+
+        let input = PermissionRequestInput {
+            hook_event_name: "PermissionRequest".to_string(),
+            tool_name: "mcp__firecrawl__firecrawl_scrape".to_string(),
+            cwd: "/tmp".to_string(),
+            permission_mode: "acceptEdits".to_string(),
+            tool_input: ToolInputVariant::Map(map.clone()),
+            ..Default::default()
+        };
+
+        let result = handle_permission_request(&input, &map);
+        let output = result.expect("firecrawl on raw.githubusercontent.com must be denied");
+        let json =
+            serde_json::to_string(&output).expect("serialize PermissionRequestOutput for assert");
+        assert!(
+            json.contains("\"behavior\":\"deny\""),
+            "expected deny-shaped output, got: {json}"
+        );
+    }
+
+    // ----- Pure match_mcp_rule unit tests (no config I/O, no env) -----
+
+    fn approval_rule(tool: &str) -> crate::config::McpApprovalRule {
+        crate::config::McpApprovalRule {
+            tool: tool.to_string(),
+            reason: None,
+            if_project_under: vec![],
+            if_project_has: vec![],
+        }
+    }
+
+    fn approval_rule_with_reason(tool: &str, reason: &str) -> crate::config::McpApprovalRule {
+        crate::config::McpApprovalRule {
+            tool: tool.to_string(),
+            reason: Some(reason.to_string()),
+            if_project_under: vec![],
+            if_project_has: vec![],
+        }
+    }
+
+    #[test]
+    fn match_mcp_rule_wrong_mode_returns_none() {
+        let rules = vec![approval_rule("mcp__serena__*")];
+        assert!(match_mcp_rule(&rules, "mcp__serena__find_symbol", "default", "").is_none());
+        assert!(match_mcp_rule(&rules, "mcp__serena__find_symbol", "", "").is_none());
+        assert!(match_mcp_rule(&rules, "mcp__serena__find_symbol", "auto", "").is_none());
+    }
+
+    #[test]
+    fn match_mcp_rule_non_mcp_tool_returns_none() {
+        let rules = vec![approval_rule("*")];
+        // Bash is not an MCP tool even though the glob matches.
+        assert!(match_mcp_rule(&rules, "Bash", "acceptEdits", "").is_none());
+        assert!(match_mcp_rule(&rules, "Read", "acceptEdits", "").is_none());
+    }
+
+    #[test]
+    fn match_mcp_rule_empty_rules_returns_none() {
+        assert!(match_mcp_rule(&[], "mcp__serena__find_symbol", "acceptEdits", "").is_none());
+    }
+
+    #[test]
+    fn match_mcp_rule_prefix_glob_matches() {
+        let rules = vec![approval_rule("mcp__serena__*")];
+        let m = match_mcp_rule(&rules, "mcp__serena__find_symbol", "acceptEdits", "");
+        assert!(m.is_some());
+        assert_eq!(m.unwrap().tool, "mcp__serena__*");
+    }
+
+    #[test]
+    fn match_mcp_rule_contains_glob_matches_both_namespaces() {
+        // `*serena*` should catch both Claude double-underscore and Gemini
+        // single-underscore MCP namespaces.
+        let rules = vec![approval_rule("*serena*")];
+        assert!(match_mcp_rule(&rules, "mcp__serena__find_symbol", "acceptEdits", "").is_some());
+        assert!(match_mcp_rule(&rules, "mcp_serena_find_symbol", "acceptEdits", "").is_some());
+    }
+
+    #[test]
+    fn match_mcp_rule_directory_conditions_filter() {
+        let mut rule = approval_rule("mcp__pw__*");
+        rule.if_project_under = vec!["/allowed".to_string()];
+        let rules = vec![rule];
+
+        // Matches when project is under the allowed path.
+        assert!(match_mcp_rule(&rules, "mcp__pw__click", "acceptEdits", "/allowed/sub").is_some());
+        // Rejected when project is elsewhere.
+        assert!(match_mcp_rule(&rules, "mcp__pw__click", "acceptEdits", "/other").is_none());
+        // Rejected when project_dir is empty (fail-closed).
+        assert!(match_mcp_rule(&rules, "mcp__pw__click", "acceptEdits", "").is_none());
+    }
+
+    #[test]
+    fn match_mcp_rule_returns_rule_with_reason() {
+        // Callers can read the reason off the returned rule reference
+        // (used by the main-thread PreToolUse path to populate allow reason).
+        let rules = vec![approval_rule_with_reason(
+            "mcp__x__*",
+            "batched under acceptEdits",
+        )];
+        let m = match_mcp_rule(&rules, "mcp__x__y", "acceptEdits", "");
+        let got = m.expect("should match");
+        assert_eq!(got.reason.as_deref(), Some("batched under acceptEdits"));
+    }
+
+    #[test]
+    fn match_mcp_rule_first_match_wins() {
+        let rules = vec![
+            approval_rule_with_reason("mcp__serena__find_symbol", "specific"),
+            approval_rule_with_reason("mcp__serena__*", "glob"),
+        ];
+        let m = match_mcp_rule(&rules, "mcp__serena__find_symbol", "acceptEdits", "");
+        assert_eq!(m.unwrap().reason.as_deref(), Some("specific"));
     }
 }

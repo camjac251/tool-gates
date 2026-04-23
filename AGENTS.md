@@ -152,7 +152,8 @@ Most gate behavior is defined in TOML; custom handlers in Rust cover cases TOML 
 4. **Route by tool_name**:
    - **Bash/Monitor** -> Bash gate engine (steps 5-13 below)
    - **Read/Write/Edit** -> File guards (symlink detection for AI config files)
-   - **Glob/Grep/MCP tools** -> Handled by block rules in step 3; pass through if not blocked
+   - **Glob/Grep** -> Handled by block rules in step 3; pass through if not blocked
+   - **MCP tools** -> If `permission_mode == "acceptEdits"`, consult `[[accept_edits_mcp]]` rules and auto-allow on match; otherwise pass through to `permissions.allow`
    - **Skill** -> Auto-approve based on `[[auto_approve_skills]]` config rules
    - **Other tools** -> Pass through (no opinion)
 
@@ -281,6 +282,7 @@ Claude Code also strips broad "allow" rules from `settings.json` on auto mode en
 - **Pending queue guard** (`main.rs`). Under auto mode, tool-gates `ask` does not prompt the user -- the classifier decides silently. Tracking is skipped so `pending.jsonl` only accumulates genuine human approvals.
 - **PermissionDenied hook** (`main.rs`). Registered at `PERMISSION_DENIED_MATCHER`. When the classifier denies a shell command that tool-gates would have allowed, the hook emits `{"hookSpecificOutput":{"hookEventName":"PermissionDenied","retry":true}}` so the model gets a second attempt. Closes the loop on classifier false positives.
 - **Skill auto-approval** (`main.rs`). `[[auto_approve_skills]]` rules fire regardless of permission mode. These are explicit trust declarations by the user; auto mode opts into classifier review for unknown commands, not into revoking existing rules.
+- **MCP accept-edits approval** (`main.rs`, `permission_request.rs`). `[[accept_edits_mcp]]` rules only fire when `permission_mode == "acceptEdits"` -- inert in default and auto modes. Block rules still run first, so these allow rules cannot unlock a default-blocked MCP call.
 
 **Classifier configuration** (Claude Code, not tool-gates) lives under `autoMode` in settings.json:
 
@@ -628,3 +630,33 @@ if_project_under = ["~/projects/staging"]   # Only approve if project is under t
 ```
 
 Auto-approve Skill tool calls based on configurable rules with directory conditions. Replaces external Python/bash hooks for skill approval. Supports `~` expansion in paths. If no rules are configured, Skill calls pass through to Claude Code's normal permission flow.
+
+### MCP Accept-Edits Approval
+
+```toml
+[[accept_edits_mcp]]
+tool = "mcp__serena__replace_symbol_body"   # exact tool name
+
+[[accept_edits_mcp]]
+tool = "mcp__serena__*"                      # all tools on a server
+reason = "Symbol edits batched through acceptEdits"
+
+[[accept_edits_mcp]]
+tool = "mcp__playwright__browser_click"
+if_project_under = ["~/projects/trusted"]    # scope to a directory tree
+```
+
+Auto-approve MCP tool calls **only when the session is in `acceptEdits` mode**. In any other mode the rules are inert and the MCP tool falls through to `permissions.allow` in `settings.json`. This closes the gap Claude Code leaves open: natively, MCP tools ignore permission mode entirely (every MCP tool's internal `checkPermissions` returns passthrough), so acceptEdits buys nothing for them. tool-gates fires these rules in both `handle_pre_tool_use_hook` (main session) and `handle_permission_request` (subagents, where PreToolUse's `allow` is ignored).
+
+Block rules run before these allow rules, so `[[accept_edits_mcp]]` cannot unlock a blocked tool (e.g. the default firecrawl/ref/exa GitHub-URL blocks still deny). Glob grammar and directory conditions are identical to `auto_approve_skills`.
+
+**Substring-glob sharp edge.** `"*serena*"` is a pure substring match, so it will also catch unrelated servers whose name merely contains `serena` (e.g. `mcp__my-serenity__*`). For cross-namespace coverage of one specific server across Claude (`mcp__`) and Gemini (`mcp_`) prefixes, prefer pairing `mcp__serena*` with `mcp_serena*`.
+
+**Reason field asymmetry.** `reason` only surfaces on the main-thread PreToolUse path. On the subagent PermissionRequest path, the `allow` wire format has no reason slot (`PermissionRequestDecision::Allow` carries only `updatedInput` and `updatedPermissions`), so a custom reason is silently dropped there.
+
+| Condition | Description |
+|-----------|-------------|
+| `tool` | MCP tool name pattern. Exact, prefix (`mcp__serena*`), suffix (`*_scrape`), or contains (`*serena*` — pure substring match, see sharp-edge note above) |
+| `reason` | Optional approval message shown to the AI assistant (main-thread only; silently dropped for subagents) |
+| `if_project_has` | Project directory must contain one of these files/directories |
+| `if_project_under` | Project directory must be at or under one of these paths |

@@ -53,6 +53,26 @@
 //! [cache]
 //! ttl_days = 14  # tool detection cache TTL (default: 7)
 //! ```
+//!
+//! ## Accept edits MCP
+//!
+//! Auto-approve MCP tool calls when the session is in `acceptEdits` mode.
+//! In any other permission mode these rules are inert and MCP tools fall
+//! through to the normal `permissions.allow` flow in settings.json.
+//! Block rules still apply (e.g. firecrawl GitHub URLs remain blocked).
+//!
+//! ```toml
+//! [[accept_edits_mcp]]
+//! tool = "mcp__serena__replace_symbol_body"   # exact tool name
+//!
+//! [[accept_edits_mcp]]
+//! tool = "mcp__serena__*"                     # all tools on a server
+//! reason = "Symbol edits batched through acceptEdits"
+//!
+//! [[accept_edits_mcp]]
+//! tool = "mcp__playwright__browser_click"
+//! if_project_under = ["~/projects/trusted"]  # scope to a directory tree
+//! ```
 
 use serde::Deserialize;
 use std::path::PathBuf;
@@ -82,6 +102,9 @@ pub struct Config {
     /// Auto-approve rules for Skill tool calls.
     #[serde(default)]
     pub auto_approve_skills: Vec<SkillApprovalRule>,
+    /// Auto-approve rules for MCP tools when `permission_mode == "acceptEdits"`.
+    #[serde(default)]
+    pub accept_edits_mcp: Vec<McpApprovalRule>,
 }
 
 impl Config {
@@ -161,55 +184,63 @@ pub struct SkillApprovalRule {
 impl SkillApprovalRule {
     /// Check if this rule matches a skill name (exact or glob).
     pub fn matches_skill(&self, skill_name: &str) -> bool {
-        let pattern = &self.skill;
-        if !pattern.contains('*') {
-            return pattern == skill_name;
-        }
-        // Reuse same glob logic as BlockRule
-        match (pattern.strip_prefix('*'), pattern.strip_suffix('*')) {
-            (Some(rest), Some(_)) => {
-                let inner = rest.strip_suffix('*').unwrap_or(rest);
-                skill_name.contains(inner)
-            }
-            (Some(suffix), None) => skill_name.ends_with(suffix),
-            (None, Some(prefix)) => skill_name.starts_with(prefix),
-            _ => pattern == skill_name,
-        }
+        glob_match(&self.skill, skill_name)
     }
 
     /// Check if the directory conditions are met.
     pub fn conditions_met(&self, project_dir: &str) -> bool {
-        // If no conditions, always match
-        if self.if_project_under.is_empty() && self.if_project_has.is_empty() {
-            return true;
-        }
+        directory_conditions_met(&self.if_project_under, &self.if_project_has, project_dir)
+    }
+}
 
-        let project_path = std::path::Path::new(project_dir);
+/// Auto-approve rule for MCP tool calls in `acceptEdits` mode only.
+///
+/// In any other permission mode the rule is inert and the MCP tool falls
+/// through to the normal `permissions.allow` flow in settings.json.
+/// Block rules run before this check, so default blocks (firecrawl on
+/// GitHub URLs, etc.) still win.
+#[derive(Debug, Deserialize, Clone)]
+pub struct McpApprovalRule {
+    /// MCP tool name pattern. Exact or glob with `*`:
+    /// - `"mcp__serena__replace_symbol_body"` - exact tool
+    /// - `"mcp__serena__*"` - all tools on a server
+    /// - `"*serena*"` - warning: this is a pure substring match and will
+    ///   also catch servers whose name merely contains `serena`
+    ///   (e.g. `mcp__my-serenity__*`). For cross-namespace coverage of a
+    ///   specific server across Claude (`mcp__`) and Gemini (`mcp_`)
+    ///   prefixes, prefer pairing `mcp__serena*` with `mcp_serena*`.
+    pub tool: String,
+    /// Custom approval reason. Defaults to the standard tool-gates message.
+    ///
+    /// Only surfaces on the main-thread PreToolUse path. The subagent
+    /// PermissionRequest `allow` wire format has no reason slot
+    /// (`PermissionRequestDecision::Allow` carries only `updatedInput` and
+    /// `updatedPermissions`), so a custom reason is silently dropped there.
+    #[serde(default)]
+    pub reason: Option<String>,
+    /// Only approve if the project directory is under one of these paths.
+    /// Supports `~` expansion.
+    #[serde(default)]
+    pub if_project_under: Vec<String>,
+    /// Only approve if the project directory contains one of these dirs/files.
+    #[serde(default)]
+    pub if_project_has: Vec<String>,
+}
 
-        // Check if_project_under: project must be at or under one of these paths
-        if !self.if_project_under.is_empty() {
-            let matched = self.if_project_under.iter().any(|dir| {
-                let expanded = expand_tilde(dir);
-                let base = std::path::Path::new(&expanded);
-                project_path == base || project_path.starts_with(base)
-            });
-            if !matched {
-                return false;
-            }
-        }
+impl McpApprovalRule {
+    /// Check if this rule matches an MCP tool name (exact or glob).
+    ///
+    /// No explicit empty-`tool` guard: `glob_match("", name)` is true only
+    /// when `name` is also empty, and the upstream `is_mcp_tool` filter in
+    /// the accept_edits_mcp branch rejects an empty tool name, so an empty
+    /// pattern cannot fire on any real MCP tool. Matches SkillApprovalRule.
+    pub fn matches_tool(&self, tool_name: &str) -> bool {
+        glob_match(&self.tool, tool_name)
+    }
 
-        // Check if_project_has: project dir must contain one of these entries
-        if !self.if_project_has.is_empty() {
-            let matched = self
-                .if_project_has
-                .iter()
-                .any(|entry| project_path.join(entry).exists());
-            if !matched {
-                return false;
-            }
-        }
-
-        true
+    /// Check if the directory conditions are met.
+    pub fn conditions_met(&self, project_dir: &str) -> bool {
+        directory_conditions_met(&self.if_project_under, &self.if_project_has, project_dir)
     }
 }
 
@@ -225,6 +256,66 @@ fn expand_tilde(path: &str) -> String {
         }
     }
     path.to_string()
+}
+
+/// Shared four-case glob used by BlockRule, SkillApprovalRule, and McpApprovalRule.
+/// UTF-8 safe via `strip_prefix`/`strip_suffix`. Middle wildcards
+/// (e.g. `mcp__*__scrape`) are deliberately unsupported and fall through to
+/// exact-string match.
+pub(crate) fn glob_match(pattern: &str, name: &str) -> bool {
+    if !pattern.contains('*') {
+        return pattern == name;
+    }
+    match (pattern.strip_prefix('*'), pattern.strip_suffix('*')) {
+        (Some(rest), Some(_)) => {
+            let inner = rest.strip_suffix('*').unwrap_or(rest);
+            name.contains(inner)
+        }
+        (Some(suffix), None) => name.ends_with(suffix),
+        (None, Some(prefix)) => name.starts_with(prefix),
+        _ => pattern == name,
+    }
+}
+
+pub(crate) fn directory_conditions_met(
+    if_project_under: &[String],
+    if_project_has: &[String],
+    project_dir: &str,
+) -> bool {
+    if if_project_under.is_empty() && if_project_has.is_empty() {
+        return true;
+    }
+
+    // Fail closed: if conditions are configured but project_dir is empty
+    // (env var unset), the condition cannot be meaningfully evaluated.
+    // Matching against the process cwd is not what the user asked for.
+    if project_dir.is_empty() && (!if_project_under.is_empty() || !if_project_has.is_empty()) {
+        return false;
+    }
+
+    let project_path = std::path::Path::new(project_dir);
+
+    if !if_project_under.is_empty() {
+        let matched = if_project_under.iter().any(|dir| {
+            let expanded = expand_tilde(dir);
+            let base = std::path::Path::new(&expanded);
+            project_path == base || project_path.starts_with(base)
+        });
+        if !matched {
+            return false;
+        }
+    }
+
+    if !if_project_has.is_empty() {
+        let matched = if_project_has
+            .iter()
+            .any(|entry| project_path.join(entry).exists());
+        if !matched {
+            return false;
+        }
+    }
+
+    true
 }
 
 /// Security reminders configuration.
@@ -291,33 +382,7 @@ pub struct BlockRule {
 impl BlockRule {
     /// Check if this rule matches a tool name.
     pub fn matches_tool(&self, tool_name: &str) -> bool {
-        let pattern = &self.tool;
-
-        if !pattern.contains('*') {
-            // Exact match
-            return pattern == tool_name;
-        }
-
-        // Simple glob using strip_prefix/strip_suffix (UTF-8 safe)
-        match (pattern.strip_prefix('*'), pattern.strip_suffix('*')) {
-            (Some(rest), Some(_)) => {
-                // *contains* (includes lone "*" which matches everything)
-                let inner = rest.strip_suffix('*').unwrap_or(rest);
-                tool_name.contains(inner)
-            }
-            (Some(suffix), None) => {
-                // *suffix
-                tool_name.ends_with(suffix)
-            }
-            (None, Some(prefix)) => {
-                // prefix*
-                tool_name.starts_with(prefix)
-            }
-            _ => {
-                // middle* not supported, treat as exact
-                pattern == tool_name
-            }
-        }
+        glob_match(&self.tool, tool_name)
     }
 
     /// Check if this is an unconditional block (no domain filter).
@@ -348,7 +413,6 @@ fn github_content_domains_owned() -> Vec<String> {
 
 const GITHUB_BLOCK_MESSAGE: &str = "GitHub URL blocked - use `gh api repos/OWNER/REPO/contents/PATH` (or `gh release download TAG` for release assets) instead. Preserves auth, rate limits, and private-repo access.";
 
-/// Built-in default block rules (used when config omits `[[block_tools]]`).
 static DEFAULT_BLOCK_RULES: std::sync::LazyLock<Vec<BlockRule>> = std::sync::LazyLock::new(|| {
     vec![
         // Claude: Glob, Gemini: glob
@@ -382,23 +446,31 @@ static DEFAULT_BLOCK_RULES: std::sync::LazyLock<Vec<BlockRule>> = std::sync::Laz
         // MCP URL-fetchers that should route GitHub URLs through `gh api`.
         // Each rule is scoped narrowly by tool-name glob so unrelated MCPs
         // (search, research, docs) aren't caught even if they share a server.
+        //
+        // Intentionally no `requires_tool`: these block rules enforce a
+        // domain policy (don't fetch GitHub content via scrapers). The
+        // recommended remediation in `GITHUB_BLOCK_MESSAGE` points at
+        // `gh api`, but the enforcement holds even on systems where `gh`
+        // isn't installed — the alternative there is to write a curl/xh
+        // call with a token or switch tools, not to suddenly allow
+        // arbitrary firecrawl/ref/exa scraping of GitHub.
         BlockRule {
             tool: "*firecrawl*".to_string(),
             message: GITHUB_BLOCK_MESSAGE.to_string(),
             block_domains: github_content_domains_owned(),
-            requires_tool: Some("gh".to_string()),
+            requires_tool: None,
         },
         BlockRule {
             tool: "*ref_read_url*".to_string(),
             message: GITHUB_BLOCK_MESSAGE.to_string(),
             block_domains: github_content_domains_owned(),
-            requires_tool: Some("gh".to_string()),
+            requires_tool: None,
         },
         BlockRule {
             tool: "*crawling_exa*".to_string(),
             message: GITHUB_BLOCK_MESSAGE.to_string(),
             block_domains: github_content_domains_owned(),
-            requires_tool: Some("gh".to_string()),
+            requires_tool: None,
         },
     ]
 });
@@ -470,11 +542,14 @@ mod tests {
         assert_eq!(rules[3].requires_tool.as_deref(), Some("rg"));
         // Firecrawl + ref + exa URL-fetchers, same github domain list
         assert_eq!(rules[4].tool, "*firecrawl*");
-        assert_eq!(rules[4].requires_tool.as_deref(), Some("gh"));
+        // GitHub-domain block rules intentionally have no requires_tool —
+        // the enforcement is unconditional; the remediation hint points at
+        // `gh api` but doesn't gate on `gh` being installed.
+        assert!(rules[4].requires_tool.is_none());
         assert_eq!(rules[5].tool, "*ref_read_url*");
-        assert_eq!(rules[5].requires_tool.as_deref(), Some("gh"));
+        assert!(rules[5].requires_tool.is_none());
         assert_eq!(rules[6].tool, "*crawling_exa*");
-        assert_eq!(rules[6].requires_tool.as_deref(), Some("gh"));
+        assert!(rules[6].requires_tool.is_none());
         // All three MCP rules share the same domain list
         for rule in &rules[4..=6] {
             let has = |d: &str| rule.block_domains.iter().any(|x| x == d);
@@ -885,5 +960,218 @@ skill = "other-tool"
             requires_tool: None,
         };
         assert!(!rule.matches_tool("Glob")); // doesn't match, but doesn't panic
+    }
+
+    // === MCP approval tests ===
+
+    fn mcp_rule(tool: &str) -> McpApprovalRule {
+        McpApprovalRule {
+            tool: tool.to_string(),
+            reason: None,
+            if_project_under: vec![],
+            if_project_has: vec![],
+        }
+    }
+
+    #[test]
+    fn test_mcp_approval_exact_match() {
+        let rule = mcp_rule("mcp__serena__replace_symbol_body");
+        assert!(rule.matches_tool("mcp__serena__replace_symbol_body"));
+        assert!(!rule.matches_tool("mcp__serena__find_symbol"));
+        assert!(!rule.matches_tool("Bash"));
+    }
+
+    #[test]
+    fn test_mcp_approval_prefix_glob() {
+        let rule = mcp_rule("mcp__serena*");
+        assert!(rule.matches_tool("mcp__serena__replace_symbol_body"));
+        assert!(rule.matches_tool("mcp__serena__find_symbol"));
+        assert!(!rule.matches_tool("mcp__other__tool"));
+    }
+
+    #[test]
+    fn test_mcp_approval_contains_glob_matches_both_namespaces() {
+        // *serena* must match both Claude mcp__ and Gemini mcp_ forms
+        let rule = mcp_rule("*serena*");
+        assert!(rule.matches_tool("mcp__serena__find_symbol"));
+        assert!(rule.matches_tool("mcp_serena_find_symbol"));
+        assert!(!rule.matches_tool("mcp__firecrawl__scrape"));
+    }
+
+    #[test]
+    fn test_mcp_approval_suffix_glob() {
+        let rule = mcp_rule("*scrape");
+        assert!(rule.matches_tool("mcp__firecrawl__firecrawl_scrape"));
+        assert!(!rule.matches_tool("mcp__firecrawl__map"));
+    }
+
+    #[test]
+    fn test_mcp_approval_empty_tool_behavior() {
+        // Empty tool never matches a real MCP tool name (the only way an
+        // empty pattern matches is against an empty name, and the upstream
+        // is_mcp_tool filter rejects empty names).
+        let rule = mcp_rule("");
+        assert!(!rule.matches_tool("mcp__anything"));
+        assert!(!rule.matches_tool("mcp_anything"));
+        // Documented glob_match behavior: empty pattern == empty name.
+        // Harmless because the accept_edits_mcp branch gates on is_mcp_tool.
+        assert!(rule.matches_tool(""));
+    }
+
+    #[test]
+    fn test_mcp_approval_glob_utf8_safe() {
+        // Non-ASCII in pattern and name must not panic.
+        let rule = mcp_rule("*\u{00e9}*");
+        assert!(!rule.matches_tool("mcp__plain__tool"));
+        assert!(rule.matches_tool("mcp__caf\u{00e9}__tool"));
+    }
+
+    #[test]
+    fn test_mcp_approval_no_conditions_always_matches() {
+        let rule = mcp_rule("mcp__any");
+        assert!(rule.conditions_met("/any/path"));
+        assert!(rule.conditions_met(""));
+    }
+
+    #[test]
+    fn test_mcp_approval_if_project_under() {
+        let rule = McpApprovalRule {
+            tool: "mcp__playwright__browser_click".to_string(),
+            reason: None,
+            if_project_under: vec!["/home/test/projects/allowed".to_string()],
+            if_project_has: vec![],
+        };
+        assert!(rule.conditions_met("/home/test/projects/allowed"));
+        assert!(rule.conditions_met("/home/test/projects/allowed/sub"));
+        assert!(!rule.conditions_met("/home/test/projects/other"));
+    }
+
+    #[test]
+    fn test_mcp_approval_if_project_has() {
+        let rule = McpApprovalRule {
+            tool: "mcp__any".to_string(),
+            reason: None,
+            if_project_under: vec![],
+            if_project_has: vec![".tool-gates-ok".to_string()],
+        };
+        // /tmp has no .tool-gates-ok entry
+        assert!(!rule.conditions_met("/tmp"));
+        // "." always exists
+        let rule2 = McpApprovalRule {
+            tool: "mcp__any".to_string(),
+            reason: None,
+            if_project_under: vec![],
+            if_project_has: vec![".".to_string()],
+        };
+        assert!(rule2.conditions_met("/tmp"));
+    }
+
+    #[test]
+    fn test_directory_conditions_fail_closed_on_empty_project_dir() {
+        // When conditions are configured but project_dir is empty (env var
+        // unset), directory_conditions_met must return false instead of
+        // silently falling back to the process cwd.
+        let rule_under = McpApprovalRule {
+            tool: "mcp__any".to_string(),
+            reason: None,
+            if_project_under: vec!["/some/path".to_string()],
+            if_project_has: vec![],
+        };
+        assert!(
+            !rule_under.conditions_met(""),
+            "empty project_dir must fail closed for if_project_under"
+        );
+
+        let rule_has = McpApprovalRule {
+            tool: "mcp__any".to_string(),
+            reason: None,
+            if_project_under: vec![],
+            if_project_has: vec![".some-marker".to_string()],
+        };
+        assert!(
+            !rule_has.conditions_met(""),
+            "empty project_dir must fail closed for if_project_has"
+        );
+
+        // No conditions + empty project_dir still returns true (the
+        // "unconditional rule" case — user didn't ask for any gating).
+        let rule_none = McpApprovalRule {
+            tool: "mcp__any".to_string(),
+            reason: None,
+            if_project_under: vec![],
+            if_project_has: vec![],
+        };
+        assert!(rule_none.conditions_met(""));
+    }
+
+    #[test]
+    fn test_mcp_approval_config_parse() {
+        let toml = r#"
+[[accept_edits_mcp]]
+tool = "mcp__serena__replace_symbol_body"
+
+[[accept_edits_mcp]]
+tool = "mcp__serena__*"
+reason = "Batch serena symbol edits"
+
+[[accept_edits_mcp]]
+tool = "mcp__playwright__browser_click"
+if_project_under = ["~/projects/trusted"]
+
+[[accept_edits_mcp]]
+tool = "*firecrawl*"
+if_project_has = [".firecrawl-ok"]
+"#;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert_eq!(config.accept_edits_mcp.len(), 4);
+        assert_eq!(
+            config.accept_edits_mcp[0].tool,
+            "mcp__serena__replace_symbol_body"
+        );
+        assert!(config.accept_edits_mcp[0].reason.is_none());
+        assert_eq!(
+            config.accept_edits_mcp[1].reason.as_deref(),
+            Some("Batch serena symbol edits")
+        );
+        assert_eq!(
+            config.accept_edits_mcp[2].if_project_under,
+            vec!["~/projects/trusted"]
+        );
+        assert_eq!(
+            config.accept_edits_mcp[3].if_project_has,
+            vec![".firecrawl-ok"]
+        );
+    }
+
+    #[test]
+    fn test_mcp_approval_default_empty() {
+        let config = Config::default();
+        assert!(config.accept_edits_mcp.is_empty());
+    }
+
+    #[test]
+    fn test_mcp_approval_partial_config_keeps_other_defaults() {
+        // Confirm adding accept_edits_mcp doesn't break other defaults.
+        // Assert properties, not a brittle count — future default-block
+        // additions shouldn't break this unrelated test.
+        let toml = r#"
+[[accept_edits_mcp]]
+tool = "mcp__serena__*"
+"#;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert_eq!(config.accept_edits_mcp.len(), 1);
+        assert!(config.features.bash_gates);
+        assert!(
+            !config.block_rules().is_empty(),
+            "default block rules should still be present"
+        );
+        assert!(
+            config
+                .block_rules()
+                .iter()
+                .any(|r| r.tool.contains("firecrawl")),
+            "default firecrawl GitHub block should still be present"
+        );
+        assert!(config.auto_approve_skills.is_empty());
     }
 }

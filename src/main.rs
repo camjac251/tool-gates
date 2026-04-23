@@ -260,6 +260,46 @@ fn handle_pre_tool_use_hook(input: &str, client: Client) {
         return;
     }
 
+    // MCP tools in acceptEdits mode: consult `[[accept_edits_mcp]]` rules
+    // before falling through to the normal tool-type dispatch.
+    //
+    // Claude Code itself never extends acceptEdits to MCP tools (every MCP
+    // tool's internal checkPermissions returns passthrough regardless of
+    // permission_mode). This branch is the user-space extension: users
+    // declare which MCP tools should auto-allow under acceptEdits without
+    // granting permanent approval via settings.json.
+    //
+    // Ordering guarantees:
+    // - block_tools already ran above, so default blocks (firecrawl GitHub
+    //   URLs, etc.) still win and these rules cannot override them.
+    // - This runs before tool-type dispatch so MCP tools don't fall through
+    //   to the pass-through branch first.
+    if hook_input.permission_mode == "acceptEdits"
+        && Client::is_mcp_tool(&hook_input.tool_name)
+        && !config.accept_edits_mcp.is_empty()
+    {
+        let project_dir = std::env::var("CLAUDE_PROJECT_DIR")
+            .or_else(|_| std::env::var("GEMINI_PROJECT_DIR"))
+            .unwrap_or_default();
+        for rule in &config.accept_edits_mcp {
+            if rule.matches_tool(&hook_input.tool_name) && rule.conditions_met(&project_dir) {
+                let reason = rule
+                    .reason
+                    .as_deref()
+                    .and_then(|m| if m.trim().is_empty() { None } else { Some(m) });
+                let output = HookOutput::allow(reason);
+                match serde_json::to_string(&output.serialize(client)) {
+                    Ok(json) => println!("{json}"),
+                    Err(e) => {
+                        eprintln!("tool-gates: error serializing accept_edits_mcp allow: {e}");
+                        print_no_opinion_for(client);
+                    }
+                }
+                return;
+            }
+        }
+    }
+
     // Route by tool type (handles both Claude and Gemini tool names)
     let tool_name = hook_input.tool_name.as_str();
     if Client::is_shell_tool(tool_name) {
@@ -479,7 +519,6 @@ fn handle_bash_pre_tool_use(hook_input: &HookInput, client: Client) {
     }
 }
 
-/// Handle PermissionRequest hook (for subagent approval)
 fn handle_permission_request_hook(input: &str) {
     let perm_input: PermissionRequestInput = match serde_json::from_str(input) {
         Ok(pi) => pi,
@@ -490,16 +529,32 @@ fn handle_permission_request_hook(input: &str) {
         }
     };
 
-    // Only process shell command tools and file tools (Edit/Write for worktree approval)
+    // Only process shell tools, file tools (Edit/Write worktree approval),
+    // and MCP tools (for the accept_edits_mcp path). Other tool types let
+    // the normal permission prompt show.
     if !Client::is_shell_tool(&perm_input.tool_name)
         && !Client::is_write_tool(&perm_input.tool_name)
+        && !Client::is_mcp_tool(&perm_input.tool_name)
     {
-        // Don't output anything - let normal prompt show
         return;
     }
 
+    // Extract the raw tool_input as a Map from the source JSON. Needed
+    // because ToolInputVariant is untagged and `Structured(ToolInput)`
+    // silently wins for MCP payloads (every ToolInput field is optional),
+    // erasing fields like `url` that block rules rely on. Re-parsing from
+    // the raw input sidesteps that.
+    let tool_input_map = serde_json::from_str::<serde_json::Value>(input)
+        .ok()
+        .and_then(|v| v.get("tool_input").cloned())
+        .and_then(|v| match v {
+            serde_json::Value::Object(m) => Some(m),
+            _ => None,
+        })
+        .unwrap_or_default();
+
     // Check if we should approve this (PermissionRequest is Claude-only)
-    if let Some(output) = handle_permission_request(&perm_input) {
+    if let Some(output) = handle_permission_request(&perm_input, &tool_input_map) {
         match serde_json::to_string(&output) {
             Ok(json) => println!("{json}"),
             Err(e) => {

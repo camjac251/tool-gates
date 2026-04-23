@@ -40,23 +40,38 @@ fn url_matches_domains(url: &str, domains: &[String]) -> bool {
     }
 }
 
-/// Extract URLs from tool_input (checks `url` field and `urls` array).
+/// Extract URLs from `tool_input`, recursing into nested objects and arrays.
+///
+/// MCP schemas vary: some put the URL at the top level (`url` / `urls`),
+/// some nest it under keys like `source.url`, `sources[].url`, `options.url`,
+/// `target`, `uri`, etc. Walking the tree means a block rule scoped by
+/// `block_domains` still fires on non-standard schema shapes.
 fn extract_urls(tool_input: &serde_json::Map<String, serde_json::Value>) -> Vec<String> {
     let mut urls = Vec::new();
-
-    if let Some(url) = tool_input.get("url").and_then(|v| v.as_str()) {
-        urls.push(url.to_string());
+    for value in tool_input.values() {
+        collect_url_strings(value, &mut urls);
     }
+    urls
+}
 
-    if let Some(arr) = tool_input.get("urls").and_then(|v| v.as_array()) {
-        for item in arr {
-            if let Some(s) = item.as_str() {
-                urls.push(s.to_string());
+/// Recursively walk a JSON value and push every http(s) URL string into `out`.
+fn collect_url_strings(value: &serde_json::Value, out: &mut Vec<String>) {
+    match value {
+        serde_json::Value::String(s) if s.starts_with("http://") || s.starts_with("https://") => {
+            out.push(s.clone());
+        }
+        serde_json::Value::Array(arr) => {
+            for item in arr {
+                collect_url_strings(item, out);
             }
         }
+        serde_json::Value::Object(map) => {
+            for v in map.values() {
+                collect_url_strings(v, out);
+            }
+        }
+        _ => {}
     }
-
-    urls
 }
 
 /// Check a tool call against block rules.
@@ -200,6 +215,51 @@ mod tests {
             input_with_urls(&["https://raw.githubusercontent.com/owner/repo/main/README.md"]);
         let result = check_tool_block("mcp__firecrawl__firecrawl_crawl", &input, &rules);
         assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_domain_block_nested_url_in_object() {
+        // Recursive URL extractor catches URLs nested under arbitrary keys
+        // (firecrawl_crawl: sources: [{type, url}], others: options.url, etc.)
+        let rules = vec![domain_rule("*firecrawl*", "blocked", &["github.com"])];
+        let input: serde_json::Map<String, serde_json::Value> = serde_json::from_str(
+            r#"{"sources":[{"type":"web","url":"https://github.com/owner/repo"}]}"#,
+        )
+        .unwrap();
+        let result = check_tool_block("mcp__firecrawl__firecrawl_crawl", &input, &rules);
+        assert!(
+            result.is_some(),
+            "nested URL under sources[].url should still match the domain block"
+        );
+    }
+
+    #[test]
+    fn test_domain_block_nested_url_under_alternate_key() {
+        // Non-`url` field names still get matched when they carry a URL
+        // (uri, target, link, etc.)
+        let rules = vec![domain_rule(
+            "*firecrawl*",
+            "blocked",
+            &["raw.githubusercontent.com"],
+        )];
+        let input: serde_json::Map<String, serde_json::Value> =
+            serde_json::from_str(r#"{"target":"https://raw.githubusercontent.com/a/b/main/c"}"#)
+                .unwrap();
+        let result = check_tool_block("mcp__firecrawl__firecrawl_scrape", &input, &rules);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_non_url_strings_not_treated_as_urls() {
+        // Plain strings that don't start with http(s):// must not be scanned
+        // (otherwise we'd get false positives on any string containing a
+        // domain-like substring).
+        let rules = vec![domain_rule("*firecrawl*", "blocked", &["github.com"])];
+        let input: serde_json::Map<String, serde_json::Value> =
+            serde_json::from_str(r#"{"note":"see github.com for details","selector":"body"}"#)
+                .unwrap();
+        let result = check_tool_block("mcp__firecrawl__firecrawl_scrape", &input, &rules);
+        assert!(result.is_none());
     }
 
     // === Default block rules exercised end-to-end ===

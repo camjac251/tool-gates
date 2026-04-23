@@ -38,6 +38,7 @@ A hook for [Claude Code](https://code.claude.com/docs/en/hooks) and [Gemini CLI]
 | **Security Reminders**   | Scans Write/Edit content for 26 anti-patterns (secrets, XSS, injection, etc.) across 3 tiers |
 | **Tool Blocking**        | Configurable rules to block tools (Glob, Grep, and firecrawl/ref/exa MCP calls to GitHub) with domain filtering |
 | **Skill Auto-Approval**  | Auto-approve Skill tool calls based on project directory conditions. No external hook scripts needed  |
+| **MCP Accept-Edits Approval** | Auto-approve named MCP tools when the session is in `acceptEdits` mode. Fills the gap Claude Code leaves open (MCP tools ignore permission mode natively) |
 | **Configuration**        | `~/.config/tool-gates/config.toml` for feature toggles, custom block rules, and file guard extensions  |
 | **Health Check**         | `tool-gates doctor` verifies config, hooks, cache files, and flags legacy remnants                     |
 | **Fast**                 | Static native binary, no interpreter overhead                                                          |
@@ -174,6 +175,8 @@ eslint --fix src/                 # Linting with fix
 - Git operations: `git push`, `git commit`
 - Deletions: `rm`, `mv`
 - Blocked commands: `rm -rf /` still denied
+
+**Extending acceptEdits to MCP tools.** Claude Code's `acceptEdits` mode does not extend to MCP tools natively -- every MCP tool's internal permission check returns passthrough regardless of mode. tool-gates fills the gap: declare `[[accept_edits_mcp]]` rules in `config.toml` and the named MCP tools auto-allow only when the session is in `acceptEdits`. See the [MCP Accept-Edits Approval](#mcp-accept-edits-approval) configuration section below.
 
 ### Auto Mode
 
@@ -834,6 +837,42 @@ Auto-approve Skill tool calls based on configurable rules. Supports `~` expansio
 | `if_project_has` | Project directory must contain one of these files/directories |
 | `if_project_under` | Project directory must be at or under one of these paths |
 | *(no conditions)* | Skill is auto-approved unconditionally |
+
+### MCP Accept-Edits Approval
+
+```toml
+[[accept_edits_mcp]]
+tool = "mcp__serena__replace_symbol_body"   # exact tool name
+
+[[accept_edits_mcp]]
+tool = "mcp__serena__*"                      # all tools on a server
+reason = "Symbol edits batched through acceptEdits"
+
+[[accept_edits_mcp]]
+tool = "mcp__playwright__browser_click"
+if_project_under = ["~/projects/trusted"]    # scope to a directory tree
+
+[[accept_edits_mcp]]
+tool = "*firecrawl*"                          # matches Claude (mcp__) and Gemini (mcp_) namespaces
+if_project_has = [".firecrawl-ok"]
+```
+
+Auto-approve MCP tool calls **only when the session is in `acceptEdits` mode**. In any other mode the rules are inert and the MCP tool falls through to whatever `permissions.allow` in `settings.json` decides. Directory conditions and glob matching are identical to `auto_approve_skills`.
+
+**Why this exists.** Claude Code's acceptEdits only natively auto-approves Edit/Write/NotebookEdit, Read (in allowed dirs), and a small fixed Bash set (`mkdir, touch, rm, rmdir, mv, cp, sed`). MCP tools ignore permission mode entirely -- their internal `checkPermissions` always returns passthrough, so acceptEdits gains them nothing. This config surface is the tool-gates extension: "prompt me normally, batch me through in acceptEdits" for named MCP tools.
+
+**Safety.** Block rules (e.g. the default firecrawl/ref/exa GitHub-URL blocks) run before these allow rules, so `[[accept_edits_mcp]]` cannot unlock a blocked tool.
+
+**Substring-glob sharp edge.** `"*serena*"` is a pure substring match, so it will also catch unrelated servers whose name merely contains `serena` (e.g. `mcp__my-serenity__*`). For cross-namespace coverage of one specific server across Claude (`mcp__`) and Gemini (`mcp_`) prefixes, prefer pairing `mcp__serena*` with `mcp_serena*`.
+
+**Reason field asymmetry.** `reason` only surfaces on the main-thread PreToolUse path. On the subagent PermissionRequest path, the `allow` wire format has no reason slot (`PermissionRequestDecision::Allow` carries only `updatedInput` and `updatedPermissions`), so a custom reason is silently dropped there.
+
+| Condition | Description |
+|-----------|-------------|
+| `tool` | MCP tool name. Exact (`mcp__serena__find_symbol`), prefix (`mcp__serena*`), suffix (`*_scrape`), or contains (`*serena*` — pure substring match, see sharp-edge note above) |
+| `reason` | Optional approval message shown to the AI assistant (main-thread only; silently dropped for subagents) |
+| `if_project_has` | Project directory must contain one of these files/directories |
+| `if_project_under` | Project directory must be at or under one of these paths |
 
 ### Cache
 
