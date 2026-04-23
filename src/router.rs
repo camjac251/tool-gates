@@ -114,6 +114,21 @@ static REDIRECT_RE: LazyLock<Regex> = LazyLock::new(|| {
 static AMP_REDIRECT_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"&>\s*([^\s]+)").expect("AMP_REDIRECT_RE must compile"));
 
+/// `| head` / `| tail` pipe pattern (hard deny).
+/// Captures the offending segment up to the next pipe/and/or/semicolon boundary so
+/// the deny message can echo what triggered the block. Streaming `tail -f` / `-F`
+/// is handled by a secondary check before denying. The optional `&` after `|`
+/// catches bash's stderr-combining `|&` form (equivalent to `2>&1 |`) so it
+/// can't bypass the rule.
+static HEAD_TAIL_PIPE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\|&?\s*(head|tail)\b[^|&;]*").expect("HEAD_TAIL_PIPE_RE must compile")
+});
+
+/// Streaming-tail exception: `| tail -f` / `| tail -F` (and the `|&` variant)
+/// watches a growing file. Legitimate through the Monitor tool, so not denied.
+static TAIL_STREAM_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^\|&?\s*tail\s+-[fF]\b").expect("TAIL_STREAM_RE must compile"));
+
 /// Check a bash command string and return the appropriate hook output.
 ///
 /// Handles compound commands (&&, ||, |, ;) by checking each command
@@ -133,6 +148,12 @@ pub fn check_command(command_string: &str) -> HookOutput {
 fn check_command_for_session(command_string: &str, session_id: &str) -> HookOutput {
     if command_string.trim().is_empty() {
         return HookOutput::no_opinion();
+    }
+
+    // Hard-deny raw-string patterns (e.g. `| head` / `| tail` pipes) come first:
+    // they have no legitimate use case and never fall through to ask/allow.
+    if let Some(output) = check_hard_deny_patterns(command_string) {
+        return output;
     }
 
     // Check for patterns at the raw string level
@@ -368,6 +389,9 @@ pub fn check_command_with_settings_and_session(
     // which is reasoning-blind to tool-gates' rationale. Hard-ask patterns
     // (pipe-to-shell, eval) have no legitimate use case and belong in the
     // deterministic safety floor, so promote them to deny instead of ask.
+    if let Some(output) = check_hard_deny_patterns(command_string) {
+        return output;
+    }
     let (hard_ask, soft_ask) = check_raw_string_patterns(command_string);
     if let Some(result) = hard_ask {
         if is_auto_mode(permission_mode) {
@@ -645,8 +669,12 @@ fn check_command_expanded(command_string: &str, cwd: &str, permission_mode: &str
         return HookOutput::no_opinion();
     }
 
-    // First do raw string security checks. Hard-ask patterns promote to deny
-    // under auto mode (see `check_command_with_settings_and_session` for rationale).
+    // First do raw string security checks. Hard-deny patterns short-circuit;
+    // hard-ask patterns promote to deny under auto mode (see
+    // `check_command_with_settings_and_session` for rationale).
+    if let Some(output) = check_hard_deny_patterns(command_string) {
+        return output;
+    }
     let (hard_ask, soft_ask) = check_raw_string_patterns(command_string);
     if let Some(output) = hard_ask {
         if is_auto_mode(permission_mode) {
@@ -838,6 +866,58 @@ fn strip_comments(s: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+/// Hard-deny raw-string patterns: no ask tier, no settings override, no mode carve-out.
+///
+/// These patterns have no legitimate shell use because tool-gates (and its host
+/// harness) already expose safer alternatives. Toggle off via
+/// `[features] head_tail_pipe_block = false` in `~/.config/tool-gates/config.toml`
+/// for users who want the old ask-or-allow behavior.
+fn check_hard_deny_patterns(command_string: &str) -> Option<HookOutput> {
+    check_hard_deny_patterns_with_features(command_string, &crate::config::get().features)
+}
+
+/// Feature-injected variant of `check_hard_deny_patterns`. Lets tests exercise
+/// the toggle path without touching the process-global `OnceLock<Config>`.
+fn check_hard_deny_patterns_with_features(
+    command_string: &str,
+    features: &crate::config::Features,
+) -> Option<HookOutput> {
+    if features.head_tail_pipe_block {
+        if let Some(output) = check_head_tail_pipe(command_string) {
+            return Some(output);
+        }
+    }
+
+    None
+}
+
+/// Deny `| head` / `| tail` pipes. Streaming `tail -f` / `-F` is allowed.
+fn check_head_tail_pipe(command_string: &str) -> Option<HookOutput> {
+    // Strip comments and quoted strings so `rg 'foo | head bar' file.txt` is safe.
+    let stripped = strip_comments(command_string);
+    let unquoted = strip_quoted_strings(&stripped);
+
+    if !unquoted.contains('|') {
+        return None;
+    }
+
+    for cap in HEAD_TAIL_PIPE_RE.find_iter(&unquoted) {
+        let segment = cap.as_str();
+        if TAIL_STREAM_RE.is_match(segment) {
+            continue;
+        }
+        let trimmed = segment.trim();
+        return Some(HookOutput::deny(&format!(
+            "Forbidden pattern: `{trimmed}`. Cap stdout with one of:\n  \
+             - Bash tool args: `max_output: N` (head semantics) or `output_tail: true` (tail semantics)\n  \
+             - Native limits: `rg -m N`, `fd --max-results N`, `bat -r START:END`\n  \
+             - Streaming: Monitor with `tail -f` / `-F` (the only legitimate tail usage)\n\
+             Rerun without the `| head` / `| tail` pipe."
+        )));
+    }
+    None
 }
 
 /// Check raw string patterns before parsing.
@@ -3018,6 +3098,150 @@ mod tests {
         }
 
         #[test]
+        fn test_head_tail_pipe_denies() {
+            // `| head -N` and `| tail -N` are hard-denied: tool-gates exposes
+            // `max_output` / `output_tail` Bash args and native `rg -m N` /
+            // `bat -r` limits that the agent should use instead.
+            for cmd in [
+                "ls | head",
+                "ls | head -5",
+                "cat big.log | tail -20",
+                "find . -type f | head -100",
+                "rg pattern src/ | head -n 3",
+                "git log --oneline | tail -50",
+                "sort file.txt |head -10",
+                "echo a; ls | head -5",
+            ] {
+                let result = check_command(cmd);
+                assert_eq!(get_decision(&result), "deny", "Failed for: {cmd}");
+                let reason = get_reason(&result);
+                assert!(
+                    reason.contains("Forbidden pattern") && reason.contains("max_output"),
+                    "Missing deny rationale for: {cmd}\ngot: {reason}"
+                );
+            }
+        }
+
+        #[test]
+        fn test_tail_streaming_allowed() {
+            // `tail -f` / `-F` is the only legitimate tail-pipe usage (log
+            // watching via the Monitor tool). Must not trigger the head/tail
+            // deny. Some of these flow through to gate-level ask/allow, which
+            // is fine -- the only requirement is that the deny path doesn't fire.
+            for cmd in [
+                "tail -f /var/log/app.log",
+                "tail -F /var/log/app.log",
+                "cat input | tail -f /tmp/out",
+                "journalctl -u myservice | tail -f",
+            ] {
+                let result = check_command(cmd);
+                assert_ne!(
+                    get_decision(&result),
+                    "deny",
+                    "tail streaming must not be denied: {cmd}"
+                );
+            }
+        }
+
+        #[test]
+        fn test_head_tail_pipe_not_triggered_by_quotes() {
+            // `| head` or `| tail` inside a quoted string is a literal pattern
+            // passed to another tool (e.g. a grep argument), not a shell pipe.
+            for cmd in [
+                "rg '| head' file.txt",
+                "rg \"pattern | tail -5\" src/",
+                "echo 'cat x | head -3'",
+            ] {
+                let result = check_command(cmd);
+                assert_ne!(
+                    get_decision(&result),
+                    "deny",
+                    "Quoted literal must not trigger head/tail deny: {cmd}"
+                );
+            }
+        }
+
+        #[test]
+        fn test_head_tail_pipe_not_triggered_without_pipe() {
+            // Bare `head` / `tail` without an upstream pipe are ordinary reads.
+            // Gate-level rules may still ask, but the hard-deny must not fire.
+            for cmd in ["head file.txt", "tail -n 20 README.md"] {
+                let result = check_command(cmd);
+                assert_ne!(
+                    get_decision(&result),
+                    "deny",
+                    "Non-pipe head/tail must not trigger deny: {cmd}"
+                );
+            }
+        }
+
+        #[test]
+        fn test_head_tail_stderr_pipe_denies() {
+            // Bash `|&` is shorthand for `2>&1 |` (stderr + stdout combined
+            // into the next command's stdin). Must still be caught by the
+            // head/tail deny rule -- otherwise the rule is one regex trick
+            // away from being bypassed.
+            for cmd in [
+                "cargo build |& head -20",
+                "npm test |& tail -50",
+                "make 2>/dev/null |&head -5",
+            ] {
+                let result = check_command(cmd);
+                assert_eq!(get_decision(&result), "deny", "Failed for: {cmd}");
+            }
+        }
+
+        #[test]
+        fn test_tail_streaming_with_stderr_pipe_allowed() {
+            // `|& tail -f` is legitimate for watching merged stderr+stdout
+            // streams (e.g. build output). Must not trigger the deny.
+            for cmd in ["cargo watch |& tail -f", "make build |& tail -F"] {
+                let result = check_command(cmd);
+                assert_ne!(
+                    get_decision(&result),
+                    "deny",
+                    "Streaming `|& tail -f` must not be denied: {cmd}"
+                );
+            }
+        }
+
+        #[test]
+        fn test_head_tail_pipe_toggle_disables_deny() {
+            // With the feature toggled off, the head/tail pipe check must be
+            // inert. Exercises the runtime toggle path (not just config parse).
+            use crate::config::Features;
+            let off = Features {
+                head_tail_pipe_block: false,
+                ..Features::default()
+            };
+            for cmd in ["ls | head -5", "cat log | tail -20", "find . | head"] {
+                assert!(
+                    check_hard_deny_patterns_with_features(cmd, &off).is_none(),
+                    "Toggle-off must suppress deny for: {cmd}"
+                );
+            }
+        }
+
+        #[test]
+        fn test_head_tail_pipe_toggle_on_denies() {
+            // Sanity: toggle on -> deny fires. Guards against a future refactor
+            // accidentally decoupling the toggle from the check.
+            use crate::config::Features;
+            let on = Features::default();
+            assert!(on.head_tail_pipe_block);
+            let output = check_hard_deny_patterns_with_features("ls | head -5", &on)
+                .expect("toggle-on must produce a deny");
+            assert!(
+                output
+                    .reason
+                    .as_deref()
+                    .unwrap_or("")
+                    .contains("Forbidden pattern"),
+                "Expected deny rationale in reason"
+            );
+        }
+
+        #[test]
         fn test_command_substitution_dangerous() {
             for cmd in [
                 "echo $(rm file.txt)",
@@ -3598,7 +3822,10 @@ mod tests {
 
         #[test]
         fn test_pipeline_read_only() {
-            let result = check_command("gh pr list | head -10");
+            // Pipe between two read-only commands. Avoids `| head` / `| tail`
+            // because the head/tail deny rule (see `check_head_tail_pipe`) would
+            // override at the raw-string stage before compound analysis runs.
+            let result = check_command("ls -la | sort");
             assert_eq!(get_decision(&result), "allow");
         }
 

@@ -302,6 +302,8 @@ Claude Code also strips broad "allow" rules from `settings.json` on auto mode en
 
 Before AST parsing, `router.rs` runs raw string checks on the command (after stripping comments). These catch patterns like pipe-to-shell (`| bash`), `eval`, `source`, `xargs rm`, destructive `find`/`fd`, dangerous command substitution, semicolon injection, and output redirection. See `check_raw_string_patterns()` in `router.rs` for the full list.
 
+A separate pre-parse pass (`check_hard_deny_patterns()` in `router.rs`) handles feature-toggleable hard-deny patterns. Today that's `| head` / `| tail` pipes (including the `|&` stderr-combining form), gated on `features.head_tail_pipe_block`. Runs before `check_raw_string_patterns` in all three entry points (`check_command_for_session`, `check_command_with_settings_and_session`, `check_command_expanded`).
+
 ## Gate Rules
 
 Gate rules are defined declaratively in `rules/*.toml`. Each rule has a `reason` field explaining why it asks/blocks. Read the TOML files for complete coverage. They are the source of truth.
@@ -563,13 +565,27 @@ User configuration lives at `~/.config/tool-gates/config.toml`. All sections are
 
 ```toml
 [features]
-bash_gates = true    # Enable Bash command gate engine (default: true)
-file_guards = true   # Enable symlink guards for Read/Write/Edit (default: true)
-hints = true         # Enable modern CLI hints, e.g. cat->bat, grep->rg, etc. (default: true)
-security_reminders = true  # Scan Write/Edit for security anti-patterns (default: true)
+bash_gates = true            # Enable Bash command gate engine (default: true)
+file_guards = true           # Enable symlink guards for Read/Write/Edit (default: true)
+hints = true                 # Enable modern CLI hints, e.g. cat->bat, grep->rg, etc. (default: true)
+security_reminders = true    # Scan Write/Edit for security anti-patterns (default: true)
+head_tail_pipe_block = true  # Deny `| head -N` / `| tail -N` pipes (default: true)
 ```
 
 Set any to `false` to disable that subsystem entirely.
+
+### Head/Tail Pipe Block
+
+`head_tail_pipe_block` denies `| head` and `| tail` pipes so the agent caps output at the source with the Bash tool's `max_output` / `output_tail` args, or with native limits like `rg -m N`, `fd --max-results N`, and `bat -r START:END`, instead of truncating stdout after the fact.
+
+Carve-outs that do not trigger:
+
+- Streaming `| tail -f` / `| tail -F` (the Monitor tool's log-watching idiom)
+- Stderr-combining `|& tail -f` / `|& tail -F`
+- Quoted literals like `rg '| head' file.txt` where `| head` is a search pattern, not a shell pipe
+- No upstream pipe, e.g. `head file.txt` or `tail -n 20 README.md`
+
+Set the toggle to `false` to disable.
 
 ### Tool Blocking
 

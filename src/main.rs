@@ -1790,6 +1790,7 @@ fn handle_doctor_subcommand() {
                         ("file_guards", features.file_guards),
                         ("hints", features.hints),
                         ("security_reminders", features.security_reminders),
+                        ("head_tail_pipe_block", features.head_tail_pipe_block),
                     ]
                     .iter()
                     .filter(|(_, v)| *v)
@@ -1800,6 +1801,7 @@ fn handle_doctor_subcommand() {
                         ("file_guards", features.file_guards),
                         ("hints", features.hints),
                         ("security_reminders", features.security_reminders),
+                        ("head_tail_pipe_block", features.head_tail_pipe_block),
                     ]
                     .iter()
                     .filter(|(_, v)| !*v)
@@ -2152,7 +2154,10 @@ mod tests {
 
     #[test]
     fn test_integration_pipeline() {
-        let json = r#"{"tool_name": "Bash", "tool_input": {"command": "git log | head -10"}}"#;
+        // Verify a safe pipeline flows through to "allow". `| head` / `| tail`
+        // would be hard-denied by the head_tail_pipe_block feature, so use an
+        // unrelated read-only pipe here.
+        let json = r#"{"tool_name": "Bash", "tool_input": {"command": "git log | cat"}}"#;
         let output = simulate_hook(json);
         assert!(
             output.contains("allow"),

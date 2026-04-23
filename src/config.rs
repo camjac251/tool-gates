@@ -129,6 +129,10 @@ pub struct Features {
     pub hints: bool,
     /// Security anti-pattern scanning for Write/Edit content
     pub security_reminders: bool,
+    /// Block `| head -N` and `| tail -N` pipes (streaming `tail -f`/`-F` still allowed).
+    /// Forces callers to use native limits (`rg -m N`, `bat -r START:END`) or the
+    /// Bash tool's `max_output` / `output_tail` args instead of truncating via pipe.
+    pub head_tail_pipe_block: bool,
 }
 
 impl Default for Features {
@@ -138,6 +142,7 @@ impl Default for Features {
             file_guards: true,
             hints: true,
             security_reminders: true,
+            head_tail_pipe_block: true,
         }
     }
 }
@@ -522,6 +527,7 @@ mod tests {
         assert!(config.features.bash_gates);
         assert!(config.features.file_guards);
         assert!(config.features.hints);
+        assert!(config.features.head_tail_pipe_block);
         assert_eq!(config.cache.ttl_days, 7);
     }
 
@@ -712,6 +718,24 @@ hints = false
         let config: Config = toml::from_str(toml).unwrap();
         assert!(!config.features.hints);
         assert!(config.features.bash_gates); // others keep defaults
+    }
+
+    #[test]
+    fn test_head_tail_pipe_block_default_enabled() {
+        let config = Config::default();
+        assert!(config.features.head_tail_pipe_block);
+    }
+
+    #[test]
+    fn test_head_tail_pipe_block_toggle_off() {
+        let toml = r#"
+[features]
+head_tail_pipe_block = false
+"#;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert!(!config.features.head_tail_pipe_block);
+        assert!(config.features.bash_gates); // others keep defaults
+        assert!(config.features.security_reminders);
     }
 
     #[test]

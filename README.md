@@ -36,6 +36,7 @@ A hook for [Claude Code](https://code.claude.com/docs/en/hooks) and [Gemini CLI]
 | **400+ Commands**        | 13 specialized gates with comprehensive coverage                                                       |
 | **File Guards**          | Blocks symlinked AI config files (CLAUDE.md, .cursorrules, etc.) to prevent confused reads/edits       |
 | **Security Reminders**   | Scans Write/Edit content for 26 anti-patterns (secrets, XSS, injection, etc.) across 3 tiers |
+| **Head/Tail Pipe Block** | Denies `\| head` / `\| tail` pipes so stdout is capped at the source via `max_output` / `rg -m N` / `bat -r` instead |
 | **Tool Blocking**        | Configurable rules to block tools (Glob, Grep, and firecrawl/ref/exa MCP calls to GitHub) with domain filtering |
 | **Skill Auto-Approval**  | Auto-approve Skill tool calls based on project directory conditions. No external hook scripts needed  |
 | **MCP Accept-Edits Approval** | Auto-approve named MCP tools when the session is in `acceptEdits` mode. Fills the gap Claude Code leaves open (MCP tools ignore permission mode natively) |
@@ -674,6 +675,7 @@ source ~/.bashrc                    # ask - sourcing script
 echo $(rm -rf /tmp/*)               # ask - dangerous substitution
 find . | xargs rm                   # ask - xargs to rm
 echo "data" > /etc/passwd           # ask - output redirection
+ls | head -20                       # deny - cap with max_output/rg -m/bat -r
 ```
 
 ### Compound Command Handling
@@ -734,11 +736,25 @@ All configuration is in `~/.config/tool-gates/config.toml`. The file is optional
 
 ```toml
 [features]
-bash_gates = true          # AST-based Bash command gating (default: true)
-file_guards = true         # Symlink guard for AI config files (default: true)
-hints = true               # Modern CLI hints, e.g. cat->bat, grep->rg, etc. (default: true)
-security_reminders = true  # Scan Write/Edit for security anti-patterns (default: true)
+bash_gates = true            # AST-based Bash command gating (default: true)
+file_guards = true           # Symlink guard for AI config files (default: true)
+hints = true                 # Modern CLI hints, e.g. cat->bat, grep->rg, etc. (default: true)
+security_reminders = true    # Scan Write/Edit for security anti-patterns (default: true)
+head_tail_pipe_block = true  # Deny `| head -N` / `| tail -N` pipes (default: true)
 ```
+
+### Head/Tail Pipe Block
+
+`head_tail_pipe_block` denies `| head` and `| tail` pipes so the agent caps output at the source with the Bash tool's `max_output` / `output_tail` args, or with native limits like `rg -m N`, `fd --max-results N`, and `bat -r START:END`, instead of truncating stdout after the fact.
+
+Carve-outs that do not trigger:
+
+- **Streaming** `| tail -f` / `| tail -F` (the Monitor tool's log-watching idiom)
+- **Stderr-combining** `|& tail -f` / `|& tail -F`
+- **Quoted literals** like `rg '| head' file.txt` where `| head` is a search pattern, not a shell pipe
+- **No upstream pipe**, e.g. `head file.txt` or `tail -n 20 README.md`
+
+Set the toggle to `false` to disable.
 
 ### Security Reminders
 
