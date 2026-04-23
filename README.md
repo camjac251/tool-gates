@@ -879,6 +879,8 @@ Auto-approve MCP tool calls **only when the session is in `acceptEdits` mode**. 
 
 **Safety.** Block rules (e.g. the default firecrawl/ref/exa GitHub-URL blocks) run before these allow rules, so `[[accept_edits_mcp]]` cannot unlock a blocked tool.
 
+**Don't double-gate with `permissions.ask`.** Claude Code evaluates `settings.json` `permissions.ask` *after* the PreToolUse hook returns. If the MCP tool also matches an ask rule there, that rule overrides the hook's `allow` and the prompt shows anyway (logged as `Hook returned 'allow' for X, but ask rule/safety check requires full permission pipeline`). For `[[accept_edits_mcp]]` to actually auto-approve a tool, remove that tool from your `permissions.ask` list. If you want unconditional approval regardless of mode, put it in `permissions.allow` instead.
+
 **Substring-glob sharp edge.** `"*serena*"` is a pure substring match, so it will also catch unrelated servers whose name merely contains `serena` (e.g. `mcp__my-serenity__*`). For cross-namespace coverage of one specific server across Claude (`mcp__`) and Gemini (`mcp_`) prefixes, prefer pairing `mcp__serena*` with `mcp_serena*`.
 
 **Reason field asymmetry.** `reason` only surfaces on the main-thread PreToolUse path. On the subagent PermissionRequest path, the `allow` wire format has no reason slot (`PermissionRequestDecision::Allow` carries only `updatedInput` and `updatedPermissions`), so a custom reason is silently dropped there.
