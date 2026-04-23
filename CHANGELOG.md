@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.16.0](https://github.com/camjac251/tool-gates/compare/v1.15.0...v1.16.0) - 2026-04-23
+
+### Added
+
+- *(router)* deny | head / | tail pipes with config toggle
+
+### Other
+
+- *(config)* warn about permissions.ask shadowing accept_edits_mcp
+
 ## [1.15.0](https://github.com/camjac251/tool-gates/compare/v1.14.0...v1.15.0) - 2026-04-23
 
 ### Added
