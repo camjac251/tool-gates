@@ -1,11 +1,11 @@
 ---
-description: Review and approve pending tool-gates permissions. Lists commands you've been manually approving with counts and suggested glob patterns, lets you multi-select which to permanently allow, and writes rules to settings.json.
-when_to_use: >
-  Use when the user wants to allow a command, approve a permission, stop getting prompted for a tool,
-  make an approval permanent, always allow something, auto-approve, or batch-approve pending approvals.
-  Triggers include "allow", "approve", "permission", "stop prompting", "always allow", "auto approve",
-  "pending approvals". NOT for manual settings.json edits, hooks, env vars, or MCP config (use
-  update-config).
+description: "Review and approve pending tool-gates permissions. Lists commands you've been manually approving (with counts and suggested glob patterns), lets you multi-select which to permanently allow, then writes rules to settings.json at user/project/local scope. NOT for manual settings.json edits, hooks, env vars, or MCP config (use update-config). NOT for scanning a transcript to build an allowlist from scratch (use fewer-permission-prompts)."
+when_to_use: >-
+  When the user wants to allow a command, approve a permission, stop getting
+  prompted for a tool, make an approval permanent, always allow something,
+  auto-approve, or batch-approve pending approvals. Triggers on 'allow',
+  'approve', 'permission', 'stop prompting', 'always allow', 'auto approve',
+  'pending approvals', 'let me always do this', 'stop asking me about'.
 argument-hint: "[--all]"
 ---
 
