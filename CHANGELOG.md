@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.16.1](https://github.com/camjac251/tool-gates/compare/v1.16.0...v1.16.1) - 2026-04-24
+
+### Fixed
+
+- *(router)* drop cc-enhanced-only refs from head/tail deny message
+
 ## [1.16.0](https://github.com/camjac251/tool-gates/compare/v1.15.0...v1.16.0) - 2026-04-23
 
 ### Added
