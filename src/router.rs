@@ -910,11 +910,9 @@ fn check_head_tail_pipe(command_string: &str) -> Option<HookOutput> {
         }
         let trimmed = segment.trim();
         return Some(HookOutput::deny(&format!(
-            "Forbidden pattern: `{trimmed}`. Cap stdout with one of:\n  \
-             - Bash tool args: `max_output: N` (head semantics) or `output_tail: true` (tail semantics)\n  \
-             - Native limits: `rg -m N`, `fd --max-results N`, `bat -r START:END`\n  \
-             - Streaming: Monitor with `tail -f` / `-F` (the only legitimate tail usage)\n\
-             Rerun without the `| head` / `| tail` pipe."
+            "`{trimmed}` blocked. Use `rg -m N`, `fd --max-results N`, or \
+             `bat -r START:END` to cap output at the source. Streaming \
+             `tail -f` / `tail -F` through the Monitor tool is fine."
         )));
     }
     None
@@ -3099,9 +3097,9 @@ mod tests {
 
         #[test]
         fn test_head_tail_pipe_denies() {
-            // `| head -N` and `| tail -N` are hard-denied: tool-gates exposes
-            // `max_output` / `output_tail` Bash args and native `rg -m N` /
-            // `bat -r` limits that the agent should use instead.
+            // `| head -N` and `| tail -N` are hard-denied: the agent should
+            // use native limits like `rg -m N`, `fd --max-results N`, or
+            // `bat -r START:END` to cap output at the source instead.
             for cmd in [
                 "ls | head",
                 "ls | head -5",
@@ -3116,7 +3114,7 @@ mod tests {
                 assert_eq!(get_decision(&result), "deny", "Failed for: {cmd}");
                 let reason = get_reason(&result);
                 assert!(
-                    reason.contains("Forbidden pattern") && reason.contains("max_output"),
+                    reason.contains("blocked") && reason.contains("rg -m"),
                     "Missing deny rationale for: {cmd}\ngot: {reason}"
                 );
             }
@@ -3232,11 +3230,7 @@ mod tests {
             let output = check_hard_deny_patterns_with_features("ls | head -5", &on)
                 .expect("toggle-on must produce a deny");
             assert!(
-                output
-                    .reason
-                    .as_deref()
-                    .unwrap_or("")
-                    .contains("Forbidden pattern"),
+                output.reason.as_deref().unwrap_or("").contains("blocked"),
                 "Expected deny rationale in reason"
             );
         }

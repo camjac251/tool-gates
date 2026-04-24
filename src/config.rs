@@ -130,8 +130,8 @@ pub struct Features {
     /// Security anti-pattern scanning for Write/Edit content
     pub security_reminders: bool,
     /// Block `| head -N` and `| tail -N` pipes (streaming `tail -f`/`-F` still allowed).
-    /// Forces callers to use native limits (`rg -m N`, `bat -r START:END`) or the
-    /// Bash tool's `max_output` / `output_tail` args instead of truncating via pipe.
+    /// Forces callers to use native limits (`rg -m N`, `fd --max-results N`,
+    /// `bat -r START:END`) to cap output at the source instead of truncating via pipe.
     pub head_tail_pipe_block: bool,
 }
 

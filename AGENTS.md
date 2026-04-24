@@ -576,7 +576,7 @@ Set any to `false` to disable that subsystem entirely.
 
 ### Head/Tail Pipe Block
 
-`head_tail_pipe_block` denies `| head` and `| tail` pipes so the agent caps output at the source with the Bash tool's `max_output` / `output_tail` args, or with native limits like `rg -m N`, `fd --max-results N`, and `bat -r START:END`, instead of truncating stdout after the fact.
+`head_tail_pipe_block` denies `| head` and `| tail` pipes so the agent caps output at the source with native limits like `rg -m N`, `fd --max-results N`, and `bat -r START:END` instead of truncating stdout after the fact.
 
 Carve-outs that do not trigger:
 
