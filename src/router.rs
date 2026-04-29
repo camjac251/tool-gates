@@ -2386,6 +2386,76 @@ mod tests {
             );
         }
 
+        /// Wrapper commands must defer like bare commands so the third
+        /// "Yes, and don't ask again for X" prompt button shows for
+        /// `pnpm <script>` shapes under interactive (non-auto) modes.
+        /// Without this the headline 1.6.0 prompt-UX win was missing for
+        /// the most common JS/TS command shapes.
+        #[test]
+        fn test_pnpm_script_defers_at_wire_level_under_default_mode() {
+            use std::fs;
+            use tempfile::TempDir;
+
+            let temp = TempDir::new().unwrap();
+            // Unknown program ensures the script body asks (so we exercise
+            // the wrapper's Ask -> Defer conversion). A gate-known safe tool
+            // like `eslint .` would auto-allow and skip the path.
+            let pkg = r#"{"name": "demo", "scripts": {"check": "mytool42 verify"}}"#;
+            fs::write(temp.path().join("package.json"), pkg).unwrap();
+
+            let cwd = temp.path().to_str().unwrap();
+            let result = check_command_with_settings("pnpm run check", cwd, "default");
+            assert_eq!(result.decision, PermissionDecision::Defer);
+            let json =
+                serde_json::to_string(&result.serialize(crate::models::Client::Claude)).unwrap();
+            assert!(
+                !json.contains("\"permissionDecision\""),
+                "Defer must omit permissionDecision so CC takes over: {json}"
+            );
+        }
+
+        /// `mise run <task>` mirrors the package.json wrapper path: defers
+        /// under interactive modes so the third prompt button appears.
+        #[test]
+        fn test_mise_task_defers_at_wire_level_under_default_mode() {
+            use std::fs;
+            use tempfile::TempDir;
+
+            let temp = TempDir::new().unwrap();
+            // Unknown program forces Ask at the body so we exercise the
+            // wrapper's Ask -> Defer conversion.
+            let mise_toml = r#"
+[tasks.check]
+run = "mytool42 verify"
+"#;
+            fs::write(temp.path().join("mise.toml"), mise_toml).unwrap();
+
+            let cwd = temp.path().to_str().unwrap();
+            let result = check_command_with_settings("mise run check", cwd, "default");
+            assert_eq!(result.decision, PermissionDecision::Defer);
+            let json =
+                serde_json::to_string(&result.serialize(crate::models::Client::Claude)).unwrap();
+            assert!(
+                !json.contains("\"permissionDecision\""),
+                "Defer must omit permissionDecision so CC takes over: {json}"
+            );
+        }
+
+        /// Auto mode keeps wrapper Ask explicit so the classifier path runs.
+        #[test]
+        fn test_pnpm_script_stays_ask_under_auto_mode() {
+            use std::fs;
+            use tempfile::TempDir;
+
+            let temp = TempDir::new().unwrap();
+            let pkg = r#"{"name": "demo", "scripts": {"check": "mytool42 verify"}}"#;
+            fs::write(temp.path().join("package.json"), pkg).unwrap();
+
+            let cwd = temp.path().to_str().unwrap();
+            let result = check_command_with_settings("pnpm run check", cwd, "auto");
+            assert_eq!(result.decision, PermissionDecision::Ask);
+        }
+
         /// Regression: package.json scripts must get the auto-mode hard-ask
         /// promotion. Mirrors mise task expansion behavior.
         #[test]
