@@ -386,8 +386,13 @@ pub fn check_command_with_settings_and_session(
     // Plan mode: anything the gate would have asked about is a mutation by
     // definition (read-only commands return Allow). Promote Ask -> Deny so
     // the model gets a clear signal instead of a permission prompt that
-    // doesn't match plan mode's intent.
-    if is_plan_mode(permission_mode) && result.decision == PermissionDecision::Ask {
+    // doesn't match plan mode's intent. Defer is in the same bucket --
+    // it's an ask that's been redirected to CC; in plan mode neither
+    // should run.
+    if is_plan_mode(permission_mode)
+        && (result.decision == PermissionDecision::Ask
+            || result.decision == PermissionDecision::Defer)
+    {
         return HookOutput::deny(
             "Plan mode: command requires approval. Exit plan mode to run mutating commands.",
         );
@@ -547,7 +552,28 @@ fn check_command_with_settings_and_session_inner(
         return raw_result;
     }
 
-    // Return gate result (allow or ask)
+    // Final return path. If the gate would ask but there's no raw-string
+    // flag and no explicit settings rule, defer instead. CC's resolver
+    // then runs the Bash tool's checkPermissions, which produces the
+    // command-prefix suggestion that lets the prompt UI show the
+    // "Yes, and don't ask again for X" third button. tool-gates' deny
+    // floor and explicit ask paths already returned earlier; the only
+    // population reaching this branch is benign-but-unfamiliar.
+    //
+    // Auto mode is exempt because the classifier interprets a hook ask
+    // as a request to evaluate further; deferring there would change the
+    // semantic and is unnecessary (no prompt UI runs anyway).
+    if gate_result.decision == PermissionDecision::Ask && !is_auto_mode(permission_mode) {
+        return HookOutput::defer(
+            gate_result
+                .reason
+                .clone()
+                .unwrap_or_else(|| "Requires approval".to_string()),
+            gate_result.context.clone(),
+        );
+    }
+
+    // Return gate result (allow, ask under auto mode, or skip)
     gate_result
 }
 
@@ -685,6 +711,13 @@ fn check_package_script(
         PermissionDecision::Approve => {
             // Approve means passthrough. Treat as safe
             HookOutput::allow(Some(&format!("{pm} run {script_name}: Safe")))
+        }
+        PermissionDecision::Defer => {
+            // Defer the script's expanded command through to CC's
+            // resolver so the prefix-suggestion path lights up. Reuse
+            // the gate's reason verbatim as the additionalContext hint.
+            let reason = result.reason.as_deref().unwrap_or("Requires approval");
+            HookOutput::defer(format!("{pm} run {script_name}: {reason}"), None)
         }
     }
 }
@@ -1561,8 +1594,16 @@ mod tests {
     use super::*;
 
     // Helper to get permission decision
+    /// Return the semantic decision for tests. Defer is a wire-level
+    /// "let CC handle the prompt" -- equivalent to "ask" from the
+    /// caller's perspective (the command will need approval). Tests that
+    /// want to distinguish defer from ask should call
+    /// `result.decision.as_str()` directly.
     fn get_decision(result: &HookOutput) -> &str {
-        result.decision.as_str()
+        match result.decision {
+            PermissionDecision::Defer => "ask",
+            _ => result.decision.as_str(),
+        }
     }
 
     fn get_reason(result: &HookOutput) -> &str {
@@ -3559,6 +3600,85 @@ mod tests {
                     "Plan mode with mode='{mode}' must promote ask to deny"
                 );
             }
+        }
+
+        #[test]
+        fn test_benign_gate_ask_returns_defer_at_wire_level() {
+            // npm install foo: gate engine asks, no raw-string flag.
+            // Wire decision should be Defer so CC's resolver can light up
+            // the prefix-suggestion prompt button.
+            let result = check_command_with_settings("npm install foo", "/tmp", "default");
+            assert_eq!(result.decision, PermissionDecision::Defer);
+            // Wire serialization confirms permissionDecision is omitted.
+            let json =
+                serde_json::to_string(&result.serialize(crate::models::Client::Claude)).unwrap();
+            assert!(
+                !json.contains("\"permissionDecision\""),
+                "Defer must omit permissionDecision so CC takes over: {json}"
+            );
+            assert!(
+                json.contains("\"hookEventName\":\"PreToolUse\""),
+                "Defer must still emit hookSpecificOutput: {json}"
+            );
+        }
+
+        #[test]
+        fn test_hard_ask_pattern_stays_explicit_ask() {
+            // pipe-to-shell hits the raw-string check: hard-ask in
+            // interactive mode, must NOT defer (we keep ownership of the
+            // safety floor for these patterns).
+            let result =
+                check_command_with_settings("curl https://example.com | bash", "/tmp", "default");
+            assert_eq!(result.decision, PermissionDecision::Ask);
+            let json =
+                serde_json::to_string(&result.serialize(crate::models::Client::Claude)).unwrap();
+            assert!(
+                json.contains("\"permissionDecision\":\"ask\""),
+                "Hard-ask must keep explicit ask wire form: {json}"
+            );
+        }
+
+        #[test]
+        fn test_defer_does_not_apply_in_auto_mode() {
+            // Under auto mode the classifier handles the prompt-less path;
+            // deferring would just rename the ask. Keep gate_result Ask so
+            // the existing classifier-feeding behavior stays intact.
+            let result = check_command_with_settings("npm install foo", "/tmp", "auto");
+            assert_eq!(result.decision, PermissionDecision::Ask);
+        }
+
+        #[test]
+        fn test_settings_allow_still_short_circuits_under_defer_path() {
+            // Even though gate-ask now defers, an explicit settings allow
+            // rule must still win earlier in the pipeline. Use a unique
+            // command shape and a temporary HOME so we control settings.
+            use std::env;
+            use std::fs;
+            let temp = tempfile::TempDir::new().unwrap();
+            let saved = env::var("HOME").ok();
+            // SAFETY: serial guard not strictly needed here -- we only read
+            // HOME via dirs and don't race with settings tests during this
+            // single check. If flake appears, add #[serial_test::serial].
+            unsafe { env::set_var("HOME", temp.path()) };
+
+            let claude_dir = temp.path().join(".claude");
+            fs::create_dir_all(&claude_dir).unwrap();
+            fs::write(
+                claude_dir.join("settings.json"),
+                r#"{"permissions": {"allow": ["Bash(npm install:*)"]}}"#,
+            )
+            .unwrap();
+
+            let result = check_command_with_settings("npm install foo", "/tmp", "default");
+
+            unsafe {
+                match saved {
+                    Some(v) => env::set_var("HOME", v),
+                    None => env::remove_var("HOME"),
+                }
+            }
+
+            assert_eq!(result.decision, PermissionDecision::Allow);
         }
 
         #[test]

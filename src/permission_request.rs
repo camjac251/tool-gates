@@ -298,7 +298,9 @@ fn output_to_decision(output: HookOutput) -> (Decision, Option<String>) {
     let decision = match output.decision {
         PermissionDecision::Allow | PermissionDecision::Approve => Decision::Allow,
         PermissionDecision::Deny => Decision::Block,
-        PermissionDecision::Ask => Decision::Ask,
+        // Defer is a wire-level "let CC handle it" -- semantically Ask
+        // for any caller deciding what to do next.
+        PermissionDecision::Ask | PermissionDecision::Defer => Decision::Ask,
     };
     (decision, output.reason)
 }

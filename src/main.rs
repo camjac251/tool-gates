@@ -448,8 +448,12 @@ fn handle_bash_pre_tool_use(hook_input: &HookInput, client: Client) {
     // Under auto mode, tool-gates "ask" does NOT surface a user prompt -- the
     // Claude Code classifier decides silently. Pending-queue entries there
     // represent classifier decisions, not human approvals, so skip tracking.
+    // Tracking fires for both Ask and Defer: in either case the user
+    // (or CC's resolver) is going to consider whether to approve, and a
+    // success means we should record the pattern for the pending queue.
     if client == Client::Claude
-        && output.decision == PermissionDecision::Ask
+        && (output.decision == PermissionDecision::Ask
+            || output.decision == PermissionDecision::Defer)
         && !hook_input.tool_use_id.is_empty()
         && !is_auto_mode(&hook_input.permission_mode)
     {

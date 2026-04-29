@@ -288,13 +288,22 @@ impl HookInput {
 /// This is the provider-agnostic decision type used by HookOutput.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PermissionDecision {
-    /// No opinion. Pass through to default behavior
+    /// No opinion. Pass through to default behavior.
     Approve,
-    /// Explicitly allowed
+    /// Explicitly allowed by tool-gates.
     Allow,
-    /// Requires user approval
+    /// Explicit ask. Tool-gates wants the prompt to fire and is overriding
+    /// CC's normal flow with an "ask" decision.
     Ask,
-    /// Blocked
+    /// Tool-gates would have asked but is letting CC's resolver decide.
+    /// Serialized as `hookSpecificOutput` with no `permissionDecision` so
+    /// CC continues into its normal pipeline (settings rules, then tool's
+    /// own checkPermissions). Lets the Bash tool's prefix-suggestion path
+    /// fire so the prompt shows the third "Yes, and don't ask again for X"
+    /// button. Used only when the gate has no security concern beyond
+    /// "this is unfamiliar".
+    Defer,
+    /// Blocked.
     Deny,
 }
 
@@ -304,6 +313,9 @@ impl PermissionDecision {
             Self::Approve => "approve",
             Self::Allow => "allow",
             Self::Ask => "ask",
+            // Defer carries no wire-level permissionDecision; the string
+            // form is internal-only and used for log lines.
+            Self::Defer => "defer",
             Self::Deny => "deny",
         }
     }
@@ -371,6 +383,19 @@ impl HookOutput {
         }
     }
 
+    /// Defer to Claude Code's normal resolver. Same context-passing as
+    /// `ask_with_context`, but the wire output omits `permissionDecision`
+    /// so CC's pipeline runs the tool's own checkPermissions and produces
+    /// prefix suggestions for the prompt UI.
+    pub fn defer(reason: impl Into<String>, context: Option<String>) -> Self {
+        Self {
+            decision: PermissionDecision::Defer,
+            reason: Some(reason.into()),
+            context,
+            updated_command: None,
+        }
+    }
+
     /// Return ask with a modified command (safer alternative)
     pub fn ask_with_updated_command(
         reason: &str,
@@ -416,7 +441,8 @@ impl HookOutput {
     /// Serialize to Claude Code wire format.
     ///
     /// Approve: `{"decision":"approve"}`
-    /// Others: `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow",...}}`
+    /// Defer:   `{"hookSpecificOutput":{"hookEventName":"PreToolUse",...}}` (no permissionDecision)
+    /// Others:  `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow",...}}`
     fn to_claude_json(&self) -> serde_json::Value {
         if self.decision == PermissionDecision::Approve {
             return serde_json::json!({ "decision": "approve" });
@@ -424,10 +450,17 @@ impl HookOutput {
 
         let mut hso = serde_json::Map::new();
         hso.insert("hookEventName".to_string(), serde_json::json!("PreToolUse"));
-        hso.insert(
-            "permissionDecision".to_string(),
-            serde_json::json!(self.decision.as_str()),
-        );
+
+        // Defer omits permissionDecision so CC's resolver continues into
+        // its normal flow. The Bash tool's checkPermissions still runs and
+        // produces the prefix-suggestion that lights up the third
+        // "Yes, and don't ask again for X" prompt button.
+        if self.decision != PermissionDecision::Defer {
+            hso.insert(
+                "permissionDecision".to_string(),
+                serde_json::json!(self.decision.as_str()),
+            );
+        }
 
         if let Some(ref reason) = self.reason {
             hso.insert(
@@ -459,9 +492,15 @@ impl HookOutput {
 
         let mut out = serde_json::Map::new();
 
-        // Map permission decision (Gemini uses "block" instead of "deny")
+        // Map permission decision (Gemini uses "block" instead of "deny").
+        // Defer is a Claude-only concept (Claude's resolver runs the
+        // tool's checkPermissions when the hook omits permissionDecision);
+        // Gemini's flow has no equivalent prefix-suggestion path, so a
+        // Defer collapses to "ask" on the Gemini side -- same end-user
+        // experience Gemini already has today for ask-tier commands.
         let decision = match self.decision {
             PermissionDecision::Deny => "block",
+            PermissionDecision::Defer => "ask",
             other => other.as_str(),
         };
         out.insert("decision".to_string(), serde_json::json!(decision));
