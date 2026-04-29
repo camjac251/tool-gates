@@ -13,14 +13,17 @@ use std::path::PathBuf;
 
 use crate::models::Decision;
 
-/// Hard TTL safety floor for tracked commands (24 hours).
+/// Hard TTL for tracked commands (24 hours).
 ///
-/// Tracked entries are normally cleaned up either by their PostToolUse
-/// correlation completing, or by `clean_foreign_sessions` when a new
-/// session_id appears. The 24h floor catches orphans where neither happened
-/// (e.g. session crashed mid-tool, prior tool-gates version with a buggy
-/// take). Long enough that a real session never crosses it on healthy
-/// PostToolUse flow.
+/// Healthy lifecycle: PostToolUse correlation removes the entry shortly
+/// after the tool finishes. The 24h floor catches orphans (session crashed
+/// mid-tool, prior tool-gates version with a buggy take). Long enough that
+/// a real session never crosses it on healthy flow, short enough that
+/// stale state self-recovers within a day.
+///
+/// Concurrent CC sessions share `tracking.json`. Sweeping by session_id
+/// would silently drop in-flight peers, so each entry stands alone until
+/// either its PostToolUse fires or the TTL expires.
 const DEFAULT_TTL_SECS: i64 = 24 * 60 * 60;
 
 /// Information about a command part (for breakdown display)
@@ -167,6 +170,52 @@ impl TrackingStore {
         Ok(result)
     }
 
+    /// Read the tracking store under a shared lock without rewriting it.
+    /// Use for diagnostics (`tool-gates doctor`) where bumping `tracking.json`'s
+    /// mtime would distort the cache-files-mtime line printed two sections
+    /// earlier in the same report. Stale entries are filtered in-memory but
+    /// not persisted; the next `with_exclusive_lock` call still does the
+    /// real cleanup.
+    pub fn with_shared_lock<F, R>(f: F) -> std::io::Result<R>
+    where
+        F: FnOnce(&TrackingStore) -> R,
+    {
+        let path = Self::path();
+
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let mut file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&path)?;
+
+        #[allow(clippy::incompatible_msrv)] // fs2 crate method, not std
+        file.lock_shared()?;
+
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+
+        let mut store: TrackingStore = if contents.is_empty() {
+            TrackingStore::default()
+        } else {
+            serde_json::from_str(&contents).unwrap_or_default()
+        };
+
+        // Filter expired entries in-memory only -- no rewrite.
+        store.clean_expired();
+
+        let result = f(&store);
+
+        #[allow(clippy::incompatible_msrv)] // fs2 crate method, not std
+        file.unlock()?;
+
+        Ok(result)
+    }
+
     /// Track a command by its tool_use_id
     pub fn track(&mut self, tool_use_id: &str, tracked: TrackedCommand) {
         self.entries.insert(tool_use_id.to_string(), tracked);
@@ -193,22 +242,11 @@ impl TrackingStore {
     pub fn clean_expired(&mut self) {
         self.entries.retain(|_, v| !v.is_expired());
     }
-
-    /// Drop entries that belong to a different session than the active one.
-    /// Empty `active` is a no-op so background paths without a session id
-    /// (e.g. `tool-gates pending list`) don't accidentally wipe everything.
-    pub fn clean_foreign_sessions(&mut self, active: &str) {
-        if active.is_empty() {
-            return;
-        }
-        self.entries.retain(|_, v| v.session_id == active);
-    }
 }
 
-/// Track a command that returned "ask" for later PostToolUse correlation.
-/// Sweeps any tracked entries from foreign sessions on the way in -- the
-/// 24h TTL is just a safety net; session-scoped cleanup is the primary
-/// mechanism.
+/// Track a command that returned "ask"/"defer" for later PostToolUse correlation.
+/// Concurrent sessions share the file safely: each entry stands alone until
+/// PostToolUse takes it or the 24h TTL clears it.
 pub fn track_ask_command(
     tool_use_id: &str,
     command: &str,
@@ -228,11 +266,7 @@ pub fn track_ask_command(
     );
 
     let tool_use_id = tool_use_id.to_string();
-    let active_session = session_id.to_string();
     if let Err(e) = TrackingStore::with_exclusive_lock(|store| {
-        // Sweep foreign sessions before adding. The 24h TTL is a fallback;
-        // session-scoped cleanup is the primary signal.
-        store.clean_foreign_sessions(&active_session);
         store.track(&tool_use_id, tracked);
     }) {
         eprintln!("Warning: Failed to save tracking file: {e}");
@@ -318,38 +352,13 @@ mod tests {
     }
 
     #[test]
-    fn test_clean_foreign_sessions_keeps_active_drops_others() {
+    fn test_concurrent_sessions_coexist_in_store() {
+        // Two CC sessions can share tracking.json without clobbering each
+        // other. With the per-call session sweep removed, each entry stands
+        // alone until its PostToolUse fires or the 24h TTL expires.
         let mut store = TrackingStore::default();
 
-        let active_cmd = TrackedCommand::new(
-            "ls".to_string(),
-            vec![],
-            vec![],
-            "/tmp".to_string(),
-            "/tmp".to_string(),
-            "active_session".to_string(),
-        );
-        let foreign_cmd = TrackedCommand::new(
-            "rm".to_string(),
-            vec![],
-            vec![],
-            "/tmp".to_string(),
-            "/tmp".to_string(),
-            "old_session".to_string(),
-        );
-        store.track("toolu_active", active_cmd);
-        store.track("toolu_foreign", foreign_cmd);
-
-        store.clean_foreign_sessions("active_session");
-
-        assert!(store.contains("toolu_active"));
-        assert!(!store.contains("toolu_foreign"));
-    }
-
-    #[test]
-    fn test_clean_foreign_sessions_empty_active_is_noop() {
-        let mut store = TrackingStore::default();
-        let cmd = TrackedCommand::new(
+        let session_a_cmd = TrackedCommand::new(
             "ls".to_string(),
             vec![],
             vec![],
@@ -357,13 +366,19 @@ mod tests {
             "/tmp".to_string(),
             "session_a".to_string(),
         );
-        store.track("toolu_a", cmd);
-
-        // Empty active session must not wipe entries (e.g. `tool-gates pending list`
-        // runs without a session_id and shouldn't trash an in-flight track).
-        store.clean_foreign_sessions("");
+        let session_b_cmd = TrackedCommand::new(
+            "rm".to_string(),
+            vec![],
+            vec![],
+            "/tmp".to_string(),
+            "/tmp".to_string(),
+            "session_b".to_string(),
+        );
+        store.track("toolu_a", session_a_cmd);
+        store.track("toolu_b", session_b_cmd);
 
         assert!(store.contains("toolu_a"));
+        assert!(store.contains("toolu_b"));
     }
 
     #[test]

@@ -224,15 +224,6 @@ fn reprobed() -> &'static std::sync::Mutex<HashMap<String, bool>> {
     REPROBED_TOOLS.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
 }
 
-/// Re-probe a single tool with a live `which` check.
-///
-/// Used as a self-healing fallback: if the cached tool detection says a
-/// modern alternative is unavailable but the user installed it after the
-/// last full refresh, the next hint that matches that tool re-checks once
-/// and updates state. Within a single process the answer is memoized in
-/// `REPROBED_TOOLS`. We also try to merge the result into the on-disk
-/// cache so subsequent processes see it without another probe; failures
-/// are non-fatal (best-effort).
 pub fn refresh_tool(tool: &str) -> bool {
     {
         let map = reprobed().lock().expect("reprobed mutex poisoned");
@@ -241,20 +232,45 @@ pub fn refresh_tool(tool: &str) -> bool {
         }
     }
 
-    let live = check_tool_available(tool);
+    // Probe both canonical and Debian/Ubuntu alias names. Without this,
+    // `refresh_tool("bat")` runs `which bat` on Ubuntu where the binary is
+    // `batcat`, returns false, and `is_available("bat")` keeps reporting
+    // missing even though the user just installed the package.
+    let names: &[&str] = match tool {
+        "bat" => &["bat", "batcat"],
+        "fd" => &["fd", "fdfind"],
+        "rg" => &["rg", "ripgrep"],
+        "sg" => &["sg", "ast-grep"],
+        "tldr" => &["tldr", "tealdeer"],
+        other => &[other],
+    };
+
+    let mut any_live = false;
+    let mut results: Vec<(String, bool)> = Vec::with_capacity(names.len());
+    for name in names {
+        let live = check_tool_available(name);
+        if live {
+            any_live = true;
+        }
+        results.push(((*name).to_string(), live));
+    }
 
     {
         let mut map = reprobed().lock().expect("reprobed mutex poisoned");
-        map.insert(tool.to_string(), live);
+        for (name, live) in &results {
+            map.insert(name.clone(), *live);
+        }
     }
 
-    // Best-effort persist so the next process inherits the fresh answer.
+    // Best-effort persist so the next process inherits the fresh answers.
     if let Some(mut cache) = load_cache() {
-        cache.tools.insert(tool.to_string(), live);
+        for (name, live) in &results {
+            cache.tools.insert(name.clone(), *live);
+        }
         let _ = save_cache(&cache);
     }
 
-    live
+    any_live
 }
 
 /// True if the in-process re-probe map already has a positive answer for

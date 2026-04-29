@@ -50,14 +50,14 @@ pub fn handle_post_tool_use(input: &PostToolUseInput) -> Option<PostToolUseOutpu
     None
 }
 
-/// Returns true if `command` would be allowed by the user's settings.json,
-/// considering both deny precedence and the most-specific ask/allow resolver.
-/// Used to filter pending entries that are already redundant with existing
-/// rules.
 fn command_already_allowed_by_settings(command: &str, cwd: &str) -> bool {
     let settings = crate::settings::Settings::load(cwd);
+    // Use the subcommand-aware check so compound commands like
+    // `cd /tmp && npm install foo` match a `Bash(npm install:*)` rule.
+    // PreToolUse uses the same resolver; the filter agrees with PreToolUse
+    // about what "settings already cover this" means.
     matches!(
-        settings.check_command(command),
+        crate::router::check_settings_with_subcommands(&settings, command),
         crate::settings::SettingsDecision::Allow
     )
 }
@@ -118,14 +118,31 @@ mod tests {
         assert!(handle_post_tool_use(&input).is_none());
     }
 
+    #[serial_test::serial]
     #[test]
     fn test_command_already_allowed_by_settings_no_settings() {
         // No settings file present anywhere -> never allowed.
         // Use /tmp as cwd; command shape doesn't matter.
+        // #[serial] mutex: HOME-mutating peer tests in this module would
+        // otherwise race and leak their tempdir's settings.json into our
+        // Settings::load call (it falls back to dirs::home_dir()).
+        use std::env;
+        let saved = env::var("HOME").ok();
+        let bare = tempfile::TempDir::new().unwrap();
+        // SAFETY: serialized via #[serial]; no concurrent env access.
+        unsafe { env::set_var("HOME", bare.path()) };
+
         assert!(!command_already_allowed_by_settings(
             "npm install foo",
             "/tmp"
         ));
+
+        unsafe {
+            match saved {
+                Some(v) => env::set_var("HOME", v),
+                None => env::remove_var("HOME"),
+            }
+        }
     }
 
     #[serial_test::serial]

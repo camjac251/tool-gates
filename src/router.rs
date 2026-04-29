@@ -298,7 +298,10 @@ fn check_subcommands_denied(settings: &Settings, command_string: &str) -> bool {
 /// (e.g. `echo`, `head`, `true`), it counts as covered rather than NoMatch.
 /// This lets gate-safe commands participate in compound settings approval
 /// without needing explicit settings rules for every safe utility.
-fn check_settings_with_subcommands(settings: &Settings, command_string: &str) -> SettingsDecision {
+pub(crate) fn check_settings_with_subcommands(
+    settings: &Settings,
+    command_string: &str,
+) -> SettingsDecision {
     // Try full string first (handles exact patterns and simple commands)
     let full_result = settings.check_command_excluding_deny(command_string);
     if full_result != SettingsDecision::NoMatch {
@@ -640,6 +643,11 @@ fn check_mise_task(task_name: &str, cwd: &str, permission_mode: &str) -> HookOut
         } else {
             ask_reasons.join("; ")
         };
+        // Match the top-level defer behavior so the third "Yes, and don't
+        // ask again" prompt button shows for `mise <task>` shapes too.
+        if !is_auto_mode(permission_mode) {
+            return HookOutput::defer(combined, None);
+        }
         return HookOutput::ask(&combined);
     }
 
@@ -702,6 +710,12 @@ fn check_package_script(
             }
 
             let reason = result.reason.as_deref().unwrap_or("Requires approval");
+            // Match the top-level defer behavior so the third "Yes, and
+            // don't ask again" prompt button shows for `pnpm <script>` /
+            // `npm run <script>` shapes too.
+            if !is_auto_mode(permission_mode) {
+                return HookOutput::defer(format!("{pm} run {script_name}: {reason}"), None);
+            }
             HookOutput::ask(&format!("{pm} run {script_name}: {reason}"))
         }
         PermissionDecision::Allow => HookOutput::allow(Some(&format!(

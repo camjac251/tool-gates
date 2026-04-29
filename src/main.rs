@@ -2028,7 +2028,7 @@ fn handle_doctor_subcommand() {
     // 5. Usage stats: pending queue, tracking, top-asked commands
     eprintln!();
     let pending = tool_gates::pending::read_pending(None);
-    let tracking = tool_gates::tracking::TrackingStore::with_exclusive_lock(|s| {
+    let tracking = tool_gates::tracking::TrackingStore::with_shared_lock(|s| {
         s.entries
             .values()
             .map(|e| (e.command.clone(), e.session_id.clone()))
@@ -2085,12 +2085,10 @@ fn handle_doctor_subcommand() {
         let session_count: std::collections::HashSet<&str> =
             tracking.iter().map(|(_, s)| s.as_str()).collect();
         if session_count.len() > 1 {
-            let msg = format!(
-                "Tracking entries span {} different session_ids -- foreign-session sweep should clear these on next track",
+            eprintln!(
+                "    {} session(s) with tracked entries (concurrent sessions share tracking.json; the 24h TTL clears orphans)",
                 session_count.len()
             );
-            eprintln!("    ⚠ {}", msg);
-            issues.push(msg);
         }
     }
 

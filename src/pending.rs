@@ -215,17 +215,32 @@ pub fn append_pending(approval: PendingApproval) -> std::io::Result<()> {
     })
 }
 
-/// Returns the broadest-but-not-program-only pattern as a stable key for
-/// near-duplicate compaction. Falls back to the only pattern when there's
-/// just one.
+/// Returns a stable key that lets near-duplicates collapse into one
+/// pending entry. Walks from broadest to narrowest:
+/// 1. A subcommand-scoped glob (`<program> <subcommand>:*`) is the ideal
+///    key because it groups variations of the same subcommand.
+/// 2. A program-only glob (`<program>:*`) groups everything for the
+///    program when no subcommand glob is on offer (e.g. mise shorthand
+///    only emits `[literal, mise:*]`).
+/// 3. Otherwise the last pattern as a stable-ish fallback.
 fn compaction_key(patterns: &[String]) -> Option<String> {
-    match patterns.len() {
-        0 => None,
-        1 => Some(patterns[0].clone()),
-        // Second-to-last: skips program-only patterns like `npm:*` while
-        // keeping subcommand-scoped patterns like `npm install:*`.
-        n => Some(patterns[n - 2].clone()),
+    if patterns.is_empty() {
+        return None;
     }
+    if patterns.len() == 1 {
+        return Some(patterns[0].clone());
+    }
+
+    if let Some(p) = patterns
+        .iter()
+        .rfind(|p| p.ends_with(":*") && p.contains(' '))
+    {
+        return Some(p.clone());
+    }
+    if let Some(p) = patterns.iter().rfind(|p| p.ends_with(":*")) {
+        return Some(p.clone());
+    }
+    Some(patterns[patterns.len() - 1].clone())
 }
 
 /// Remove a pending approval by ID
@@ -610,6 +625,58 @@ mod tests {
     fn test_compaction_key_empty_returns_none() {
         let p: Vec<String> = vec![];
         assert!(compaction_key(&p).is_none());
+    }
+
+    #[test]
+    fn test_compaction_key_git_checkout_two_patterns() {
+        // suggest_patterns intentionally omits "git:*" for git checkout/switch
+        // (too broad for VCS), so the patterns list is [literal, "git checkout:*"].
+        // Compaction must pick the glob, not the literal, so different branches
+        // collapse into a single pending entry.
+        let p = vec![
+            "git checkout main".to_string(),
+            "git checkout:*".to_string(),
+        ];
+        assert_eq!(compaction_key(&p).as_deref(), Some("git checkout:*"));
+    }
+
+    #[test]
+    fn test_compaction_key_mise_shorthand_two_patterns() {
+        // mise shorthand emits [literal, "mise:*"] with no subcommand glob.
+        // Different tasks must collapse, so we pick "mise:*" (the only glob).
+        let p = vec!["mise lint".to_string(), "mise:*".to_string()];
+        assert_eq!(compaction_key(&p).as_deref(), Some("mise:*"));
+    }
+
+    #[test]
+    fn test_append_collapses_git_checkout_branches() {
+        let mut entries = Vec::new();
+        simulate_append(
+            &mut entries,
+            make_approval_with_patterns(
+                "git checkout main",
+                "proj",
+                &["git checkout main", "git checkout:*"],
+            ),
+        );
+        simulate_append(
+            &mut entries,
+            make_approval_with_patterns(
+                "git checkout dev",
+                "proj",
+                &["git checkout dev", "git checkout:*"],
+            ),
+        );
+
+        assert_eq!(
+            entries.len(),
+            1,
+            "git checkout main and git checkout dev should collapse"
+        );
+        assert!(
+            entries[0].patterns.iter().any(|p| p == "git checkout:*"),
+            "compacted entry should keep the shared subcommand glob"
+        );
     }
 
     #[test]
