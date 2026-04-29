@@ -3647,6 +3647,7 @@ mod tests {
             assert_eq!(result.decision, PermissionDecision::Ask);
         }
 
+        #[serial_test::serial]
         #[test]
         fn test_settings_allow_still_short_circuits_under_defer_path() {
             // Even though gate-ask now defers, an explicit settings allow
