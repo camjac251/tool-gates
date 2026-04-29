@@ -23,6 +23,15 @@ pub fn is_auto_mode(mode: &str) -> bool {
     mode.trim().eq_ignore_ascii_case("auto")
 }
 
+/// True if Claude Code's `permission_mode` signals plan mode. Plan mode is
+/// "read-and-explore only" -- the model can investigate but should not edit
+/// or execute mutating commands. Same case-insensitive normalization as
+/// `is_auto_mode` since mode strings are CC-supplied and we want to fail
+/// safe on minor drift.
+pub fn is_plan_mode(mode: &str) -> bool {
+    mode.trim().eq_ignore_ascii_case("plan")
+}
+
 /// Permission decision types with priority: Block > Ask > Allow > Skip
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Decision {
@@ -1159,6 +1168,19 @@ mod tests {
         assert!(!is_auto_mode("auto_v2"));
         assert!(!is_auto_mode("plan"));
         assert!(!is_auto_mode("acceptEdits"));
+    }
+
+    #[test]
+    fn test_is_plan_mode_normalizes_case_and_whitespace() {
+        assert!(is_plan_mode("plan"));
+        assert!(is_plan_mode(" plan "));
+        assert!(is_plan_mode("PLAN"));
+        assert!(is_plan_mode("Plan"));
+        assert!(!is_plan_mode(""));
+        assert!(!is_plan_mode("default"));
+        assert!(!is_plan_mode("auto"));
+        assert!(!is_plan_mode("acceptEdits"));
+        assert!(!is_plan_mode("planning"));
     }
 
     #[test]

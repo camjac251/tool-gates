@@ -26,7 +26,7 @@ use tool_gates::config;
 use tool_gates::file_guards::check_file_guard;
 use tool_gates::models::{
     Client, HookInput, HookOutput, PermissionDecision, PermissionDeniedInput,
-    PermissionDeniedOutput, PermissionRequestInput, PostToolUseInput, is_auto_mode,
+    PermissionDeniedOutput, PermissionRequestInput, PostToolUseInput, is_auto_mode, is_plan_mode,
 };
 use tool_gates::patterns::suggest_patterns;
 use tool_gates::pending::{clear_pending, pending_count, read_pending};
@@ -298,6 +298,26 @@ fn handle_pre_tool_use_hook(input: &str, client: Client) {
                 return;
             }
         }
+    }
+
+    // Plan mode: model is in "read and explore" only. Hard-deny mutating file
+    // tools (Write/Edit) before they reach file_guards/security_reminders so
+    // the deny reason is unambiguous. Bash mutations are handled in
+    // handle_bash_pre_tool_use after gate analysis (read-only Bash like
+    // `git status` should still allow).
+    if is_plan_mode(&hook_input.permission_mode) && Client::is_write_tool(&hook_input.tool_name) {
+        let output = HookOutput::deny(
+            "Plan mode: file edits are not allowed. Exit plan mode before writing.",
+        );
+        if let Ok(json) = serde_json::to_string(&output.serialize(client)) {
+            println!("{json}");
+            if client == Client::Gemini {
+                std::process::exit(2);
+            }
+        } else {
+            print_deny_and_exit(client, "Internal error serializing plan-mode deny");
+        }
+        return;
     }
 
     // Route by tool type (handles both Claude and Gemini tool names)
