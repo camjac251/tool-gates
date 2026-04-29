@@ -167,23 +167,65 @@ where
     Ok(result)
 }
 
-/// Append a pending approval (or increment if same command already exists)
+/// Append a pending approval (or increment if same command already exists).
+///
+/// Compaction strategy:
+///   1. Exact match on `(command, project_id)` -> increment, refresh patterns
+///      and breakdown. Self-heals stale per-subcommand attribution.
+///   2. Pattern-key match on `(compaction_key, project_id)` -> increment the
+///      existing entry, intersect the pattern lists so the kept pattern is
+///      the broadest one shared by both commands. Lets `npm install foo`
+///      and `npm install bar` collapse to a single `npm install:*` entry
+///      instead of polluting the queue with one row per package.
+///   3. Otherwise append as a new entry.
 pub fn append_pending(approval: PendingApproval) -> std::io::Result<()> {
     with_exclusive_pending(|entries| {
-        // Check if we already have this exact command in the same project
+        // Tier 1: exact command match in same project.
         if let Some(existing) = entries
             .iter_mut()
             .find(|e| e.command == approval.command && e.project_id == approval.project_id)
         {
             existing.increment();
-            // Replace patterns and breakdown with fresh values (self-healing:
-            // corrects old entries that had wrong per-subcommand attribution)
             existing.patterns = approval.patterns;
             existing.breakdown = approval.breakdown;
-        } else {
-            entries.push(approval);
+            return;
         }
+
+        // Tier 2: compaction-key match in same project. Collapses near-duplicates
+        // that differ only in trailing literal args (package names, PR numbers).
+        if let Some(new_key) = compaction_key(&approval.patterns) {
+            if let Some(existing) = entries.iter_mut().find(|e| {
+                e.project_id == approval.project_id
+                    && compaction_key(&e.patterns).as_deref() == Some(new_key.as_str())
+            }) {
+                existing.increment();
+                // Keep only patterns shared by both. The broadest matching
+                // pattern survives; the specific-literal patterns drop out.
+                let new_set: std::collections::HashSet<&String> =
+                    approval.patterns.iter().collect();
+                existing.patterns.retain(|p| new_set.contains(p));
+                // Don't replace breakdown -- the existing entry's breakdown
+                // already corresponds to its command, and the new command
+                // would be misleading there.
+                return;
+            }
+        }
+
+        entries.push(approval);
     })
+}
+
+/// Returns the broadest-but-not-program-only pattern as a stable key for
+/// near-duplicate compaction. Falls back to the only pattern when there's
+/// just one.
+fn compaction_key(patterns: &[String]) -> Option<String> {
+    match patterns.len() {
+        0 => None,
+        1 => Some(patterns[0].clone()),
+        // Second-to-last: skips program-only patterns like `npm:*` while
+        // keeping subcommand-scoped patterns like `npm install:*`.
+        n => Some(patterns[n - 2].clone()),
+    }
 }
 
 /// Remove a pending approval by ID
@@ -386,6 +428,7 @@ mod tests {
 
     /// Helper: simulate the append_pending dedup logic (mirrors the closure inside append_pending)
     fn simulate_append(entries: &mut Vec<PendingApproval>, approval: PendingApproval) {
+        // Tier 1: exact command + project match
         if let Some(existing) = entries
             .iter_mut()
             .find(|e| e.command == approval.command && e.project_id == approval.project_id)
@@ -393,9 +436,24 @@ mod tests {
             existing.increment();
             existing.patterns = approval.patterns;
             existing.breakdown = approval.breakdown;
-        } else {
-            entries.push(approval);
+            return;
         }
+
+        // Tier 2: compaction-key match
+        if let Some(new_key) = compaction_key(&approval.patterns) {
+            if let Some(existing) = entries.iter_mut().find(|e| {
+                e.project_id == approval.project_id
+                    && compaction_key(&e.patterns).as_deref() == Some(new_key.as_str())
+            }) {
+                existing.increment();
+                let new_set: std::collections::HashSet<&String> =
+                    approval.patterns.iter().collect();
+                existing.patterns.retain(|p| new_set.contains(p));
+                return;
+            }
+        }
+
+        entries.push(approval);
     }
 
     /// Helper: simulate the clear_pending logic (mirrors the closure inside clear_pending)
@@ -509,6 +567,143 @@ mod tests {
             2,
             "different commands in same project are separate"
         );
+    }
+
+    fn make_approval_with_patterns(
+        command: &str,
+        project_id: &str,
+        patterns: &[&str],
+    ) -> PendingApproval {
+        PendingApproval::new(
+            command.to_string(),
+            patterns.iter().map(|s| s.to_string()).collect(),
+            vec![],
+            project_id.to_string(),
+            String::new(),
+            "sess".to_string(),
+        )
+    }
+
+    #[test]
+    fn test_compaction_key_picks_second_to_last_for_three_patterns() {
+        let p = vec![
+            "npm install foo".to_string(),
+            "npm install:*".to_string(),
+            "npm:*".to_string(),
+        ];
+        assert_eq!(compaction_key(&p).as_deref(), Some("npm install:*"));
+    }
+
+    #[test]
+    fn test_compaction_key_picks_first_for_two_patterns() {
+        let p = vec!["mytool sub:*".to_string(), "mytool:*".to_string()];
+        assert_eq!(compaction_key(&p).as_deref(), Some("mytool sub:*"));
+    }
+
+    #[test]
+    fn test_compaction_key_singleton_returns_only_pattern() {
+        let p = vec!["prettier:*".to_string()];
+        assert_eq!(compaction_key(&p).as_deref(), Some("prettier:*"));
+    }
+
+    #[test]
+    fn test_compaction_key_empty_returns_none() {
+        let p: Vec<String> = vec![];
+        assert!(compaction_key(&p).is_none());
+    }
+
+    #[test]
+    fn test_append_collapses_pkg_install_variants() {
+        let mut entries = Vec::new();
+        simulate_append(
+            &mut entries,
+            make_approval_with_patterns(
+                "npm install foo",
+                "proj",
+                &["npm install foo", "npm install:*", "npm:*"],
+            ),
+        );
+        simulate_append(
+            &mut entries,
+            make_approval_with_patterns(
+                "npm install bar",
+                "proj",
+                &["npm install bar", "npm install:*", "npm:*"],
+            ),
+        );
+        simulate_append(
+            &mut entries,
+            make_approval_with_patterns(
+                "npm install baz",
+                "proj",
+                &["npm install baz", "npm install:*", "npm:*"],
+            ),
+        );
+
+        assert_eq!(entries.len(), 1, "three install variants must collapse");
+        let entry = &entries[0];
+        assert_eq!(entry.count, 3);
+        assert_eq!(
+            entry.patterns,
+            vec!["npm install:*".to_string(), "npm:*".to_string()],
+            "specific-literal patterns drop out, broad shared patterns remain"
+        );
+    }
+
+    #[test]
+    fn test_append_does_not_collapse_different_subcommands() {
+        let mut entries = Vec::new();
+        simulate_append(
+            &mut entries,
+            make_approval_with_patterns(
+                "npm install foo",
+                "proj",
+                &["npm install foo", "npm install:*", "npm:*"],
+            ),
+        );
+        simulate_append(
+            &mut entries,
+            make_approval_with_patterns("npm test", "proj", &["npm test:*", "npm:*"]),
+        );
+
+        assert_eq!(
+            entries.len(),
+            2,
+            "install and test have different compaction keys"
+        );
+    }
+
+    #[test]
+    fn test_append_does_not_collapse_across_projects() {
+        let mut entries = Vec::new();
+        simulate_append(
+            &mut entries,
+            make_approval_with_patterns(
+                "npm install foo",
+                "proj-a",
+                &["npm install foo", "npm install:*", "npm:*"],
+            ),
+        );
+        simulate_append(
+            &mut entries,
+            make_approval_with_patterns(
+                "npm install bar",
+                "proj-b",
+                &["npm install bar", "npm install:*", "npm:*"],
+            ),
+        );
+
+        assert_eq!(entries.len(), 2, "compaction must respect project_id");
+    }
+
+    #[test]
+    fn test_append_no_patterns_falls_through_to_tier1_only() {
+        // Backwards-compat: entries without patterns (legacy) only dedup on
+        // exact command match.
+        let mut entries = Vec::new();
+        simulate_append(&mut entries, make_approval("cmd a", "proj"));
+        simulate_append(&mut entries, make_approval("cmd b", "proj"));
+        assert_eq!(entries.len(), 2);
     }
 
     // Bug 1: clear_pending(None) must use with_exclusive_pending (tested via simulate logic)
