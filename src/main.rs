@@ -2021,7 +2021,76 @@ fn handle_doctor_subcommand() {
         }
     }
 
-    // 5. Old bash-gates remnants
+    // 5. Usage stats: pending queue, tracking, top-asked commands
+    eprintln!();
+    let pending = tool_gates::pending::read_pending(None);
+    let tracking = tool_gates::tracking::TrackingStore::with_exclusive_lock(|s| {
+        s.entries
+            .values()
+            .map(|e| (e.command.clone(), e.session_id.clone()))
+            .collect::<Vec<_>>()
+    })
+    .unwrap_or_default();
+
+    eprintln!(
+        "  Stats: {} pending entry(ies), {} tracked command(s) in flight",
+        pending.len(),
+        tracking.len()
+    );
+
+    if !pending.is_empty() {
+        let mut by_project: std::collections::HashMap<String, (usize, u32)> =
+            std::collections::HashMap::new();
+        for entry in &pending {
+            let key = if entry.cwd.is_empty() {
+                entry.project_id.clone()
+            } else {
+                entry.cwd.clone()
+            };
+            let slot = by_project.entry(key).or_insert((0, 0));
+            slot.0 += 1;
+            slot.1 += entry.count;
+        }
+        let mut rows: Vec<_> = by_project.into_iter().collect();
+        rows.sort_by(|a, b| b.1.0.cmp(&a.1.0).then_with(|| a.0.cmp(&b.0)));
+        for (project, (n_entries, total_count)) in rows.iter().take(5) {
+            eprintln!(
+                "    {}: {} entry(ies), {} total approvals",
+                project, n_entries, total_count
+            );
+        }
+
+        // Top-N most-asked commands across all projects.
+        let mut top: Vec<_> = pending
+            .iter()
+            .map(|e| (e.count, e.command.as_str()))
+            .collect();
+        top.sort_by_key(|(count, _)| std::cmp::Reverse(*count));
+        let preview = top.iter().take(5).collect::<Vec<_>>();
+        if !preview.is_empty() {
+            eprintln!("    Top-asked:");
+            for (count, cmd) in preview {
+                let shown: String = cmd.chars().take(60).collect();
+                let suffix = if cmd.chars().count() > 60 { "..." } else { "" };
+                eprintln!("      {}x {}{}", count, shown, suffix);
+            }
+        }
+    }
+
+    if !tracking.is_empty() {
+        let session_count: std::collections::HashSet<&str> =
+            tracking.iter().map(|(_, s)| s.as_str()).collect();
+        if session_count.len() > 1 {
+            let msg = format!(
+                "Tracking entries span {} different session_ids -- foreign-session sweep should clear these on next track",
+                session_count.len()
+            );
+            eprintln!("    ⚠ {}", msg);
+            issues.push(msg);
+        }
+    }
+
+    // 6. Old bash-gates remnants
     let old_cache = dirs::home_dir()
         .map(|h| h.join(".cache/bash-gates"))
         .unwrap_or_default();
