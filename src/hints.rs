@@ -25,9 +25,6 @@ pub struct ModernHint {
     pub hint: String,
 }
 
-/// Check if a command could benefit from a modern alternative and return a hint.
-/// Only returns hints for tools that are actually installed.
-/// Respects `features.hints` toggle and `hints.disable` list from config.
 pub fn get_modern_hint(cmd: &CommandInfo) -> Option<ModernHint> {
     let config = crate::config::get();
 
@@ -79,12 +76,16 @@ pub fn get_modern_hint(cmd: &CommandInfo) -> Option<ModernHint> {
         _ => None,
     }?;
 
-    // Only return hint if the modern tool is installed
-    if cache().is_available(hint.modern_command) {
-        Some(hint)
-    } else {
-        None
-    }
+    // Only return hint if the modern tool is installed.
+    //
+    // The on-disk cache has a TTL (default 7 days). If a user installs a
+    // modern tool today, hints would stay silent until the cache rolls.
+    // When the cache says missing, opportunistically re-probe just this
+    // one tool. The result is memoized for the rest of this process and
+    // written back to the disk cache so other processes see it too.
+    let available = cache().is_available(hint.modern_command)
+        || crate::tool_cache::refresh_tool(hint.modern_command);
+    if available { Some(hint) } else { None }
 }
 
 fn hint_cat(cmd: &CommandInfo) -> Option<ModernHint> {

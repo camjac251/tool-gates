@@ -61,33 +61,52 @@ pub struct ToolCache {
 impl ToolCache {
     /// Check if a specific tool is available
     pub fn is_available(&self, tool: &str) -> bool {
-        // Handle aliases (some tools have different names on different distros)
+        // Handle aliases (some tools have different names on different distros).
+        // Each branch also consults the in-process re-probe map so that a tool
+        // installed after the on-disk cache was written can flip to true
+        // mid-session via `refresh_tool`.
         match tool {
             "bat" => {
                 self.tools.get("bat").copied().unwrap_or(false)
                     || self.tools.get("batcat").copied().unwrap_or(false)
+                    || reprobed_positive("bat")
+                    || reprobed_positive("batcat")
             }
             "fd" => {
                 self.tools.get("fd").copied().unwrap_or(false)
                     || self.tools.get("fdfind").copied().unwrap_or(false)
+                    || reprobed_positive("fd")
+                    || reprobed_positive("fdfind")
             }
             "rg" => {
                 self.tools.get("rg").copied().unwrap_or(false)
                     || self.tools.get("ripgrep").copied().unwrap_or(false)
+                    || reprobed_positive("rg")
+                    || reprobed_positive("ripgrep")
             }
             "sg" => {
                 self.tools.get("sg").copied().unwrap_or(false)
                     || self.tools.get("ast-grep").copied().unwrap_or(false)
+                    || reprobed_positive("sg")
+                    || reprobed_positive("ast-grep")
             }
             "tldr" => {
                 self.tools.get("tldr").copied().unwrap_or(false)
                     || self.tools.get("tealdeer").copied().unwrap_or(false)
+                    || reprobed_positive("tldr")
+                    || reprobed_positive("tealdeer")
             }
-            _ => self.tools.get(tool).copied().unwrap_or_else(|| {
+            _ => {
+                if self.tools.get(tool).copied().unwrap_or(false) {
+                    return true;
+                }
+                if reprobed_positive(tool) {
+                    return true;
+                }
                 // Tool not in cache (not a modern tool hint target).
                 // Fall back to live `which` check for requires_tool and similar.
                 check_tool_available(tool)
-            }),
+            }
         }
     }
 
@@ -193,6 +212,59 @@ pub fn refresh_cache() -> ToolCache {
     cache
 }
 
+/// Process-local override for tools that were re-probed during this process
+/// after the on-disk cache reported them missing. Prevents repeated `which`
+/// calls for the same tool within a single tool-gates invocation, and lets
+/// later `is_available` calls in the same process see the fresh answer
+/// without paying for another probe.
+static REPROBED_TOOLS: std::sync::OnceLock<std::sync::Mutex<HashMap<String, bool>>> =
+    std::sync::OnceLock::new();
+
+fn reprobed() -> &'static std::sync::Mutex<HashMap<String, bool>> {
+    REPROBED_TOOLS.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
+}
+
+/// Re-probe a single tool with a live `which` check.
+///
+/// Used as a self-healing fallback: if the cached tool detection says a
+/// modern alternative is unavailable but the user installed it after the
+/// last full refresh, the next hint that matches that tool re-checks once
+/// and updates state. Within a single process the answer is memoized in
+/// `REPROBED_TOOLS`. We also try to merge the result into the on-disk
+/// cache so subsequent processes see it without another probe; failures
+/// are non-fatal (best-effort).
+pub fn refresh_tool(tool: &str) -> bool {
+    {
+        let map = reprobed().lock().expect("reprobed mutex poisoned");
+        if let Some(&val) = map.get(tool) {
+            return val;
+        }
+    }
+
+    let live = check_tool_available(tool);
+
+    {
+        let mut map = reprobed().lock().expect("reprobed mutex poisoned");
+        map.insert(tool.to_string(), live);
+    }
+
+    // Best-effort persist so the next process inherits the fresh answer.
+    if let Some(mut cache) = load_cache() {
+        cache.tools.insert(tool.to_string(), live);
+        let _ = save_cache(&cache);
+    }
+
+    live
+}
+
+/// True if the in-process re-probe map already has a positive answer for
+/// this tool. Used by `ToolCache::is_available` to short-circuit aliases
+/// that were re-probed during the current process.
+pub(crate) fn reprobed_positive(tool: &str) -> bool {
+    let map = reprobed().lock().expect("reprobed mutex poisoned");
+    map.get(tool).copied().unwrap_or(false)
+}
+
 /// Get cache status for display
 pub fn cache_status() -> String {
     let path = cache_path()
@@ -285,6 +357,42 @@ mod tests {
             !cache.is_available("rg"),
             "missing tool should return false"
         );
+    }
+
+    #[test]
+    fn test_refresh_tool_returns_live_result_for_missing_tool() {
+        // Use a name that will never be on PATH so the result is stable
+        // across CI environments. Disambiguate from any other test by
+        // including a unique stem.
+        let bogus = "tool_gates_zzzzz_does_not_exist_001";
+        assert!(!refresh_tool(bogus));
+        // Re-probe is memoized: a second call should still return false
+        // without re-running which.
+        assert!(!refresh_tool(bogus));
+        assert!(!reprobed_positive(bogus));
+    }
+
+    #[test]
+    fn test_is_available_consults_reprobed_map_for_alias() {
+        // Simulate the disk cache reporting `bat` and `batcat` both missing.
+        // After a refresh that flips `bat` to true, is_available must
+        // observe it via the alias-aware branch. Use a unique tool name
+        // to avoid colliding with the actual tool cache.
+        let cache = ToolCache::default();
+        // The tool name must be one of the alias-resolved targets in
+        // is_available so the branch consults reprobed_positive.
+        // Inject a positive into the reprobed map directly to keep the
+        // test hermetic (no PATH dependency).
+        {
+            let mut map = reprobed().lock().expect("mutex");
+            map.insert("bat".to_string(), true);
+        }
+        assert!(cache.is_available("bat"));
+        // Cleanup so other tests aren't affected.
+        {
+            let mut map = reprobed().lock().expect("mutex");
+            map.remove("bat");
+        }
     }
 
     #[test]
