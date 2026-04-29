@@ -51,6 +51,10 @@ Promote pending one-time approvals into permanent settings.json rules. Single-sh
 - Prefer the most-specific pattern that covers the user's real workflow over the broadest one the queue suggests.
 - The compaction logic in `pending.rs` already collapses near-duplicates by broadest-non-program-only pattern (e.g. `npm install foo/bar/baz` -> one row keyed on `npm install:*`). Trust the suggestion; broaden manually only when you've inspected the breakdown.
 
+## Sibling cleanup: ask-rule audit
+
+If the user is here because they *aren't getting* the third "Yes, and don't ask again" prompt button as often as they expect, the cause is usually an old `permissions.ask` rule in their settings.json that's matching ahead of CC's prefix-suggestion path. Different problem from the pending queue, fixed by `tool-gates rules ask-audit`. That command lists ask rules grouped by what removing them would do (redundant / safety floor / indeterminate), with a copy-pasteable remove for each. Mention it once if the user complains about the prompt UI; otherwise stay focused on the queue.
+
 ## Gotchas
 
 - The CC prompt's "Yes, and don't ask again for X" writes the rule to `localSettings`. tool-gates' approve-via-skill writes wherever the user picks. If a pattern already exists in localSettings from the prompt button, the user might want `project` or `user` scope here for sharing -- duplicates across scopes are harmless, the more-specific scope wins.

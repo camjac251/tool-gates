@@ -145,7 +145,7 @@ pub fn check_command(command_string: &str) -> HookOutput {
 /// Check a bash command with session-scoped hint dedup.
 ///
 /// When `session_id` is non-empty, each hint fires at most once per session.
-fn check_command_for_session(command_string: &str, session_id: &str) -> HookOutput {
+pub fn check_command_for_session(command_string: &str, session_id: &str) -> HookOutput {
     if command_string.trim().is_empty() {
         return HookOutput::no_opinion();
     }

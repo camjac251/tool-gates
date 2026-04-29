@@ -1586,11 +1586,15 @@ fn print_rules_help() {
     eprintln!("  -s, --scope <scope>   Filter by scope: user, project, or local");
 }
 
-/// List `permissions.ask` Bash rules with the third-button explanation,
-/// emitting a ready-to-run `tool-gates rules remove` line for each. CC's
-/// prompt UI shows two buttons (Yes/No) for any command that matches an
-/// `permissions.ask` rule -- removing redundant rules restores the third
-/// "Yes, and don't ask again for X" button.
+/// List `permissions.ask` Bash rules categorized by what removing them
+/// would do. Categories:
+/// * **Redundant** -- tool-gates' gate engine would also ask for the same
+///   command, so the rule is pure third-button suppression. Safe to remove.
+/// * **Safety floor** -- gate engine would allow the command. The rule is
+///   the user's deliberate "always prompt me" floor; removing it lets
+///   tool-gates auto-allow.
+/// * **Indeterminate** -- pattern is too generic (or a glob shape we can't
+///   round-trip into a representative command) to classify automatically.
 fn handle_rules_ask_audit(_args: &[String]) {
     let ask_rules: Vec<_> = list_all_rules()
         .into_iter()
@@ -1608,24 +1612,143 @@ fn handle_rules_ask_audit(_args: &[String]) {
         return;
     }
 
+    let mut redundant: Vec<&_> = Vec::new();
+    let mut safety_floor: Vec<&_> = Vec::new();
+    let mut indeterminate: Vec<&_> = Vec::new();
+    for rule in &ask_rules {
+        match classify_ask_rule(&rule.pattern) {
+            AskRuleCategory::Redundant => redundant.push(rule),
+            AskRuleCategory::SafetyFloor => safety_floor.push(rule),
+            AskRuleCategory::Indeterminate => indeterminate.push(rule),
+        }
+    }
+
     eprintln!(
-        "Found {} `permissions.ask` Bash rule(s) that suppress the third prompt button:",
+        "Found {} `permissions.ask` Bash rule(s). Each one suppresses the third prompt button when it matches.",
         ask_rules.len()
     );
-    eprintln!();
-    for rule in &ask_rules {
-        eprintln!("  {} ({} scope)", rule.pattern, rule.scope.as_str());
+    eprintln!(
+        "Categories below show what removing the rule would do, based on tool-gates' gate engine."
+    );
+    eprintln!(
+        "Caveat: classification uses the rule's literal prefix. Patterns like `cmd *` may behave"
+    );
+    eprintln!(
+        "differently in practice once the glob is filled with real content -- review safety-floor"
+    );
+    eprintln!("rules manually before removing.");
+
+    if !redundant.is_empty() {
+        eprintln!();
         eprintln!(
-            "    remove: tool-gates rules remove '{}' -s {}",
-            rule.pattern,
-            rule.scope.as_str()
+            "Redundant ({}): tool-gates' gate engine already asks for these commands.",
+            redundant.len()
         );
+        eprintln!(
+            "Removing them restores the third button without weakening anything you'd be prompted for."
+        );
+        for rule in &redundant {
+            eprintln!("  {} ({} scope)", rule.pattern, rule.scope.as_str());
+            eprintln!(
+                "    remove: tool-gates rules remove '{}' -s {}",
+                rule.pattern,
+                rule.scope.as_str()
+            );
+        }
     }
-    eprintln!();
-    eprintln!("Whenever any of these rules matches a command, CC's prompt UI shows Yes/No only.");
-    eprintln!("Remove rules where you'd rather get the three-button prompt. tool-gates' gate");
-    eprintln!("engine still asks for unfamiliar commands -- you don't need a settings.json rule");
-    eprintln!("to be prompted.");
+
+    if !safety_floor.is_empty() {
+        eprintln!();
+        eprintln!(
+            "Safety floor ({}): tool-gates' gate engine would auto-allow these commands.",
+            safety_floor.len()
+        );
+        eprintln!("Keep these rules if you want to be prompted for the command anyway.");
+        eprintln!("Removing them gives auto-allow with no prompt -- not the three-button prompt.");
+        for rule in &safety_floor {
+            eprintln!("  {} ({} scope)", rule.pattern, rule.scope.as_str());
+            eprintln!(
+                "    remove: tool-gates rules remove '{}' -s {}",
+                rule.pattern,
+                rule.scope.as_str()
+            );
+        }
+    }
+
+    if !indeterminate.is_empty() {
+        eprintln!();
+        eprintln!(
+            "Indeterminate ({}): pattern shape is too generic to classify automatically.",
+            indeterminate.len()
+        );
+        eprintln!("Inspect each one manually to decide whether to keep it.");
+        for rule in &indeterminate {
+            eprintln!("  {} ({} scope)", rule.pattern, rule.scope.as_str());
+            eprintln!(
+                "    remove: tool-gates rules remove '{}' -s {}",
+                rule.pattern,
+                rule.scope.as_str()
+            );
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AskRuleCategory {
+    Redundant,
+    SafetyFloor,
+    Indeterminate,
+}
+
+fn classify_ask_rule(pattern: &str) -> AskRuleCategory {
+    let Some(inner) = pattern
+        .strip_prefix("Bash(")
+        .and_then(|s| s.strip_suffix(')'))
+    else {
+        return AskRuleCategory::Indeterminate;
+    };
+
+    // Word-boundary prefix: `<command>:*` matches `<command>` and
+    // `<command> <anything>`. The literal prefix is the representative.
+    let candidate = if let Some(prefix) = inner.strip_suffix(":*") {
+        prefix.trim().to_string()
+    } else if let Some(prefix) = inner.strip_suffix(" *") {
+        // Glob prefix with explicit space-star: `<prefix> *` matches
+        // `<prefix> ...`. Strip the trailing star and let the prefix
+        // stand in.
+        prefix.trim().to_string()
+    } else if inner.contains('*') {
+        // Internal glob (e.g., `echo > /etc/ *`). Round-tripping these
+        // accurately is brittle -- bail out.
+        return AskRuleCategory::Indeterminate;
+    } else {
+        // Exact pattern: use it verbatim.
+        inner.trim().to_string()
+    };
+
+    if candidate.is_empty() {
+        return AskRuleCategory::Indeterminate;
+    }
+
+    // Use the full security pipeline (raw-string deny/ask + gate engine)
+    // so destructive shapes like `find . -delete` are recognized via the
+    // raw-string layer. Empty session_id keeps hint dedup state out of
+    // the audit. Settings are NOT consulted: we want to know what
+    // tool-gates would do *without* the rule we're classifying.
+    let result = tool_gates::router::check_command_for_session(&candidate, "");
+
+    match result.decision {
+        // Deny: removing the ask rule still blocks the command. The
+        // ask rule is strictly weaker than tool-gates' floor; safe to
+        // delete (post-removal posture is *stricter*, not weaker).
+        PermissionDecision::Deny => AskRuleCategory::Redundant,
+        PermissionDecision::Ask => AskRuleCategory::Redundant,
+        PermissionDecision::Allow => AskRuleCategory::SafetyFloor,
+        // Defer / Approve / other shapes shouldn't show up from
+        // check_command_for_session (no settings, no defer wrapping).
+        // Treat as indeterminate to be safe.
+        _ => AskRuleCategory::Indeterminate,
+    }
 }
 
 // === Pending subcommand ===
@@ -2141,43 +2264,39 @@ fn handle_doctor_subcommand() {
         }
     }
 
-    // 6. settings.json `permissions.ask` Bash rules suppress the third
-    // "Yes, and don't ask again for X" prompt button. CC's Bash rule check
-    // (cli.js JU7) returns `{behavior: "ask"}` without populating the
-    // suggestions array whenever any ask rule matches; the prompt UI
-    // gates the third button on suggestions being non-empty. tool-gates
-    // can't influence that from a hook, so the only fix is removing the
-    // ask rule. Surface them here so the user knows what's costing them
-    // the third button.
+    // 6. `permissions.ask` Bash rules suppress the third "Yes, and don't
+    // ask again for X" prompt button (CC's resolver returns ask without
+    // populating the suggestion list whenever a settings ask rule matches,
+    // and the prompt UI shows the third button only when suggestions are
+    // non-empty). Surface a quick summary; deep details are in
+    // `tool-gates rules ask-audit`.
     let ask_rules: Vec<_> = list_all_rules()
         .into_iter()
         .filter(|r| r.rule_type == RuleType::Ask && r.pattern.starts_with("Bash("))
         .collect();
     if !ask_rules.is_empty() {
+        let mut redundant = 0usize;
+        let mut safety_floor = 0usize;
+        let mut indeterminate = 0usize;
+        for rule in &ask_rules {
+            match classify_ask_rule(&rule.pattern) {
+                AskRuleCategory::Redundant => redundant += 1,
+                AskRuleCategory::SafetyFloor => safety_floor += 1,
+                AskRuleCategory::Indeterminate => indeterminate += 1,
+            }
+        }
         eprintln!();
         eprintln!(
-            "  Note: {} `permissions.ask` Bash rule(s) suppress the third \"Yes, and don't ask again for X\" prompt button:",
+            "  Note: {} `permissions.ask` Bash rule(s) suppress the third \"Yes, and don't ask again for X\" prompt button.",
             ask_rules.len()
         );
-        for rule in ask_rules.iter().take(8) {
-            eprintln!(
-                "    {} ({} scope)  remove: tool-gates rules remove '{}' -s {}",
-                rule.pattern,
-                rule.scope.as_str(),
-                rule.pattern,
-                rule.scope.as_str(),
-            );
-        }
-        if ask_rules.len() > 8 {
-            eprintln!("    ...and {} more", ask_rules.len() - 8);
-        }
         eprintln!(
-            "    Whenever one of these rules matches, CC shows Yes/No only. Remove rules you'd"
+            "    {} redundant (gate would also ask), {} safety floor (gate would auto-allow), {} indeterminate.",
+            redundant, safety_floor, indeterminate
         );
         eprintln!(
-            "    rather have the three-button prompt for. tool-gates' gate engine still asks for"
+            "    Run `tool-gates rules ask-audit` for the per-rule breakdown and remove commands."
         );
-        eprintln!("    unfamiliar commands without needing an ask rule in settings.json.");
     }
 
     // 7. Old bash-gates remnants
