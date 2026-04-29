@@ -207,11 +207,21 @@ BLOCK > ASK > ALLOW > SKIP
 | Decision | Output | Effect |
 |----------|--------|--------|
 | `block` | `permissionDecision: "deny"` | Block with reason |
-| `ask` | `permissionDecision: "ask"` | Prompt user for approval |
+| `ask` | `permissionDecision: "ask"` | Prompt user for approval (Yes/No, two buttons) |
+| `defer` | omits `permissionDecision` | CC's resolver runs the tool's own checkPermissions; for Bash this populates the prefix-suggestion that lights up the three-button prompt (Yes / Yes-and-don't-ask-again / No) |
 | `allow` | `permissionDecision: "allow"` | Auto-approve |
-| `skip` | (triggers ask) | Gate doesn't handle command -> unknown |
+| `skip` | (triggers ask/defer) | Gate doesn't handle command -> unknown |
 
 **Unknown commands require approval.** If no gate explicitly allows a command, it's treated as unknown and requires user approval. For compound commands (`&&`, `||`, `|`, `;`), the strictest decision wins.
+
+**Prompt UI: when the third button shows.** Verified against cli.js 2.1.123:
+
+- **Defer (no `permissionDecision`) + no settings.json rule matches** -> three buttons (CC's `JU7` falls through to passthrough with suggestions populated by `hdH(command)`).
+- **Defer + a `permissions.ask` rule matches** -> two buttons (CC's `JU7` returns `{behavior: "ask"}` without suggestions; this is gated entirely on CC's side and a hook can't add suggestions back).
+- **Explicit `ask` (raw-string hard-ask patterns like pipe-to-shell, eval)** -> two buttons (intentional safety floor).
+- **Auto mode (any decision)** -> no prompt; the classifier evaluates instead.
+
+Run `tool-gates rules ask-audit` to see which `permissions.ask` Bash rules in your settings.json are suppressing the third button.
 
 ## Settings.json Integration
 
@@ -550,6 +560,7 @@ Cache files under `~/.cache/tool-gates/`:
 | `tool-gates approve <pattern> -s <scope>` | Add permission rule to settings |
 | `tool-gates rules list` | List all permission rules |
 | `tool-gates rules remove <pattern> -s <scope>` | Remove a permission rule |
+| `tool-gates rules ask-audit` | List `permissions.ask` Bash rules that suppress the third prompt button |
 | `tool-gates pending list` | List pending approvals |
 | `tool-gates pending clear` | Clear pending approval queue |
 | `tool-gates review` | Interactive TUI for pending approvals |

@@ -1268,6 +1268,9 @@ fn print_main_help() {
     eprintln!("  approve <pattern> -s <scope> Add allow rule for command pattern");
     eprintln!("  rules list                   List all permission rules");
     eprintln!("  rules remove <pattern>       Remove a permission rule");
+    eprintln!(
+        "  rules ask-audit              List ask-rules that suppress the third prompt button"
+    );
     eprintln!("  pending list                 List pending approvals");
     eprintln!("  pending clear                Clear pending approval queue");
     eprintln!("  review                       Interactive TUI for pending approvals");
@@ -1456,6 +1459,7 @@ fn handle_rules_subcommand(args: &[String]) {
     match subcommand.as_str() {
         "list" => handle_rules_list(sub_args),
         "remove" => handle_rules_remove(sub_args),
+        "ask-audit" => handle_rules_ask_audit(sub_args),
         _ => {
             eprintln!("Unknown rules subcommand: {}", subcommand);
             eprintln!("Run 'tool-gates rules --help' for usage.");
@@ -1570,13 +1574,58 @@ fn print_rules_help() {
     eprintln!("USAGE:");
     eprintln!("  tool-gates rules list [--scope <scope>]");
     eprintln!("  tool-gates rules remove <pattern> -s <scope>");
+    eprintln!("  tool-gates rules ask-audit");
     eprintln!();
     eprintln!("COMMANDS:");
-    eprintln!("  list     List all permission rules");
-    eprintln!("  remove   Remove a permission rule");
+    eprintln!("  list        List all permission rules");
+    eprintln!("  remove      Remove a permission rule");
+    eprintln!("  ask-audit   List `permissions.ask` Bash rules that suppress the");
+    eprintln!("              \"Yes, and don't ask again for X\" prompt button");
     eprintln!();
     eprintln!("OPTIONS:");
     eprintln!("  -s, --scope <scope>   Filter by scope: user, project, or local");
+}
+
+/// List `permissions.ask` Bash rules with the third-button explanation,
+/// emitting a ready-to-run `tool-gates rules remove` line for each. CC's
+/// prompt UI shows two buttons (Yes/No) for any command that matches an
+/// `permissions.ask` rule -- removing redundant rules restores the third
+/// "Yes, and don't ask again for X" button.
+fn handle_rules_ask_audit(_args: &[String]) {
+    let ask_rules: Vec<_> = list_all_rules()
+        .into_iter()
+        .filter(|r| r.rule_type == RuleType::Ask && r.pattern.starts_with("Bash("))
+        .collect();
+
+    if ask_rules.is_empty() {
+        eprintln!("No `permissions.ask` Bash rules found.");
+        eprintln!();
+        eprintln!("tool-gates' gate engine asks for unfamiliar commands without needing rules in");
+        eprintln!(
+            "settings.json. The three-button prompt (Yes / Yes-and-don't-ask-again / No) appears"
+        );
+        eprintln!("for those commands automatically.");
+        return;
+    }
+
+    eprintln!(
+        "Found {} `permissions.ask` Bash rule(s) that suppress the third prompt button:",
+        ask_rules.len()
+    );
+    eprintln!();
+    for rule in &ask_rules {
+        eprintln!("  {} ({} scope)", rule.pattern, rule.scope.as_str());
+        eprintln!(
+            "    remove: tool-gates rules remove '{}' -s {}",
+            rule.pattern,
+            rule.scope.as_str()
+        );
+    }
+    eprintln!();
+    eprintln!("Whenever any of these rules matches a command, CC's prompt UI shows Yes/No only.");
+    eprintln!("Remove rules where you'd rather get the three-button prompt. tool-gates' gate");
+    eprintln!("engine still asks for unfamiliar commands -- you don't need a settings.json rule");
+    eprintln!("to be prompted.");
 }
 
 // === Pending subcommand ===
@@ -2092,7 +2141,46 @@ fn handle_doctor_subcommand() {
         }
     }
 
-    // 6. Old bash-gates remnants
+    // 6. settings.json `permissions.ask` Bash rules suppress the third
+    // "Yes, and don't ask again for X" prompt button. CC's Bash rule check
+    // (cli.js JU7) returns `{behavior: "ask"}` without populating the
+    // suggestions array whenever any ask rule matches; the prompt UI
+    // gates the third button on suggestions being non-empty. tool-gates
+    // can't influence that from a hook, so the only fix is removing the
+    // ask rule. Surface them here so the user knows what's costing them
+    // the third button.
+    let ask_rules: Vec<_> = list_all_rules()
+        .into_iter()
+        .filter(|r| r.rule_type == RuleType::Ask && r.pattern.starts_with("Bash("))
+        .collect();
+    if !ask_rules.is_empty() {
+        eprintln!();
+        eprintln!(
+            "  Note: {} `permissions.ask` Bash rule(s) suppress the third \"Yes, and don't ask again for X\" prompt button:",
+            ask_rules.len()
+        );
+        for rule in ask_rules.iter().take(8) {
+            eprintln!(
+                "    {} ({} scope)  remove: tool-gates rules remove '{}' -s {}",
+                rule.pattern,
+                rule.scope.as_str(),
+                rule.pattern,
+                rule.scope.as_str(),
+            );
+        }
+        if ask_rules.len() > 8 {
+            eprintln!("    ...and {} more", ask_rules.len() - 8);
+        }
+        eprintln!(
+            "    Whenever one of these rules matches, CC shows Yes/No only. Remove rules you'd"
+        );
+        eprintln!(
+            "    rather have the three-button prompt for. tool-gates' gate engine still asks for"
+        );
+        eprintln!("    unfamiliar commands without needing an ask rule in settings.json.");
+    }
+
+    // 7. Old bash-gates remnants
     let old_cache = dirs::home_dir()
         .map(|h| h.join(".cache/bash-gates"))
         .unwrap_or_default();
