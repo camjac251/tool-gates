@@ -1,7 +1,7 @@
 {
   "name": "tool-gates",
   "description": "Intelligent permission gate for all Claude Code tools. AST-parses Bash commands, guards file reads/writes, and blocks dangerous tool invocations. Defers benign asks to CC's resolver so the prompt UI shows the 'Yes, and don't ask again for X' button, while keeping a deny floor for dangerous patterns. Tracks one-time approvals so they can be batch-promoted to permanent rules later.",
-  "version": "1.5.9",
+  "version": "1.6.0",
   "author": {
     "name": "camjac251"
   },
