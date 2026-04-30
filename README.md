@@ -125,25 +125,26 @@ flowchart TD
 
 **Decision Priority:** `BLOCK > ASK > ALLOW > SKIP`
 
-| Decision  | Effect                      |
-| :-------: | --------------------------- |
-| **deny**  | Command blocked with reason |
-|  **ask**  | User prompted for approval  |
-| **allow** | Auto-approved               |
+| Decision  | Wire output                            | Effect                                                                                  |
+| :-------: | -------------------------------------- | --------------------------------------------------------------------------------------- |
+| **deny**  | `permissionDecision: "deny"`           | Command blocked with reason                                                             |
+|  **ask**  | `permissionDecision: "ask"`            | User prompted (Yes / No, two buttons). Used for hard-deny adjacent patterns and explicit `permissions.ask` matches |
+| **defer** | `permissionDecision` omitted           | Claude Code's resolver runs the tool's own permission check, populating the prefix-suggestion that lights up the third "Yes, and don't ask again for X" button. Used for benign gate-engine asks |
+| **allow** | `permissionDecision: "allow"`          | Auto-approved                                                                           |
 
-> Unknown commands always require approval.
+> Unknown commands always require approval. Whether they get the two-button or three-button prompt depends on whether your `permissions.ask` rules in settings.json match -- run `tool-gates rules ask-audit` to surface ask rules that suppress the third button.
 
 ### Settings.json Integration
 
 tool-gates reads your Claude Code settings from `~/.claude/settings.json` and `.claude/settings.json` (project) to respect your explicit permission rules:
 
-| settings.json | tool-gates | Result                                       |
-| ------------- | ---------- | -------------------------------------------- |
-| `deny` rule   | (any)      | Defers to Claude Code (respects your deny)   |
-| `ask` rule    | (any)      | Defers to Claude Code (respects your ask)    |
-| `allow` rule  | dangerous  | **deny** (tool-gates still blocks dangerous) |
-| `allow`/none  | safe       | **allow**                                    |
-| none          | unknown    | **ask**                                      |
+| settings.json | tool-gates | Result                                                              |
+| ------------- | ---------- | ------------------------------------------------------------------- |
+| `deny` rule   | (any)      | **deny** (respects your explicit deny)                              |
+| `ask` rule    | (any)      | **ask** (respects your explicit ask; two-button prompt)             |
+| `allow` rule  | dangerous  | **deny** (tool-gates still blocks dangerous)                        |
+| `allow`/none  | safe       | **allow**                                                           |
+| none          | unknown    | **defer** (three-button prompt restored via Claude Code's resolver) |
 
 This ensures tool-gates won't accidentally bypass your explicit deny rules while still providing security against dangerous commands.
 
@@ -301,7 +302,13 @@ tool-gates approve 'cargo*' -s user
 # Manage existing rules
 tool-gates rules list
 tool-gates rules remove 'pattern' -s local
+
+# Audit `permissions.ask` rules that suppress the third prompt button
+tool-gates rules ask-audit            # categorized listing
+tool-gates rules ask-audit --apply    # multi-select TUI checklist
 ```
+
+**Why ask-audit?** Whenever a `permissions.ask` rule in settings.json matches a command, Claude Code's resolver shows two buttons (Yes / No) instead of three. The third "Yes, and don't ask again for X" button is suppressed because the resolver returns ask without populating the prefix-suggestion. `ask-audit` categorizes each rule by what tool-gates would do without it (gate-covered, safety floor, indeterminate) and offers per-rule removal.
 
 **Scopes:**
 | Scope | File | Use case |
@@ -436,7 +443,7 @@ Add to `~/.claude/settings.json`:
     ],
     "PermissionRequest": [
       {
-        "matcher": "Bash|Monitor",
+        "matcher": "Bash|Monitor|Write|Edit",
         "hooks": [{ "type": "command", "command": "~/.local/bin/tool-gates", "timeout": 10 }]
       }
     ],
@@ -552,7 +559,7 @@ tool-gates recognizes its own CLI commands:
 
 | Allow                                                                                                                   | Ask                                                                                  |
 | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `pending list`, `pending count`, `rules list`, `hooks status`, `--help`, `--version`, `--tools-status` | `approve`, `rules remove`, `pending clear`, `hooks add`, `review`, `--refresh-tools` |
+| `pending list`, `pending count`, `rules list`, `rules ask-audit`, `hooks status`, `--help`, `--version`, `--tools-status` | `approve`, `rules remove`, `rules ask-audit --apply`, `pending clear`, `hooks add`, `review`, `--refresh-tools` |
 
 ### Basics
 
@@ -924,7 +931,7 @@ src/
 ├── tool_cache.rs        # Tool availability cache for hints
 ├── mise.rs              # Mise task file parsing and command extraction
 ├── package_json.rs      # package.json script parsing and command extraction
-├── tracking.rs          # PreToolUse->PostToolUse correlation (15min TTL)
+├── tracking.rs          # PreToolUse->PostToolUse correlation (24h TTL)
 ├── pending.rs           # Pending approval queue (JSONL format)
 ├── patterns.rs          # Pattern suggestion algorithm
 ├── post_tool_use.rs     # PostToolUse handler

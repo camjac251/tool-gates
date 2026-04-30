@@ -99,7 +99,7 @@ src/
 ├── tool_cache.rs        # Tool availability cache for hints
 ├── mise.rs              # Mise task file parsing and command extraction
 ├── package_json.rs      # package.json script parsing and command extraction
-├── tracking.rs          # PreToolUse->PostToolUse correlation (15min TTL)
+├── tracking.rs          # PreToolUse->PostToolUse correlation (24h TTL)
 ├── pending.rs           # Pending approval queue (JSONL format)
 ├── patterns.rs          # Pattern suggestion algorithm
 ├── post_tool_use.rs     # PostToolUse handler
@@ -208,16 +208,16 @@ BLOCK > ASK > ALLOW > SKIP
 |----------|--------|--------|
 | `block` | `permissionDecision: "deny"` | Block with reason |
 | `ask` | `permissionDecision: "ask"` | Prompt user for approval (Yes/No, two buttons) |
-| `defer` | omits `permissionDecision` | CC's resolver runs the tool's own checkPermissions; for Bash this populates the prefix-suggestion that lights up the three-button prompt (Yes / Yes-and-don't-ask-again / No) |
+| `defer` | omits `permissionDecision` | Claude Code's resolver runs the tool's own permission check; for Bash this populates the prefix-suggestion that lights up the three-button prompt (Yes / Yes-and-don't-ask-again / No) |
 | `allow` | `permissionDecision: "allow"` | Auto-approve |
 | `skip` | (triggers ask/defer) | Gate doesn't handle command -> unknown |
 
 **Unknown commands require approval.** If no gate explicitly allows a command, it's treated as unknown and requires user approval. For compound commands (`&&`, `||`, `|`, `;`), the strictest decision wins.
 
-**Prompt UI: when the third button shows.** Verified against cli.js 2.1.123:
+**Prompt UI: when the third button shows.**
 
-- **Defer (no `permissionDecision`) + no settings.json rule matches** -> three buttons (CC's `JU7` falls through to passthrough with suggestions populated by `hdH(command)`).
-- **Defer + a `permissions.ask` rule matches** -> two buttons (CC's `JU7` returns `{behavior: "ask"}` without suggestions; this is gated entirely on CC's side and a hook can't add suggestions back).
+- **Defer (no `permissionDecision`) + no settings.json rule matches** -> three buttons. Claude Code's resolver runs the tool's own permission check, which falls through to passthrough and populates the command-prefix suggestion the prompt UI needs for the third button.
+- **Defer + a `permissions.ask` rule matches** -> two buttons. The resolver short-circuits on the matching ask rule and returns ask without populating suggestions. A hook can't add suggestions back from this point; the only fix is removing the ask rule.
 - **Explicit `ask` (raw-string hard-ask patterns like pipe-to-shell, eval)** -> two buttons (intentional safety floor).
 - **Auto mode (any decision)** -> no prompt; the classifier evaluates instead.
 
@@ -532,7 +532,7 @@ Cache files under `~/.cache/tool-gates/`:
 
 | File | Purpose |
 |------|---------|
-| `tracking.json` | PreToolUse->PostToolUse correlation (15min TTL, auto-cleaned) |
+| `tracking.json` | PreToolUse->PostToolUse correlation (24h TTL, auto-cleaned) |
 | `pending.jsonl` | Approval queue. Commands awaiting `tool-gates review` |
 | `available-tools.json` | Tool cache for hints (7-day TTL) |
 | `hint-tracker.json` | Session-scoped dedup for hints + security warnings |
