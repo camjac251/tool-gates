@@ -1574,7 +1574,7 @@ fn print_rules_help() {
     eprintln!("USAGE:");
     eprintln!("  tool-gates rules list [--scope <scope>]");
     eprintln!("  tool-gates rules remove <pattern> -s <scope>");
-    eprintln!("  tool-gates rules ask-audit [--apply [--yes]]");
+    eprintln!("  tool-gates rules ask-audit [--apply]");
     eprintln!();
     eprintln!("COMMANDS:");
     eprintln!("  list        List all permission rules");
@@ -1584,13 +1584,13 @@ fn print_rules_help() {
     eprintln!();
     eprintln!("OPTIONS:");
     eprintln!("  -s, --scope <scope>   Filter by scope: user, project, or local");
-    eprintln!("  --apply               (ask-audit only) Remove redundant rules with confirmation");
-    eprintln!("  -y, --yes             (ask-audit --apply) Skip the confirmation prompt");
+    eprintln!(
+        "  --apply               (ask-audit only) Walk gate-covered rules with [y/N] per rule"
+    );
 }
 
 fn handle_rules_ask_audit(args: &[String]) {
     let apply = args.iter().any(|a| a == "--apply");
-    let yes = args.iter().any(|a| a == "--yes" || a == "-y");
 
     let ask_rules: Vec<_> = list_all_rules()
         .into_iter()
@@ -1608,47 +1608,49 @@ fn handle_rules_ask_audit(args: &[String]) {
         return;
     }
 
-    let mut redundant: Vec<&_> = Vec::new();
+    let mut gate_covered: Vec<&_> = Vec::new();
     let mut safety_floor: Vec<&_> = Vec::new();
     let mut indeterminate: Vec<&_> = Vec::new();
     for rule in &ask_rules {
         match classify_ask_rule(&rule.pattern) {
-            AskRuleCategory::Redundant => redundant.push(rule),
+            AskRuleCategory::GateCovered => gate_covered.push(rule),
             AskRuleCategory::SafetyFloor => safety_floor.push(rule),
             AskRuleCategory::Indeterminate => indeterminate.push(rule),
         }
     }
 
     if apply {
-        run_ask_audit_apply(&redundant, yes);
+        run_ask_audit_apply(&gate_covered);
         return;
     }
 
     eprintln!(
-        "Found {} `permissions.ask` Bash rule(s). Each one suppresses the third prompt button when it matches.",
+        "Found {} `permissions.ask` Bash rule(s). Each one trades the third prompt button for a forced 2-button confirmation.",
         ask_rules.len()
     );
+    eprintln!();
     eprintln!(
-        "Categories below show what removing the rule would do, based on tool-gates' gate engine."
+        "Categories below classify each rule by what tool-gates would do without it. Use them as a"
     );
     eprintln!(
-        "Caveat: classification uses the rule's literal prefix. Patterns like `cmd *` may behave"
+        "starting point for review, not a removal recommendation -- many gate-covered rules are"
     );
     eprintln!(
-        "differently in practice once the glob is filled with real content -- review safety-floor"
+        "kept deliberately as a slip-click safety floor (no chance of an accidental \"Yes, and don't"
     );
-    eprintln!("rules manually before removing.");
+    eprintln!("ask again\" creating a persistent allow rule).");
 
-    if !redundant.is_empty() {
+    if !gate_covered.is_empty() {
         eprintln!();
         eprintln!(
-            "Redundant ({}): tool-gates' gate engine already asks for these commands.",
-            redundant.len()
+            "Gate-covered ({}): tool-gates would still ask (or deny) for these commands without",
+            gate_covered.len()
         );
         eprintln!(
-            "Removing them restores the third button without weakening anything you'd be prompted for."
+            "the rule. Remove if you want the three-button prompt; keep if you'd rather force the"
         );
-        for rule in &redundant {
+        eprintln!("2-button confirmation as a slip-click guard.");
+        for rule in &gate_covered {
             eprintln!("  {} ({} scope)", rule.pattern, rule.scope.as_str());
             eprintln!(
                 "    remove: tool-gates rules remove '{}' -s {}",
@@ -1693,77 +1695,67 @@ fn handle_rules_ask_audit(args: &[String]) {
         }
     }
 
-    if !redundant.is_empty() {
+    if !gate_covered.is_empty() {
         eprintln!();
         eprintln!(
-            "Tip: run `tool-gates rules ask-audit --apply` to remove the {} redundant rule(s) in one go.",
-            redundant.len()
+            "Tip: `tool-gates rules ask-audit --apply` walks the gate-covered rules one at a time"
         );
-        eprintln!("     Add `--yes` to skip the confirmation prompt.");
+        eprintln!(
+            "with [y/N] per rule, defaulting to keep. Editing settings.json directly is also fine."
+        );
     }
 }
 
-fn run_ask_audit_apply(redundant: &[&tool_gates::settings_writer::PermissionRule], yes: bool) {
-    if redundant.is_empty() {
-        eprintln!("No redundant rules to remove.");
+fn run_ask_audit_apply(gate_covered: &[&tool_gates::settings_writer::PermissionRule]) {
+    if gate_covered.is_empty() {
+        eprintln!("No gate-covered rules to review.");
         return;
     }
 
     eprintln!(
-        "About to remove {} redundant `permissions.ask` Bash rule(s):",
-        redundant.len()
-    );
-    for rule in redundant {
-        eprintln!("  - {} ({} scope)", rule.pattern, rule.scope.as_str());
-    }
-    eprintln!();
-    eprintln!(
-        "Each rule was classified as redundant: tool-gates' gate engine already asks (or denies)"
+        "Walking {} gate-covered rule(s). For each one, type 'y' to remove, anything else to keep.",
+        gate_covered.len()
     );
     eprintln!(
-        "for the same command shape, so removing the rule restores the third prompt button without"
+        "Default is keep. Removed rules trade the 2-button confirmation for a three-button prompt"
     );
-    eprintln!("weakening anything you'd otherwise be prompted for.");
+    eprintln!("(adds a one-click \"Yes, and don't ask again for X\" option per project).");
     eprintln!();
 
-    if !yes {
-        eprint!("Proceed? [y/N] ");
+    let mut removed = 0usize;
+    let mut kept = 0usize;
+    let mut errors: Vec<String> = Vec::new();
+
+    for rule in gate_covered {
+        eprint!(
+            "  {} ({} scope) -- remove? [y/N] ",
+            rule.pattern,
+            rule.scope.as_str()
+        );
         use std::io::Write;
         let _ = std::io::stderr().flush();
         let mut answer = String::new();
         if std::io::stdin().read_line(&mut answer).is_err() {
-            eprintln!("Failed to read input. Aborting.");
+            eprintln!("\nFailed to read input. Aborting.");
             std::process::exit(1);
         }
         let trimmed = answer.trim().to_lowercase();
         if trimmed != "y" && trimmed != "yes" {
-            eprintln!("Aborted. No rules removed.");
-            return;
+            kept += 1;
+            continue;
         }
-    }
 
-    let mut removed = 0usize;
-    let mut errors: Vec<String> = Vec::new();
-    for rule in redundant {
         match remove_rule(rule.scope, &rule.pattern) {
             Ok(true) => {
-                eprintln!(
-                    "  removed: {} ({} scope)",
-                    rule.pattern,
-                    rule.scope.as_str()
-                );
+                eprintln!("    removed.");
                 removed += 1;
             }
             Ok(false) => {
-                eprintln!(
-                    "  skipped: {} ({} scope) -- not present (maybe already removed)",
-                    rule.pattern,
-                    rule.scope.as_str()
-                );
+                eprintln!("    not present (maybe already removed).");
             }
             Err(e) => {
                 let msg = format!(
-                    "  error removing {} ({} scope): {}",
+                    "    error removing {} ({} scope): {}",
                     rule.pattern,
                     rule.scope.as_str(),
                     e
@@ -1774,7 +1766,12 @@ fn run_ask_audit_apply(redundant: &[&tool_gates::settings_writer::PermissionRule
         }
     }
     eprintln!();
-    eprintln!("Removed {}/{} rule(s).", removed, redundant.len());
+    eprintln!(
+        "Removed {}/{} rule(s); kept {}.",
+        removed,
+        gate_covered.len(),
+        kept
+    );
     if !errors.is_empty() {
         std::process::exit(1);
     }
@@ -1782,8 +1779,18 @@ fn run_ask_audit_apply(redundant: &[&tool_gates::settings_writer::PermissionRule
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AskRuleCategory {
-    Redundant,
+    /// Gate engine would ask (or deny) for this command without the rule.
+    /// The rule is technically redundant from a "would I be prompted?"
+    /// perspective, but may still be intentional: it forces a 2-button
+    /// prompt, which prevents an accidental "Yes, and don't ask again"
+    /// click from creating a persistent allow rule.
+    GateCovered,
+    /// Gate engine would auto-allow without the rule. Removing the rule
+    /// drops the prompt entirely; keeping it is a deliberate "always
+    /// prompt me" floor.
     SafetyFloor,
+    /// Pattern shape can't be round-tripped into a representative command
+    /// (internal globs, etc.). Inspect manually.
     Indeterminate,
 }
 
@@ -1828,8 +1835,8 @@ fn classify_ask_rule(pattern: &str) -> AskRuleCategory {
         // Deny: removing the ask rule still blocks the command. The
         // ask rule is strictly weaker than tool-gates' floor; safe to
         // delete (post-removal posture is *stricter*, not weaker).
-        PermissionDecision::Deny => AskRuleCategory::Redundant,
-        PermissionDecision::Ask => AskRuleCategory::Redundant,
+        PermissionDecision::Deny => AskRuleCategory::GateCovered,
+        PermissionDecision::Ask => AskRuleCategory::GateCovered,
         PermissionDecision::Allow => AskRuleCategory::SafetyFloor,
         // Defer / Approve / other shapes shouldn't show up from
         // check_command_for_session (no settings, no defer wrapping).
@@ -2362,12 +2369,12 @@ fn handle_doctor_subcommand() {
         .filter(|r| r.rule_type == RuleType::Ask && r.pattern.starts_with("Bash("))
         .collect();
     if !ask_rules.is_empty() {
-        let mut redundant = 0usize;
+        let mut gate_covered = 0usize;
         let mut safety_floor = 0usize;
         let mut indeterminate = 0usize;
         for rule in &ask_rules {
             match classify_ask_rule(&rule.pattern) {
-                AskRuleCategory::Redundant => redundant += 1,
+                AskRuleCategory::GateCovered => gate_covered += 1,
                 AskRuleCategory::SafetyFloor => safety_floor += 1,
                 AskRuleCategory::Indeterminate => indeterminate += 1,
             }
@@ -2378,8 +2385,8 @@ fn handle_doctor_subcommand() {
             ask_rules.len()
         );
         eprintln!(
-            "    {} redundant (gate would also ask), {} safety floor (gate would auto-allow), {} indeterminate.",
-            redundant, safety_floor, indeterminate
+            "    {} gate-covered (gate would also ask), {} safety floor (gate would auto-allow), {} indeterminate.",
+            gate_covered, safety_floor, indeterminate
         );
         eprintln!(
             "    Run `tool-gates rules ask-audit` for the per-rule breakdown and remove commands."
