@@ -585,6 +585,8 @@ tool-gates recognizes its own CLI commands:
 | -------------------------------------------- | ---------------------------------------- | ------------------------------------------- |
 | `status`, `log`, `diff`, `show`, `branch -a` | `add`, `commit`, `push`, `pull`, `merge` | `push --force`, `reset --hard`, `clean -fd` |
 
+User-defined aliases in `~/.gitconfig` resolve through these rules: `git st` allows as `status`, `git lg` as `log`, `git astatus` as `status` (the leading `-c color.ui=false` is stripped before resolution), `git co main` asks as `checkout`. Built-ins win over aliases (`alias.status = log` doesn't shadow real `status`). Shell-prefixed aliases (`!cmd`) and chains beyond depth 5 ask. See the [Git Aliases](#git-aliases) configuration section.
+
 ### Shortcut CLI
 
 [shortcut-cli](https://github.com/shortcut-cli/shortcut-cli) - Community CLI for Shortcut
@@ -748,7 +750,26 @@ file_guards = true           # Symlink guard for AI config files (default: true)
 hints = true                 # Modern CLI hints, e.g. cat->bat, grep->rg, etc. (default: true)
 security_reminders = true    # Scan Write/Edit for security anti-patterns (default: true)
 head_tail_pipe_block = true  # Deny `| head -N` / `| tail -N` pipes (default: true)
+git_aliases = true           # Resolve user-defined git aliases (default: true)
 ```
+
+### Git Aliases
+
+When enabled, the git gate resolves user-defined aliases against `~/.gitconfig` so they apply the same rules as the underlying subcommand. `git st` allows as `status`, `git lg` as `log`, `git astatus` as `status` (the leading `-c color.ui=false` is stripped first), `git co main` asks as `checkout`. Without this, every alias hits the default ask path.
+
+```toml
+[git_aliases]
+include_local_repo = false   # Also read $REPO/.git/config aliases (default: false)
+```
+
+Resolution rules:
+
+- **Built-ins win.** `alias.status = log` does not shadow real `status`.
+- **Shell aliases (`!cmd`) ask.** Resolving the body would mean re-running it through the gate engine.
+- **Chained aliases recurse to depth 5** with cycle detection.
+- **Compound bodies** (`alias.foo = log; rm -rf .`) get re-checked through the raw-string deny pass after rewrite.
+- **Repo-local aliases are off by default.** A malicious alias in a third-party repo should not silently inherit alias trust on first checkout. Local entries shadow global by name when enabled.
+- The alias map is read once per process via `git config --global --get-regexp '^alias\.'` (~30ms cold).
 
 ### Head/Tail Pipe Block
 

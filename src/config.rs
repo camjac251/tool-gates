@@ -105,6 +105,9 @@ pub struct Config {
     /// Auto-approve rules for MCP tools when `permission_mode == "acceptEdits"`.
     #[serde(default)]
     pub accept_edits_mcp: Vec<McpApprovalRule>,
+    /// Git alias resolution settings.
+    #[serde(default)]
+    pub git_aliases: GitAliasesConfig,
 }
 
 impl Config {
@@ -133,6 +136,10 @@ pub struct Features {
     /// Forces callers to use native limits (`rg -m N`, `fd --max-results N`,
     /// `bat -r START:END`) to cap output at the source instead of truncating via pipe.
     pub head_tail_pipe_block: bool,
+    /// Resolve user-defined git aliases against `~/.gitconfig` so they apply
+    /// the same rules as the underlying subcommand. When disabled, aliases
+    /// hit the default ask path.
+    pub git_aliases: bool,
 }
 
 impl Default for Features {
@@ -143,6 +150,7 @@ impl Default for Features {
             hints: true,
             security_reminders: true,
             head_tail_pipe_block: true,
+            git_aliases: true,
         }
     }
 }
@@ -153,6 +161,17 @@ impl Default for Features {
 pub struct HintsConfig {
     /// Legacy command names to suppress hints for (e.g., ["man", "du"]).
     pub disable: Vec<String>,
+}
+
+/// Git alias resolution settings.
+#[derive(Debug, Deserialize, Default, Clone)]
+#[serde(default)]
+pub struct GitAliasesConfig {
+    /// Read repo-local aliases from `$REPO/.git/config` in addition to the
+    /// global `~/.gitconfig`. Default is `false` because a malicious alias
+    /// in a third-party repo should not silently inherit alias trust on
+    /// first checkout. Local entries shadow global by name when enabled.
+    pub include_local_repo: bool,
 }
 
 /// Cache settings.

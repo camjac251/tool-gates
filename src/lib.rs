@@ -33,6 +33,7 @@ pub mod config;
 pub mod file_guards;
 pub mod gates;
 pub mod generated;
+pub mod git_aliases;
 pub mod hint_tracker;
 pub mod hints;
 pub mod mise;

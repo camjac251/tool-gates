@@ -18,13 +18,14 @@
 //! Everything else (checkout -b/-B, checkout --, push --force-with-lease,
 //! config subcommands, etc.) is handled declaratively via TOML rules.
 
-use crate::generated::rules::check_git_declarative;
+use crate::generated::rules::{GIT_ALLOW, GIT_ASK, check_git_declarative};
+use crate::git_aliases::{self, Resolved};
 use crate::models::{CommandInfo, GateResult};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
 /// Git global options that take a value (must skip arg + value)
-static GLOBAL_OPTS_WITH_VALUE: LazyLock<HashSet<&str>> = LazyLock::new(|| {
+pub(crate) static GLOBAL_OPTS_WITH_VALUE: LazyLock<HashSet<&str>> = LazyLock::new(|| {
     [
         "-C",
         "-c",
@@ -41,7 +42,7 @@ static GLOBAL_OPTS_WITH_VALUE: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 });
 
 /// Git global flags (single flags, no value)
-static GLOBAL_FLAGS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
+pub(crate) static GLOBAL_FLAGS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
     [
         "--bare",
         "--no-replace-objects",
@@ -112,6 +113,32 @@ fn extract_subcommand(args: &[String]) -> Option<(usize, &str)> {
 
 /// Check git command.
 pub fn check_git(cmd: &CommandInfo) -> GateResult {
+    let config = crate::config::get();
+    if !config.features.git_aliases {
+        // Alias resolution disabled. Empty map -> no alias ever resolves;
+        // the gate falls through to the existing TOML behavior.
+        return check_git_with_alias_map(cmd, &HashMap::new());
+    }
+    if config.git_aliases.include_local_repo {
+        // Merge global + local; local entries shadow global by name.
+        let mut merged: HashMap<String, String> = git_aliases::GLOBAL_ALIASES.clone();
+        let local = git_aliases::load_local_aliases(".");
+        for (k, v) in local {
+            merged.insert(k, v);
+        }
+        return check_git_with_alias_map(cmd, &merged);
+    }
+    check_git_with_alias_map(cmd, &git_aliases::GLOBAL_ALIASES)
+}
+
+/// Test entry point that lets callers inject a synthetic alias map. Production
+/// always goes through [`check_git`], which uses the cached `~/.gitconfig`
+/// map. Tests use this to exercise resolution without touching the real
+/// gitconfig.
+pub fn check_git_with_alias_map(
+    cmd: &CommandInfo,
+    alias_map: &HashMap<String, String>,
+) -> GateResult {
     if cmd.program != "git" {
         return GateResult::skip();
     }
@@ -134,13 +161,6 @@ pub fn check_git(cmd: &CommandInfo) -> GateResult {
     // Build normalized args (subcommand + its args, without global opts)
     let normalized_args: Vec<String> = args.iter().skip(subcmd_idx).cloned().collect();
 
-    // Create normalized command for declarative rules
-    let normalized_cmd = CommandInfo {
-        program: cmd.program.clone(),
-        args: normalized_args.clone(),
-        raw: cmd.raw.clone(),
-    };
-
     // Special case: git add with wildcards, --all, or . (complex logic)
     if subcommand == "add" {
         return check_git_add(&normalized_args);
@@ -152,6 +172,41 @@ pub fn check_git(cmd: &CommandInfo) -> GateResult {
         let has_no_flags = !normalized_args[1..].iter().any(|a| a.starts_with('-'));
         if has_no_flags {
             return GateResult::ask("Creating tag");
+        }
+    }
+
+    // Built-ins win over aliases. If the TOML knows this subcommand at the
+    // single-token level (allow or ask, including flag-conditional), apply
+    // its rule directly. Compound-only entries like `config get` slip
+    // through this check, but conflicts there require an alias named after
+    // a real git command (`alias.config = ...`), which is rare enough to
+    // accept as a divergence.
+    let known_builtin = GIT_ALLOW.contains(subcommand)
+        || GIT_ASK.contains_key(subcommand)
+        || matches!(subcommand, "branch" | "tag");
+
+    let normalized_cmd = CommandInfo {
+        program: cmd.program.clone(),
+        args: normalized_args.clone(),
+        raw: cmd.raw.clone(),
+    };
+
+    if !known_builtin && let Some(resolved) = git_aliases::resolve_with_map(subcommand, alias_map) {
+        match resolved {
+            Resolved::Tokens(tokens) => {
+                let mut new_args = tokens;
+                new_args.extend(normalized_args.iter().skip(1).cloned());
+                let rewritten = CommandInfo {
+                    program: cmd.program.clone(),
+                    args: new_args,
+                    raw: cmd.raw.clone(),
+                };
+                return check_git_declarative(&rewritten)
+                    .unwrap_or_else(|| GateResult::ask(format!("git: alias {subcommand}")));
+            }
+            Resolved::Shell => {
+                return GateResult::ask(format!("git: shell alias {subcommand}"));
+            }
         }
     }
 
@@ -552,5 +607,157 @@ mod tests {
     fn test_non_git_skips() {
         let result = check_git(&make_cmd("gh", &["pr", "list"]));
         assert_eq!(result.decision, Decision::Skip);
+    }
+
+    // === Aliases ===
+
+    fn alias_map(entries: &[(&str, &str)]) -> HashMap<String, String> {
+        entries
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
+    }
+
+    #[test]
+    fn test_alias_to_status_allows() {
+        let m = alias_map(&[("st", "status")]);
+        let result = check_git_with_alias_map(&cmd(&["st"]), &m);
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_alias_to_log_allows() {
+        let m = alias_map(&[("lg", "log --oneline -10")]);
+        let result = check_git_with_alias_map(&cmd(&["lg"]), &m);
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_alias_strips_c_prefix_and_allows() {
+        let m = alias_map(&[("astatus", "-c color.ui=false status --short")]);
+        let result = check_git_with_alias_map(&cmd(&["astatus"]), &m);
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_alias_to_checkout_asks() {
+        let m = alias_map(&[("co", "checkout")]);
+        let result = check_git_with_alias_map(&cmd(&["co", "main"]), &m);
+        assert_eq!(result.decision, Decision::Ask);
+        assert!(
+            result
+                .reason
+                .as_ref()
+                .unwrap()
+                .to_lowercase()
+                .contains("checking out"),
+            "expected 'Checking out', got: {:?}",
+            result.reason
+        );
+    }
+
+    #[test]
+    fn test_alias_to_commit_asks() {
+        let m = alias_map(&[("ci", "commit")]);
+        let result = check_git_with_alias_map(&cmd(&["ci", "-m", "msg"]), &m);
+        assert_eq!(result.decision, Decision::Ask);
+        assert!(
+            result
+                .reason
+                .as_ref()
+                .unwrap()
+                .to_lowercase()
+                .contains("committing"),
+            "expected 'Committing', got: {:?}",
+            result.reason
+        );
+    }
+
+    #[test]
+    fn test_alias_to_reset_asks() {
+        let m = alias_map(&[("unstage", "reset HEAD --")]);
+        let result = check_git_with_alias_map(&cmd(&["unstage", "file.txt"]), &m);
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    #[test]
+    fn test_shell_alias_asks() {
+        let m = alias_map(&[("deploy", "!./deploy.sh")]);
+        let result = check_git_with_alias_map(&cmd(&["deploy"]), &m);
+        assert_eq!(result.decision, Decision::Ask);
+        assert!(
+            result
+                .reason
+                .as_ref()
+                .unwrap()
+                .to_lowercase()
+                .contains("shell alias"),
+            "expected 'shell alias', got: {:?}",
+            result.reason
+        );
+    }
+
+    #[test]
+    fn test_alias_with_global_opts_composes() {
+        let m = alias_map(&[("st", "status")]);
+        let result = check_git_with_alias_map(&cmd(&["-C", "/path", "st"]), &m);
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_builtin_wins_over_alias_for_status() {
+        // alias.status = log -- built-in 'status' wins, returns Allow as status.
+        let m = alias_map(&[("status", "log")]);
+        let result = check_git_with_alias_map(&cmd(&["status"]), &m);
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_builtin_wins_over_alias_for_commit() {
+        // alias.commit = log -- built-in 'commit' wins, asks "Committing".
+        let m = alias_map(&[("commit", "log")]);
+        let result = check_git_with_alias_map(&cmd(&["commit", "-m", "x"]), &m);
+        assert_eq!(result.decision, Decision::Ask);
+        assert!(
+            result
+                .reason
+                .as_ref()
+                .unwrap()
+                .to_lowercase()
+                .contains("committing"),
+            "Built-in commit should win, got: {:?}",
+            result.reason
+        );
+    }
+
+    #[test]
+    fn test_unknown_subcommand_no_alias_falls_through_to_ask() {
+        // No alias defined for "totally-unknown" -- existing fallback path.
+        let m = alias_map(&[]);
+        let result = check_git_with_alias_map(&cmd(&["totally-unknown"]), &m);
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    #[test]
+    fn test_dry_run_short_circuits_alias() {
+        let m = alias_map(&[("co", "checkout")]);
+        let result = check_git_with_alias_map(&cmd(&["co", "main", "--dry-run"]), &m);
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_chained_alias_resolves() {
+        let m = alias_map(&[("a", "b"), ("b", "status")]);
+        let result = check_git_with_alias_map(&cmd(&["a"]), &m);
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_user_args_appended_after_alias_body() {
+        // alias.lg = log --oneline; "git lg --author=me" should resolve to
+        // "log --oneline --author=me".
+        let m = alias_map(&[("lg", "log --oneline")]);
+        let result = check_git_with_alias_map(&cmd(&["lg", "--author=me"]), &m);
+        assert_eq!(result.decision, Decision::Allow);
     }
 }
