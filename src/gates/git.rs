@@ -191,21 +191,23 @@ pub fn check_git_with_alias_map(
         raw: cmd.raw.clone(),
     };
 
-    if !known_builtin && let Some(resolved) = git_aliases::resolve_with_map(subcommand, alias_map) {
-        match resolved {
-            Resolved::Tokens(tokens) => {
-                let mut new_args = tokens;
-                new_args.extend(normalized_args.iter().skip(1).cloned());
-                let rewritten = CommandInfo {
-                    program: cmd.program.clone(),
-                    args: new_args,
-                    raw: cmd.raw.clone(),
-                };
-                return check_git_declarative(&rewritten)
-                    .unwrap_or_else(|| GateResult::ask(format!("git: alias {subcommand}")));
-            }
-            Resolved::Shell => {
-                return GateResult::ask(format!("git: shell alias {subcommand}"));
+    if !known_builtin {
+        if let Some(resolved) = git_aliases::resolve_with_map(subcommand, alias_map) {
+            match resolved {
+                Resolved::Tokens(tokens) => {
+                    let mut new_args = tokens;
+                    new_args.extend(normalized_args.iter().skip(1).cloned());
+                    let rewritten = CommandInfo {
+                        program: cmd.program.clone(),
+                        args: new_args,
+                        raw: cmd.raw.clone(),
+                    };
+                    return check_git_declarative(&rewritten)
+                        .unwrap_or_else(|| GateResult::ask(format!("git: alias {subcommand}")));
+                }
+                Resolved::Shell => {
+                    return GateResult::ask(format!("git: shell alias {subcommand}"));
+                }
             }
         }
     }

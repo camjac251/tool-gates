@@ -61,11 +61,11 @@ pub fn load_local_aliases(cwd: &str) -> HashMap<String, String> {
     let output = Command::new("git")
         .args(["-C", cwd, "config", "--local", "--get-regexp", r"^alias\."])
         .output();
-    if let Ok(output) = output
-        && output.status.success()
-    {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        local = parse_alias_output(&stdout);
+    if let Ok(output) = output {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            local = parse_alias_output(&stdout);
+        }
     }
     local
 }
