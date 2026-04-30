@@ -6,7 +6,11 @@ use crate::models::CommandInfo;
 
 /// Generate suggested approval patterns for a command.
 ///
-/// Returns patterns from most specific to most broad.
+/// Returns patterns from most specific to most broad. Some shapes
+/// deliberately omit broader globs because broadening is unsafe -- e.g.
+/// `cargo install <pkg>:*` allows arbitrary package install (build.rs
+/// runs during install). For those, only the literal-package pattern is
+/// suggested so the third-button click can't accidentally widen trust.
 pub fn suggest_patterns(cmd: &CommandInfo) -> Vec<String> {
     let mut patterns = Vec::new();
 
@@ -26,35 +30,78 @@ pub fn suggest_patterns(cmd: &CommandInfo) -> Vec<String> {
                         }
                     }
                     patterns.push(format!("{} {}:*", cmd.program, subcmd));
-                } else if subcmd == "install" || subcmd == "add" || subcmd == "remove" {
-                    // npm install <pkg> → "npm install pkg", "npm install:*"
-                    if let Some(pkg) = cmd.args.get(1) {
-                        if !pkg.starts_with('-') {
-                            patterns.push(format!("{} {} {}", cmd.program, subcmd, pkg));
-                        }
+                    patterns.push(format!("{}:*", cmd.program));
+                } else if subcmd == "install" || subcmd == "add" {
+                    // npm install <pkg> runs install/postinstall scripts.
+                    // Suggest only the literal-package pattern so a third-
+                    // button click can't widen to arbitrary packages.
+                    if let Some(pkg) = cmd.args.iter().skip(1).find(|a| !a.starts_with('-')) {
+                        patterns.push(format!("{} {} {}", cmd.program, subcmd, pkg));
+                    }
+                    // No broader globs intentionally.
+                } else if subcmd == "remove" {
+                    if let Some(pkg) = cmd.args.iter().skip(1).find(|a| !a.starts_with('-')) {
+                        patterns.push(format!("{} {} {}", cmd.program, subcmd, pkg));
                     }
                     patterns.push(format!("{} {}:*", cmd.program, subcmd));
+                    patterns.push(format!("{}:*", cmd.program));
                 } else {
                     patterns.push(format!("{} {}:*", cmd.program, subcmd));
+                    patterns.push(format!("{}:*", cmd.program));
                 }
+            } else {
+                patterns.push(format!("{}:*", cmd.program));
             }
-            patterns.push(format!("{}:*", cmd.program));
         }
 
-        // Cargo - similar to package managers
+        // Cargo - install can run arbitrary build.rs; tighten suggestions
         "cargo" => {
             if let Some(subcmd) = cmd.args.first() {
-                patterns.push(format!("cargo {}:*", subcmd));
+                if subcmd == "install" {
+                    if let Some(pkg) = cmd.args.iter().skip(1).find(|a| !a.starts_with('-')) {
+                        patterns.push(format!("cargo install {}", pkg));
+                    }
+                    // No `cargo install:*` or `cargo:*` -- both allow arbitrary
+                    // package install with build.rs execution.
+                } else {
+                    patterns.push(format!("cargo {}:*", subcmd));
+                    patterns.push("cargo:*".to_string());
+                }
+            } else {
+                patterns.push("cargo:*".to_string());
             }
-            patterns.push("cargo:*".to_string());
         }
 
-        // pip/uv/poetry
+        // pip/uv/poetry - install runs setup.py / package scripts
         "pip" | "pip3" | "uv" | "poetry" => {
             if let Some(subcmd) = cmd.args.first() {
-                patterns.push(format!("{} {}:*", cmd.program, subcmd));
+                if subcmd == "install" {
+                    if let Some(pkg) = cmd.args.iter().skip(1).find(|a| !a.starts_with('-')) {
+                        patterns.push(format!("{} install {}", cmd.program, pkg));
+                    }
+                    // No broader globs.
+                } else {
+                    patterns.push(format!("{} {}:*", cmd.program, subcmd));
+                    patterns.push(format!("{}:*", cmd.program));
+                }
+            } else {
+                patterns.push(format!("{}:*", cmd.program));
             }
-            patterns.push(format!("{}:*", cmd.program));
+        }
+
+        // System package managers - install runs maintainer scripts as root
+        "gem" | "brew" | "apt" | "apt-get" => {
+            if let Some(subcmd) = cmd.args.first() {
+                if subcmd == "install" {
+                    if let Some(pkg) = cmd.args.iter().skip(1).find(|a| !a.starts_with('-')) {
+                        patterns.push(format!("{} install {}", cmd.program, pkg));
+                    }
+                    // No broader globs.
+                } else {
+                    patterns.push(format!("{} {}:*", cmd.program, subcmd));
+                    patterns.push(format!("{}:*", cmd.program));
+                }
+            }
         }
 
         // mise tasks
@@ -193,10 +240,46 @@ mod tests {
 
     #[test]
     fn test_npm_install_patterns() {
+        // `npm install <pkg>` runs install/postinstall scripts. Suggesting
+        // `npm install:*` would let a third-button click widen trust to
+        // arbitrary packages, so only the literal-package pattern is
+        // suggested here.
         let patterns = suggest_patterns(&cmd("npm", &["install", "lodash"]));
         assert!(patterns.contains(&"npm install lodash".to_string()));
-        assert!(patterns.contains(&"npm install:*".to_string()));
-        assert!(patterns.contains(&"npm:*".to_string()));
+        assert!(
+            !patterns.iter().any(|p| p == "npm install:*"),
+            "broader install glob must not be suggested: {patterns:?}"
+        );
+        assert!(
+            !patterns.iter().any(|p| p == "npm:*"),
+            "broadest npm glob must not be suggested for install: {patterns:?}"
+        );
+    }
+
+    #[test]
+    fn test_cargo_install_only_literal() {
+        // Same reasoning as npm install: `cargo install <pkg>` runs
+        // build.rs during install. Only the literal package is suggested.
+        let patterns = suggest_patterns(&cmd("cargo", &["install", "ripgrep"]));
+        assert!(patterns.contains(&"cargo install ripgrep".to_string()));
+        assert!(!patterns.iter().any(|p| p == "cargo install:*"));
+        assert!(!patterns.iter().any(|p| p == "cargo:*"));
+    }
+
+    #[test]
+    fn test_cargo_build_keeps_broader_globs() {
+        // Non-install cargo subcommands keep the broader glob suggestions.
+        let patterns = suggest_patterns(&cmd("cargo", &["build", "--release"]));
+        assert!(patterns.contains(&"cargo build:*".to_string()));
+        assert!(patterns.contains(&"cargo:*".to_string()));
+    }
+
+    #[test]
+    fn test_apt_install_only_literal() {
+        let patterns = suggest_patterns(&cmd("apt", &["install", "ripgrep"]));
+        assert!(patterns.contains(&"apt install ripgrep".to_string()));
+        assert!(!patterns.iter().any(|p| p == "apt install:*"));
+        assert!(!patterns.iter().any(|p| p == "apt:*"));
     }
 
     #[test]

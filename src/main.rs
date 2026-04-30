@@ -1585,7 +1585,7 @@ fn print_rules_help() {
     eprintln!("OPTIONS:");
     eprintln!("  -s, --scope <scope>   Filter by scope: user, project, or local");
     eprintln!(
-        "  --apply               (ask-audit only) Walk gate-covered rules with [y/N] per rule"
+        "  --apply               (ask-audit only) Open a multi-select checklist TUI for removals"
     );
 }
 
@@ -1698,11 +1698,12 @@ fn handle_rules_ask_audit(args: &[String]) {
     if !gate_covered.is_empty() {
         eprintln!();
         eprintln!(
-            "Tip: `tool-gates rules ask-audit --apply` walks the gate-covered rules one at a time"
+            "Tip: `tool-gates rules ask-audit --apply` opens a checklist TUI for the gate-covered"
         );
         eprintln!(
-            "with [y/N] per rule, defaulting to keep. Editing settings.json directly is also fine."
+            "rules. Space toggles, Enter applies, Esc cancels. Editing settings.json directly is"
         );
+        eprintln!("also fine.");
     }
 }
 
@@ -1712,50 +1713,45 @@ fn run_ask_audit_apply(gate_covered: &[&tool_gates::settings_writer::PermissionR
         return;
     }
 
-    eprintln!(
-        "Walking {} gate-covered rule(s). For each one, type 'y' to remove, anything else to keep.",
-        gate_covered.len()
-    );
-    eprintln!(
-        "Default is keep. Removed rules trade the 2-button confirmation for a three-button prompt"
-    );
-    eprintln!("(adds a one-click \"Yes, and don't ask again for X\" option per project).");
-    eprintln!();
-
-    let mut removed = 0usize;
-    let mut kept = 0usize;
-    let mut errors: Vec<String> = Vec::new();
-
-    for rule in gate_covered {
-        eprint!(
-            "  {} ({} scope) -- remove? [y/N] ",
-            rule.pattern,
-            rule.scope.as_str()
-        );
-        use std::io::Write;
-        let _ = std::io::stderr().flush();
-        let mut answer = String::new();
-        if std::io::stdin().read_line(&mut answer).is_err() {
-            eprintln!("\nFailed to read input. Aborting.");
+    let chosen = match tool_gates::tui::run_ask_audit_checklist(gate_covered) {
+        Ok(Some(indices)) => indices,
+        Ok(None) => {
+            eprintln!("Cancelled. No rules removed.");
+            return;
+        }
+        Err(e) => {
+            eprintln!("Failed to launch checklist TUI: {}", e);
             std::process::exit(1);
         }
-        let trimmed = answer.trim().to_lowercase();
-        if trimmed != "y" && trimmed != "yes" {
-            kept += 1;
-            continue;
-        }
+    };
 
+    if chosen.is_empty() {
+        eprintln!("No rules selected. Nothing removed.");
+        return;
+    }
+
+    let mut removed = 0usize;
+    let mut errors: Vec<String> = Vec::new();
+
+    for idx in &chosen {
+        let Some(rule) = gate_covered.get(*idx) else {
+            continue;
+        };
         match remove_rule(rule.scope, &rule.pattern) {
             Ok(true) => {
-                eprintln!("    removed.");
+                eprintln!("removed: {} ({} scope)", rule.pattern, rule.scope.as_str());
                 removed += 1;
             }
             Ok(false) => {
-                eprintln!("    not present (maybe already removed).");
+                eprintln!(
+                    "skipped: {} ({} scope) -- not present (maybe already removed)",
+                    rule.pattern,
+                    rule.scope.as_str()
+                );
             }
             Err(e) => {
                 let msg = format!(
-                    "    error removing {} ({} scope): {}",
+                    "error removing {} ({} scope): {}",
                     rule.pattern,
                     rule.scope.as_str(),
                     e
@@ -1766,12 +1762,7 @@ fn run_ask_audit_apply(gate_covered: &[&tool_gates::settings_writer::PermissionR
         }
     }
     eprintln!();
-    eprintln!(
-        "Removed {}/{} rule(s); kept {}.",
-        removed,
-        gate_covered.len(),
-        kept
-    );
+    eprintln!("Removed {}/{} rule(s).", removed, chosen.len());
     if !errors.is_empty() {
         std::process::exit(1);
     }
@@ -2344,6 +2335,30 @@ fn handle_doctor_subcommand() {
                 let suffix = if cmd.chars().count() > 60 { "..." } else { "" };
                 eprintln!("      {}x {}{}", count, shown, suffix);
             }
+        }
+
+        // Frequent-approval nudge: if any pending entry has been approved
+        // 5+ times across sessions, the user is repeatedly clicking yes
+        // without promoting. Surface it once so they can decide whether
+        // to use the third button or `/tool-gates:review`.
+        const FREQUENT_THRESHOLD: u32 = 5;
+        let frequent: Vec<_> = pending
+            .iter()
+            .filter(|e| e.count >= FREQUENT_THRESHOLD)
+            .collect();
+        if !frequent.is_empty() {
+            eprintln!();
+            eprintln!(
+                "    {} pending entry(ies) have been approved {}+ times. Consider promoting them:",
+                frequent.len(),
+                FREQUENT_THRESHOLD
+            );
+            eprintln!(
+                "      - In-session: click \"Yes, and don't ask again for X\" on the next prompt"
+            );
+            eprintln!(
+                "      - Cross-session: run `/tool-gates:review` (Claude Code) or `tool-gates review`"
+            );
         }
     }
 
