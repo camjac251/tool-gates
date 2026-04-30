@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.18.0](https://github.com/camjac251/tool-gates/compare/v1.17.0...v1.18.0) - 2026-04-30
+
+### Added
+
+- *(git)* resolve user-defined aliases against ~/.gitconfig
+
+### Fixed
+
+- *(git)* split nested if-let to satisfy MSRV 1.86
+- *(main)* drop redundant plan-mode hard-deny on Write/Edit
+
+### Other
+
+- *(tracking)* restore HOME after with_temp_cache to stop sequential leak
+
 ## [1.17.0](https://github.com/camjac251/tool-gates/compare/v1.16.1...v1.17.0) - 2026-04-30
 
 ### Added
