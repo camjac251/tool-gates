@@ -309,9 +309,19 @@ mod tests {
         F: FnOnce(),
     {
         let temp_dir = TempDir::new().unwrap();
-        // SAFETY: Test runs single-threaded and doesn't depend on HOME after this
+        let saved = env::var("HOME").ok();
+        // SAFETY: Test must hold a #[serial_test::serial] guard. HOME is
+        // restored before this function returns so peer tests reading
+        // HOME (rm-rf detection, settings fall-through) don't see a
+        // dropped-tempdir path on later runs.
         unsafe { env::set_var("HOME", temp_dir.path()) };
         test();
+        unsafe {
+            match saved {
+                Some(v) => env::set_var("HOME", v),
+                None => env::remove_var("HOME"),
+            }
+        }
     }
 
     #[test]
