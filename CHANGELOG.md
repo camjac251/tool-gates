@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.17.0](https://github.com/camjac251/tool-gates/compare/v1.16.1...v1.17.0) - 2026-04-30
+
+### Added
+
+- *(rules)* polish round, install patterns, doctor nudge, audit TUI
+- close ask-audit gaps with broader find guard and --apply
+- *(rules)* categorize ask-audit rules by gate-engine outcome
+- *(rules)* add ask-audit to surface third-button-suppressing rules
+- *(router)* defer benign gate-ask to CC for prefix-suggestion prompt
+- *(doctor)* surface usage stats in the doctor report
+- *(hints)* self-heal cache with single-tool re-probe
+- *(pending)* collapse near-duplicate entries by pattern key
+- *(router)* hard-deny mutating tools in plan mode
+
+### Fixed
+
+- post-review fixes on the 1.6.0 series
+- *(post-tool-use)* skip pending append when settings already allow
+
+### Other
+
+- cover defer wire format, ask-audit, and 24h tracking TTL
+- *(rules)* reframe ask-audit around slip-click safety, drop bulk apply
+- *(router)* cover wire-format defer path for mise/pnpm wrappers
+- *(plugin)* bump to 1.6.0
+- *(plugin)* reframe skills around defer behavior
+- *(tracking)* replace 15min TTL with session-bounded GC
+- *(plugin)* tighten review/test-gate skill descriptions, bump to 1.5.9
+
 ## [1.16.1](https://github.com/camjac251/tool-gates/compare/v1.16.0...v1.16.1) - 2026-04-24
 
 ### Fixed
