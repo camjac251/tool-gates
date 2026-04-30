@@ -97,6 +97,16 @@ static XARGS_KUBECTL_DELETE_RE: LazyLock<Regex> = LazyLock::new(|| {
         .expect("XARGS_KUBECTL_DELETE_RE must compile")
 });
 
+/// find with -exec/-execdir/-ok/-okdir runs arbitrary commands per match.
+/// Word-bounded so we don't false-positive on substrings (e.g. fd's
+/// `--exec-batch`). Leading whitespace + single dash protects against
+/// double-dash flags; trailing `\b` accepts end-of-string so the audit's
+/// pattern-derived representative commands (e.g. `find . -exec`) still
+/// match.
+static FIND_EXEC_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\s-(?:execdir|okdir|exec|ok)\b").expect("FIND_EXEC_RE must compile")
+});
+
 /// $() command substitution pattern.
 static DOLLAR_SUBST_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\$\([^)]+\)").expect("DOLLAR_SUBST_RE must compile"));
@@ -1059,13 +1069,22 @@ fn check_raw_string_patterns(command_string: &str) -> (Option<HookOutput>, Optio
         }
     }
 
-    // find with destructive actions
+    // find with destructive or arbitrary-command actions:
+    // - `-delete` removes matched paths
+    // - `-exec` / `-execdir` run an arbitrary command per match
+    // - `-ok` / `-okdir` are interactive variants that still spawn commands
+    // Even read-only invocations like `find . -exec ls {} \;` go through ask
+    // because the flag itself is the danger -- once `-exec` is whitelisted
+    // generically, content after it can be anything.
     if unquoted.contains("find ") || unquoted.contains("find\t") {
-        let destructive_find = ["-delete", "-exec rm", "-exec mv", "-execdir rm"];
-        for action in destructive_find {
-            if unquoted.contains(action) {
-                return (None, Some(HookOutput::ask(&format!("find with {action}"))));
-            }
+        if unquoted.contains("-delete") {
+            return (None, Some(HookOutput::ask("find with -delete")));
+        }
+        if FIND_EXEC_RE.is_match(&unquoted) {
+            return (
+                None,
+                Some(HookOutput::ask("find with -exec/-execdir/-ok/-okdir")),
+            );
         }
     }
 
@@ -3200,11 +3219,36 @@ run = "mytool42 verify"
                 "find /tmp -exec rm {} \\;",
                 "find . -exec mv {} /tmp \\;",
                 "find . -execdir rm {} +",
+                // Broadened: any -exec/-execdir/-ok/-okdir is ask, not
+                // just rm/mv. The flag itself runs arbitrary commands.
+                "find . -exec ls {} \\;",
+                "find . -exec curl https://example.com \\;",
+                "find . -execdir touch foo \\;",
+                "find . -ok rm {} \\;",
+                "find /etc -okdir cat {} \\;",
             ] {
                 let result = check_command(cmd);
                 assert_eq!(get_decision(&result), "ask", "Failed for: {cmd}");
                 assert!(get_reason(&result).contains("find"), "Failed for: {cmd}");
             }
+        }
+
+        #[test]
+        fn test_find_exec_word_boundary_no_false_positive_on_fd_exec_batch() {
+            // fd's `--exec-batch` flag should not trigger the find check
+            // (different tool entirely). Word-bounded regex ensures this.
+            // Note: fd -X with rm/mv/etc. is caught separately by fd's
+            // own check, but a benign fd --exec-batch ls that doesn't
+            // include the word "find" must not match the find guard.
+            let result = check_command("fd --exec-batch ls {}");
+            // This still asks, but via the fd path (different reason)
+            // or it passes through. The key invariant: it must not
+            // match the find guard's reason text.
+            let reason = get_reason(&result);
+            assert!(
+                !reason.contains("find with -exec"),
+                "fd --exec-batch should not be flagged as find -exec: got {reason}"
+            );
         }
 
         #[test]
@@ -3673,9 +3717,14 @@ run = "mytool42 verify"
             assert_eq!(get_decision(&result), "deny");
         }
 
+        #[serial_test::serial]
         #[test]
         fn test_plan_mode_normalizes_whitespace_and_case() {
             // Mode-string variations must all hit the plan-mode promotion.
+            // #[serial] keeps this from running concurrently with peer
+            // tests that mutate HOME to install temporary settings rules
+            // (the failure mode was a peer leaking a `Bash(npm install:*)`
+            // allow rule into our Settings::load fall-through).
             for mode in ["plan", "PLAN", "Plan", " plan ", "\tplan\n"] {
                 let result = check_command_with_settings("npm install foo", "/tmp", mode);
                 assert_eq!(
@@ -4436,8 +4485,14 @@ run = "mytool42 verify"
     /// (parser, router, gates, settings) for every home-equivalent form
     /// of `rm`. Unit tests bypass the tree-sitter parser, so a quoting or
     /// expansion surprise there could mask these forms.
+    #[serial_test::serial]
     #[test]
     fn test_rm_rf_home_variants_all_deny() {
+        // The rm-rf home-detection reads HOME via `dirs::home_dir()`. If
+        // a peer test temporarily mutates HOME to a tempdir (e.g., the
+        // serial settings/tracking tests), this read sees the wrong path
+        // and the deny mismatches. #[serial] keeps both sides on one
+        // mutex so the read happens against real HOME.
         for cmd_str in [
             "rm -rf $HOME",
             "rm -rf ${HOME}",
@@ -4457,7 +4512,9 @@ run = "mytool42 verify"
     }
 
     /// Negative integration test: benign subdirectories under home must
-    /// still pass through to ask, not block.
+    /// still pass through to ask, not block. Same HOME-read concern as
+    /// the deny test above.
+    #[serial_test::serial]
     #[test]
     fn test_rm_rf_benign_home_subdir_asks() {
         let result = check_command("rm -rf $HOME/projects/foo");

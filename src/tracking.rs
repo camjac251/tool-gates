@@ -328,8 +328,12 @@ mod tests {
         assert!(!cmd.is_expired());
     }
 
+    #[serial_test::serial]
     #[test]
     fn test_tracking_store_operations() {
+        // #[serial] because with_temp_cache mutates HOME. Without the
+        // guard, peer tests that read HOME (rm -rf detection, settings
+        // fall-through) race against this test's tempdir HOME.
         with_temp_cache(|| {
             let mut store = TrackingStore::default();
 

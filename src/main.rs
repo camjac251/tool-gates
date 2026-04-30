@@ -1574,7 +1574,7 @@ fn print_rules_help() {
     eprintln!("USAGE:");
     eprintln!("  tool-gates rules list [--scope <scope>]");
     eprintln!("  tool-gates rules remove <pattern> -s <scope>");
-    eprintln!("  tool-gates rules ask-audit");
+    eprintln!("  tool-gates rules ask-audit [--apply [--yes]]");
     eprintln!();
     eprintln!("COMMANDS:");
     eprintln!("  list        List all permission rules");
@@ -1584,18 +1584,14 @@ fn print_rules_help() {
     eprintln!();
     eprintln!("OPTIONS:");
     eprintln!("  -s, --scope <scope>   Filter by scope: user, project, or local");
+    eprintln!("  --apply               (ask-audit only) Remove redundant rules with confirmation");
+    eprintln!("  -y, --yes             (ask-audit --apply) Skip the confirmation prompt");
 }
 
-/// List `permissions.ask` Bash rules categorized by what removing them
-/// would do. Categories:
-/// * **Redundant** -- tool-gates' gate engine would also ask for the same
-///   command, so the rule is pure third-button suppression. Safe to remove.
-/// * **Safety floor** -- gate engine would allow the command. The rule is
-///   the user's deliberate "always prompt me" floor; removing it lets
-///   tool-gates auto-allow.
-/// * **Indeterminate** -- pattern is too generic (or a glob shape we can't
-///   round-trip into a representative command) to classify automatically.
-fn handle_rules_ask_audit(_args: &[String]) {
+fn handle_rules_ask_audit(args: &[String]) {
+    let apply = args.iter().any(|a| a == "--apply");
+    let yes = args.iter().any(|a| a == "--yes" || a == "-y");
+
     let ask_rules: Vec<_> = list_all_rules()
         .into_iter()
         .filter(|r| r.rule_type == RuleType::Ask && r.pattern.starts_with("Bash("))
@@ -1621,6 +1617,11 @@ fn handle_rules_ask_audit(_args: &[String]) {
             AskRuleCategory::SafetyFloor => safety_floor.push(rule),
             AskRuleCategory::Indeterminate => indeterminate.push(rule),
         }
+    }
+
+    if apply {
+        run_ask_audit_apply(&redundant, yes);
+        return;
     }
 
     eprintln!(
@@ -1690,6 +1691,92 @@ fn handle_rules_ask_audit(_args: &[String]) {
                 rule.scope.as_str()
             );
         }
+    }
+
+    if !redundant.is_empty() {
+        eprintln!();
+        eprintln!(
+            "Tip: run `tool-gates rules ask-audit --apply` to remove the {} redundant rule(s) in one go.",
+            redundant.len()
+        );
+        eprintln!("     Add `--yes` to skip the confirmation prompt.");
+    }
+}
+
+fn run_ask_audit_apply(redundant: &[&tool_gates::settings_writer::PermissionRule], yes: bool) {
+    if redundant.is_empty() {
+        eprintln!("No redundant rules to remove.");
+        return;
+    }
+
+    eprintln!(
+        "About to remove {} redundant `permissions.ask` Bash rule(s):",
+        redundant.len()
+    );
+    for rule in redundant {
+        eprintln!("  - {} ({} scope)", rule.pattern, rule.scope.as_str());
+    }
+    eprintln!();
+    eprintln!(
+        "Each rule was classified as redundant: tool-gates' gate engine already asks (or denies)"
+    );
+    eprintln!(
+        "for the same command shape, so removing the rule restores the third prompt button without"
+    );
+    eprintln!("weakening anything you'd otherwise be prompted for.");
+    eprintln!();
+
+    if !yes {
+        eprint!("Proceed? [y/N] ");
+        use std::io::Write;
+        let _ = std::io::stderr().flush();
+        let mut answer = String::new();
+        if std::io::stdin().read_line(&mut answer).is_err() {
+            eprintln!("Failed to read input. Aborting.");
+            std::process::exit(1);
+        }
+        let trimmed = answer.trim().to_lowercase();
+        if trimmed != "y" && trimmed != "yes" {
+            eprintln!("Aborted. No rules removed.");
+            return;
+        }
+    }
+
+    let mut removed = 0usize;
+    let mut errors: Vec<String> = Vec::new();
+    for rule in redundant {
+        match remove_rule(rule.scope, &rule.pattern) {
+            Ok(true) => {
+                eprintln!(
+                    "  removed: {} ({} scope)",
+                    rule.pattern,
+                    rule.scope.as_str()
+                );
+                removed += 1;
+            }
+            Ok(false) => {
+                eprintln!(
+                    "  skipped: {} ({} scope) -- not present (maybe already removed)",
+                    rule.pattern,
+                    rule.scope.as_str()
+                );
+            }
+            Err(e) => {
+                let msg = format!(
+                    "  error removing {} ({} scope): {}",
+                    rule.pattern,
+                    rule.scope.as_str(),
+                    e
+                );
+                eprintln!("{}", msg);
+                errors.push(msg);
+            }
+        }
+    }
+    eprintln!();
+    eprintln!("Removed {}/{} rule(s).", removed, redundant.len());
+    if !errors.is_empty() {
+        std::process::exit(1);
     }
 }
 
