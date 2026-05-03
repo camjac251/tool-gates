@@ -5,9 +5,10 @@
 //! - **Read/Write/Edit**: Symlink guard for AI config files
 //! - **Glob/Grep/MCP tools**: Configurable tool blocking
 //!
-//! Supports Claude Code and Gemini CLI hook systems:
-//! - Claude Code: `PreToolUse`, `PermissionRequest`, `PostToolUse` (Bash, Monitor, Write, Edit)
-//! - Gemini CLI: `BeforeTool`, `AfterTool` (tool_name: "run_shell_command")
+//! Supports Claude Code, Gemini CLI, and Codex CLI hook systems:
+//! - Claude Code: `PreToolUse`, `PermissionRequest`, `PermissionDenied`, `PostToolUse` (Bash, Monitor, Write, Edit)
+//! - Gemini CLI:  `BeforeTool`, `AfterTool` (tool_name: "run_shell_command")
+//! - Codex CLI:   `PreToolUse`, `PermissionRequest`, `PostToolUse` (Bash, apply_patch). Selected via `--client codex`.
 //!
 //! Configuration: `~/.config/tool-gates/config.toml`
 //!
@@ -19,6 +20,7 @@
 //! Install:
 //!   `tool-gates hooks add -s user`      # Claude Code
 //!   `tool-gates hooks add --gemini`     # Gemini CLI
+//!   `tool-gates hooks add --codex`      # Codex CLI
 
 use std::env;
 use std::io::{self, Read};
@@ -26,7 +28,8 @@ use tool_gates::config;
 use tool_gates::file_guards::check_file_guard;
 use tool_gates::models::{
     Client, HookInput, HookOutput, PermissionDecision, PermissionDeniedInput,
-    PermissionDeniedOutput, PermissionRequestInput, PostToolUseInput, is_auto_mode,
+    PermissionDeniedOutput, PermissionRequestDecision, PermissionRequestInput,
+    PermissionRequestOutput, PostToolUseInput, is_auto_mode,
 };
 use tool_gates::patterns::suggest_patterns;
 use tool_gates::pending::{clear_pending, pending_count, read_pending};
@@ -47,6 +50,13 @@ fn main() {
     tool_gates::cache::ensure_cache_migrated();
 
     let args: Vec<String> = env::args().collect();
+
+    // Pull `--client <name>` out of argv before subcommand dispatch so it can
+    // also work when subcommands recurse on remaining args. The flag overrides
+    // hook-event-based client detection on the stdin path; subcommands ignore
+    // it. Codex must use this flag because it emits the same hook_event_name
+    // strings as Claude.
+    let (client_override, args) = extract_client_override(args);
 
     // Handle subcommands first
     if args.len() > 1 && args[1] == "hooks" {
@@ -120,12 +130,12 @@ fn main() {
     let mut input = String::new();
     if let Err(e) = io::stdin().read_to_string(&mut input) {
         eprintln!("Error reading stdin: {e}");
-        print_no_opinion_for(Client::Claude);
+        print_no_opinion_for(client_override.unwrap_or(Client::Claude));
         return;
     }
 
     if input.trim().is_empty() {
-        print_no_opinion_for(Client::Claude);
+        print_no_opinion_for(client_override.unwrap_or(Client::Claude));
         return;
     }
 
@@ -137,13 +147,16 @@ fn main() {
                 .and_then(|h| h.as_str().map(String::from))
         });
 
-    // Detect which client is calling us
-    let client = Client::from_hook_event(hook_event.as_deref().unwrap_or("PreToolUse"));
+    // Detect which client is calling us. The argv override (Codex et al.)
+    // wins over hook_event_name detection because Codex shares Claude's event
+    // names verbatim.
+    let client = client_override
+        .unwrap_or_else(|| Client::from_hook_event(hook_event.as_deref().unwrap_or("PreToolUse")));
 
     // Route based on hook event type
     match hook_event.as_deref() {
         Some("PermissionRequest") => {
-            handle_permission_request_hook(&input);
+            handle_permission_request_hook(&input, client);
         }
         Some("PostToolUse") | Some("AfterTool") => {
             handle_post_tool_use_hook(&input, client);
@@ -152,10 +165,65 @@ fn main() {
             handle_permission_denied_hook(&input);
         }
         _ => {
-            // Default: PreToolUse (Claude) or BeforeTool (Gemini) or unspecified
+            // Default: PreToolUse (Claude/Codex) or BeforeTool (Gemini) or unspecified
             handle_pre_tool_use_hook(&input, client);
         }
     }
+}
+
+/// Extract `--client <name>` from argv, returning the parsed client (if any)
+/// and the remaining args. Unknown values exit with an error so the operator
+/// notices a typo immediately rather than silently falling back to Claude.
+///
+/// Mistyped variants like `--clientcodex` (missing separator) match neither
+/// `--client` nor `--client=` and would otherwise fall through to argv as an
+/// unknown positional. Loud-warn on any `--client*` arg that doesn't parse
+/// so the operator sees the typo before the wire format silently desyncs
+/// (Codex would receive Claude-shape output it rejects).
+fn extract_client_override(args: Vec<String>) -> (Option<Client>, Vec<String>) {
+    let mut out = Vec::with_capacity(args.len());
+    let mut chosen: Option<Client> = None;
+    let mut iter = args.into_iter();
+    while let Some(arg) = iter.next() {
+        if arg == "--client" {
+            match iter.next() {
+                Some(name) => match Client::from_cli_name(name.as_str()) {
+                    Some(c) => chosen = Some(c),
+                    None => {
+                        eprintln!(
+                            "Error: --client expects 'claude', 'gemini', or 'codex' (got '{name}')"
+                        );
+                        std::process::exit(2);
+                    }
+                },
+                None => {
+                    eprintln!("Error: --client requires a value");
+                    std::process::exit(2);
+                }
+            }
+        } else if let Some(rest) = arg.strip_prefix("--client=") {
+            match Client::from_cli_name(rest) {
+                Some(c) => chosen = Some(c),
+                None => {
+                    eprintln!(
+                        "Error: --client expects 'claude', 'gemini', or 'codex' (got '{rest}')"
+                    );
+                    std::process::exit(2);
+                }
+            }
+        } else if arg.starts_with("--client") {
+            // Mistyped flag like `--clientcodex` (missing space/equals separator).
+            // Don't silently let it fall through; warn loudly so the typo
+            // surfaces before the wire format desyncs.
+            eprintln!(
+                "Warning: unrecognized flag '{arg}' (did you mean '--client codex' or '--client=codex'?)"
+            );
+            out.push(arg);
+        } else {
+            out.push(arg);
+        }
+    }
+    (chosen, out)
 }
 
 /// Handle PermissionDenied hook (Claude auto mode only).
@@ -228,7 +296,14 @@ fn handle_pre_tool_use_hook(input: &str, client: Client) {
         Ok(hi) => hi,
         Err(e) => {
             eprintln!("Error: Invalid JSON input: {e}");
-            print_no_opinion_for(client);
+            // Codex maps empty stdout to pass-through. For Codex specifically,
+            // an unreadable hook payload must NOT silently allow the command;
+            // emit a synthetic deny so the gate stays closed.
+            if client == Client::Codex {
+                print_deny_and_exit(client, "tool-gates: malformed PreToolUse hook input");
+            } else {
+                print_no_opinion_for(client);
+            }
             return;
         }
     };
@@ -249,13 +324,12 @@ fn handle_pre_tool_use_hook(input: &str, client: Client) {
     if let Some(output) =
         check_tool_block(&hook_input.tool_name, &tool_input_map, config.block_rules())
     {
-        if let Ok(json) = serde_json::to_string(&output.serialize(client)) {
-            println!("{json}");
-            if client == Client::Gemini {
-                std::process::exit(2);
-            }
-        } else {
+        let value = output.serialize(client);
+        if !emit_hook_value(&value) && !value.is_null() {
             print_deny_and_exit(client, "Internal error serializing block deny");
+        }
+        if client == Client::Gemini {
+            std::process::exit(2);
         }
         return;
     }
@@ -288,12 +362,10 @@ fn handle_pre_tool_use_hook(input: &str, client: Client) {
                     .as_deref()
                     .and_then(|m| if m.trim().is_empty() { None } else { Some(m) });
                 let output = HookOutput::allow(reason);
-                match serde_json::to_string(&output.serialize(client)) {
-                    Ok(json) => println!("{json}"),
-                    Err(e) => {
-                        eprintln!("tool-gates: error serializing accept_edits_mcp allow: {e}");
-                        print_no_opinion_for(client);
-                    }
+                let value = output.serialize(client);
+                if !emit_hook_value(&value) && !value.is_null() {
+                    eprintln!("tool-gates: error serializing accept_edits_mcp allow");
+                    print_no_opinion_for(client);
                 }
                 return;
             }
@@ -310,21 +382,52 @@ fn handle_pre_tool_use_hook(input: &str, client: Client) {
         }
         handle_bash_pre_tool_use(&hook_input, client);
     } else if Client::is_file_tool(tool_name) {
-        // File tools: symlink guard + security reminders
+        // File tools: symlink guard + security reminders.
+        //
+        // For apply_patch (Codex), fail closed when the patch body is
+        // non-empty but produced no parsed files. Codex's lenient parser at
+        // codex-rs/apply-patch/src/parser.rs:266 may apply a patch shape
+        // tool-gates can't route through file_guards, so an unparseable body
+        // would otherwise pass through untyped. The parser already mirrors
+        // Codex's leading-whitespace handling, but the strictest defense is
+        // to deny anything we couldn't parse.
+        if hook_input.tool_name == "apply_patch" {
+            let command = tool_input_map
+                .get("command")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let parsed = tool_gates::apply_patch_parser::parse_patch(command);
+            if tool_gates::apply_patch_parser::looks_unparseable(command, &parsed) {
+                let output = HookOutput::deny(
+                    "apply_patch payload has no parseable file headers; tool-gates refuses to pass through unrecognized patch shapes.",
+                );
+                let value = output.serialize(client);
+                if !emit_hook_value(&value) && !value.is_null() {
+                    print_deny_and_exit(
+                        client,
+                        "Internal error serializing apply_patch parse-failure deny",
+                    );
+                }
+                if client == Client::Gemini {
+                    std::process::exit(2);
+                }
+                return;
+            }
+        }
+
         // 1. File guards: symlink check for AI config files
         if config.features.file_guards {
-            let file_paths = extract_file_paths_from_map(&tool_input_map);
+            let file_paths = extract_file_paths_from_map(&hook_input.tool_name, &tool_input_map);
             for file_path in &file_paths {
                 if let Some(output) =
                     check_file_guard(file_path, &hook_input.tool_name, &config.file_guards)
                 {
-                    if let Ok(json) = serde_json::to_string(&output.serialize(client)) {
-                        println!("{json}");
-                        if client == Client::Gemini {
-                            std::process::exit(2);
-                        }
-                    } else {
+                    let value = output.serialize(client);
+                    if !emit_hook_value(&value) && !value.is_null() {
                         print_deny_and_exit(client, "Internal error serializing file guard deny");
+                    }
+                    if client == Client::Gemini {
+                        std::process::exit(2);
                     }
                     return;
                 }
@@ -339,16 +442,14 @@ fn handle_pre_tool_use_hook(input: &str, client: Client) {
                 &config.security_reminders,
                 &hook_input.session_id,
             ) {
-                let json_value = output.serialize(client);
+                let value = output.serialize(client);
                 let is_gemini_block = client == Client::Gemini
-                    && json_value.get("decision").and_then(|d| d.as_str()) == Some("block");
-                if let Ok(json) = serde_json::to_string(&json_value) {
-                    println!("{json}");
-                    if is_gemini_block {
-                        std::process::exit(2);
-                    }
-                } else {
+                    && value.get("decision").and_then(|d| d.as_str()) == Some("block");
+                if !emit_hook_value(&value) && !value.is_null() {
                     print_deny_and_exit(client, "Internal error serializing security reminder");
+                }
+                if is_gemini_block {
+                    std::process::exit(2);
                 }
             }
         }
@@ -379,9 +480,8 @@ fn handle_pre_tool_use_hook(input: &str, client: Client) {
                         .as_deref()
                         .and_then(|m| if m.is_empty() { None } else { Some(m) });
                     let output = HookOutput::allow(reason);
-                    if let Ok(json) = serde_json::to_string(&output.serialize(client)) {
-                        println!("{json}");
-                    }
+                    let value = output.serialize(client);
+                    emit_hook_value(&value);
                     return;
                 }
             }
@@ -391,18 +491,38 @@ fn handle_pre_tool_use_hook(input: &str, client: Client) {
     // All other tools: pass through (blocks already checked above)
 }
 
-/// Extract all file paths from a raw tool_input map.
-/// Handles single-file tools (file_path).
-fn extract_file_paths_from_map(map: &serde_json::Map<String, serde_json::Value>) -> Vec<String> {
-    let mut paths = Vec::new();
+/// Extract all file paths from a raw tool_input map for the given tool.
+///
+/// - Claude Write/Edit and Gemini write_file/replace: read `file_path`.
+/// - Codex apply_patch: parse the unified-diff body in `command` and pull
+///   every affected path (Add/Update/Delete + rename targets).
+fn extract_file_paths_from_map(
+    tool_name: &str,
+    map: &serde_json::Map<String, serde_json::Value>,
+) -> Vec<String> {
+    if tool_name == "apply_patch" {
+        let command = map.get("command").and_then(|v| v.as_str()).unwrap_or("");
+        if command.is_empty() {
+            return Vec::new();
+        }
+        return tool_gates::apply_patch_parser::parse_patch(command)
+            .into_iter()
+            .flat_map(|f| {
+                f.affected_paths()
+                    .into_iter()
+                    .map(|p| p.display().to_string())
+                    .collect::<Vec<_>>()
+            })
+            .filter(|p| !p.is_empty())
+            .collect();
+    }
 
-    // Single file_path (Read/Write/Edit)
+    let mut paths = Vec::new();
     if let Some(fp) = map.get("file_path").and_then(|v| v.as_str()) {
         if !fp.is_empty() {
             paths.push(fp.to_string());
         }
     }
-
     paths
 }
 
@@ -505,37 +625,34 @@ fn handle_bash_pre_tool_use(hook_input: &HookInput, client: Client) {
         }
     }
 
-    // Serialize in the appropriate format for the client
-    let json_value = output.serialize(client);
-    let is_gemini_block = client == Client::Gemini
-        && json_value.get("decision").and_then(|d| d.as_str()) == Some("block");
-    match serde_json::to_string(&json_value) {
-        Ok(json) => {
-            println!("{json}");
-            if is_gemini_block {
-                std::process::exit(2);
-            }
-        }
-        Err(e) => {
-            eprintln!("Error serializing output: {e}");
-            print_no_opinion_for(client);
-        }
+    // Serialize in the appropriate format for the client.
+    let value = output.serialize(client);
+    let is_gemini_block =
+        client == Client::Gemini && value.get("decision").and_then(|d| d.as_str()) == Some("block");
+    if !emit_hook_value(&value) && !value.is_null() {
+        eprintln!("Error serializing output");
+        print_no_opinion_for(client);
+    }
+    if is_gemini_block {
+        std::process::exit(2);
     }
 }
 
-fn handle_permission_request_hook(input: &str) {
+fn handle_permission_request_hook(input: &str, client: Client) {
     let perm_input: PermissionRequestInput = match serde_json::from_str(input) {
         Ok(pi) => pi,
         Err(e) => {
             eprintln!("Error: Invalid PermissionRequest JSON: {e}");
-            // Don't output anything - let normal prompt show
+            // Don't output anything - let the client's normal prompt show.
+            // For Codex this means its built-in UI asks the user, which is
+            // fail-closed by default for the PermissionRequest event.
             return;
         }
     };
 
-    // Only process shell tools, file tools (Edit/Write worktree approval),
-    // and MCP tools (for the accept_edits_mcp path). Other tool types let
-    // the normal permission prompt show.
+    // Only process shell tools, file tools (Edit/Write/apply_patch worktree
+    // approval), and MCP tools (for the accept_edits_mcp path). Other tool
+    // types let the normal permission prompt show.
     if !Client::is_shell_tool(&perm_input.tool_name)
         && !Client::is_write_tool(&perm_input.tool_name)
         && !Client::is_mcp_tool(&perm_input.tool_name)
@@ -557,9 +674,13 @@ fn handle_permission_request_hook(input: &str) {
         })
         .unwrap_or_default();
 
-    // Check if we should approve this (PermissionRequest is Claude-only)
+    // Check if we should approve this
     if let Some(output) = handle_permission_request(&perm_input, &tool_input_map) {
-        match serde_json::to_string(&output) {
+        let value = serialize_permission_request_for_client(&output, client);
+        if value.is_null() {
+            return;
+        }
+        match serde_json::to_string(&value) {
             Ok(json) => println!("{json}"),
             Err(e) => {
                 eprintln!("Error serializing PermissionRequest output: {e}");
@@ -570,7 +691,90 @@ fn handle_permission_request_hook(input: &str) {
     // If None, we don't output anything - lets the normal permission prompt show
 }
 
-/// Handle PostToolUse (Claude) / AfterTool (Gemini) hook
+/// Serialize a PermissionRequestOutput for the given client.
+///
+/// Claude: derived `Serialize` (full Allow/Deny shape).
+/// Codex: stripped to `{behavior, message}` on Allow/Deny. `addDirectories`,
+///        `updatedInput`, `updatedPermissions`, `interrupt` are silently
+///        dropped because Codex's parser rejects them as unsupported.
+///        Logs to stderr when dropping non-empty fields so operators
+///        investigating "why does my worktree keep prompting on Codex"
+///        have a diagnostic instead of a silent gap.
+/// Gemini: PermissionRequest isn't a Gemini event today; emit null so the
+///        caller treats it as pass-through. Logs the dropped decision so a
+///        future Gemini PermissionRequest event doesn't silently lose denies.
+fn serialize_permission_request_for_client(
+    output: &PermissionRequestOutput,
+    client: Client,
+) -> serde_json::Value {
+    match client {
+        Client::Claude => serde_json::to_value(output).unwrap_or(serde_json::Value::Null),
+        Client::Codex => {
+            let mut decision = serde_json::Map::new();
+            match &output.hook_specific_output.decision {
+                PermissionRequestDecision::Allow {
+                    updated_input,
+                    updated_permissions,
+                } => {
+                    decision.insert("behavior".to_string(), serde_json::json!("allow"));
+                    if updated_input.is_some() {
+                        eprintln!(
+                            "tool-gates: Codex doesn't honor `updatedInput` on PermissionRequest; dropping rewrite"
+                        );
+                    }
+                    if let Some(perms) = updated_permissions {
+                        if !perms.is_empty() {
+                            eprintln!(
+                                "tool-gates: Codex doesn't honor `updatedPermissions` on PermissionRequest; dropping {} entry/entries (worktree edits will keep prompting)",
+                                perms.len()
+                            );
+                        }
+                    }
+                }
+                PermissionRequestDecision::Deny { message, interrupt } => {
+                    decision.insert("behavior".to_string(), serde_json::json!("deny"));
+                    if let Some(msg) = message {
+                        decision.insert("message".to_string(), serde_json::json!(msg));
+                    }
+                    if interrupt.unwrap_or(false) {
+                        eprintln!(
+                            "tool-gates: Codex doesn't honor `interrupt` on PermissionRequest; agent loop will continue after deny"
+                        );
+                    }
+                }
+            }
+            serde_json::json!({
+                "hookSpecificOutput": {
+                    "hookEventName": "PermissionRequest",
+                    "decision": serde_json::Value::Object(decision),
+                }
+            })
+        }
+        Client::Gemini => {
+            // PermissionRequest isn't a Gemini event today. If a future Gemini
+            // version emits one, log dropped denies so they don't silently
+            // disappear -- this is a future-proof fail-loud rather than fail-open.
+            if matches!(
+                output.hook_specific_output.decision,
+                PermissionRequestDecision::Deny { .. }
+            ) {
+                eprintln!(
+                    "tool-gates: dropped PermissionRequest deny for Gemini (no Gemini equivalent yet)"
+                );
+            }
+            serde_json::Value::Null
+        }
+        // Future variants: log and drop until they get explicit handling.
+        _ => {
+            eprintln!(
+                "tool-gates: PermissionRequest serialization not implemented for client {client:?}; dropping decision"
+            );
+            serde_json::Value::Null
+        }
+    }
+}
+
+/// Handle PostToolUse (Claude / Codex) / AfterTool (Gemini) hook
 fn handle_post_tool_use_hook(input: &str, client: Client) {
     let post_input: PostToolUseInput = match serde_json::from_str(input) {
         Ok(pi) => pi,
@@ -582,12 +786,56 @@ fn handle_post_tool_use_hook(input: &str, client: Client) {
 
     let tool_name = post_input.tool_name.as_str();
     if Client::is_shell_tool(tool_name) {
-        // Shell commands: track successful executions for approval learning
-        // Gemini doesn't provide tool_use_id, so tracking won't work
+        // Shell commands: track successful executions for approval learning.
+        // Gemini doesn't provide tool_use_id, so tracking can't correlate
+        // PreToolUse "ask" entries; bail. Codex provides tool_use_id, so
+        // tracking works there.
         if client == Client::Gemini {
             return;
         }
-        if let Some(output) = handle_post_tool_use(&post_input) {
+
+        // Tracking writes to disk and currently always returns None. If a
+        // future change makes it return Some, merge that output with Codex
+        // hints into a single PostToolUseOutput so neither stream gets lost.
+        // Codex parses one JSON object per stdout, so two emissions would
+        // be invalid.
+        let tracking_output = handle_post_tool_use(&post_input);
+
+        // Codex: hints + Tier-3 warnings can't ride on PreToolUse (the parser
+        // rejects `additionalContext` there), so they ride here. Claude
+        // already received the hints in the Pre output; don't double-inject.
+        let mut codex_hints = String::new();
+        if client == Client::Codex {
+            let command = post_input.get_command();
+            codex_hints =
+                tool_gates::hints::compute_hints_for_command(&command, &post_input.session_id);
+        }
+
+        // Merge: tracking output (today: always None) plus Codex hints into
+        // one PostToolUseOutput. additionalContext is a single string, so
+        // concatenate when both exist.
+        let merged = match (tracking_output, codex_hints.is_empty()) {
+            (Some(track), true) => Some(track),
+            (Some(track), false) => {
+                let mut combined = String::new();
+                if let Some(ref hso) = track.hook_specific_output {
+                    if let Some(ref existing) = hso.additional_context {
+                        combined.push_str(existing);
+                        combined.push_str("\n\n");
+                    }
+                }
+                combined.push_str(&codex_hints);
+                Some(tool_gates::models::PostToolUseOutput::with_context(
+                    &combined,
+                ))
+            }
+            (None, false) => Some(tool_gates::models::PostToolUseOutput::with_context(
+                &codex_hints,
+            )),
+            (None, true) => None,
+        };
+
+        if let Some(output) = merged {
             if let Ok(json) = serde_json::to_string(&output) {
                 println!("{json}");
             } else {
@@ -595,9 +843,10 @@ fn handle_post_tool_use_hook(input: &str, client: Client) {
             }
         }
     } else if Client::is_write_tool(tool_name) {
-        // File tools: post-write security scanning (Tier 2 anti-patterns)
-        // PostToolUseOutput uses Claude-specific wire format (hookEventName: "PostToolUse"),
-        // so skip for Gemini until AfterTool output is properly serialized
+        // File tools: post-write security scanning (Tier 2 anti-patterns).
+        // Gemini's AfterTool wire format is not Claude-shape, so skip there
+        // until we plumb a proper Gemini PostToolUseOutput. Codex accepts
+        // the same camelCase shape Claude uses, so it goes through here too.
         if client == Client::Gemini {
             return;
         }
@@ -619,6 +868,7 @@ fn handle_post_tool_use_hook(input: &str, client: Client) {
             &tool_input_map,
             &config.security_reminders,
             &post_input.session_id,
+            client,
         ) {
             if let Ok(json) = serde_json::to_string(&output) {
                 println!("{json}");
@@ -703,6 +953,68 @@ fn generate_gemini_hook_entry(binary_path: &str, matcher: &str) -> serde_json::V
     serde_json::json!({
         "matcher": matcher,
         "hooks": [{"type": "command", "command": binary_path, "timeout": 5000}]
+    })
+}
+
+// Codex hooks live in `~/.codex/hooks.json`. The matcher field accepts
+// pipe-separated exact-equality literals when the input is `[A-Za-z0-9_|]+`,
+// or a regex otherwise. `Bash|apply_patch` covers shell commands and Codex's
+// canonical file-edit tool name. apply_patch's matcher_aliases (`Write`/
+// `Edit`) auto-fire too, so users editing the file by hand can list any of
+// those forms and the same handler runs.
+const CODEX_PRE_TOOL_USE_MATCHER: &str = "Bash|apply_patch";
+
+const CODEX_MCP_TOOL_USE_MATCHER: &str = "mcp__.*";
+
+const CODEX_PERMISSION_REQUEST_MATCHER: &str = "Bash|apply_patch";
+
+const CODEX_POST_TOOL_USE_MATCHER: &str = "Bash|apply_patch";
+
+/// Build a Codex hook entry. The installed command embeds `--client codex`
+/// so tool-gates routes the wire format correctly when Codex spawns it.
+///
+/// Codex spawns the command via `/bin/sh -lc <command>`, so the binary path
+/// is shell-quoted to survive paths containing spaces or other shell
+/// metacharacters. Without quoting, `/home/me/My Tools/tool-gates` tokenises
+/// on spaces and the hook silently fails (exit 127), turning every gate
+/// decision into a Codex pass-through.
+fn generate_codex_hook_entry(binary_path: &str, matcher: &str) -> serde_json::Value {
+    let command = format!("{} --client codex", shell_single_quote(binary_path));
+    serde_json::json!({
+        "matcher": matcher,
+        "hooks": [{"type": "command", "command": command, "timeout": 30}]
+    })
+}
+
+/// Single-quote a string for `/bin/sh`. Replaces any embedded single quote
+/// with `'\''` so the result is safe to paste into a shell command line
+/// without re-escaping. Used by the Codex/Gemini/Claude hook installers
+/// because their command field is interpreted by the shell.
+fn shell_single_quote(s: &str) -> String {
+    let escaped = s.replace('\'', "'\\''");
+    format!("'{}'", escaped)
+}
+
+/// Build the full Codex hooks JSON for the installer. Three matcher groups
+/// per event: shell commands, file edits (apply_patch + Claude-style aliases),
+/// and MCP tools. PreToolUse covers all three; PermissionRequest also covers
+/// MCP so `[[accept_edits_mcp]]` rules can land on Codex (PreToolUse Allow
+/// maps to Null for Codex, so PermissionRequest is the only place an MCP
+/// allow can fire). PostToolUse covers Bash + apply_patch for tracking +
+/// security reminders.
+fn generate_codex_hooks_json(binary_path: &str) -> serde_json::Value {
+    serde_json::json!({
+        "PreToolUse": [
+            generate_codex_hook_entry(binary_path, CODEX_PRE_TOOL_USE_MATCHER),
+            generate_codex_hook_entry(binary_path, CODEX_MCP_TOOL_USE_MATCHER),
+        ],
+        "PermissionRequest": [
+            generate_codex_hook_entry(binary_path, CODEX_PERMISSION_REQUEST_MATCHER),
+            generate_codex_hook_entry(binary_path, CODEX_MCP_TOOL_USE_MATCHER),
+        ],
+        "PostToolUse": [
+            generate_codex_hook_entry(binary_path, CODEX_POST_TOOL_USE_MATCHER),
+        ]
     })
 }
 
@@ -1085,6 +1397,166 @@ fn install_gemini_hooks(scope: &str, dry_run: bool) {
     }
 }
 
+/// Get Codex hooks file path. Codex reads hooks from a dedicated file under
+/// `~/.codex/hooks.json` (user) or `<repo>/.codex/hooks.json` (project).
+/// The on-disk root has a top-level `hooks` key, same as Claude/Gemini
+/// settings.json, so the same install machinery works.
+fn get_codex_hooks_path(scope: &str) -> std::path::PathBuf {
+    match scope {
+        "user" => dirs::home_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join(".codex")
+            .join("hooks.json"),
+        "project" => std::path::PathBuf::from(".codex").join("hooks.json"),
+        _ => {
+            eprintln!(
+                "Error: Invalid Codex scope '{}'. Use: user or project",
+                scope
+            );
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Install hooks into Codex CLI's `hooks.json`. Mirrors `install_gemini_hooks`
+/// but writes to a dedicated file (not `settings.json`) and emits Codex's
+/// PreToolUse/PermissionRequest/PostToolUse event names.
+fn install_codex_hooks(scope: &str, dry_run: bool) {
+    let binary_path = get_binary_path();
+    let settings_path = get_codex_hooks_path(scope);
+
+    eprintln!("tool-gates installer (Codex CLI)");
+    eprintln!("Binary: {}", binary_path);
+    eprintln!("Target: {} ({})", settings_path.display(), scope);
+    eprintln!();
+
+    let mut settings: serde_json::Value = if settings_path.exists() {
+        match std::fs::read_to_string(&settings_path) {
+            Ok(content) => serde_json::from_str(&content).unwrap_or_else(|e| {
+                eprintln!("Error: Failed to parse {}: {}", settings_path.display(), e);
+                std::process::exit(1);
+            }),
+            Err(e) => {
+                eprintln!("Error: Failed to read {}: {}", settings_path.display(), e);
+                std::process::exit(1);
+            }
+        }
+    } else {
+        serde_json::json!({})
+    };
+
+    // serde_json's Index trait panics if the root is not an Object (e.g. `[]`,
+    // `"string"`, `42`, `null`). Validate before any indexed assignment so the
+    // installer produces a clear error instead of a stack trace.
+    if !settings.is_object() {
+        eprintln!(
+            "Error: {} root must be a JSON object, found {}",
+            settings_path.display(),
+            json_value_kind(&settings)
+        );
+        std::process::exit(1);
+    }
+
+    if settings.get("hooks").is_none() {
+        settings["hooks"] = serde_json::json!({});
+    } else if !settings["hooks"].is_object() {
+        eprintln!(
+            "Error: {} `hooks` field must be a JSON object, found {}",
+            settings_path.display(),
+            json_value_kind(&settings["hooks"])
+        );
+        std::process::exit(1);
+    }
+
+    let hooks = settings.get_mut("hooks").expect("hooks key inserted above");
+    let codex_hooks = generate_codex_hooks_json(&binary_path);
+    let mut changes = Vec::new();
+
+    for event in ["PreToolUse", "PermissionRequest", "PostToolUse"] {
+        if hooks.get(event).is_none() {
+            hooks[event] = serde_json::json!([]);
+        } else if !hooks[event].is_array() {
+            eprintln!(
+                "Error: {} `hooks.{}` must be a JSON array, found {}",
+                settings_path.display(),
+                event,
+                json_value_kind(&hooks[event])
+            );
+            std::process::exit(1);
+        }
+        let expected: Vec<serde_json::Value> = codex_hooks[event]
+            .as_array()
+            .map(|a| a.to_vec())
+            .unwrap_or_default();
+        match sync_hook_entries(&mut hooks[event], &expected) {
+            None => eprintln!("✓ {} hook up to date", event),
+            Some(ref change) if change == "added" => {
+                changes.push(event);
+                eprintln!("+ Adding {} hook(s)", event);
+            }
+            Some(change) => {
+                changes.push(event);
+                eprintln!("~ Updating {} matchers ({})", event, change);
+            }
+        }
+    }
+
+    if changes.is_empty() {
+        eprintln!("\nAll hooks up to date.");
+        return;
+    }
+
+    if dry_run {
+        eprintln!("\n--dry-run: Would write to {}", settings_path.display());
+        eprintln!("\nResulting hooks configuration:");
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&settings["hooks"]).unwrap()
+        );
+        return;
+    }
+
+    if let Some(parent) = settings_path.parent() {
+        if !parent.exists() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                eprintln!("Error: Failed to create {}: {}", parent.display(), e);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    match std::fs::write(
+        &settings_path,
+        serde_json::to_string_pretty(&settings).unwrap() + "\n",
+    ) {
+        Ok(_) => {
+            eprintln!("\n✓ Installed to {}", settings_path.display());
+            eprintln!("\nHooks added: {}", changes.join(", "));
+            eprintln!("\nCodex CLI hooks:");
+            eprintln!("  - PreToolUse: Command safety (deny / pass-through to Codex UI)");
+            eprintln!("  - PermissionRequest: Subagent allow/deny");
+            eprintln!("  - PostToolUse: Tracking + Tier-2 security + modern-CLI hints");
+        }
+        Err(e) => {
+            eprintln!("Error: Failed to write {}: {}", settings_path.display(), e);
+            std::process::exit(1);
+        }
+    }
+}
+
+/// One-word kind label for a serde_json Value, for clearer error messages
+/// when an installer sees a config file with the wrong root shape.
+fn json_value_kind(v: &serde_json::Value) -> &'static str {
+    match v {
+        serde_json::Value::Null => "null",
+        serde_json::Value::Bool(_) => "bool",
+        serde_json::Value::Number(_) => "number",
+        serde_json::Value::String(_) => "string",
+        serde_json::Value::Array(_) => "array",
+        serde_json::Value::Object(_) => "object",
+    }
+}
+
 /// Handle `tool-gates hooks` subcommand
 fn handle_hooks_subcommand(args: &[String]) {
     if args.is_empty() || args.iter().any(|a| a == "--help" || a == "-h") {
@@ -1111,6 +1583,12 @@ fn handle_hooks_subcommand(args: &[String]) {
 fn handle_hooks_add(args: &[String]) {
     let dry_run = args.iter().any(|a| a == "--dry-run" || a == "-n");
     let gemini = args.iter().any(|a| a == "--gemini");
+    let codex = args.iter().any(|a| a == "--codex");
+
+    if gemini && codex {
+        eprintln!("Error: --gemini and --codex are mutually exclusive");
+        std::process::exit(1);
+    }
 
     // Parse --scope option
     let scope = args
@@ -1123,6 +1601,13 @@ fn handle_hooks_add(args: &[String]) {
         // Gemini: scope defaults to "user" (~/.gemini/settings.json)
         let scope = scope.unwrap_or("user");
         install_gemini_hooks(scope, dry_run);
+        return;
+    }
+
+    if codex {
+        // Codex: scope defaults to "user" (~/.codex/hooks.json)
+        let scope = scope.unwrap_or("user");
+        install_codex_hooks(scope, dry_run);
         return;
     }
 
@@ -1211,14 +1696,31 @@ fn handle_hooks_status() {
     for (scope, path) in &gemini_scopes {
         check_settings_hooks(scope, path, &gemini_hooks);
     }
+
+    eprintln!("\nCodex CLI:");
+    let codex_scopes = [
+        ("user", get_codex_hooks_path("user")),
+        ("project", get_codex_hooks_path("project")),
+    ];
+    let codex_hooks = ["PreToolUse", "PermissionRequest", "PostToolUse"];
+    for (scope, path) in &codex_scopes {
+        check_settings_hooks(scope, path, &codex_hooks);
+    }
 }
 
 /// Print hooks JSON only
 fn print_hooks_json(args: &[String]) {
     let binary_path = get_binary_path();
     let gemini = args.iter().any(|a| a == "--gemini");
+    let codex = args.iter().any(|a| a == "--codex");
+    if gemini && codex {
+        eprintln!("Error: --gemini and --codex are mutually exclusive");
+        std::process::exit(1);
+    }
     let hooks = if gemini {
         generate_gemini_hooks_json(&binary_path)
+    } else if codex {
+        generate_codex_hooks_json(&binary_path)
     } else {
         generate_hooks_json(&binary_path)
     };
@@ -1230,7 +1732,10 @@ fn print_main_help() {
     eprintln!();
     eprintln!("USAGE:");
     eprintln!("  tool-gates                   Read hook input from stdin (default)");
-    eprintln!("  tool-gates hooks <command>   Manage Claude Code / Gemini CLI hooks");
+    eprintln!(
+        "  tool-gates --client <name>   Force client (claude|gemini|codex); used in hook commands"
+    );
+    eprintln!("  tool-gates hooks <command>   Manage Claude Code / Gemini CLI / Codex CLI hooks");
     eprintln!("  tool-gates approve <pattern> Add permission rule to settings");
     eprintln!("  tool-gates rules <command>   List/remove permission rules");
     eprintln!("  tool-gates pending <command> Manage pending approval queue");
@@ -1244,6 +1749,7 @@ fn print_main_help() {
     eprintln!("COMMANDS:");
     eprintln!("  hooks add -s <scope>         Add hooks to Claude Code settings");
     eprintln!("  hooks add --gemini           Add hooks to Gemini CLI settings");
+    eprintln!("  hooks add --codex            Add hooks to Codex CLI hooks.json");
     eprintln!("  hooks status                 Show hook installation status");
     eprintln!("  approve <pattern> -s <scope> Add allow rule for command pattern");
     eprintln!("  rules list                   List all permission rules");
@@ -1255,7 +1761,7 @@ fn print_main_help() {
     eprintln!("  pending clear                Clear pending approval queue");
     eprintln!("  review                       Interactive TUI for pending approvals");
     eprintln!();
-    eprintln!("SCOPES:");
+    eprintln!("CLAUDE CODE SCOPES:");
     eprintln!("  user     ~/.claude/settings.json (global, recommended)");
     eprintln!("  project  .claude/settings.json (shared with team)");
     eprintln!("  local    .claude/settings.local.json (personal, not committed)");
@@ -1263,19 +1769,21 @@ fn print_main_help() {
     eprintln!("EXAMPLES:");
     eprintln!("  tool-gates hooks add -s user          # Install Claude Code hooks");
     eprintln!("  tool-gates hooks add --gemini         # Install Gemini CLI hooks");
+    eprintln!("  tool-gates hooks add --codex          # Install Codex CLI hooks");
     eprintln!("  tool-gates approve 'npm:*' -s local   # Allow npm commands");
     eprintln!("  tool-gates rules list                 # Show all rules");
     eprintln!("  tool-gates pending list               # Show pending approvals");
 }
 
 fn print_hooks_help() {
-    eprintln!("tool-gates hooks - Manage Claude Code / Gemini CLI hooks");
+    eprintln!("tool-gates hooks - Manage Claude Code / Gemini CLI / Codex CLI hooks");
     eprintln!();
     eprintln!("USAGE:");
-    eprintln!("  tool-gates hooks add -s <scope>   Add hooks to Claude Code settings");
-    eprintln!("  tool-gates hooks add --gemini      Add hooks to Gemini CLI settings");
-    eprintln!("  tool-gates hooks status            Show hook installation status");
-    eprintln!("  tool-gates hooks json [--gemini]   Output hooks JSON only");
+    eprintln!("  tool-gates hooks add -s <scope>     Add hooks to Claude Code settings");
+    eprintln!("  tool-gates hooks add --gemini       Add hooks to Gemini CLI settings");
+    eprintln!("  tool-gates hooks add --codex        Add hooks to Codex CLI hooks.json");
+    eprintln!("  tool-gates hooks status             Show hook installation status (all clients)");
+    eprintln!("  tool-gates hooks json [--gemini|--codex]   Output hooks JSON only");
     eprintln!();
     eprintln!("CLAUDE CODE SCOPES:");
     eprintln!("  user     ~/.claude/settings.json (global user settings)");
@@ -1286,9 +1794,14 @@ fn print_hooks_help() {
     eprintln!("  user     ~/.gemini/settings.json (default)");
     eprintln!("  project  .gemini/settings.json");
     eprintln!();
+    eprintln!("CODEX CLI SCOPES:");
+    eprintln!("  user     ~/.codex/hooks.json (default)");
+    eprintln!("  project  .codex/hooks.json");
+    eprintln!();
     eprintln!("EXAMPLES:");
-    eprintln!("  tool-gates hooks add -s user         # Claude Code (recommended)");
-    eprintln!("  tool-gates hooks add --gemini        # Gemini CLI");
+    eprintln!("  tool-gates hooks add -s user          # Claude Code (recommended)");
+    eprintln!("  tool-gates hooks add --gemini         # Gemini CLI");
+    eprintln!("  tool-gates hooks add --codex          # Codex CLI");
     eprintln!("  tool-gates hooks add -s user --dry-run  # Preview changes");
 }
 
@@ -1296,15 +1809,21 @@ fn print_hooks_add_help() {
     eprintln!("USAGE:");
     eprintln!("  tool-gates hooks add -s <scope> [--dry-run]");
     eprintln!("  tool-gates hooks add --gemini [-s <scope>] [--dry-run]");
+    eprintln!("  tool-gates hooks add --codex [-s <scope>] [--dry-run]");
     eprintln!();
-    eprintln!("SCOPES:");
+    eprintln!("CLAUDE CODE SCOPES:");
     eprintln!("  user     ~/.claude/settings.json");
     eprintln!("  project  .claude/settings.json");
     eprintln!("  local    .claude/settings.local.json");
     eprintln!();
+    eprintln!("GEMINI CLI / CODEX CLI SCOPES:");
+    eprintln!("  user     (default)");
+    eprintln!("  project");
+    eprintln!();
     eprintln!("OPTIONS:");
-    eprintln!("  -s, --scope <scope>   Target settings file (required for Claude Code)");
-    eprintln!("  --gemini              Install for Gemini CLI instead of Claude Code");
+    eprintln!("  -s, --scope <scope>   Target settings/hooks file (required for Claude Code)");
+    eprintln!("  --gemini              Install for Gemini CLI");
+    eprintln!("  --codex               Install for Codex CLI");
     eprintln!("  -n, --dry-run         Preview changes without writing");
 }
 
@@ -2426,28 +2945,88 @@ fn humanize_bytes(bytes: u64) -> String {
     }
 }
 
-/// Print empty JSON to signal no opinion (pass through to normal flow).
+/// Emit a serialized hook output value to stdout. Returns whether something
+/// was printed.
+///
+/// Codex's `serialize()` returns `Value::Null` for pass-through (Allow/Ask/no
+/// opinion); the parser there only honors `permissionDecision: "deny"` and
+/// rejects everything else. Emitting literal `null` would make Codex mark the
+/// hook as invalid, so the contract is: null in -> empty stdout out.
+fn emit_hook_value(value: &serde_json::Value) -> bool {
+    if value.is_null() {
+        return false;
+    }
+    match serde_json::to_string(value) {
+        Ok(json) => {
+            println!("{json}");
+            true
+        }
+        Err(_) => false,
+    }
+}
+
+/// Print empty/no-opinion JSON for the given client.
+///
+/// Claude: `{"decision": "approve"}`. Gemini: `{"decision": "allow"}`.
+/// Codex: empty stdout (Codex's parser treats no output as pass-through).
 fn print_no_opinion_for(client: Client) {
     let output = HookOutput::no_opinion();
-    if let Ok(json) = serde_json::to_string(&output.serialize(client)) {
+    let value = output.serialize(client);
+    if value.is_null() {
+        // Codex pass-through: emit nothing.
+        return;
+    }
+    if let Ok(json) = serde_json::to_string(&value) {
         println!("{json}");
     } else {
         println!("{{}}");
     }
 }
 
-/// Print a deny/block result in the correct client format and exit with code 2 for Gemini.
-fn print_deny_and_exit(client: Client, reason: &str) {
+/// Print a deny/block result in the correct client format and exit non-zero.
+///
+/// All clients exit with code 2 when the gate decided to deny. Codex's parser
+/// honors `permissionDecision: "deny"` on stdout and tool-gates's exit code
+/// reinforces "this hook reported failure". Gemini's behavior was already
+/// to exit 2 for a hard block; this extends the same fail-closed semantics
+/// to Claude and Codex.
+///
+/// If serialization itself fails, fall through to a hardcoded last-resort
+/// deny payload so the gate never silently passes through. The previous
+/// behavior of `eprintln + return` left Codex with empty stdout = pass-through,
+/// turning a serialization error into a silent allow of an explicitly-denied
+/// command.
+fn print_deny_and_exit(client: Client, reason: &str) -> ! {
     let output = HookOutput::deny(reason);
-    let json_value = output.serialize(client);
-    if let Ok(json) = serde_json::to_string(&json_value) {
-        println!("{json}");
-    } else {
-        eprintln!("Error: failed to serialize deny output");
+    let value = output.serialize(client);
+    if !emit_hook_value(&value) {
+        eprintln!("Error: failed to serialize deny output for {client:?}");
+        // Last-resort hardcoded deny in Claude/Codex shape so the gate
+        // doesn't silently pass through. Gemini's flat shape is also
+        // emitted via a literal so even malformed structs can't undo
+        // the fail-closed contract.
+        let fallback = match client {
+            Client::Claude | Client::Codex => format!(
+                r#"{{"hookSpecificOutput":{{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{}}}}}"#,
+                serde_json::to_string(reason)
+                    .unwrap_or_else(|_| "\"tool-gates internal error\"".to_string())
+            ),
+            Client::Gemini => format!(
+                r#"{{"decision":"block","reason":{}}}"#,
+                serde_json::to_string(reason)
+                    .unwrap_or_else(|_| "\"tool-gates internal error\"".to_string())
+            ),
+            // Future Client variants: assume the Claude shape is the safest
+            // last-resort deny since most new variants emerge as Claude-compatible.
+            _ => format!(
+                r#"{{"hookSpecificOutput":{{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{}}}}}"#,
+                serde_json::to_string(reason)
+                    .unwrap_or_else(|_| "\"tool-gates internal error\"".to_string())
+            ),
+        };
+        println!("{fallback}");
     }
-    if client == Client::Gemini {
-        std::process::exit(2);
-    }
+    std::process::exit(2);
 }
 
 #[cfg(test)]
@@ -2626,5 +3205,160 @@ mod tests {
             output_json.contains("deny"),
             "Secret in Write should deny: {output_json}"
         );
+    }
+
+    // === Codex CLI integration tests ===
+
+    fn vec_strs(args: &[&str]) -> Vec<String> {
+        args.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn extract_client_override_separated_form() {
+        let (client, rest) =
+            extract_client_override(vec_strs(&["tool-gates", "--client", "codex", "extra"]));
+        assert_eq!(client, Some(Client::Codex));
+        assert_eq!(rest, vec_strs(&["tool-gates", "extra"]));
+    }
+
+    #[test]
+    fn extract_client_override_equals_form() {
+        let (client, rest) = extract_client_override(vec_strs(&["tool-gates", "--client=claude"]));
+        assert_eq!(client, Some(Client::Claude));
+        assert_eq!(rest, vec_strs(&["tool-gates"]));
+    }
+
+    #[test]
+    fn extract_client_override_absent() {
+        let (client, rest) = extract_client_override(vec_strs(&["tool-gates", "hooks", "status"]));
+        assert!(client.is_none());
+        assert_eq!(rest, vec_strs(&["tool-gates", "hooks", "status"]));
+    }
+
+    #[test]
+    fn codex_hooks_json_shape_has_three_events_and_command_carries_client_flag() {
+        let hooks = generate_codex_hooks_json("/path/to/tool-gates");
+        let obj = hooks.as_object().unwrap();
+        assert!(obj.contains_key("PreToolUse"));
+        assert!(obj.contains_key("PermissionRequest"));
+        assert!(obj.contains_key("PostToolUse"));
+
+        // PreToolUse must have two matcher groups (Bash|apply_patch, mcp__.*).
+        let pre = obj["PreToolUse"].as_array().unwrap();
+        assert_eq!(pre.len(), 2);
+        assert_eq!(pre[0]["matcher"], "Bash|apply_patch");
+        assert_eq!(pre[1]["matcher"], "mcp__.*");
+
+        // PermissionRequest gets two matcher groups (Bash|apply_patch + mcp__.*)
+        // so accept_edits_mcp rules can reach the PermissionRequest path.
+        let perm = obj["PermissionRequest"].as_array().unwrap();
+        assert_eq!(perm.len(), 2);
+        assert_eq!(perm[0]["matcher"], "Bash|apply_patch");
+        assert_eq!(perm[1]["matcher"], "mcp__.*");
+
+        // PostToolUse keeps a single Bash|apply_patch matcher.
+        assert_eq!(obj["PostToolUse"][0]["matcher"], "Bash|apply_patch");
+
+        // Every hook command must include `--client codex` so tool-gates routes
+        // the wire format correctly when Codex spawns it. 5 hook entries:
+        // 2 PreToolUse + 2 PermissionRequest + 1 PostToolUse.
+        let json_text = serde_json::to_string(&hooks).unwrap();
+        let occurrences = json_text.matches("--client codex").count();
+        assert_eq!(
+            occurrences, 5,
+            "expected --client codex on all five hook entries: {json_text}"
+        );
+
+        // Binary path is shell-quoted so spaces don't tokenise under /bin/sh -lc.
+        let path_with_spaces_hooks = generate_codex_hooks_json("/home/me/My Tools/tool-gates");
+        let with_spaces = serde_json::to_string(&path_with_spaces_hooks).unwrap();
+        assert!(
+            with_spaces.contains("'/home/me/My Tools/tool-gates' --client codex"),
+            "binary path with spaces must be shell-quoted: {with_spaces}"
+        );
+    }
+
+    #[test]
+    fn permission_request_codex_drops_extras() {
+        // PermissionRequestOutput::allow_with_directories carries
+        // `addDirectories`, which Codex's parser rejects. Verify the Codex
+        // serializer strips it down to `behavior + message` only.
+        let output = PermissionRequestOutput::allow_with_directories(vec!["/tmp".to_string()]);
+        let value = serialize_permission_request_for_client(&output, Client::Codex);
+        let s = serde_json::to_string(&value).unwrap();
+        assert!(
+            !s.contains("addDirectories"),
+            "Codex must drop addDirectories: {s}"
+        );
+        assert!(
+            !s.contains("updatedPermissions"),
+            "Codex must drop updatedPermissions: {s}"
+        );
+        assert_eq!(
+            value["hookSpecificOutput"]["hookEventName"],
+            "PermissionRequest"
+        );
+        assert_eq!(value["hookSpecificOutput"]["decision"]["behavior"], "allow");
+    }
+
+    #[test]
+    fn permission_request_codex_deny_carries_message() {
+        let output = PermissionRequestOutput::deny_and_interrupt("blocked path");
+        let value = serialize_permission_request_for_client(&output, Client::Codex);
+        let decision = &value["hookSpecificOutput"]["decision"];
+        assert_eq!(decision["behavior"], "deny");
+        assert_eq!(decision["message"], "blocked path");
+        // `interrupt` is rejected by Codex, must not be emitted.
+        let s = serde_json::to_string(&value).unwrap();
+        assert!(!s.contains("interrupt"), "Codex must drop interrupt: {s}");
+    }
+
+    #[test]
+    fn permission_request_gemini_emits_null() {
+        // PermissionRequest is not a Gemini event; Codex serializer should
+        // be the only one that produces non-null for non-Claude clients
+        // (until Gemini gains the equivalent).
+        let output = PermissionRequestOutput::allow();
+        let value = serialize_permission_request_for_client(&output, Client::Gemini);
+        assert!(
+            value.is_null(),
+            "Gemini PermissionRequest must be Null: {value}"
+        );
+    }
+
+    #[test]
+    fn shell_single_quote_escapes_apostrophe() {
+        // Path with embedded apostrophe must be safely re-quoted under sh.
+        assert_eq!(shell_single_quote("plain"), "'plain'");
+        assert_eq!(shell_single_quote("with space"), "'with space'");
+        assert_eq!(
+            shell_single_quote("don't"),
+            "'don'\\''t'",
+            "embedded apostrophe must close-and-escape-and-reopen"
+        );
+    }
+
+    #[test]
+    fn extract_client_override_warns_on_typo() {
+        // `--clientcodex` (no separator) should land in `out` so subcommand
+        // dispatch can see it (we still pass the raw flag forward), but the
+        // warning is the operator-visible signal. Not asserted here directly
+        // because eprintln output isn't captured by the test runner.
+        let (chosen, rest) =
+            extract_client_override(vec_strs(&["tool-gates", "--clientcodex", "hooks"]));
+        assert!(chosen.is_none());
+        assert_eq!(rest, vec_strs(&["tool-gates", "--clientcodex", "hooks"]));
+    }
+
+    #[test]
+    fn json_value_kind_for_each_variant() {
+        // Helper used by install_codex_hooks for clean error messages on
+        // non-object hooks.json roots. Keep parity with serde_json::Value.
+        assert_eq!(json_value_kind(&serde_json::Value::Null), "null");
+        assert_eq!(json_value_kind(&serde_json::json!(true)), "bool");
+        assert_eq!(json_value_kind(&serde_json::json!(42)), "number");
+        assert_eq!(json_value_kind(&serde_json::json!("x")), "string");
+        assert_eq!(json_value_kind(&serde_json::json!([])), "array");
+        assert_eq!(json_value_kind(&serde_json::json!({})), "object");
     }
 }

@@ -108,18 +108,40 @@ impl GateResult {
 // === Client Detection ===
 
 /// Which AI coding tool is calling us
+///
+/// `#[non_exhaustive]` so adding future variants (Sourcegraph Cody, JetBrains
+/// AI, etc.) is not a breaking change for downstream consumers; they must
+/// always include a wildcard arm in `match Client { ... }`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Client {
     Claude,
     Gemini,
+    Codex,
 }
 
 impl Client {
-    /// Detect client from hook_event_name
+    /// Detect client from hook_event_name.
+    ///
+    /// Codex emits the same event names as Claude (`PreToolUse`, etc.) and so
+    /// cannot be detected from the event name alone. Codex is selected via the
+    /// explicit `--client codex` CLI flag in `main`, which overrides whatever
+    /// this returns. Without the flag, Codex inputs default-resolve to Claude
+    /// here; the flag is required to flip the wire format.
     pub fn from_hook_event(event: &str) -> Self {
         match event {
             "BeforeTool" | "AfterTool" => Client::Gemini,
             _ => Client::Claude,
+        }
+    }
+
+    /// Parse a client name from the `--client <name>` CLI flag.
+    pub fn from_cli_name(name: &str) -> Option<Self> {
+        match name {
+            "claude" => Some(Client::Claude),
+            "gemini" => Some(Client::Gemini),
+            "codex" => Some(Client::Codex),
+            _ => None,
         }
     }
 
@@ -128,6 +150,7 @@ impl Client {
         match self {
             Client::Claude => "Bash",
             Client::Gemini => "run_shell_command",
+            Client::Codex => "Bash",
         }
     }
 
@@ -136,11 +159,21 @@ impl Client {
         tool_name == "Bash" || tool_name == "Monitor" || tool_name == "run_shell_command"
     }
 
-    /// Check if a tool_name represents a file operation tool (read, write, edit)
+    /// Check if a tool_name represents a file operation tool (read, write, edit).
+    /// `apply_patch` is Codex's canonical name for file edits. The payload shape
+    /// differs from Claude Write/Edit (a unified-diff body in `tool_input.command`),
+    /// so callers must route through the apply_patch parser to extract paths.
     pub fn is_file_tool(tool_name: &str) -> bool {
         matches!(
             tool_name,
-            "Read" | "Write" | "Edit" | "read_file" | "read_many_files" | "write_file" | "replace"
+            "Read"
+                | "Write"
+                | "Edit"
+                | "read_file"
+                | "read_many_files"
+                | "write_file"
+                | "replace"
+                | "apply_patch"
         )
     }
 
@@ -149,9 +182,14 @@ impl Client {
         matches!(tool_name, "Read" | "read_file" | "read_many_files")
     }
 
-    /// Check if a tool_name is a write/edit file tool
+    /// Check if a tool_name is a write/edit file tool.
+    /// `apply_patch` is Codex's file-edit tool; it carries a unified-diff body
+    /// in `tool_input.command` rather than `file_path`+`content`.
     pub fn is_write_tool(tool_name: &str) -> bool {
-        matches!(tool_name, "Write" | "Edit" | "write_file" | "replace")
+        matches!(
+            tool_name,
+            "Write" | "Edit" | "write_file" | "replace" | "apply_patch"
+        )
     }
 
     /// Check if a tool_name represents a skill/extension tool
@@ -190,13 +228,25 @@ pub struct ToolInput {
     pub file_path: Option<String>,
 }
 
+/// Deserialize a string field that may arrive as `null`. Codex's hook payload
+/// schema marks `transcript_path` as `string|null`; serde's default rejects
+/// `null` for `String` fields. Coerce null to empty string so downstream
+/// `.find()`/`.is_empty()` calls behave the same as for missing values.
+fn deserialize_null_string<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Option::<String>::deserialize(deserializer).map(|v| v.unwrap_or_default())
+}
+
 /// Input received by `PreToolUse` hook
 #[derive(Debug, Deserialize, Default)]
 #[allow(dead_code)]
 pub struct HookInput {
     #[serde(default)]
     pub session_id: String,
-    #[serde(default)]
+    /// Codex emits `null` here when no transcript is available; coerce to "".
+    #[serde(default, deserialize_with = "deserialize_null_string")]
     pub transcript_path: String,
     #[serde(default)]
     pub cwd: String,
@@ -431,10 +481,16 @@ impl HookOutput {
     }
 
     /// Serialize for the given client.
+    ///
+    /// Codex returns `Value::Null` for any non-deny decision. Callers must
+    /// treat null as "emit nothing" (empty stdout + exit 0) so Codex's parser
+    /// sees pass-through rather than a (possibly invalid) `allow`/`ask` field
+    /// that it would mark as an error.
     pub fn serialize(&self, client: Client) -> serde_json::Value {
         match client {
             Client::Claude => self.to_claude_json(),
             Client::Gemini => self.to_gemini_json(),
+            Client::Codex => self.to_codex_json(),
         }
     }
 
@@ -529,6 +585,65 @@ impl HookOutput {
         }
 
         serde_json::Value::Object(out)
+    }
+
+    /// Serialize to Codex CLI wire format.
+    ///
+    /// Codex's PreToolUse parser only honors `permissionDecision: "deny"`.
+    /// `"allow"` and `"ask"` are marked invalid; `additionalContext` is rejected
+    /// on PreToolUse (only PostToolUse and SessionStart accept it);
+    /// `updatedInput`/`continue`/`stopReason`/`suppressOutput` are also rejected.
+    /// So Codex pass-through means literally empty stdout + exit 0.
+    ///
+    /// Mapping:
+    /// - `Approve` (no opinion)  -> `Value::Null` (caller emits nothing)
+    /// - `Allow`                 -> `Value::Null` (Codex's UI handles it)
+    /// - `Ask`                   -> `Value::Null` (Codex prompts the user)
+    /// - `Defer`                 -> `Value::Null` (no Codex equivalent)
+    /// - `Deny`                  -> `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"..."}}`
+    ///
+    /// Hints + Tier-3 warnings (carried in `context`) are dropped here on Pre.
+    /// Tier-3 surfaces via the Codex PostToolUse hint path; deny+context
+    /// remediation text is concatenated into the deny reason since Codex
+    /// has no other place to emit it (the patch was blocked, no Post fires).
+    ///
+    /// Codex requires a non-empty `permissionDecisionReason` on deny; an
+    /// empty reason gets marked as an invalid hook output and the deny is
+    /// silently dropped (a fail-open route via `[[block_tools]]` rules with
+    /// `message = ""`). Fall back to a static reason when none is provided.
+    fn to_codex_json(&self) -> serde_json::Value {
+        if self.decision != PermissionDecision::Deny {
+            return serde_json::Value::Null;
+        }
+
+        let mut hso = serde_json::Map::new();
+        hso.insert("hookEventName".to_string(), serde_json::json!("PreToolUse"));
+        hso.insert("permissionDecision".to_string(), serde_json::json!("deny"));
+
+        // Concatenate optional context (Tier-3 remediation, hints) into the
+        // reason since Codex's parser rejects `additionalContext` on Pre.
+        // The reason is the only operator-visible field on a Codex deny.
+        let mut reason = self
+            .reason
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .unwrap_or("Blocked by tool-gates")
+            .to_string();
+        if let Some(ctx) = self
+            .context
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            reason.push_str("\n\n");
+            reason.push_str(ctx);
+        }
+        hso.insert(
+            "permissionDecisionReason".to_string(),
+            serde_json::json!(reason),
+        );
+        serde_json::json!({ "hookSpecificOutput": serde_json::Value::Object(hso) })
     }
 }
 
@@ -1233,5 +1348,169 @@ mod tests {
         // Not MCP
         assert!(!Client::is_mcp_tool("Bash"));
         assert!(!Client::is_mcp_tool("Read"));
+    }
+
+    // === Codex CLI output tests ===
+
+    #[test]
+    fn test_codex_from_cli_name() {
+        assert_eq!(Client::from_cli_name("claude"), Some(Client::Claude));
+        assert_eq!(Client::from_cli_name("gemini"), Some(Client::Gemini));
+        assert_eq!(Client::from_cli_name("codex"), Some(Client::Codex));
+        assert_eq!(Client::from_cli_name("CODEX"), None);
+        assert_eq!(Client::from_cli_name(""), None);
+        assert_eq!(Client::from_cli_name("openai"), None);
+    }
+
+    #[test]
+    fn test_codex_shell_tool_name() {
+        assert_eq!(Client::Codex.shell_tool_name(), "Bash");
+    }
+
+    #[test]
+    fn test_apply_patch_classified_as_file_and_write_tool() {
+        // Codex uses apply_patch as the canonical name for file edits.
+        assert!(Client::is_file_tool("apply_patch"));
+        assert!(Client::is_write_tool("apply_patch"));
+        assert!(!Client::is_read_tool("apply_patch"));
+        assert!(!Client::is_shell_tool("apply_patch"));
+    }
+
+    #[test]
+    fn test_codex_allow_emits_null() {
+        // Codex pass-through is empty stdout; serialize returns Null.
+        let output = HookOutput::allow(Some("Read-only"));
+        let value = output.serialize(Client::Codex);
+        assert!(
+            value.is_null(),
+            "Codex Allow must serialize to Null (empty stdout), got: {value}"
+        );
+    }
+
+    #[test]
+    fn test_codex_ask_emits_null() {
+        // Codex's parser rejects permissionDecision: ask. Map to pass-through.
+        let output = HookOutput::ask("Needs approval");
+        let value = output.serialize(Client::Codex);
+        assert!(
+            value.is_null(),
+            "Codex Ask must serialize to Null (Codex's UI prompts), got: {value}"
+        );
+    }
+
+    #[test]
+    fn test_codex_no_opinion_emits_null() {
+        let output = HookOutput::no_opinion();
+        let value = output.serialize(Client::Codex);
+        assert!(value.is_null(), "Codex no_opinion must be Null: {value}");
+    }
+
+    #[test]
+    fn test_codex_deny_shape() {
+        let output = HookOutput::deny("Dangerous command");
+        let value = output.serialize(Client::Codex);
+        assert!(!value.is_null(), "Codex Deny must produce JSON, got Null");
+        let hso = value
+            .get("hookSpecificOutput")
+            .expect("expected hookSpecificOutput");
+        assert_eq!(hso["hookEventName"], "PreToolUse");
+        assert_eq!(hso["permissionDecision"], "deny");
+        assert_eq!(hso["permissionDecisionReason"], "Dangerous command");
+    }
+
+    #[test]
+    fn codex_deny_with_empty_reason_falls_back_to_static() {
+        // Codex's parser rejects deny without a non-empty reason. A
+        // `[[block_tools]] message = ""` config rule must not cause silent
+        // pass-through; the serializer fills in a static reason.
+        let output = HookOutput {
+            decision: PermissionDecision::Deny,
+            reason: Some(String::new()),
+            context: None,
+            updated_command: None,
+        };
+        let value = output.serialize(Client::Codex);
+        let reason = &value["hookSpecificOutput"]["permissionDecisionReason"];
+        assert_eq!(reason, "Blocked by tool-gates");
+    }
+
+    #[test]
+    fn codex_deny_concatenates_context_into_reason() {
+        // When deny carries Tier-1 + Tier-3 context (e.g. AWS key with weak
+        // crypto), Codex's parser would reject additionalContext on Pre. The
+        // serializer concatenates it into the reason so the remediation text
+        // still reaches the operator.
+        let output = HookOutput {
+            decision: PermissionDecision::Deny,
+            reason: Some("Hardcoded AWS key detected".to_string()),
+            context: Some("Also: weak hash (MD5)".to_string()),
+            updated_command: None,
+        };
+        let value = output.serialize(Client::Codex);
+        let reason = value["hookSpecificOutput"]["permissionDecisionReason"]
+            .as_str()
+            .unwrap();
+        assert!(reason.contains("Hardcoded AWS key detected"));
+        assert!(reason.contains("Also: weak hash (MD5)"));
+    }
+
+    #[test]
+    fn test_codex_pre_output_drops_additional_context() {
+        // Hints + Tier-3 warnings ride on PostToolUse for Codex; the Pre wire
+        // shape must not include `additionalContext`, `updatedInput`, or any
+        // other fields the parser rejects.
+        let output = HookOutput::allow_with_context(Some("Safe"), "Use bat instead");
+        let value = output.serialize(Client::Codex);
+        assert!(
+            value.is_null(),
+            "Codex Allow+context still maps to Null on Pre: {value}"
+        );
+    }
+
+    #[test]
+    fn test_codex_deny_output_has_no_extra_fields() {
+        let output = HookOutput::deny("blocked");
+        let value = output.serialize(Client::Codex);
+        let s = serde_json::to_string(&value).unwrap();
+        assert!(
+            !s.contains("additionalContext"),
+            "no Pre additionalContext: {s}"
+        );
+        assert!(!s.contains("updatedInput"), "no updatedInput: {s}");
+        assert!(!s.contains("\"continue\""), "no continue: {s}");
+        assert!(!s.contains("stopReason"), "no stopReason: {s}");
+    }
+
+    #[test]
+    fn test_codex_serialize_dispatches() {
+        // Each client gets its own serializer arm.
+        let output = HookOutput::deny("nope");
+        let claude = output.serialize(Client::Claude);
+        let gemini = output.serialize(Client::Gemini);
+        let codex = output.serialize(Client::Codex);
+        // Claude: nested hookSpecificOutput
+        assert!(claude.get("hookSpecificOutput").is_some());
+        // Gemini: flat decision
+        assert_eq!(gemini["decision"], "block");
+        // Codex: nested hookSpecificOutput like Claude but only "deny"
+        assert_eq!(codex["hookSpecificOutput"]["permissionDecision"], "deny");
+    }
+
+    #[test]
+    fn test_codex_transcript_path_null_parses() {
+        // Codex emits transcript_path as nullable; serde must accept null.
+        let raw = r#"{
+            "hook_event_name": "PreToolUse",
+            "session_id": "s1",
+            "transcript_path": null,
+            "cwd": "/tmp",
+            "tool_name": "Bash",
+            "tool_input": {"command": "ls"},
+            "tool_use_id": "u1",
+            "permission_mode": "default"
+        }"#;
+        let parsed: HookInput = serde_json::from_str(raw).expect("null transcript_path parses");
+        assert_eq!(parsed.transcript_path, "");
+        assert_eq!(parsed.tool_name, "Bash");
     }
 }

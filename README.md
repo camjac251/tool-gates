@@ -11,7 +11,7 @@
 [![Rust](https://img.shields.io/badge/rust-1.86+-orange.svg)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A hook for [Claude Code](https://code.claude.com/docs/en/hooks) and [Gemini CLI](https://github.com/google-gemini/gemini-cli) that gates Bash commands, file operations, and tool invocations using AST parsing. Determines whether to allow, ask, or block based on potential impact.
+A hook for [Claude Code](https://code.claude.com/docs/en/hooks), [Gemini CLI](https://github.com/google-gemini/gemini-cli), and [Codex CLI](https://github.com/openai/codex) that gates Bash commands, file operations, and tool invocations using AST parsing. Determines whether to allow, ask, or block based on potential impact.
 
 [Installation](#installation) · [Permission Gates](#permission-gates) · [Security](#security-features) · [Testing](#testing)
 
@@ -120,6 +120,15 @@ flowchart TD
 - No approval tracking (Gemini doesn't provide `tool_use_id`)
 - `"block"` instead of `"deny"` in output, exit code 2 for blocks
 - Security anti-pattern scanning in AfterTool is not yet supported
+
+**Codex CLI** uses three hooks (`PreToolUse`/`PermissionRequest`/`PostToolUse`) with the same gate engine. Codex emits the same `hook_event_name` strings as Claude, so the client is selected via the explicit `--client codex` CLI flag (the installer bakes that flag into the hook command). Key differences from Claude:
+
+- `apply_patch` is the canonical file-edit tool name (matcher aliases `Write` and `Edit` also fire). The patch body lives in `tool_input.command` as a unified diff; tool-gates parses out `*** Add/Update/Delete File:` headers so file_guards and security_reminders run against every affected path
+- Codex's parser only honors `permissionDecision: "deny"` on PreToolUse. tool-gates emits empty stdout for Allow/Ask so Codex's UI prompts the user (same end-user experience as Claude's prompt)
+- PreToolUse `additionalContext` is rejected; modern-CLI hints + Tier-3 warnings ride on PostToolUse instead
+- PermissionRequest accepts only `behavior: allow|deny` + `message`. `addDirectories`, `updatedInput`, `updatedPermissions`, `interrupt` are dropped (worktree approval reduces to a flat allow without path expansion)
+- No PermissionDenied event (no auto-mode classifier in Codex)
+- Hook config lives in `~/.codex/hooks.json` (user) or `<repo>/.codex/hooks.json` (project)
 
 > `PermissionRequest` metadata like `blocked_path` and `decision_reason` is optional in Claude Code payloads. tool-gates treats those fields as best-effort context, not required inputs.
 
@@ -397,15 +406,19 @@ tool-gates hooks add -s user
 # Gemini CLI
 tool-gates hooks add --gemini
 
+# Codex CLI
+tool-gates hooks add --codex
+
 # Install to project settings (shared with team)
 tool-gates hooks add -s project
 
-# Check installation status (both clients)
+# Check installation status (all three clients)
 tool-gates hooks status
 
 # Preview changes without writing
 tool-gates hooks add -s user --dry-run
 tool-gates hooks add --gemini --dry-run
+tool-gates hooks add --codex --dry-run
 ```
 
 #### Claude Code
@@ -547,7 +560,52 @@ Add to `~/.gemini/settings.json`:
 
 </details>
 
-The client is auto-detected from the `hook_event_name` field. No configuration needed. The same binary handles both.
+The Claude/Gemini client is auto-detected from the `hook_event_name` field; the same binary handles both. Codex shares Claude's event names, so it requires `--client codex` baked into the hook command (the installer does this for you).
+
+#### Codex CLI
+
+| Scope | File | Use case |
+|-------|------|----------|
+| `user` | `~/.codex/hooks.json` | Personal use (default) |
+| `project` | `.codex/hooks.json` | Share with team |
+
+Three hooks are installed: `PreToolUse`, `PermissionRequest`, `PostToolUse`. Each command embeds `--client codex` so tool-gates routes the wire format correctly.
+
+<details>
+<summary>Manual installation</summary>
+
+Add to `~/.codex/hooks.json`:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|apply_patch",
+        "hooks": [{"type": "command", "command": "~/.local/bin/tool-gates --client codex", "timeout": 30}]
+      },
+      {
+        "matcher": "mcp__.*",
+        "hooks": [{"type": "command", "command": "~/.local/bin/tool-gates --client codex", "timeout": 30}]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "Bash|apply_patch",
+        "hooks": [{"type": "command", "command": "~/.local/bin/tool-gates --client codex", "timeout": 30}]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|apply_patch",
+        "hooks": [{"type": "command", "command": "~/.local/bin/tool-gates --client codex", "timeout": 30}]
+      }
+    ]
+  }
+}
+```
+
+</details>
 
 ---
 
@@ -733,6 +791,16 @@ echo '{"hook_event_name":"BeforeTool","tool_name":"run_shell_command","tool_inpu
 
 echo '{"hook_event_name":"BeforeTool","tool_name":"run_shell_command","tool_input":{"command":"rm -rf /"}}' | tool-gates
 # -> {"decision":"block","reason":"rm: rm -rf / blocked"}  (exit code 2)
+
+# Codex CLI format (selected via --client codex flag, since event names match Claude)
+echo '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git status"},"cwd":"/tmp","session_id":"s","tool_use_id":"u","permission_mode":"default","transcript_path":null}' | tool-gates --client codex
+# -> (empty stdout, exit 0 -- pass through, Codex's UI prompts the user)
+
+echo '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"rm -rf /"},"cwd":"/tmp","session_id":"s","tool_use_id":"u","permission_mode":"default","transcript_path":null}' | tool-gates --client codex
+# -> {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"rm: rm -rf / blocked"}}
+
+echo '{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"command":"*** Begin Patch\n*** Update File: /home/me/CLAUDE.md\n@@\n-old\n+new\n*** End Patch\n"},"cwd":"/tmp","session_id":"s","tool_use_id":"u","permission_mode":"default","transcript_path":null}' | tool-gates --client codex
+# -> deny if /home/me/CLAUDE.md is a guarded symlink, empty stdout otherwise
 ```
 
 ---

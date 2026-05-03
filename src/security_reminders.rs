@@ -14,20 +14,47 @@ use crate::models::{HookOutput, PostToolUseOutput};
 use regex::Regex;
 use std::sync::OnceLock;
 
-/// Extract all writable content strings from a tool_input map.
+/// Extract all writable (file_path, content) pairs from a tool_input map.
 ///
 /// Handles all tool types:
-/// - Write: `map["content"]`
-/// - Edit (classic): `map["new_string"]`
-/// - Edit (batch): `map["edits"][*]["new_string"]`
-///
-/// Returns a vec of (file_path, content) pairs. The file_path
-/// comes from the top-level `file_path` field.
+/// - Claude `Write` / Gemini `write_file`: top-level `file_path` + `content`.
+/// - Claude `Edit` / Gemini `replace`: top-level `file_path` + `new_string`,
+///   plus the batch `edits[].new_string` form.
+/// - Codex `apply_patch`: parse the unified-diff body in `command` and emit
+///   one `(path, added_lines)` pair per Add/Update section. Delete sections
+///   are skipped (no content to scan).
 fn extract_content(
     tool_name: &str,
     map: &serde_json::Map<String, serde_json::Value>,
 ) -> Vec<(String, String)> {
     let mut results = Vec::new();
+
+    if tool_name == "apply_patch" {
+        let command = map.get("command").and_then(|v| v.as_str()).unwrap_or("");
+        if command.is_empty() {
+            return results;
+        }
+        for file in crate::apply_patch_parser::parse_patch(command) {
+            if file.op == crate::apply_patch_parser::PatchOp::Delete {
+                continue;
+            }
+            let content = file.added_content();
+            if content.is_empty() {
+                continue;
+            }
+            // The destination path matters for "is this a doc/.env file" checks;
+            // when there's a rename we use the move target since that's where
+            // the bytes actually land.
+            let path = file
+                .move_to
+                .as_ref()
+                .unwrap_or(&file.path)
+                .display()
+                .to_string();
+            results.push((path, content));
+        }
+        return results;
+    }
 
     let top_file_path = map
         .get("file_path")
@@ -553,6 +580,12 @@ pub fn check_security_reminders(
 /// PostToolUse: Check content for Tier 2 (anti-pattern) and doc-file Tier 1 (secret)
 /// matches after the write succeeds.
 ///
+/// For Codex specifically, also emits Tier 3 (warn) findings here. Codex's
+/// PreToolUse parser rejects `additionalContext`, so the warnings can't ride
+/// on Pre. Without including them on Post, Codex users get strictly less
+/// security feedback than Claude users on the same anti-patterns. Pass the
+/// active client so the dominator knows to include Tier-3 for Codex only.
+///
 /// Returns `Some(PostToolUseOutput)` with additionalContext containing the security
 /// warning. Claude sees this as a `<system-reminder>` and can self-correct.
 /// Deduped per (file, rule) per session via hint_tracker.
@@ -561,12 +594,14 @@ pub fn check_security_reminders_post(
     tool_input_map: &serde_json::Map<String, serde_json::Value>,
     config: &SecurityRemindersConfig,
     session_id: &str,
+    client: crate::models::Client,
 ) -> Option<PostToolUseOutput> {
     if crate::models::Client::is_read_tool(tool_name) {
         return None;
     }
-    // Early exit only if both subsystems are disabled
-    if !config.anti_patterns && !config.secrets {
+    // Tier 3 emission depends on client; the early bail must consider it too.
+    let tier3_active = client == crate::models::Client::Codex && config.warnings;
+    if !config.anti_patterns && !config.secrets && !tier3_active {
         return None;
     }
 
@@ -575,14 +610,15 @@ pub fn check_security_reminders_post(
         return None;
     }
 
-    // Collect all Tier 2 warnings (multiple patterns can match)
+    // Collect all warnings (multiple patterns can match)
     let mut warnings = Vec::new();
 
     for (file_path, content) in &content_pairs {
         let matches = scan_content(file_path, content);
 
         for m in &matches {
-            // PostToolUse handles Tier 2 (all files) + Tier 1 (doc files only)
+            // PostToolUse handles Tier 2 (all files) + Tier 1 (doc files only).
+            // For Codex, also Tier 3 (warn) since it can't ride on Pre.
             let dominated = match m.tier {
                 Tier::AskOnce => !config.anti_patterns,
                 Tier::Deny => {
@@ -594,7 +630,11 @@ pub fn check_security_reminders_post(
                         !is_doc_file(file_path)
                     }
                 }
-                _ => true, // Tier 3 handled by PreToolUse
+                Tier::Warn => {
+                    // Tier 3: Claude/Gemini handle on Pre. For Codex, emit
+                    // here because additionalContext is rejected on Pre.
+                    !(tier3_active)
+                }
             };
             if dominated {
                 continue;
@@ -1054,7 +1094,13 @@ print(result.stdout)
         let json_str = format!(r#"{{"file_path": "{path}", "content": "eval(input)"}}"#);
         let map = make_map(&json_str);
         let config = SecurityRemindersConfig::default();
-        let result = check_security_reminders_post("Write", &map, &config, &session);
+        let result = check_security_reminders_post(
+            "Write",
+            &map,
+            &config,
+            &session,
+            crate::models::Client::Claude,
+        );
         assert!(result.is_some(), "PostToolUse should catch eval");
         let json = serde_json::to_string(&result.unwrap()).unwrap();
         assert!(
@@ -1075,10 +1121,22 @@ print(result.stdout)
         let map = make_map(&json_str);
         let config = SecurityRemindersConfig::default();
 
-        let r1 = check_security_reminders_post("Write", &map, &config, &session);
+        let r1 = check_security_reminders_post(
+            "Write",
+            &map,
+            &config,
+            &session,
+            crate::models::Client::Claude,
+        );
         assert!(r1.is_some(), "First PostToolUse call should warn");
 
-        let r2 = check_security_reminders_post("Write", &map, &config, &session);
+        let r2 = check_security_reminders_post(
+            "Write",
+            &map,
+            &config,
+            &session,
+            crate::models::Client::Claude,
+        );
         assert!(r2.is_none(), "Second call should be deduped");
     }
 
@@ -1091,7 +1149,13 @@ print(result.stdout)
         );
         let map = make_map(&json_str);
         let config = SecurityRemindersConfig::default();
-        let result = check_security_reminders_post("Write", &map, &config, &session);
+        let result = check_security_reminders_post(
+            "Write",
+            &map,
+            &config,
+            &session,
+            crate::models::Client::Claude,
+        );
         assert!(result.is_some());
         let json = serde_json::to_string(&result.unwrap()).unwrap();
         assert!(json.contains("eval_injection"), "Should have eval: {json}");
@@ -1109,7 +1173,13 @@ print(result.stdout)
         );
         let config = SecurityRemindersConfig::default();
         let session = unique_session("post-tier3");
-        let result = check_security_reminders_post("Write", &map, &config, &session);
+        let result = check_security_reminders_post(
+            "Write",
+            &map,
+            &config,
+            &session,
+            crate::models::Client::Claude,
+        );
         assert!(result.is_none(), "Tier 3 should not fire in PostToolUse");
     }
 
@@ -1121,7 +1191,13 @@ print(result.stdout)
             ..Default::default()
         };
         let session = unique_session("post-disabled");
-        let result = check_security_reminders_post("Write", &map, &config, &session);
+        let result = check_security_reminders_post(
+            "Write",
+            &map,
+            &config,
+            &session,
+            crate::models::Client::Claude,
+        );
         assert!(
             result.is_none(),
             "Disabled rule should not fire in PostToolUse"
@@ -1457,7 +1533,13 @@ mod coverage_gap_tests {
         let json_str = format!(r#"{{"file_path": "{path}", "content": "eval(something)"}}"#);
         let map = make_map(&json_str);
         let config = SecurityRemindersConfig::default();
-        let result = check_security_reminders_post("Write", &map, &config, &session);
+        let result = check_security_reminders_post(
+            "Write",
+            &map,
+            &config,
+            &session,
+            crate::models::Client::Claude,
+        );
         assert!(
             result.is_some(),
             "Tier 2 should still fire on .env in PostToolUse"
@@ -1660,7 +1742,13 @@ mod doc_file_secret_tests {
         let json_str = format!(r#"{{"file_path": "{path}", "content": "{content}"}}"#);
         let map = make_map(&json_str);
         let config = SecurityRemindersConfig::default();
-        let result = check_security_reminders_post("Write", &map, &config, &session);
+        let result = check_security_reminders_post(
+            "Write",
+            &map,
+            &config,
+            &session,
+            crate::models::Client::Claude,
+        );
         assert!(
             result.is_some(),
             "PostToolUse should warn about secrets in doc files"
@@ -1696,7 +1784,13 @@ mod doc_file_secret_tests {
         let map = make_map(&json_str);
         let config = SecurityRemindersConfig::default();
         let session = unique_session("source-post-skip");
-        let result = check_security_reminders_post("Write", &map, &config, &session);
+        let result = check_security_reminders_post(
+            "Write",
+            &map,
+            &config,
+            &session,
+            crate::models::Client::Claude,
+        );
         assert!(
             result.is_none(),
             "PostToolUse should NOT warn about secrets in source files (PreToolUse blocks them)"
@@ -1712,10 +1806,22 @@ mod doc_file_secret_tests {
         let map = make_map(&json_str);
         let config = SecurityRemindersConfig::default();
 
-        let r1 = check_security_reminders_post("Write", &map, &config, &session);
+        let r1 = check_security_reminders_post(
+            "Write",
+            &map,
+            &config,
+            &session,
+            crate::models::Client::Claude,
+        );
         assert!(r1.is_some(), "First doc secret should warn");
 
-        let r2 = check_security_reminders_post("Write", &map, &config, &session);
+        let r2 = check_security_reminders_post(
+            "Write",
+            &map,
+            &config,
+            &session,
+            crate::models::Client::Claude,
+        );
         assert!(r2.is_none(), "Second doc secret should be deduped");
     }
 
@@ -1730,7 +1836,13 @@ mod doc_file_secret_tests {
         let pre = check_security_reminders("Write", &map, &config, &session);
         assert!(pre.is_none(), "PreToolUse should skip for .html doc files");
 
-        let post = check_security_reminders_post("Write", &map, &config, &session);
+        let post = check_security_reminders_post(
+            "Write",
+            &map,
+            &config,
+            &session,
+            crate::models::Client::Claude,
+        );
         assert!(
             post.is_some(),
             "PostToolUse should warn for .html doc files"

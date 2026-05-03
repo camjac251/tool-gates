@@ -897,6 +897,27 @@ pub fn format_hints(hints: &[ModernHint]) -> String {
         .join("\n")
 }
 
+/// Compute and format modern-CLI hints for a raw shell command.
+///
+/// Used by the Codex PostToolUse path where hints are deferred (Codex's
+/// PreToolUse parser rejects `additionalContext`, so they ride on Post
+/// instead). Independent of gate-decision logic so it can run on any
+/// successful command without rerunning the full router.
+pub fn compute_hints_for_command(command: &str, session_id: &str) -> String {
+    if command.is_empty() {
+        return String::new();
+    }
+    let commands = crate::parser::extract_commands(command);
+    let mut hints: Vec<ModernHint> = Vec::new();
+    for cmd in &commands {
+        if let Some(hint) = get_modern_hint(cmd) {
+            hints.push(hint);
+        }
+    }
+    crate::hint_tracker::filter_hints(session_id, &mut hints);
+    format_hints(&hints)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

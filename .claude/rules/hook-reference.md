@@ -8,11 +8,12 @@ paths:
 
 # Hook Input/Output Reference
 
-tool-gates supports two clients, detected via `hook_event_name`:
-- **Claude Code**: `PreToolUse` / `PermissionRequest` / `PostToolUse` events
-- **Gemini CLI**: `BeforeTool` / `AfterTool` events
+tool-gates supports three clients:
+- **Claude Code**: `PreToolUse` / `PermissionRequest` / `PermissionDenied` / `PostToolUse` events. Detected from `hook_event_name`.
+- **Gemini CLI**: `BeforeTool` / `AfterTool` events. Detected from `hook_event_name`.
+- **Codex CLI**: `PreToolUse` / `PermissionRequest` / `PostToolUse` events. **Cannot** be detected from `hook_event_name` (Codex shares Claude's event names verbatim). Selected via the explicit `--client codex` argv flag, which the installer bakes into the hook command.
 
-The `Client` enum in `models.rs` maps hook events to the appropriate client and controls serialization format, tool name mapping, and exit code behavior.
+The `Client` enum in `models.rs` maps the chosen client to the appropriate serialization format, tool name mapping, and exit code behavior.
 
 All Claude JSON output uses **camelCase** field names (`hookEventName`, `permissionDecision`, `updatedPermissions`). Enforced by `#[serde(rename_all = "camelCase")]` on output structs in `models.rs`. New fields must follow this convention with test coverage asserting exact casing.
 
@@ -23,11 +24,12 @@ Every hook input includes these fields from the base schema:
 | Field | Type | Description |
 |-------|------|-------------|
 | `session_id` | `string` | Current session UUID |
-| `transcript_path` | `string` | Path to the session's JSONL transcript file |
+| `transcript_path` | `string \| null` | Path to the session's JSONL transcript file. Codex emits `null` when no transcript is available; `HookInput`'s deserializer coerces null to empty string |
 | `cwd` | `string` | Current working directory |
 | `permission_mode` | `string` (optional) | Current permission mode (e.g., `"acceptEdits"`) |
 | `agent_id` | `string` (optional) | Present only when hook fires from a subagent. Absent for main thread, even in `--agent` sessions. |
 | `agent_type` | `string` (optional) | Agent type name (e.g., `"code-reviewer"`). Present for subagents (with `agent_id`) or main thread of `--agent` sessions (without `agent_id`). |
+| `turn_id` | `string` (Codex only) | Per-turn identifier from Codex; tool-gates doesn't currently key off this field but accepts it without rejecting the payload. |
 
 ## PreToolUse
 
@@ -196,3 +198,40 @@ Key differences from Claude:
 - Exit code 2 used as process-level block signal. Gemini treats any non-zero/non-1 exit as deny for non-JSON output, but JSON `decision` field takes precedence when present.
 - No `tool_use_id` from Gemini, so PostToolUse tracking is skipped
 - MCP tools use single underscore prefix (`mcp_server_tool`) vs Claude's double (`mcp__server__tool`)
+
+## Codex CLI Hooks
+
+Codex emits `PreToolUse` / `PermissionRequest` / `PostToolUse` events with snake_case input fields and camelCase output -- the same surface shape as Claude. The wire format is similar enough that the same `HookInput` / `PostToolUseInput` deserializers parse it. Detection is via the explicit `--client codex` argv flag (`Client::from_cli_name`); `from_hook_event()` cannot distinguish Codex from Claude because the event names are identical.
+
+**Hook config file**: `~/.codex/hooks.json` (user) or `<repo>/.codex/hooks.json` (project). Top-level `{ "hooks": { ... } }` object, same shape as Claude/Gemini settings.json.
+
+**Tool name mapping** (Codex -> Claude equivalents):
+| Codex | Claude |
+|-------|--------|
+| `Bash` | `Bash` |
+| `apply_patch` | `Write` / `Edit` (single payload, unified-diff in `tool_input.command`) |
+| `mcp__server__tool` | `mcp__server__tool` (same convention) |
+
+**`apply_patch` payload**: tool_input is `{ "command": "<entire-patch-body>" }`. Paths are inside the body as `*** Add File: <path>` / `*** Update File: <path>` / `*** Delete File: <path>` headers, optionally with `*** Move to: <target>` for renames. tool-gates parses this in `apply_patch_parser.rs` and routes each affected path through file_guards + security_reminders.
+
+**Output format**:
+```json
+// Allow / Ask / no opinion: empty stdout, exit 0 (Codex's UI prompts the user)
+// Deny: nested hookSpecificOutput
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "permissionDecision": "deny",
+    "permissionDecisionReason": "Human-readable reason"
+  }
+}
+```
+
+Key differences from Claude (rejected by Codex's parser, dropped silently by tool-gates):
+- PreToolUse `permissionDecision: "allow"` and `"ask"` are marked invalid -> tool-gates emits empty stdout (`Value::Null` from `to_codex_json`) so Codex's prompt fires instead.
+- PreToolUse `additionalContext` is rejected -> hints + Tier-3 warnings move to PostToolUse for Codex (Codex accepts `additionalContext` on Post).
+- PreToolUse `updatedInput` is rejected -> command rewriting won't take effect on Codex.
+- PreToolUse `continue: false` / `stopReason` / `suppressOutput` are rejected -> tool-gates doesn't emit them for Codex.
+- PermissionRequest `addDirectories` / `updatedInput` / `updatedPermissions` / `interrupt` are rejected -> worktree approval reduces to a flat `behavior: "allow"` with no path expansion.
+- No PermissionDenied event in Codex (no auto-mode classifier).
+- `transcript_path` is nullable in Codex's schema -> `HookInput` uses a `deserialize_null_string` helper to coerce null to empty string.

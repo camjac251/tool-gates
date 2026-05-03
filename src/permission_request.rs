@@ -49,15 +49,10 @@ pub fn handle_permission_request(
     input: &PermissionRequestInput,
     tool_input_map: &serde_json::Map<String, serde_json::Value>,
 ) -> Option<PermissionRequestOutput> {
-    // Edit/Write tools: auto-approve in worktree contexts
-    if Client::is_write_tool(&input.tool_name) {
-        return handle_file_permission_request(input);
-    }
-
-    // Block rules run first: dangerous tools (e.g. firecrawl on GitHub URLs)
-    // must be denied even for subagents. Mirrors the ordering in
-    // handle_pre_tool_use_hook; docs claim block rules always win and that
-    // guarantee must hold on the subagent path too.
+    // Block rules run first for ALL tool types, including write tools.
+    // The earlier code returned early for is_write_tool, which let block_tools
+    // rules be silently bypassed on the PermissionRequest path. Docs claim
+    // block rules always win and the subagent path must honor that too.
     let config = crate::config::load();
     if let Some(hook_output) =
         crate::tool_blocks::check_tool_block(&input.tool_name, tool_input_map, config.block_rules())
@@ -66,6 +61,12 @@ pub fn handle_permission_request(
             .reason
             .unwrap_or_else(|| "Blocked by tool-gates".to_string());
         return Some(PermissionRequestOutput::deny(&reason));
+    }
+
+    // Edit/Write/apply_patch tools: auto-approve in worktree contexts.
+    // Runs after block_tools so a configured block on a write tool wins.
+    if Client::is_write_tool(&input.tool_name) {
+        return handle_file_permission_request(input);
     }
 
     // MCP tools in acceptEdits mode: consult `[[accept_edits_mcp]]` rules.
@@ -149,36 +150,43 @@ pub fn handle_permission_request(
     }
 }
 
-/// Handle PermissionRequest for Edit/Write tools in worktree contexts.
+/// Handle PermissionRequest for Edit/Write/apply_patch tools in worktree contexts.
 ///
 /// Claude Code has a bug where agent worktrees are not added to `additionalWorkingDirectories`,
 /// so every Edit/Write in a worktree triggers a permission prompt even in `acceptEdits` mode.
 /// This works around it by auto-approving edits within the worktree when the cwd is clearly
 /// a Claude-created agent worktree.
+///
+/// `apply_patch` (Codex) carries paths inside the patch body in
+/// `tool_input.command` rather than `file_path`. We parse the patch and apply
+/// the same worktree containment + guarded-file checks against every affected
+/// path; if any path falls outside the worktree or is a guarded AI config
+/// file, return `None` so the normal permission prompt fires.
 fn handle_file_permission_request(
     input: &PermissionRequestInput,
 ) -> Option<PermissionRequestOutput> {
-    let file_path = input.get_file_path();
-    if file_path.is_empty() {
+    let paths = collect_paths_for_permission(input);
+    if paths.is_empty() {
         return None;
     }
 
-    // Resolve the file path (may be relative to cwd) and clean .. components
-    let joined = if Path::new(&file_path).is_absolute() {
-        std::path::PathBuf::from(&file_path)
-    } else {
-        Path::new(&input.cwd).join(&file_path)
-    };
-    let resolved = clean_path(&joined);
-
-    if !is_worktree_context(&resolved, &input.cwd) {
-        return None;
-    }
-
-    // Don't auto-approve edits to AI config files even in worktrees
     let config = crate::config::load();
-    if is_guarded(&resolved, &config.file_guards) {
-        return None;
+    for raw in &paths {
+        let joined = if Path::new(raw).is_absolute() {
+            std::path::PathBuf::from(raw)
+        } else {
+            Path::new(&input.cwd).join(raw)
+        };
+        let resolved = clean_path(&joined);
+
+        if !is_worktree_context(&resolved, &input.cwd) {
+            return None;
+        }
+
+        // Don't auto-approve edits to AI config files even in worktrees
+        if is_guarded(&resolved, &config.file_guards) {
+            return None;
+        }
     }
 
     // Auto-approve and add the worktree cwd to session permissions
@@ -186,6 +194,35 @@ fn handle_file_permission_request(
     Some(PermissionRequestOutput::allow_with_directories(vec![
         input.cwd.clone(),
     ]))
+}
+
+/// Collect every file path this PermissionRequest would write to. Read from
+/// `file_path` for Claude/Gemini tools, from the parsed unified-diff body for
+/// Codex `apply_patch`.
+fn collect_paths_for_permission(input: &PermissionRequestInput) -> Vec<String> {
+    if input.tool_name == "apply_patch" {
+        let command = input.get_command();
+        if command.is_empty() {
+            return Vec::new();
+        }
+        return crate::apply_patch_parser::parse_patch(&command)
+            .into_iter()
+            .flat_map(|f| {
+                f.affected_paths()
+                    .into_iter()
+                    .map(|p| p.display().to_string())
+                    .collect::<Vec<_>>()
+            })
+            .filter(|p| !p.is_empty())
+            .collect();
+    }
+
+    let path = input.get_file_path();
+    if path.is_empty() {
+        Vec::new()
+    } else {
+        vec![path]
+    }
 }
 
 /// Handle PermissionRequest for MCP tools under `acceptEdits` mode.

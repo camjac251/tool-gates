@@ -4,6 +4,7 @@ Intelligent tool permission gate using tree-sitter AST parsing. Handles Bash/Mon
 
 **Claude Code:** Use as PreToolUse + PermissionRequest + PermissionDenied + PostToolUse hooks (native integration)
 **Gemini CLI:** Use as BeforeTool + AfterTool hooks (requires v0.36.0+ for `ask` decision support)
+**Codex CLI:** Use as PreToolUse + PermissionRequest + PostToolUse hooks. Selected via the explicit `--client codex` flag baked into the installed hook command (Codex emits the same `hook_event_name` strings as Claude).
 
 ## Quick Reference
 
@@ -20,7 +21,7 @@ echo '{"tool_name": "Bash", "tool_input": {"command": "git status"}}' | tool-gat
 
 ## Hook Types
 
-tool-gates supports Claude Code and Gemini CLI hook systems:
+tool-gates supports Claude Code, Gemini CLI, and Codex CLI hook systems:
 
 **Claude Code** (tool_name: `Bash`, `Monitor`):
 
@@ -38,28 +39,45 @@ tool-gates supports Claude Code and Gemini CLI hook systems:
 | **BeforeTool** | Route all tool types (shell, file ops, glob/grep, MCP, skills), block dangerous operations, allow safe ones, provide hints, file guards, security reminders | Before tool execution |
 | **AfterTool** | Post-execution security scanning for write tools (tracking is Claude-only) | After command completes |
 
-The client is auto-detected from `hook_event_name`. No configuration needed. Output is serialized in the appropriate wire format:
-- Claude: nested `hookSpecificOutput` with `permissionDecision`
+**Codex CLI** (tool_name: `Bash`, `apply_patch`, `mcp__*`):
+
+| Hook | Purpose | When it runs |
+|------|---------|--------------|
+| **PreToolUse** | Route Bash/apply_patch/MCP, block dangerous operations, pass through unknown commands so Codex prompts the user | Before any permission check |
+| **PermissionRequest** | Allow/deny only (Codex rejects `addDirectories`, `updatedInput`, `updatedPermissions`, `interrupt`) | When Codex would prompt for approval |
+| **PostToolUse** | Tracking + Tier-2 security reminders; modern-CLI hints + Tier-3 warnings ride here for Codex (Codex rejects `additionalContext` on PreToolUse) | After command completes |
+
+The client is auto-detected from `hook_event_name` for Claude/Gemini. **Codex must be selected via the explicit `--client codex` CLI flag** because it emits the same `hook_event_name` strings as Claude. The installer bakes that flag into the hook command. Output is serialized in the appropriate wire format:
+- Claude: nested `hookSpecificOutput` with `permissionDecision` (`allow`/`ask`/`deny`)
 - Gemini: flat `decision` + `reason` (uses `"block"` instead of `"deny"`, exit code 2 for hard blocks)
+- Codex: empty stdout for Allow/Ask (Codex's UI prompts the user), nested `hookSpecificOutput.permissionDecision: "deny"` for hard blocks. `additionalContext`, `updatedInput`, `addDirectories`, `interrupt`, `continue: false`, `stopReason`, `suppressOutput`, and PreToolUse `allow`/`ask` are all rejected by Codex's parser, so tool-gates only emits the fields Codex honors.
 
-**Tool name mapping** (Claude <-> Gemini):
+**Tool name mapping** (canonical names per client):
 
-| Claude | Gemini | Category |
-|--------|--------|----------|
-| `Bash`, `Monitor` | `run_shell_command` | Shell commands |
-| `Read` | `read_file`, `read_many_files` | File read |
-| `Write` | `write_file` | File write |
-| `Edit` | `replace` | File edit |
-| `Glob` | `glob` | File search |
-| `Grep` | `grep_search` | Text search |
-| `Skill` | `activate_skill` | Skills/extensions |
-| `mcp__server__tool` | `mcp_server_tool` | MCP tools |
+| Claude | Gemini | Codex | Category |
+|--------|--------|-------|----------|
+| `Bash`, `Monitor` | `run_shell_command` | `Bash` | Shell commands |
+| `Read` | `read_file`, `read_many_files` | (no read hook) | File read |
+| `Write` | `write_file` | `apply_patch` (matcher aliases: `Write`, `Edit`) | File write/edit |
+| `Edit` | `replace` | `apply_patch` (single payload carries the whole patch) | File edit |
+| `Glob` | `glob` | (no glob hook) | File search |
+| `Grep` | `grep_search` | (no grep hook) | Text search |
+| `Skill` | `activate_skill` | (n/a) | Skills/extensions |
+| `mcp__server__tool` | `mcp_server_tool` | `mcp__server__tool` | MCP tools |
+
+Codex `apply_patch` payloads put the unified-diff body in `tool_input.command`. tool-gates parses out the `*** Add File: <path>` / `*** Update File: <path>` / `*** Delete File: <path>` headers (and any `*** Move to: <path>` rename targets) so file_guards and security_reminders run against every affected path.
 
 **Why four hooks for Claude?**
 - PreToolUse handles command safety for the main session and tracks commands that return "ask"
 - PermissionRequest makes those same decisions work for subagents (where PreToolUse's `allow` is ignored), and auto-approves Edit/Write in agent worktrees
 - PermissionDenied fires when the auto-mode classifier denies a command. If tool-gates would allow the same command, emits `retry: true` so the model can try again
 - PostToolUse detects when "ask" commands complete successfully and queues them for permanent approval
+
+**Codex limitations** (parser rejects the listed fields, so we drop them silently):
+- PreToolUse `additionalContext` is rejected -> hints + Tier-3 warnings move to PostToolUse for Codex
+- PreToolUse `permissionDecision: "allow"` and `"ask"` are marked invalid -> tool-gates emits empty stdout for those decisions and lets Codex's own UI prompt the user
+- PermissionRequest `addDirectories` / `updatedInput` / `updatedPermissions` / `interrupt` are rejected -> worktree approval reduces to a flat `behavior: allow` without path expansion
+- No PermissionDenied event in Codex (no auto-mode classifier)
 
 ## Project Structure
 
@@ -553,11 +571,14 @@ Cache files under `~/.cache/tool-gates/`:
 | Command | Description |
 |---------|-------------|
 | `tool-gates` | Read hook input from stdin (default) |
+| `tool-gates --client <name>` | Force client (`claude`/`gemini`/`codex`); used in installed hook commands |
 | `tool-gates hooks add -s <scope>` | Install Claude Code hooks into settings file |
 | `tool-gates hooks add --gemini` | Install Gemini CLI hooks |
-| `tool-gates hooks status` | Show hook installation status (both clients) |
+| `tool-gates hooks add --codex` | Install Codex CLI hooks (~/.codex/hooks.json) |
+| `tool-gates hooks status` | Show hook installation status (all three clients) |
 | `tool-gates hooks json` | Output Claude hooks JSON only |
 | `tool-gates hooks json --gemini` | Output Gemini hooks JSON only |
+| `tool-gates hooks json --codex` | Output Codex hooks JSON only |
 | `tool-gates approve <pattern> -s <scope>` | Add permission rule to settings |
 | `tool-gates rules list` | List all permission rules |
 | `tool-gates rules remove <pattern> -s <scope>` | Remove a permission rule |

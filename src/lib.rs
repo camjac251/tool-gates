@@ -28,6 +28,7 @@
 //! assert_eq!(output.decision, PermissionDecision::Deny);
 //! ```
 
+pub mod apply_patch_parser;
 pub mod cache;
 pub mod config;
 pub mod file_guards;
