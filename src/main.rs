@@ -33,7 +33,7 @@ use tool_gates::models::{
 };
 use tool_gates::patterns::suggest_patterns;
 use tool_gates::pending::{clear_pending, pending_count, read_pending};
-use tool_gates::permission_request::handle_permission_request;
+use tool_gates::permission_request::handle_permission_request_for_client;
 use tool_gates::post_tool_use::handle_post_tool_use;
 use tool_gates::router::{check_command_with_settings_and_session, check_single_command};
 use tool_gates::security_reminders::check_security_reminders;
@@ -542,8 +542,8 @@ fn handle_bash_pre_tool_use(hook_input: &HookInput, client: Client) {
         &hook_input.session_id,
     );
 
-    // If the result is "ask", track it for PostToolUse correlation (Claude only,
-    // Gemini doesn't provide tool_use_id).
+    // If the result is "ask", track it for PostToolUse correlation. Gemini
+    // doesn't provide tool_use_id, but Claude and Codex do.
     //
     // Under auto mode, tool-gates "ask" does NOT surface a user prompt -- the
     // Claude Code classifier decides silently. Pending-queue entries there
@@ -551,7 +551,7 @@ fn handle_bash_pre_tool_use(hook_input: &HookInput, client: Client) {
     // Tracking fires for both Ask and Defer: in either case the user
     // (or CC's resolver) is going to consider whether to approve, and a
     // success means we should record the pattern for the pending queue.
-    if client == Client::Claude
+    if matches!(client, Client::Claude | Client::Codex)
         && (output.decision == PermissionDecision::Ask
             || output.decision == PermissionDecision::Defer)
         && !hook_input.tool_use_id.is_empty()
@@ -675,7 +675,8 @@ fn handle_permission_request_hook(input: &str, client: Client) {
         .unwrap_or_default();
 
     // Check if we should approve this
-    if let Some(output) = handle_permission_request(&perm_input, &tool_input_map) {
+    if let Some(output) = handle_permission_request_for_client(&perm_input, &tool_input_map, client)
+    {
         let value = serialize_permission_request_for_client(&output, client);
         if value.is_null() {
             return;
@@ -998,13 +999,12 @@ fn shell_single_quote(s: &str) -> String {
     format!("'{}'", escaped)
 }
 
-/// Build the full Codex hooks JSON for the installer. Three matcher groups
-/// per event: shell commands, file edits (apply_patch + Claude-style aliases),
-/// and MCP tools. PreToolUse covers all three; PermissionRequest also covers
-/// MCP so `[[accept_edits_mcp]]` rules can land on Codex (PreToolUse Allow
-/// maps to Null for Codex, so PermissionRequest is the only place an MCP
-/// allow can fire). PostToolUse covers Bash + apply_patch for tracking +
-/// security reminders.
+/// Build the full Codex hooks JSON for the installer. PreToolUse covers shell
+/// commands, apply_patch, and MCP tools so block rules can fire before Codex's
+/// normal permission pipeline. PermissionRequest covers Bash/apply_patch only:
+/// Codex does not currently emit an `acceptEdits` permission mode, so
+/// `[[accept_edits_mcp]]` cannot safely auto-approve MCP calls for Codex.
+/// PostToolUse covers Bash + apply_patch for tracking + security reminders.
 fn generate_codex_hooks_json(binary_path: &str) -> serde_json::Value {
     serde_json::json!({
         "PreToolUse": [
@@ -1013,7 +1013,6 @@ fn generate_codex_hooks_json(binary_path: &str) -> serde_json::Value {
         ],
         "PermissionRequest": [
             generate_codex_hook_entry(binary_path, CODEX_PERMISSION_REQUEST_MATCHER),
-            generate_codex_hook_entry(binary_path, CODEX_MCP_TOOL_USE_MATCHER),
         ],
         "PostToolUse": [
             generate_codex_hook_entry(binary_path, CODEX_POST_TOOL_USE_MATCHER),
@@ -1093,13 +1092,20 @@ fn has_tool_gates_hook(hooks_array: &serde_json::Value) -> bool {
 }
 
 /// Sync tool-gates hook entries for a hook event.
-/// Replaces existing tool-gates entries with expected ones if matchers differ.
+/// Replaces existing tool-gates entries with expected ones if any managed
+/// field differs. Matcher-only comparisons miss stale hook commands, such as
+/// older Codex installs that lack `--client codex`.
 /// Returns None if unchanged, or a description of what changed.
 fn sync_hook_entries(
     hooks_array: &mut serde_json::Value,
     expected: &[serde_json::Value],
 ) -> Option<String> {
     let arr = hooks_array.as_array_mut().unwrap();
+    let old_entries: Vec<serde_json::Value> = arr
+        .iter()
+        .filter(|e| is_tool_gates_entry(e))
+        .cloned()
+        .collect();
     let old_matchers: Vec<String> = arr
         .iter()
         .filter(|e| is_tool_gates_entry(e))
@@ -1111,12 +1117,7 @@ fn sync_hook_entries(
         .filter_map(|e| e.get("matcher").and_then(|m| m.as_str()))
         .collect();
 
-    if old_matchers.len() == new_matchers.len()
-        && old_matchers
-            .iter()
-            .zip(new_matchers.iter())
-            .all(|(a, b)| a.as_str() == *b)
-    {
+    if old_entries == expected {
         return None;
     }
 
@@ -2988,13 +2989,12 @@ fn print_no_opinion_for(client: Client) {
     }
 }
 
-/// Print a deny/block result in the correct client format and exit non-zero.
+/// Print a deny/block result in the correct client format and exit.
 ///
-/// All clients exit with code 2 when the gate decided to deny. Codex's parser
-/// honors `permissionDecision: "deny"` on stdout and tool-gates's exit code
-/// reinforces "this hook reported failure". Gemini's behavior was already
-/// to exit 2 for a hard block; this extends the same fail-closed semantics
-/// to Claude and Codex.
+/// Claude and Gemini use exit code 2 for hard blocks. Codex only interprets
+/// code 2 as a block when the reason is written to stderr, while structured
+/// PreToolUse denies are parsed from stdout on exit code 0. Keep Codex on the
+/// structured stdout path so a fallback deny remains fail-closed.
 ///
 /// If serialization itself fails, fall through to a hardcoded last-resort
 /// deny payload so the gate never silently passes through. The previous
@@ -3030,6 +3030,9 @@ fn print_deny_and_exit(client: Client, reason: &str) -> ! {
             ),
         };
         println!("{fallback}");
+    }
+    if client == Client::Codex {
+        std::process::exit(0);
     }
     std::process::exit(2);
 }
@@ -3254,24 +3257,23 @@ mod tests {
         assert_eq!(pre[0]["matcher"], "Bash|apply_patch");
         assert_eq!(pre[1]["matcher"], "mcp__.*");
 
-        // PermissionRequest gets two matcher groups (Bash|apply_patch + mcp__.*)
-        // so accept_edits_mcp rules can reach the PermissionRequest path.
+        // PermissionRequest covers Bash/apply_patch. Codex does not emit
+        // acceptEdits today, so MCP accept-edits approval is not installed.
         let perm = obj["PermissionRequest"].as_array().unwrap();
-        assert_eq!(perm.len(), 2);
+        assert_eq!(perm.len(), 1);
         assert_eq!(perm[0]["matcher"], "Bash|apply_patch");
-        assert_eq!(perm[1]["matcher"], "mcp__.*");
 
         // PostToolUse keeps a single Bash|apply_patch matcher.
         assert_eq!(obj["PostToolUse"][0]["matcher"], "Bash|apply_patch");
 
         // Every hook command must include `--client codex` so tool-gates routes
-        // the wire format correctly when Codex spawns it. 5 hook entries:
-        // 2 PreToolUse + 2 PermissionRequest + 1 PostToolUse.
+        // the wire format correctly when Codex spawns it. 4 hook entries:
+        // 2 PreToolUse + 1 PermissionRequest + 1 PostToolUse.
         let json_text = serde_json::to_string(&hooks).unwrap();
         let occurrences = json_text.matches("--client codex").count();
         assert_eq!(
-            occurrences, 5,
-            "expected --client codex on all five hook entries: {json_text}"
+            occurrences, 4,
+            "expected --client codex on all four hook entries: {json_text}"
         );
 
         // Binary path is shell-quoted so spaces don't tokenise under /bin/sh -lc.
@@ -3355,6 +3357,42 @@ mod tests {
         let arr = hooks["PreToolUse"].as_array().unwrap();
         assert_eq!(arr.len(), 1);
         assert_eq!(arr[0]["matcher"], "Bash");
+    }
+
+    #[test]
+    fn sync_hook_entries_replaces_stale_command_with_same_matcher() {
+        let expected = vec![generate_codex_hook_entry(
+            "/new/path/tool-gates",
+            CODEX_PRE_TOOL_USE_MATCHER,
+        )];
+        let mut hooks = serde_json::json!([
+            {
+                "matcher": CODEX_PRE_TOOL_USE_MATCHER,
+                "hooks": [{"type": "command", "command": "/old/path/tool-gates", "timeout": 30}]
+            }
+        ]);
+
+        let change = sync_hook_entries(&mut hooks, &expected);
+
+        assert!(
+            change.is_some(),
+            "same matcher with stale command must be replaced"
+        );
+        assert_eq!(hooks.as_array().unwrap(), &expected);
+    }
+
+    #[test]
+    fn sync_hook_entries_keeps_identical_managed_entries() {
+        let expected = vec![generate_codex_hook_entry(
+            "/new/path/tool-gates",
+            CODEX_PRE_TOOL_USE_MATCHER,
+        )];
+        let mut hooks = serde_json::Value::Array(expected.clone());
+
+        let change = sync_hook_entries(&mut hooks, &expected);
+
+        assert!(change.is_none(), "identical managed entries need no sync");
+        assert_eq!(hooks.as_array().unwrap(), &expected);
     }
 
     #[test]

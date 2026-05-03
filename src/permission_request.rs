@@ -49,6 +49,14 @@ pub fn handle_permission_request(
     input: &PermissionRequestInput,
     tool_input_map: &serde_json::Map<String, serde_json::Value>,
 ) -> Option<PermissionRequestOutput> {
+    handle_permission_request_for_client(input, tool_input_map, Client::Claude)
+}
+
+pub fn handle_permission_request_for_client(
+    input: &PermissionRequestInput,
+    tool_input_map: &serde_json::Map<String, serde_json::Value>,
+    client: Client,
+) -> Option<PermissionRequestOutput> {
     // Block rules run first for ALL tool types, including write tools.
     // The earlier code returned early for is_write_tool, which let block_tools
     // rules be silently bypassed on the PermissionRequest path. Docs claim
@@ -65,13 +73,13 @@ pub fn handle_permission_request(
 
     // Edit/Write/apply_patch tools: auto-approve in worktree contexts.
     // Runs after block_tools so a configured block on a write tool wins.
-    // Gated on agent_id so only subagent calls auto-approve. Main-thread
-    // calls fall through to the user's permission_mode, even when cwd is
-    // under .claude/worktrees/ (e.g. when the user opens Claude Code
-    // directly inside a worktree to debug it). agent_id is populated only
-    // when the hook fires from within a subagent and absent for the main
-    // thread, including in --agent sessions.
-    if Client::is_write_tool(&input.tool_name) && input.agent_id.is_some() {
+    // Claude/Gemini include agent_id, so only subagent calls auto-approve.
+    // Codex does not currently send agent_id on PermissionRequest, so its
+    // apply_patch path falls back to the stricter worktree-path check inside
+    // handle_file_permission_request.
+    let can_consider_worktree_write =
+        input.agent_id.is_some() || (client == Client::Codex && input.tool_name == "apply_patch");
+    if Client::is_write_tool(&input.tool_name) && can_consider_worktree_write {
         return handle_file_permission_request(input);
     }
 
@@ -816,6 +824,66 @@ mod tests {
         assert!(
             result.is_none(),
             "Main thread Edit must not be auto-approved by worktree handler"
+        );
+    }
+
+    #[test]
+    fn test_codex_apply_patch_in_worktree_without_agent_id_approves() {
+        // Codex PermissionRequest input currently has no agent_id field. Keep
+        // apply_patch support alive by using the worktree path boundary as
+        // the approval signal for Codex only.
+        let mut map = serde_json::Map::new();
+        map.insert(
+            "command".to_string(),
+            serde_json::Value::String(
+                "*** Begin Patch\n*** Update File: src/lib.rs\n@@\n-old\n+new\n*** End Patch\n"
+                    .to_string(),
+            ),
+        );
+        let input = PermissionRequestInput {
+            hook_event_name: "PermissionRequest".to_string(),
+            tool_name: "apply_patch".to_string(),
+            cwd: "/project/.claude/worktrees/agent-abc123".to_string(),
+            permission_mode: "default".to_string(),
+            agent_id: None,
+            tool_input: ToolInputVariant::Map(map),
+            ..Default::default()
+        };
+
+        let result =
+            handle_permission_request_for_client(&input, &serde_json::Map::new(), Client::Codex);
+
+        assert!(
+            result.is_some(),
+            "Codex apply_patch in a worktree must not be blocked on missing agent_id"
+        );
+    }
+
+    #[test]
+    fn test_claude_apply_patch_without_agent_id_still_passes_through() {
+        let mut map = serde_json::Map::new();
+        map.insert(
+            "command".to_string(),
+            serde_json::Value::String(
+                "*** Begin Patch\n*** Update File: src/lib.rs\n@@\n-old\n+new\n*** End Patch\n"
+                    .to_string(),
+            ),
+        );
+        let input = PermissionRequestInput {
+            hook_event_name: "PermissionRequest".to_string(),
+            tool_name: "apply_patch".to_string(),
+            cwd: "/project/.claude/worktrees/agent-abc123".to_string(),
+            permission_mode: "default".to_string(),
+            agent_id: None,
+            tool_input: ToolInputVariant::Map(map),
+            ..Default::default()
+        };
+
+        let result = handle_permission_request(&input, &serde_json::Map::new());
+
+        assert!(
+            result.is_none(),
+            "Claude apply_patch without agent_id must still honor main-thread prompt behavior"
         );
     }
 

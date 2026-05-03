@@ -26,7 +26,7 @@ Every hook input includes these fields from the base schema:
 | `session_id` | `string` | Current session UUID |
 | `transcript_path` | `string \| null` | Path to the session's JSONL transcript file. Codex emits `null` when no transcript is available; `HookInput`'s deserializer coerces null to empty string |
 | `cwd` | `string` | Current working directory |
-| `permission_mode` | `string` (optional) | Current permission mode (e.g., `"acceptEdits"`) |
+| `permission_mode` | `string` (optional) | Current permission mode (e.g., `"acceptEdits"`). Codex currently emits `"default"` or `"bypassPermissions"` |
 | `agent_id` | `string` (optional) | Present only when hook fires from a subagent. Absent for main thread, even in `--agent` sessions. |
 | `agent_type` | `string` (optional) | Agent type name (e.g., `"code-reviewer"`). Present for subagents (with `agent_id`) or main thread of `--agent` sessions (without `agent_id`). |
 | `turn_id` | `string` (Codex only) | Per-turn identifier from Codex; tool-gates doesn't currently key off this field but accepts it without rejecting the payload. |
@@ -205,6 +205,8 @@ Codex emits `PreToolUse` / `PermissionRequest` / `PostToolUse` events with snake
 
 **Hook config file**: `~/.codex/hooks.json` (user) or `<repo>/.codex/hooks.json` (project). Top-level `{ "hooks": { ... } }` object, same shape as Claude/Gemini settings.json.
 
+Codex hooks installed by tool-gates cover PreToolUse for Bash/apply_patch and MCP tools, PermissionRequest for Bash/apply_patch, and PostToolUse for Bash/apply_patch. MCP PermissionRequest is not installed for Codex today because Codex does not emit `acceptEdits`, so `[[accept_edits_mcp]]` rules cannot safely fire for Codex MCP calls.
+
 **Tool name mapping** (Codex -> Claude equivalents):
 | Codex | Claude |
 |-------|--------|
@@ -217,7 +219,7 @@ Codex emits `PreToolUse` / `PermissionRequest` / `PostToolUse` events with snake
 **Output format**:
 ```json
 // Allow / Ask / no opinion: empty stdout, exit 0 (Codex's UI prompts the user)
-// Deny: nested hookSpecificOutput
+// Deny: nested hookSpecificOutput on stdout, exit 0
 {
   "hookSpecificOutput": {
     "hookEventName": "PreToolUse",
@@ -232,6 +234,8 @@ Key differences from Claude (rejected by Codex's parser, dropped silently by too
 - PreToolUse `additionalContext` is rejected -> hints + Tier-3 warnings move to PostToolUse for Codex (Codex accepts `additionalContext` on Post).
 - PreToolUse `updatedInput` is rejected -> command rewriting won't take effect on Codex.
 - PreToolUse `continue: false` / `stopReason` / `suppressOutput` are rejected -> tool-gates doesn't emit them for Codex.
-- PermissionRequest `addDirectories` / `updatedInput` / `updatedPermissions` / `interrupt` are rejected -> worktree approval reduces to a flat `behavior: "allow"` with no path expansion.
+- PermissionRequest uses `hookSpecificOutput.decision.behavior` (`"allow"` / `"deny"`) plus optional deny `message`.
+- PermissionRequest `addDirectories` / `updatedInput` / `updatedPermissions` / `interrupt` are rejected -> worktree approval reduces to an allow decision with no path expansion.
+- Codex PermissionRequest input does not include `agent_id`; `apply_patch` worktree approval uses the worktree path boundary instead.
 - No PermissionDenied event in Codex (no auto-mode classifier).
 - `transcript_path` is nullable in Codex's schema -> `HookInput` uses a `deserialize_null_string` helper to coerce null to empty string.

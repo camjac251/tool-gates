@@ -126,7 +126,8 @@ flowchart TD
 - `apply_patch` is the canonical file-edit tool name (matcher aliases `Write` and `Edit` also fire). The patch body lives in `tool_input.command` as a unified diff; tool-gates parses out `*** Add/Update/Delete File:` headers so file_guards and security_reminders run against every affected path
 - Codex's parser only honors `permissionDecision: "deny"` on PreToolUse. tool-gates emits empty stdout for Allow/Ask so Codex's UI prompts the user (same end-user experience as Claude's prompt)
 - PreToolUse `additionalContext` is rejected; modern-CLI hints + Tier-3 warnings ride on PostToolUse instead
-- PermissionRequest accepts only `behavior: allow|deny` + `message`. `addDirectories`, `updatedInput`, `updatedPermissions`, `interrupt` are dropped (worktree approval reduces to a flat allow without path expansion)
+- PermissionRequest accepts only `hookSpecificOutput.decision.behavior` (`allow`/`deny`) plus an optional deny `message`. `addDirectories`, `updatedInput`, `updatedPermissions`, `interrupt` are dropped (worktree approval reduces to a flat allow without path expansion)
+- Codex currently reports `permission_mode` as `default` or `bypassPermissions`, not `acceptEdits`, so `[[accept_edits_mcp]]` is inactive for Codex MCP calls
 - No PermissionDenied event (no auto-mode classifier in Codex)
 - Hook config lives in `~/.codex/hooks.json` (user) or `<repo>/.codex/hooks.json` (project)
 
@@ -569,7 +570,7 @@ The Claude/Gemini client is auto-detected from the `hook_event_name` field; the 
 | `user` | `~/.codex/hooks.json` | Personal use (default) |
 | `project` | `.codex/hooks.json` | Share with team |
 
-Three hooks are installed: `PreToolUse`, `PermissionRequest`, `PostToolUse`. Each command embeds `--client codex` so tool-gates routes the wire format correctly.
+Three hooks are installed: `PreToolUse`, `PermissionRequest`, `PostToolUse`. Each command embeds `--client codex` so tool-gates routes the wire format correctly. MCP tools are covered on PreToolUse for block rules; Codex does not currently expose an `acceptEdits` mode for MCP PermissionRequest auto-approval.
 
 <details>
 <summary>Manual installation</summary>
@@ -969,7 +970,7 @@ tool = "*firecrawl*"                          # matches Claude (mcp__) and Gemin
 if_project_has = [".firecrawl-ok"]
 ```
 
-Auto-approve MCP tool calls **only when the session is in `acceptEdits` mode**. In any other mode the rules are inert and the MCP tool falls through to whatever `permissions.allow` in `settings.json` decides. Directory conditions and glob matching are identical to `auto_approve_skills`.
+Auto-approve MCP tool calls **only when the session is in `acceptEdits` mode**. In any other mode the rules are inert and the MCP tool falls through to whatever `permissions.allow` in `settings.json` decides. Directory conditions and glob matching are identical to `auto_approve_skills`. Codex currently reports only `default` or `bypassPermissions`, so this feature is inactive for Codex MCP calls until Codex exposes an `acceptEdits` hook mode.
 
 **Why this exists.** Claude Code's acceptEdits only natively auto-approves Edit/Write/NotebookEdit, Read (in allowed dirs), and a small fixed Bash set (`mkdir, touch, rm, rmdir, mv, cp, sed`). MCP tools ignore permission mode entirely -- their internal `checkPermissions` always returns passthrough, so acceptEdits gains them nothing. This config surface is the tool-gates extension: "prompt me normally, batch me through in acceptEdits" for named MCP tools.
 

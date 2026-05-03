@@ -44,7 +44,7 @@ tool-gates supports Claude Code, Gemini CLI, and Codex CLI hook systems:
 | Hook | Purpose | When it runs |
 |------|---------|--------------|
 | **PreToolUse** | Route Bash/apply_patch/MCP, block dangerous operations, pass through unknown commands so Codex prompts the user | Before any permission check |
-| **PermissionRequest** | Allow/deny only (Codex rejects `addDirectories`, `updatedInput`, `updatedPermissions`, `interrupt`) | When Codex would prompt for approval |
+| **PermissionRequest** | Allow/deny Bash/apply_patch only (Codex rejects `addDirectories`, `updatedInput`, `updatedPermissions`, `interrupt`) | When Codex would prompt for approval |
 | **PostToolUse** | Tracking + Tier-2 security reminders; modern-CLI hints + Tier-3 warnings ride here for Codex (Codex rejects `additionalContext` on PreToolUse) | After command completes |
 
 The client is auto-detected from `hook_event_name` for Claude/Gemini. **Codex must be selected via the explicit `--client codex` CLI flag** because it emits the same `hook_event_name` strings as Claude. The installer bakes that flag into the hook command. Output is serialized in the appropriate wire format:
@@ -77,6 +77,7 @@ Codex `apply_patch` payloads put the unified-diff body in `tool_input.command`. 
 - PreToolUse `additionalContext` is rejected -> hints + Tier-3 warnings move to PostToolUse for Codex
 - PreToolUse `permissionDecision: "allow"` and `"ask"` are marked invalid -> tool-gates emits empty stdout for those decisions and lets Codex's own UI prompt the user
 - PermissionRequest `addDirectories` / `updatedInput` / `updatedPermissions` / `interrupt` are rejected -> worktree approval reduces to a flat `behavior: allow` without path expansion
+- Codex currently emits `permission_mode` as `default` or `bypassPermissions`, not `acceptEdits`, so `[[accept_edits_mcp]]` rules are inactive for Codex MCP calls
 - No PermissionDenied event in Codex (no auto-mode classifier)
 
 ## Project Structure
@@ -311,7 +312,7 @@ Claude Code also strips broad "allow" rules from `settings.json` on auto mode en
 - **Pending queue guard** (`main.rs`). Under auto mode, tool-gates `ask` does not prompt the user -- the classifier decides silently. Tracking is skipped so `pending.jsonl` only accumulates genuine human approvals.
 - **PermissionDenied hook** (`main.rs`). Registered at `PERMISSION_DENIED_MATCHER`. When the classifier denies a shell command that tool-gates would have allowed, the hook emits `{"hookSpecificOutput":{"hookEventName":"PermissionDenied","retry":true}}` so the model gets a second attempt. Closes the loop on classifier false positives.
 - **Skill auto-approval** (`main.rs`). `[[auto_approve_skills]]` rules fire regardless of permission mode. These are explicit trust declarations by the user; auto mode opts into classifier review for unknown commands, not into revoking existing rules.
-- **MCP accept-edits approval** (`main.rs`, `permission_request.rs`). `[[accept_edits_mcp]]` rules only fire when `permission_mode == "acceptEdits"` -- inert in default and auto modes. Block rules still run first, so these allow rules cannot unlock a default-blocked MCP call.
+- **MCP accept-edits approval** (`main.rs`, `permission_request.rs`). `[[accept_edits_mcp]]` rules only fire when `permission_mode == "acceptEdits"` -- inert in default and auto modes. Codex currently reports only `default` or `bypassPermissions`, so these rules are inactive for Codex MCP calls. Block rules still run first, so these allow rules cannot unlock a default-blocked MCP call.
 
 **Classifier configuration** (Claude Code, not tool-gates) lives under `autoMode` in settings.json:
 
@@ -715,7 +716,7 @@ tool = "mcp__playwright__browser_click"
 if_project_under = ["~/projects/trusted"]    # scope to a directory tree
 ```
 
-Auto-approve MCP tool calls **only when the session is in `acceptEdits` mode**. In any other mode the rules are inert and the MCP tool falls through to `permissions.allow` in `settings.json`. This closes the gap Claude Code leaves open: natively, MCP tools ignore permission mode entirely (every MCP tool's internal `checkPermissions` returns passthrough), so acceptEdits buys nothing for them. tool-gates fires these rules in both `handle_pre_tool_use_hook` (main session) and `handle_permission_request` (subagents, where PreToolUse's `allow` is ignored).
+Auto-approve MCP tool calls **only when the session is in `acceptEdits` mode**. In any other mode the rules are inert and the MCP tool falls through to `permissions.allow` in `settings.json`. This closes the gap Claude Code leaves open: natively, MCP tools ignore permission mode entirely (every MCP tool's internal `checkPermissions` returns passthrough), so acceptEdits buys nothing for them. tool-gates fires these rules in both `handle_pre_tool_use_hook` (main session) and `handle_permission_request` (subagents, where PreToolUse's `allow` is ignored). Codex currently does not emit `acceptEdits`, so this feature is inactive for Codex MCP calls.
 
 Block rules run before these allow rules, so `[[accept_edits_mcp]]` cannot unlock a blocked tool (e.g. the default firecrawl/ref/exa GitHub-URL blocks still deny). Glob grammar and directory conditions are identical to `auto_approve_skills`.
 
