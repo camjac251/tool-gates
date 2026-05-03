@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.19.1](https://github.com/camjac251/tool-gates/compare/v1.19.0...v1.19.1) - 2026-05-03
+
+### Fixed
+
+- *(hooks)* align client hook contracts
+
 ## [1.19.0](https://github.com/camjac251/tool-gates/compare/v1.18.0...v1.19.0) - 2026-05-03
 
 ### Added
