@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.19.0](https://github.com/camjac251/tool-gates/compare/v1.18.0...v1.19.0) - 2026-05-03
+
+### Added
+
+- *(codex)* add Codex CLI client support
+
+### Fixed
+
+- *(permission)* gate worktree auto-approve on subagent agent_id
+- *(hooks)* fire Claude PermissionRequest for MCP tools
+
 ## [1.18.0](https://github.com/camjac251/tool-gates/compare/v1.17.0...v1.18.0) - 2026-04-30
 
 ### Added
