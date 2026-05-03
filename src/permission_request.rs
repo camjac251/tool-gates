@@ -65,7 +65,13 @@ pub fn handle_permission_request(
 
     // Edit/Write/apply_patch tools: auto-approve in worktree contexts.
     // Runs after block_tools so a configured block on a write tool wins.
-    if Client::is_write_tool(&input.tool_name) {
+    // Gated on agent_id so only subagent calls auto-approve. Main-thread
+    // calls fall through to the user's permission_mode, even when cwd is
+    // under .claude/worktrees/ (e.g. when the user opens Claude Code
+    // directly inside a worktree to debug it). agent_id is populated only
+    // when the hook fires from within a subagent and absent for the main
+    // thread, including in --agent sessions.
+    if Client::is_write_tool(&input.tool_name) && input.agent_id.is_some() {
         return handle_file_permission_request(input);
     }
 
@@ -152,8 +158,14 @@ pub fn handle_permission_request(
 
 /// Handle PermissionRequest for Edit/Write/apply_patch tools in worktree contexts.
 ///
+/// Subagent-only path. The caller in `handle_permission_request` gates on
+/// `agent_id.is_some()` so main-thread invocations never reach this handler;
+/// auto-approving them would silently bypass the user's permission_mode when
+/// the user has opened Claude Code directly inside a `.claude/worktrees/*`
+/// directory.
+///
 /// Claude Code has a bug where agent worktrees are not added to `additionalWorkingDirectories`,
-/// so every Edit/Write in a worktree triggers a permission prompt even in `acceptEdits` mode.
+/// so every Edit/Write in a subagent worktree triggers a permission prompt even in `acceptEdits` mode.
 /// This works around it by auto-approving edits within the worktree when the cwd is clearly
 /// a Claude-created agent worktree.
 ///
@@ -590,6 +602,9 @@ mod tests {
             tool_name: tool_name.to_string(),
             cwd: cwd.to_string(),
             permission_mode: "acceptEdits".to_string(),
+            // Default to a subagent invocation so worktree auto-approve fires.
+            // Tests targeting main-thread behavior set this back to None.
+            agent_id: Some("test-subagent".to_string()),
             tool_input: ToolInputVariant::Map({
                 let mut map = serde_json::Map::new();
                 map.insert(
@@ -764,6 +779,43 @@ mod tests {
         assert!(
             result.is_some(),
             "Should approve Edit in worktree regardless of permission mode"
+        );
+    }
+
+    #[test]
+    fn test_write_in_worktree_main_thread_passes_through() {
+        // Main-thread Write/Edit must NOT be auto-approved even when cwd is
+        // under .claude/worktrees/. This case happens when the user opens
+        // Claude Code directly inside a worktree to debug it. They expect
+        // their permission_mode to be honored, not silently bypassed.
+        let mut input = make_file_input(
+            "Write",
+            "/project/.claude/worktrees/agent-abc123/src/main.rs",
+            "/project/.claude/worktrees/agent-abc123",
+        );
+        input.agent_id = None;
+        input.permission_mode = "default".to_string();
+        let result = handle_permission_request(&input, &serde_json::Map::new());
+        assert!(
+            result.is_none(),
+            "Main thread must fall through to permission prompt"
+        );
+    }
+
+    #[test]
+    fn test_edit_in_worktree_main_thread_passes_through() {
+        // Same as above but for Edit and acceptEdits mode. The gate is on
+        // agent_id, not on permission_mode.
+        let mut input = make_file_input(
+            "Edit",
+            "/project/.claude/worktrees/agent-abc123/src/lib.rs",
+            "/project/.claude/worktrees/agent-abc123",
+        );
+        input.agent_id = None;
+        let result = handle_permission_request(&input, &serde_json::Map::new());
+        assert!(
+            result.is_none(),
+            "Main thread Edit must not be auto-approved by worktree handler"
         );
     }
 
