@@ -941,7 +941,10 @@ fn generate_hooks_json(binary_path: &str) -> serde_json::Value {
             generate_hook_entry(binary_path, PRE_TOOL_USE_MATCHER),
             generate_hook_entry(binary_path, MCP_TOOL_USE_MATCHER),
         ],
-        "PermissionRequest": [generate_hook_entry(binary_path, PERMISSION_REQUEST_MATCHER)],
+        "PermissionRequest": [
+            generate_hook_entry(binary_path, PERMISSION_REQUEST_MATCHER),
+            generate_hook_entry(binary_path, MCP_TOOL_USE_MATCHER),
+        ],
         "PermissionDenied": [generate_hook_entry(binary_path, PERMISSION_DENIED_MATCHER)],
         "PostToolUse": [
             generate_hook_entry(binary_path, POST_TOOL_USE_MATCHER),
@@ -1162,23 +1165,17 @@ fn install_hooks(scope: &str, dry_run: bool) {
         serde_json::json!({})
     };
 
-    // Ensure hooks object exists
-    if settings.get("hooks").is_none() {
-        settings["hooks"] = serde_json::json!({});
-    }
-
-    let hooks = settings.get_mut("hooks").unwrap();
+    let hooks = validate_and_ensure_hooks_object(&mut settings, &settings_path);
     let pre_tool_use_entry = generate_hook_entry(&binary_path, PRE_TOOL_USE_MATCHER);
     let mcp_tool_use_entry = generate_hook_entry(&binary_path, MCP_TOOL_USE_MATCHER);
     let perm_request_entry = generate_hook_entry(&binary_path, PERMISSION_REQUEST_MATCHER);
+    let mcp_perm_request_entry = generate_hook_entry(&binary_path, MCP_TOOL_USE_MATCHER);
     let perm_denied_entry = generate_hook_entry(&binary_path, PERMISSION_DENIED_MATCHER);
     let post_tool_use_entry = generate_hook_entry(&binary_path, POST_TOOL_USE_MATCHER);
     let mut changes = Vec::new();
 
     // Sync PreToolUse hooks (built-in tools + MCP tools as separate entries)
-    if hooks.get("PreToolUse").is_none() {
-        hooks["PreToolUse"] = serde_json::json!([]);
-    }
+    ensure_event_array(hooks, "PreToolUse", &settings_path);
     match sync_hook_entries(
         &mut hooks["PreToolUse"],
         &[pre_tool_use_entry, mcp_tool_use_entry],
@@ -1194,26 +1191,26 @@ fn install_hooks(scope: &str, dry_run: bool) {
         }
     }
 
-    // Sync PermissionRequest hook (Bash + Write/Edit for worktree approval)
-    if hooks.get("PermissionRequest").is_none() {
-        hooks["PermissionRequest"] = serde_json::json!([]);
-    }
-    match sync_hook_entries(&mut hooks["PermissionRequest"], &[perm_request_entry]) {
-        None => eprintln!("✓ PermissionRequest hook up to date"),
+    // Sync PermissionRequest hooks (Bash + Write/Edit for worktree approval, MCP
+    // for [[accept_edits_mcp]] subagent approval).
+    ensure_event_array(hooks, "PermissionRequest", &settings_path);
+    match sync_hook_entries(
+        &mut hooks["PermissionRequest"],
+        &[perm_request_entry, mcp_perm_request_entry],
+    ) {
+        None => eprintln!("✓ PermissionRequest hooks up to date"),
         Some(ref change) if change == "added" => {
             changes.push("PermissionRequest");
-            eprintln!("+ Adding PermissionRequest hook");
+            eprintln!("+ Adding PermissionRequest hooks (built-in tools + MCP)");
         }
         Some(change) => {
             changes.push("PermissionRequest");
-            eprintln!("~ Updating PermissionRequest matcher ({})", change);
+            eprintln!("~ Updating PermissionRequest matchers ({})", change);
         }
     }
 
     // Sync PermissionDenied hook (auto-mode classifier retry guidance)
-    if hooks.get("PermissionDenied").is_none() {
-        hooks["PermissionDenied"] = serde_json::json!([]);
-    }
+    ensure_event_array(hooks, "PermissionDenied", &settings_path);
     match sync_hook_entries(&mut hooks["PermissionDenied"], &[perm_denied_entry]) {
         None => eprintln!("✓ PermissionDenied hook up to date"),
         Some(ref change) if change == "added" => {
@@ -1227,9 +1224,7 @@ fn install_hooks(scope: &str, dry_run: bool) {
     }
 
     // Sync PostToolUse hook (Bash tracking + file security reminders)
-    if hooks.get("PostToolUse").is_none() {
-        hooks["PostToolUse"] = serde_json::json!([]);
-    }
+    ensure_event_array(hooks, "PostToolUse", &settings_path);
     match sync_hook_entries(&mut hooks["PostToolUse"], &[post_tool_use_entry]) {
         None => eprintln!("✓ PostToolUse hook up to date"),
         Some(ref change) if change == "added" => {
@@ -1326,18 +1321,12 @@ fn install_gemini_hooks(scope: &str, dry_run: bool) {
         serde_json::json!({})
     };
 
-    if settings.get("hooks").is_none() {
-        settings["hooks"] = serde_json::json!({});
-    }
-
-    let hooks = settings.get_mut("hooks").unwrap();
+    let hooks = validate_and_ensure_hooks_object(&mut settings, &settings_path);
     let gemini_hooks = generate_gemini_hooks_json(&binary_path);
     let mut changes = Vec::new();
 
     for event in ["BeforeTool", "AfterTool"] {
-        if hooks.get(event).is_none() {
-            hooks[event] = serde_json::json!([]);
-        }
+        ensure_event_array(hooks, event, &settings_path);
         let expected: Vec<serde_json::Value> = gemini_hooks[event]
             .as_array()
             .map(|a| a.to_vec())
@@ -1445,45 +1434,12 @@ fn install_codex_hooks(scope: &str, dry_run: bool) {
         serde_json::json!({})
     };
 
-    // serde_json's Index trait panics if the root is not an Object (e.g. `[]`,
-    // `"string"`, `42`, `null`). Validate before any indexed assignment so the
-    // installer produces a clear error instead of a stack trace.
-    if !settings.is_object() {
-        eprintln!(
-            "Error: {} root must be a JSON object, found {}",
-            settings_path.display(),
-            json_value_kind(&settings)
-        );
-        std::process::exit(1);
-    }
-
-    if settings.get("hooks").is_none() {
-        settings["hooks"] = serde_json::json!({});
-    } else if !settings["hooks"].is_object() {
-        eprintln!(
-            "Error: {} `hooks` field must be a JSON object, found {}",
-            settings_path.display(),
-            json_value_kind(&settings["hooks"])
-        );
-        std::process::exit(1);
-    }
-
-    let hooks = settings.get_mut("hooks").expect("hooks key inserted above");
+    let hooks = validate_and_ensure_hooks_object(&mut settings, &settings_path);
     let codex_hooks = generate_codex_hooks_json(&binary_path);
     let mut changes = Vec::new();
 
     for event in ["PreToolUse", "PermissionRequest", "PostToolUse"] {
-        if hooks.get(event).is_none() {
-            hooks[event] = serde_json::json!([]);
-        } else if !hooks[event].is_array() {
-            eprintln!(
-                "Error: {} `hooks.{}` must be a JSON array, found {}",
-                settings_path.display(),
-                event,
-                json_value_kind(&hooks[event])
-            );
-            std::process::exit(1);
-        }
+        ensure_event_array(hooks, event, &settings_path);
         let expected: Vec<serde_json::Value> = codex_hooks[event]
             .as_array()
             .map(|a| a.to_vec())
@@ -1554,6 +1510,55 @@ fn json_value_kind(v: &serde_json::Value) -> &'static str {
         serde_json::Value::String(_) => "string",
         serde_json::Value::Array(_) => "array",
         serde_json::Value::Object(_) => "object",
+    }
+}
+
+/// Validate `settings` is an Object and ensure `hooks` exists as an Object.
+///
+/// `settings["hooks"] = ...` panics inside serde_json's Index trait when the
+/// root is `[]`, `"string"`, `42`, `null`, or anything other than an Object,
+/// and similarly when `hooks` exists but isn't an Object. Exit 1 with a clear
+/// message in both cases so a misshapen settings file produces a real error
+/// instead of a stack trace. Returns a mutable reference to the `hooks` value.
+fn validate_and_ensure_hooks_object<'a>(
+    settings: &'a mut serde_json::Value,
+    settings_path: &std::path::Path,
+) -> &'a mut serde_json::Value {
+    if !settings.is_object() {
+        eprintln!(
+            "Error: {} root must be a JSON object, found {}",
+            settings_path.display(),
+            json_value_kind(settings)
+        );
+        std::process::exit(1);
+    }
+    if settings.get("hooks").is_none() {
+        settings["hooks"] = serde_json::json!({});
+    } else if !settings["hooks"].is_object() {
+        eprintln!(
+            "Error: {} `hooks` field must be a JSON object, found {}",
+            settings_path.display(),
+            json_value_kind(&settings["hooks"])
+        );
+        std::process::exit(1);
+    }
+    settings.get_mut("hooks").expect("hooks key inserted above")
+}
+
+/// Ensure `hooks[event]` exists as a JSON array. Same fail-loud contract as
+/// `validate_and_ensure_hooks_object`: a wrong-shape value here would later
+/// panic inside `sync_hook_entries`'s `as_array_mut().unwrap()`.
+fn ensure_event_array(hooks: &mut serde_json::Value, event: &str, settings_path: &std::path::Path) {
+    if hooks.get(event).is_none() {
+        hooks[event] = serde_json::json!([]);
+    } else if !hooks[event].is_array() {
+        eprintln!(
+            "Error: {} `hooks.{}` must be a JSON array, found {}",
+            settings_path.display(),
+            event,
+            json_value_kind(&hooks[event])
+        );
+        std::process::exit(1);
     }
 }
 
@@ -3276,6 +3281,80 @@ mod tests {
             with_spaces.contains("'/home/me/My Tools/tool-gates' --client codex"),
             "binary path with spaces must be shell-quoted: {with_spaces}"
         );
+    }
+
+    #[test]
+    fn claude_hooks_json_shape_includes_mcp_on_permission_request() {
+        let hooks = generate_hooks_json("/path/to/tool-gates");
+        let obj = hooks.as_object().unwrap();
+        assert!(obj.contains_key("PreToolUse"));
+        assert!(obj.contains_key("PermissionRequest"));
+        assert!(obj.contains_key("PermissionDenied"));
+        assert!(obj.contains_key("PostToolUse"));
+
+        // PreToolUse: built-in tools + MCP.
+        let pre = obj["PreToolUse"].as_array().unwrap();
+        assert_eq!(pre.len(), 2);
+        assert_eq!(pre[0]["matcher"], PRE_TOOL_USE_MATCHER);
+        assert_eq!(pre[1]["matcher"], MCP_TOOL_USE_MATCHER);
+
+        // PermissionRequest must include MCP so [[accept_edits_mcp]] rules
+        // fire for subagents (where PreToolUse's allow is ignored).
+        let perm = obj["PermissionRequest"].as_array().unwrap();
+        assert_eq!(perm.len(), 2);
+        assert_eq!(perm[0]["matcher"], PERMISSION_REQUEST_MATCHER);
+        assert_eq!(perm[1]["matcher"], MCP_TOOL_USE_MATCHER);
+
+        // PermissionDenied is shell-only (auto-mode classifier retry).
+        let denied = obj["PermissionDenied"].as_array().unwrap();
+        assert_eq!(denied.len(), 1);
+        assert_eq!(denied[0]["matcher"], PERMISSION_DENIED_MATCHER);
+
+        // PostToolUse: shell tracking + file security.
+        let post = obj["PostToolUse"].as_array().unwrap();
+        assert_eq!(post.len(), 1);
+        assert_eq!(post[0]["matcher"], POST_TOOL_USE_MATCHER);
+    }
+
+    #[test]
+    fn validate_and_ensure_hooks_object_creates_missing_hooks() {
+        let mut settings = serde_json::json!({"otherKey": "preserved"});
+        let path = std::path::Path::new("/tmp/test-settings.json");
+        let hooks = validate_and_ensure_hooks_object(&mut settings, path);
+        assert!(
+            hooks.is_object(),
+            "hooks should be an empty object after creation"
+        );
+        assert_eq!(hooks.as_object().unwrap().len(), 0);
+        // Other keys must survive.
+        assert_eq!(settings["otherKey"], "preserved");
+    }
+
+    #[test]
+    fn validate_and_ensure_hooks_object_returns_existing_hooks() {
+        let mut settings = serde_json::json!({"hooks": {"PreToolUse": []}});
+        let path = std::path::Path::new("/tmp/test-settings.json");
+        let hooks = validate_and_ensure_hooks_object(&mut settings, path);
+        assert!(hooks["PreToolUse"].is_array());
+    }
+
+    #[test]
+    fn ensure_event_array_creates_missing_event() {
+        let mut hooks = serde_json::json!({});
+        let path = std::path::Path::new("/tmp/test-settings.json");
+        ensure_event_array(&mut hooks, "PreToolUse", path);
+        assert!(hooks["PreToolUse"].is_array());
+        assert_eq!(hooks["PreToolUse"].as_array().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn ensure_event_array_preserves_existing_array() {
+        let mut hooks = serde_json::json!({"PreToolUse": [{"matcher": "Bash"}]});
+        let path = std::path::Path::new("/tmp/test-settings.json");
+        ensure_event_array(&mut hooks, "PreToolUse", path);
+        let arr = hooks["PreToolUse"].as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["matcher"], "Bash");
     }
 
     #[test]
