@@ -139,7 +139,7 @@ flowchart TD
 | :-------: | -------------------------------------- | --------------------------------------------------------------------------------------- |
 | **deny**  | `permissionDecision: "deny"`           | Command blocked with reason                                                             |
 |  **ask**  | `permissionDecision: "ask"`            | User prompted (Yes / No, two buttons). Used for hard-deny adjacent patterns and explicit `permissions.ask` matches |
-| **defer** | `permissionDecision` omitted           | Claude Code's resolver runs the tool's own permission check, populating the prefix-suggestion that lights up the third "Yes, and don't ask again for X" button. Used for benign gate-engine asks |
+| **defer** | `permissionDecision` omitted           | Claude Code's resolver runs the tool's own permission check, populating the prefix-suggestion that lights up the third "Yes, and don't ask again for X" button. Used for benign gate-engine asks except Claude Code's acceptEdits Bash auto-allow commands that tool-gates did not already approve |
 | **allow** | `permissionDecision: "allow"`          | Auto-approved                                                                           |
 
 > Unknown commands always require approval. Whether they get the two-button or three-button prompt depends on whether your `permissions.ask` rules in settings.json match -- run `tool-gates rules ask-audit` to surface ask rules that suppress the third button.
@@ -154,7 +154,7 @@ tool-gates reads your Claude Code settings from `~/.claude/settings.json` and `.
 | `ask` rule    | (any)      | **ask** (respects your explicit ask; two-button prompt)             |
 | `allow` rule  | dangerous  | **deny** (tool-gates still blocks dangerous)                        |
 | `allow`/none  | safe       | **allow**                                                           |
-| none          | unknown    | **defer** (three-button prompt restored via Claude Code's resolver) |
+| none          | unknown    | default/acceptEdits: **defer**; auto: **ask**. In acceptEdits, Claude Code Bash auto-allow commands stay explicit **ask** unless tool-gates' own accept-edits policy approves them |
 
 This ensures tool-gates won't accidentally bypass your explicit deny rules while still providing security against dangerous commands.
 
@@ -177,6 +177,7 @@ sd 'old' 'new' file.txt           # Text replacement
 prettier --write src/             # Code formatting
 ast-grep -p 'old' -r 'new' -U .   # Code refactoring
 sed -i 's/foo/bar/g' file.txt     # In-place sed
+mkdir -p src/components           # Directory creation inside allowed dirs
 black src/                        # Python formatting
 eslint --fix src/                 # Linting with fix
 ```
@@ -185,7 +186,7 @@ eslint --fix src/                 # Linting with fix
 
 - Package managers: `npm install`, `cargo add`
 - Git operations: `git push`, `git commit`
-- Deletions: `rm`, `mv`
+- Filesystem structure changes: `rm`, `rmdir`, `mv`, `cp`, `touch`
 - Blocked commands: `rm -rf /` still denied
 
 **Extending acceptEdits to MCP tools.** Claude Code's `acceptEdits` mode does not extend to MCP tools natively -- every MCP tool's internal permission check returns passthrough regardless of mode. tool-gates fills the gap: declare `[[accept_edits_mcp]]` rules in `config.toml` and the named MCP tools auto-allow only when the session is in `acceptEdits`. See the [MCP Accept-Edits Approval](#mcp-accept-edits-approval) configuration section below.
@@ -205,6 +206,7 @@ When Claude Code runs in `auto` permission mode, a server-side classifier decide
 **What changes under auto mode:**
 
 - **Pipe-to-shell and `eval` escalate from ask to deny.** These patterns have no legitimate use case, so they stay in the deterministic floor rather than routing to the classifier.
+- **Claude's acceptEdits Bash fast path is not trusted.** Auto mode checks whether a command would be allowed in `acceptEdits` before it asks the classifier. tool-gates now owns that decision: commands like `mkdir -p src/components` and `sed -i ... file` can still allow when they pass tool-gates' path-aware accept-edits policy, while unapproved Claude hardcoded bases such as `rm`, `rmdir`, `mv`, `cp`, and `touch` deny instead of reaching Claude's fast path.
 - **Pending queue only tracks human approvals.** Under auto mode the classifier decides silently, so nothing goes into `pending.jsonl` -- the review queue stays focused on patterns you explicitly approved.
 - **Classifier denials get retry hints.** If the classifier denies a command tool-gates would allow (e.g. `cargo check`), the `PermissionDenied` hook tells the model it may retry.
 - **Skill auto-approval still fires.** `[[auto_approve_skills]]` rules are explicit trust declarations and aren't revoked by opting into auto mode.

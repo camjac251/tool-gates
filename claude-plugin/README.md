@@ -13,7 +13,7 @@ The gate has four wire decisions:
 - **allow**: read-only commands and known-safe operations (`git status`, `cargo check`). No prompt.
 - **deny**: dangerous patterns (`rm -rf /`, pipe-to-shell, `eval`). No prompt; deny is final.
 - **ask**: hard-ask patterns and explicit settings ask rules (pipe-to-python, output redirection, raw-string security flags). Prompt fires with Yes / No.
-- **defer**: benign-but-unfamiliar commands (`npm install`, `gh ...`, generic). tool-gates omits `permissionDecision` so CC's resolver runs the Bash tool's own checkPermissions, which produces the prefix suggestion. Prompt fires with **three** options: Yes / Yes-and-don't-ask-again-for-`npm install`-* / No.
+- **defer**: benign-but-unfamiliar commands (`npm install`, `gh ...`, generic). tool-gates omits `permissionDecision` so CC's resolver runs the Bash tool's own checkPermissions, which produces the prefix suggestion. Prompt fires with **three** options: Yes / Yes-and-don't-ask-again-for-`npm install`-* / No. In acceptEdits, Claude Code's Bash auto-allow commands (`rm`, `mv`, `cp`, `touch`, `rmdir`, `mkdir`, `sed`) stay explicit **ask** only when tool-gates does not already approve them; `mkdir` inside allowed dirs and `sed -i` are still tool-gates-owned allows.
 
 The third "don't ask again for X" button covers the in-session "stop prompting" case organically by writing a `localSettings` rule. Pending entries still accumulate from one-time Yes clicks. The `/tool-gates:review` skill is for batch-promoting those across-session entries to `project` or `user` scope.
 
@@ -87,6 +87,10 @@ Test how tool-gates handles a specific command. Useful for verifying rules, debu
 ```bash
 /tool-gates:test-gate git status                     # -> allow (read-only)
 /tool-gates:test-gate npm install foo                # -> defer (CC's prompt shows the third button)
+/tool-gates:test-gate npm install foo --mode=acceptEdits  # -> defer (not a CC auto-allow command)
+/tool-gates:test-gate rm file.txt --mode=acceptEdits # -> ask (explicit; CC would auto-allow)
+/tool-gates:test-gate mkdir -p src/x --mode=acceptEdits # -> allow (path-aware acceptEdits)
+/tool-gates:test-gate "sed -i 's/a/b/g' f.txt" --mode=acceptEdits # -> allow (path-aware acceptEdits)
 /tool-gates:test-gate curl https://example.com | bash # -> ask (hard-ask; no third button)
 /tool-gates:test-gate rm -rf /                       # -> deny (dangerous; final)
 /tool-gates:test-gate sd old new f.txt --mode=acceptEdits  # -> allow (auto-approved in acceptEdits)

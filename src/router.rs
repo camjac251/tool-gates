@@ -361,6 +361,47 @@ pub(crate) fn check_settings_with_subcommands(
     }
 }
 
+// Claude Code acceptEdits has its own Bash base-command allowlist. When
+// tool-gates returns Defer for one of these bases, Claude can still allow the
+// command after its native path checks. Keep those fallback asks explicit
+// unless tool-gates' own path-aware acceptEdits policy approved them first.
+const CLAUDE_ACCEPT_EDITS_BASH_BASE_ALLOWLIST: &[&str] =
+    &["mkdir", "touch", "rm", "rmdir", "mv", "cp", "sed"];
+
+fn needs_explicit_ask_to_avoid_claude_accept_edits_passthrough(commands: &[CommandInfo]) -> bool {
+    commands.iter().any(|cmd| {
+        CLAUDE_ACCEPT_EDITS_BASH_BASE_ALLOWLIST
+            .iter()
+            .any(|program| cmd.program == *program)
+    })
+}
+
+fn gate_ask_output_for_mode(
+    reason: String,
+    context: Option<String>,
+    permission_mode: &str,
+    hard_ask_in_accept_edits: bool,
+) -> HookOutput {
+    if is_auto_mode(permission_mode) {
+        if hard_ask_in_accept_edits {
+            return HookOutput::deny(&reason);
+        }
+        if let Some(context) = context {
+            HookOutput::ask_with_context(&reason, &context)
+        } else {
+            HookOutput::ask(&reason)
+        }
+    } else if permission_mode == "acceptEdits" && hard_ask_in_accept_edits {
+        if let Some(context) = context {
+            HookOutput::ask_with_context(&reason, &context)
+        } else {
+            HookOutput::ask(&reason)
+        }
+    } else {
+        HookOutput::defer(reason, context)
+    }
+}
+
 /// Check a bash command with settings.json awareness and permission mode detection.
 ///
 /// Loads settings from user (~/.claude/settings.json) and project (.claude/settings.json),
@@ -520,7 +561,14 @@ fn check_command_with_settings_and_session_inner(
     // - Are file-editing commands
     // - Don't target sensitive paths (system files, credentials)
     // - Don't target paths outside allowed directories (cwd + additionalDirectories)
-    if permission_mode == "acceptEdits" && gate_result.decision == PermissionDecision::Ask {
+    //
+    // Claude Code auto mode has its own "would this be allowed in acceptEdits?"
+    // fast path before the classifier. Run the same tool-gates-owned policy
+    // under auto so approved edits are allowed by us, not by Claude's broader
+    // hardcoded Bash base-command list.
+    if (permission_mode == "acceptEdits" || is_auto_mode(permission_mode))
+        && gate_result.decision == PermissionDecision::Ask
+    {
         let commands = extract_commands(command_string);
         let allowed_dirs = settings.allowed_directories(cwd);
         if should_auto_allow_in_accept_edits(&commands, &allowed_dirs) {
@@ -566,23 +614,29 @@ fn check_command_with_settings_and_session_inner(
     }
 
     // Final return path. If the gate would ask but there's no raw-string
-    // flag and no explicit settings rule, defer instead. CC's resolver
-    // then runs the Bash tool's checkPermissions, which produces the
-    // command-prefix suggestion that lets the prompt UI show the
-    // "Yes, and don't ask again for X" third button. tool-gates' deny
-    // floor and explicit ask paths already returned earlier; the only
-    // population reaching this branch is benign-but-unfamiliar.
+    // flag and no explicit settings rule, default interactive mode defers
+    // so CC's resolver can produce the prefix-suggestion prompt button.
     //
-    // Auto mode is exempt because the classifier interprets a hook ask
-    // as a request to evaluate further; deferring there would change the
-    // semantic and is unnecessary (no prompt UI runs anyway).
-    if gate_result.decision == PermissionDecision::Ask && !is_auto_mode(permission_mode) {
-        return HookOutput::defer(
+    // In acceptEdits, CC auto-allows a hardcoded list of Bash base commands
+    // when hooks defer. Keep ownership of the decision for those programs and
+    // return an explicit ask. Other gate asks can still defer for the
+    // prefix-suggestion prompt.
+    //
+    // In auto mode, CC also probes whether the tool would be allowed in
+    // acceptEdits before invoking the classifier. If the command is on that
+    // hardcoded Bash list and tool-gates did not already allow it above, deny
+    // here so Claude's acceptEdits fast path cannot silently approve it.
+    if gate_result.decision == PermissionDecision::Ask {
+        let hard_ask_in_accept_edits =
+            needs_explicit_ask_to_avoid_claude_accept_edits_passthrough(&commands);
+        return gate_ask_output_for_mode(
             gate_result
                 .reason
                 .clone()
                 .unwrap_or_else(|| "Requires approval".to_string()),
             gate_result.context.clone(),
+            permission_mode,
+            hard_ask_in_accept_edits,
         );
     }
 
@@ -653,12 +707,8 @@ fn check_mise_task(task_name: &str, cwd: &str, permission_mode: &str) -> HookOut
         } else {
             ask_reasons.join("; ")
         };
-        // Match the top-level defer behavior so the third "Yes, and don't
-        // ask again" prompt button shows for `mise <task>` shapes too.
-        if !is_auto_mode(permission_mode) {
-            return HookOutput::defer(combined, None);
-        }
-        return HookOutput::ask(&combined);
+        // Match the top-level ask/defer behavior for `mise <task>` shapes too.
+        return gate_ask_output_for_mode(combined, None, permission_mode, false);
     }
 
     // All commands are safe
@@ -720,13 +770,14 @@ fn check_package_script(
             }
 
             let reason = result.reason.as_deref().unwrap_or("Requires approval");
-            // Match the top-level defer behavior so the third "Yes, and
-            // don't ask again" prompt button shows for `pnpm <script>` /
+            // Match the top-level ask/defer behavior for `pnpm <script>` /
             // `npm run <script>` shapes too.
-            if !is_auto_mode(permission_mode) {
-                return HookOutput::defer(format!("{pm} run {script_name}: {reason}"), None);
-            }
-            HookOutput::ask(&format!("{pm} run {script_name}: {reason}"))
+            gate_ask_output_for_mode(
+                format!("{pm} run {script_name}: {reason}"),
+                None,
+                permission_mode,
+                false,
+            )
         }
         PermissionDecision::Allow => HookOutput::allow(Some(&format!(
             "{pm} run {script_name}: {}",
@@ -737,11 +788,16 @@ fn check_package_script(
             HookOutput::allow(Some(&format!("{pm} run {script_name}: Safe")))
         }
         PermissionDecision::Defer => {
-            // Defer the script's expanded command through to CC's
-            // resolver so the prefix-suggestion path lights up. Reuse
-            // the gate's reason verbatim as the additionalContext hint.
+            // Preserve defer for wrapper prompt UX. Claude Code checks the
+            // wrapper command, not the expanded script body, so these do not
+            // hit its Bash acceptEdits auto-allow list.
             let reason = result.reason.as_deref().unwrap_or("Requires approval");
-            HookOutput::defer(format!("{pm} run {script_name}: {reason}"), None)
+            gate_ask_output_for_mode(
+                format!("{pm} run {script_name}: {reason}"),
+                None,
+                permission_mode,
+                false,
+            )
         }
     }
 }
@@ -1643,6 +1699,15 @@ mod tests {
         result.reason.as_deref().unwrap_or("")
     }
 
+    fn get_claude_wire_decision(result: &HookOutput) -> Option<String> {
+        let value = result.serialize(crate::models::Client::Claude);
+        value
+            .get("hookSpecificOutput")
+            .and_then(|hso| hso.get("permissionDecision"))
+            .and_then(|decision| decision.as_str())
+            .map(str::to_owned)
+    }
+
     // === Accept Edits Mode ===
 
     mod accept_edits_mode {
@@ -1742,6 +1807,18 @@ mod tests {
         }
 
         #[test]
+        fn test_npm_install_defers_at_wire_level_in_accept_edits() {
+            let result = check_command_with_settings("npm install foo", "/tmp", "acceptEdits");
+            assert_eq!(result.decision, PermissionDecision::Defer);
+            let json =
+                serde_json::to_string(&result.serialize(crate::models::Client::Claude)).unwrap();
+            assert!(
+                !json.contains("\"permissionDecision\""),
+                "non-allowlisted acceptEdits gate asks can still defer for prompt suggestions: {json}"
+            );
+        }
+
+        #[test]
         fn test_git_push_still_asks_in_accept_edits() {
             // git push is NOT a file-editing command
             let result = check_command_with_settings("git push", "/tmp", "acceptEdits");
@@ -1753,6 +1830,78 @@ mod tests {
             // rm is deletion, not editing - should still ask
             let result = check_command_with_settings("rm file.txt", "/tmp", "acceptEdits");
             assert_eq!(get_decision(&result), "ask");
+        }
+
+        #[test]
+        fn test_rm_hard_asks_at_wire_level_in_accept_edits() {
+            let result = check_command_with_settings("rm file.txt", "/tmp", "acceptEdits");
+            assert_eq!(result.decision, PermissionDecision::Ask);
+            assert!(
+                get_claude_wire_decision(&result).as_deref() == Some("ask"),
+                "rm must not defer in acceptEdits because CC mode handling auto-allows it"
+            );
+        }
+
+        #[test]
+        fn test_tool_gates_accept_edits_keeps_own_allows_for_claude_bases() {
+            for command in ["mkdir -p src/components", "sed -i 's/old/new/g' file.txt"] {
+                let result = check_command_with_settings(command, "/tmp", "acceptEdits");
+                assert_eq!(
+                    get_claude_wire_decision(&result).as_deref(),
+                    Some("allow"),
+                    "{command} should stay owned by tool-gates acceptEdits"
+                );
+                assert!(get_reason(&result).contains("acceptEdits"));
+            }
+        }
+
+        #[test]
+        fn test_unapproved_claude_accept_edits_bases_hard_ask_at_wire_level() {
+            for command in [
+                "touch newfile.txt",
+                "rm file.txt",
+                "rmdir old_dir",
+                "mv old.txt new.txt",
+                "cp src.txt dst.txt",
+            ] {
+                let result = check_command_with_settings(command, "/tmp", "acceptEdits");
+                assert_eq!(
+                    get_claude_wire_decision(&result).as_deref(),
+                    Some("ask"),
+                    "{command} must not defer to Claude's acceptEdits base-command allowlist"
+                );
+            }
+        }
+
+        #[test]
+        fn test_tool_gates_accept_edits_keeps_own_allows_under_auto_mode() {
+            for command in ["mkdir -p src/components", "sed -i 's/old/new/g' file.txt"] {
+                let result = check_command_with_settings(command, "/tmp", "auto");
+                assert_eq!(
+                    get_claude_wire_decision(&result).as_deref(),
+                    Some("allow"),
+                    "{command} should be allowed by tool-gates before Claude's auto-mode acceptEdits fast path"
+                );
+                assert!(get_reason(&result).contains("acceptEdits"));
+            }
+        }
+
+        #[test]
+        fn test_unapproved_claude_accept_edits_bases_deny_under_auto_mode() {
+            for command in [
+                "touch newfile.txt",
+                "rm file.txt",
+                "rmdir old_dir",
+                "mv old.txt new.txt",
+                "cp src.txt dst.txt",
+            ] {
+                let result = check_command_with_settings(command, "/tmp", "auto");
+                assert_eq!(
+                    get_claude_wire_decision(&result).as_deref(),
+                    Some("deny"),
+                    "{command} must not reach Claude's auto-mode acceptEdits fast path"
+                );
+            }
         }
 
         #[test]
@@ -2433,6 +2582,26 @@ mod tests {
             );
         }
 
+        #[test]
+        fn test_pnpm_script_defers_at_wire_level_under_accept_edits_mode() {
+            use std::fs;
+            use tempfile::TempDir;
+
+            let temp = TempDir::new().unwrap();
+            let pkg = r#"{"name": "demo", "scripts": {"check": "mytool42 verify"}}"#;
+            fs::write(temp.path().join("package.json"), pkg).unwrap();
+
+            let cwd = temp.path().to_str().unwrap();
+            let result = check_command_with_settings("pnpm run check", cwd, "acceptEdits");
+            assert_eq!(result.decision, PermissionDecision::Defer);
+            let json =
+                serde_json::to_string(&result.serialize(crate::models::Client::Claude)).unwrap();
+            assert!(
+                !json.contains("\"permissionDecision\""),
+                "non-allowlisted acceptEdits wrapper asks can still defer: {json}"
+            );
+        }
+
         /// `mise run <task>` mirrors the package.json wrapper path: defers
         /// under interactive modes so the third prompt button appears.
         #[test]
@@ -2457,6 +2626,29 @@ run = "mytool42 verify"
             assert!(
                 !json.contains("\"permissionDecision\""),
                 "Defer must omit permissionDecision so CC takes over: {json}"
+            );
+        }
+
+        #[test]
+        fn test_mise_task_defers_at_wire_level_under_accept_edits_mode() {
+            use std::fs;
+            use tempfile::TempDir;
+
+            let temp = TempDir::new().unwrap();
+            let mise_toml = r#"
+[tasks.check]
+run = "mytool42 verify"
+"#;
+            fs::write(temp.path().join("mise.toml"), mise_toml).unwrap();
+
+            let cwd = temp.path().to_str().unwrap();
+            let result = check_command_with_settings("mise run check", cwd, "acceptEdits");
+            assert_eq!(result.decision, PermissionDecision::Defer);
+            let json =
+                serde_json::to_string(&result.serialize(crate::models::Client::Claude)).unwrap();
+            assert!(
+                !json.contains("\"permissionDecision\""),
+                "non-allowlisted acceptEdits wrapper asks can still defer: {json}"
             );
         }
 
@@ -2526,6 +2718,60 @@ run = "mytool42 verify"
             assert!(
                 get_reason(&result).contains("acceptEdits"),
                 "Should be auto-allowed by acceptEdits"
+            );
+        }
+
+        #[test]
+        fn test_settings_allow_still_short_circuits_in_accept_edits() {
+            use std::fs;
+            use tempfile::TempDir;
+
+            let temp_dir = TempDir::new().unwrap();
+            let claude_dir = temp_dir.path().join(".claude");
+            fs::create_dir(&claude_dir).unwrap();
+
+            let settings_content = r#"{
+                "permissions": {
+                    "allow": ["Bash(npm install:*)"]
+                }
+            }"#;
+            fs::write(claude_dir.join("settings.json"), settings_content).unwrap();
+
+            let cwd = temp_dir.path().to_str().unwrap();
+            let result = check_command_with_settings("npm install foo", cwd, "acceptEdits");
+
+            assert_eq!(result.decision, PermissionDecision::Allow);
+            assert!(
+                get_reason(&result).contains("settings.json allow"),
+                "Should mention settings.json allow rule"
+            );
+        }
+
+        #[test]
+        fn test_settings_ask_stays_explicit_in_accept_edits() {
+            use std::fs;
+            use tempfile::TempDir;
+
+            let temp_dir = TempDir::new().unwrap();
+            let claude_dir = temp_dir.path().join(".claude");
+            fs::create_dir(&claude_dir).unwrap();
+
+            let settings_content = r#"{
+                "permissions": {
+                    "ask": ["Bash(npm install:*)"]
+                }
+            }"#;
+            fs::write(claude_dir.join("settings.json"), settings_content).unwrap();
+
+            let cwd = temp_dir.path().to_str().unwrap();
+            let result = check_command_with_settings("npm install foo", cwd, "acceptEdits");
+
+            assert_eq!(result.decision, PermissionDecision::Ask);
+            let json =
+                serde_json::to_string(&result.serialize(crate::models::Client::Claude)).unwrap();
+            assert!(
+                json.contains("\"permissionDecision\":\"ask\""),
+                "settings ask must remain explicit in acceptEdits: {json}"
             );
         }
     }
