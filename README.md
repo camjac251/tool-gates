@@ -2,7 +2,7 @@
 
 # Tool Gates
 
-*formerly `bash-gates`*
+_formerly `bash-gates`_
 
 **Intelligent tool permission gate for AI coding assistants**
 
@@ -21,28 +21,28 @@ A hook for [Claude Code](https://code.claude.com/docs/en/hooks), [Gemini CLI](ht
 
 ## Features
 
-| Feature                  | Description                                                                                            |
-| ------------------------ | ------------------------------------------------------------------------------------------------------ |
-| **Approval Learning**    | Tracks approved commands and saves patterns to settings.json via TUI or CLI                            |
-| **Settings Integration** | Respects your `settings.json` allow/deny/ask rules - won't bypass your explicit permissions            |
-| **Accept Edits Mode**    | Auto-allows file-editing commands (`sd`, `prettier --write`, etc.) when in acceptEdits mode            |
-| **Auto Mode Support**    | Integrates with Claude Code auto mode: deterministic deny floor for dangerous patterns, classifier retry hints |
-| **Modern CLI Hints**     | Suggests modern alternatives (`bat`, `rg`, `fd`, etc.) via `additionalContext` for Claude to learn     |
-| **AST Parsing**          | Uses [tree-sitter-bash](https://github.com/tree-sitter/tree-sitter-bash) for accurate command analysis |
-| **Compound Commands**    | Handles `&&`, `\|\|`, `\|`, `;` chains correctly                                                       |
-| **Security First**       | Catches pipe-to-shell, eval, command injection patterns                                                |
-| **Unknown Protection**   | Unrecognized commands require approval                                                                 |
-| **Claude Code Plugin**   | Install as a plugin with the `/tool-gates:review` skill for interactive approval management            |
-| **400+ Commands**        | 13 specialized gates with comprehensive coverage                                                       |
-| **File Guards**          | Blocks symlinked AI config files (CLAUDE.md, .cursorrules, etc.) to prevent confused reads/edits       |
-| **Security Reminders**   | Scans Write/Edit content for 26 anti-patterns (secrets, XSS, injection, etc.) across 3 tiers |
-| **Head/Tail Pipe Block** | Denies `\| head` / `\| tail` pipes so stdout is capped at the source via `rg -m N` / `fd --max-results N` / `bat -r START:END` instead |
-| **Tool Blocking**        | Configurable rules to block tools (Glob, Grep, and firecrawl/ref/exa MCP calls to GitHub) with domain filtering |
-| **Skill Auto-Approval**  | Auto-approve Skill tool calls based on project directory conditions. No external hook scripts needed  |
+| Feature                       | Description                                                                                                                                               |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Approval Learning**         | Tracks approved commands and saves patterns to settings.json via TUI or CLI                                                                               |
+| **Settings Integration**      | Respects your `settings.json` allow/deny/ask rules - won't bypass your explicit permissions                                                               |
+| **Accept Edits Mode**         | Auto-allows file-editing commands (`sd`, `prettier --write`, etc.) when in acceptEdits mode                                                               |
+| **Auto Mode Support**         | Integrates with Claude Code auto mode: deterministic deny floor for dangerous patterns, classifier retry hints                                            |
+| **Modern CLI Hints**          | Suggests modern alternatives (`bat`, `rg`, `fd`, etc.) via `additionalContext` for Claude to learn                                                        |
+| **AST Parsing**               | Uses [tree-sitter-bash](https://github.com/tree-sitter/tree-sitter-bash) for accurate command analysis                                                    |
+| **Compound Commands**         | Handles `&&`, `\|\|`, `\|`, `;` chains correctly                                                                                                          |
+| **Security First**            | Catches pipe-to-shell, eval, command injection patterns                                                                                                   |
+| **Unknown Protection**        | Unrecognized commands require approval                                                                                                                    |
+| **Claude Code Plugin**        | Install as a plugin with the `/tool-gates:review` skill for interactive approval management                                                               |
+| **400+ Commands**             | 13 specialized gates with comprehensive coverage                                                                                                          |
+| **File Guards**               | Blocks symlinked AI config files (CLAUDE.md, .cursorrules, etc.) to prevent confused reads/edits                                                          |
+| **Security Reminders**        | Scans Write/Edit content for 26 anti-patterns (secrets, XSS, injection, etc.) across 3 tiers                                                              |
+| **Head/Tail Pipe Block**      | Denies `\| head` / `\| tail` pipes so stdout is capped at the source via `rg -m N` / `fd --max-results N` / `bat -r START:END` instead                    |
+| **Tool Blocking**             | Configurable rules to block tools (Glob, Grep, and firecrawl/ref/exa MCP calls to GitHub) with domain filtering                                           |
+| **Skill Auto-Approval**       | Auto-approve Skill tool calls based on project directory conditions. No external hook scripts needed                                                      |
 | **MCP Accept-Edits Approval** | Auto-approve named MCP tools when the session is in `acceptEdits` mode. Fills the gap Claude Code leaves open (MCP tools ignore permission mode natively) |
-| **Configuration**        | `~/.config/tool-gates/config.toml` for feature toggles, custom block rules, and file guard extensions  |
-| **Health Check**         | `tool-gates doctor` verifies config, hooks, cache files, and flags legacy remnants                     |
-| **Fast**                 | Static native binary, no interpreter overhead                                                          |
+| **Configuration**             | `~/.config/tool-gates/config.toml` for feature toggles, custom block rules, and file guard extensions                                                     |
+| **Health Check**              | `tool-gates doctor` verifies config, hooks, cache files, and flags legacy remnants                                                                        |
+| **Fast**                      | Static native binary, no interpreter overhead                                                                                                             |
 
 ---
 
@@ -135,12 +135,12 @@ flowchart TD
 
 **Decision Priority:** `BLOCK > ASK > ALLOW > SKIP`
 
-| Decision  | Wire output                            | Effect                                                                                  |
-| :-------: | -------------------------------------- | --------------------------------------------------------------------------------------- |
-| **deny**  | `permissionDecision: "deny"`           | Command blocked with reason                                                             |
-|  **ask**  | `permissionDecision: "ask"`            | User prompted (Yes / No, two buttons). Used for hard-deny adjacent patterns and explicit `permissions.ask` matches |
-| **defer** | `permissionDecision` omitted           | Claude Code's resolver runs the tool's own permission check, populating the prefix-suggestion that lights up the third "Yes, and don't ask again for X" button. Used for benign gate-engine asks except Claude Code's acceptEdits Bash auto-allow commands that tool-gates did not already approve |
-| **allow** | `permissionDecision: "allow"`          | Auto-approved                                                                           |
+| Decision  | Wire output                   | Effect                                                                                                                                                                                                                                                                                             |
+| :-------: | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **deny**  | `permissionDecision: "deny"`  | Command blocked with reason                                                                                                                                                                                                                                                                        |
+|  **ask**  | `permissionDecision: "ask"`   | User prompted (Yes / No, two buttons). Used for hard-deny adjacent patterns and explicit `permissions.ask` matches                                                                                                                                                                                 |
+| **defer** | `permissionDecision` omitted  | Claude Code's resolver runs the tool's own permission check, populating the prefix-suggestion that lights up the third "Yes, and don't ask again for X" button. Used for benign gate-engine asks except Claude Code's acceptEdits Bash auto-allow commands that tool-gates did not already approve |
+| **allow** | `permissionDecision: "allow"` | Auto-approved                                                                                                                                                                                                                                                                                      |
 
 > Unknown commands always require approval. Whether they get the two-button or three-button prompt depends on whether your `permissions.ask` rules in settings.json match -- run `tool-gates rules ask-audit` to surface ask rules that suppress the third button.
 
@@ -148,12 +148,12 @@ flowchart TD
 
 tool-gates reads your Claude Code settings from `~/.claude/settings.json` and `.claude/settings.json` (project) to respect your explicit permission rules:
 
-| settings.json | tool-gates | Result                                                              |
-| ------------- | ---------- | ------------------------------------------------------------------- |
-| `deny` rule   | (any)      | **deny** (respects your explicit deny)                              |
-| `ask` rule    | (any)      | **ask** (respects your explicit ask; two-button prompt)             |
-| `allow` rule  | dangerous  | **deny** (tool-gates still blocks dangerous)                        |
-| `allow`/none  | safe       | **allow**                                                           |
+| settings.json | tool-gates | Result                                                                                                                                                                             |
+| ------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `deny` rule   | (any)      | **deny** (respects your explicit deny)                                                                                                                                             |
+| `ask` rule    | (any)      | **ask** (respects your explicit ask; two-button prompt)                                                                                                                            |
+| `allow` rule  | dangerous  | **deny** (tool-gates still blocks dangerous)                                                                                                                                       |
+| `allow`/none  | safe       | **allow**                                                                                                                                                                          |
 | none          | unknown    | default/acceptEdits: **defer**; auto: **ask**. In acceptEdits, Claude Code Bash auto-allow commands stay explicit **ask** unless tool-gates' own accept-edits policy approves them |
 
 This ensures tool-gates won't accidentally bypass your explicit deny rules while still providing security against dangerous commands.
@@ -197,11 +197,11 @@ _Requires Claude Code 2.1.89+ for the `PermissionDenied` retry hook. Earlier aut
 
 When Claude Code runs in `auto` permission mode, a server-side classifier decides `ask` calls instead of prompting. tool-gates layers in as a deterministic pre-filter and safety floor:
 
-| tool-gates decision | Behavior under auto mode |
-|---------------------|--------------------------|
+| tool-gates decision                        | Behavior under auto mode            |
+| ------------------------------------------ | ----------------------------------- |
 | `allow` (e.g. `git status`, `cargo check`) | Classifier skipped, action executes |
-| `ask` (e.g. `cargo install foo`) | Classifier runs, decides allow/deny |
-| `deny` (e.g. `rm -rf /`, `\| bash`) | Hard floor, classifier bypassed |
+| `ask` (e.g. `cargo install foo`)           | Classifier runs, decides allow/deny |
+| `deny` (e.g. `rm -rf /`, `\| bash`)        | Hard floor, classifier bypassed     |
 
 **What changes under auto mode:**
 
@@ -233,25 +233,31 @@ When Claude uses legacy commands, tool-gates suggests modern alternatives via `a
 {"decision":"allow","hookSpecificOutput":{"additionalContext":"Tip: Use 'bat README.md' ..."}}
 ```
 
-| Legacy Command                | Modern Alternative | When triggered                       |
-| ----------------------------- | ------------------ | ------------------------------------ |
-| `cat`, `head`, `tail`, `less` | `bat`              | Always (`tail -f` excluded)          |
-| `grep` (code patterns)        | `sg`               | AST-aware code search                |
-| `grep` (text/log/config)      | `rg`               | Any grep usage                       |
-| `find`                        | `fd`               | Always                               |
-| `ls`                          | `eza`              | With `-l` or `-a` flags              |
-| `sed`                         | `sd`               | Substitution patterns (`s/.../.../`) |
-| `awk`                         | `choose`           | Field extraction (`print $`)         |
-| `du`                          | `dust`             | Always                               |
-| `ps`                          | `procs`            | With `aux`, `-e`, `-A` flags         |
-| `curl`, `wget`                | `xh`               | JSON APIs or verbose mode            |
-| `curl`, `wget`, `xh`          | `gh`               | GitHub content URLs (raw/api/blob/gist) |
-| `diff`                        | `delta`            | Two-file comparisons                 |
-| `xxd`, `hexdump`              | `hexyl`            | Always                               |
-| `cloc`                        | `tokei`            | Always                               |
-| `tree`                        | `eza -T`           | Always                               |
-| `man`                         | `tldr`             | Always                               |
-| `wc -l`                       | `rg -c`            | Line counting                        |
+| Legacy Command                | Modern Alternative                 | When triggered                                                                                                                                            |
+| ----------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cat`, `head`, `tail`, `less` | `bat`                              | Always (`tail -f` excluded)                                                                                                                               |
+| `grep` (code patterns)        | `sg`                               | AST-aware code search                                                                                                                                     |
+| `grep` (text/log/config)      | `rg`                               | Any grep usage                                                                                                                                            |
+| `rg` (code paths)             | Probe / ChunkHound / Serena / `sg` | Routes by pattern shape: identifier → Probe `exact: true`, structural → `sg -p`, natural-language → ChunkHound semantic, `-A`/`-B`/`-C` → sg body capture |
+| `find`                        | `fd`                               | Always                                                                                                                                                    |
+| `ls`                          | `eza`                              | With `-l` or `-a` flags                                                                                                                                   |
+| `sed`                         | `sd`                               | Substitution patterns (`s/.../.../`)                                                                                                                      |
+| `awk`                         | `choose`                           | Field extraction (`print $`)                                                                                                                              |
+| `du`                          | `dust`                             | Always                                                                                                                                                    |
+| `ps`                          | `procs`                            | With `aux`, `-e`, `-A` flags                                                                                                                              |
+| `curl`, `wget`                | `xh`                               | JSON APIs or verbose mode                                                                                                                                 |
+| `curl`, `wget`, `xh`          | `gh`                               | GitHub content URLs (raw/api/blob/gist)                                                                                                                   |
+| `pip`, `python -m pip`        | `uv pip`                           | Subcommand-aware (`install`/`uninstall`/`list`)                                                                                                           |
+| `python -m venv`              | `uv venv`                          | Always                                                                                                                                                    |
+| `dig`, `nslookup`             | `doggo`                            | Always                                                                                                                                                    |
+| `unzip`, `zip`                | `ouch`                             | Always (`zip --version` skipped)                                                                                                                          |
+| `tar -x` / `tar xzf`          | `ouch decompress`                  | Extract only; create (`-c`) left alone                                                                                                                    |
+| `diff`                        | `difft`                            | Two-file comparisons                                                                                                                                      |
+| `xxd`, `hexdump`              | `hexyl`                            | Always                                                                                                                                                    |
+| `cloc`                        | `tokei`                            | Always                                                                                                                                                    |
+| `tree`                        | `eza -T`                           | Always                                                                                                                                                    |
+| `man`                         | `tldr`                             | Always                                                                                                                                                    |
+| `wc -l`                       | `rg -c`                            | Line counting                                                                                                                                             |
 
 **Only suggests installed tools.** Hints are cached (7-day TTL) to avoid repeated `which` calls.
 
@@ -267,11 +273,11 @@ tool-gates --tools-status
 
 When Claude writes code via Write/Edit, tool-gates scans the content for 26 security anti-patterns organized into three tiers:
 
-| Tier | Hook | Decision | Behavior |
-|------|------|----------|----------|
-| **Tier 1** | PreToolUse | `deny` | Hardcoded secrets always blocked before write |
-| **Tier 2** | PostToolUse | `additionalContext` | Anti-patterns flagged after write. Claude gets a nudge to fix |
-| **Tier 3** | PreToolUse | `allow` + context | Informational warnings injected without blocking |
+| Tier       | Hook        | Decision                 | Behavior                                                                                                                                                                                                                                          |
+| ---------- | ----------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Tier 1** | PreToolUse  | `deny` + `systemMessage` | Hardcoded secrets blocked before write. Tier-1 denies surface to the operator via top-level `systemMessage` so the block isn't silent. Routine denies (head/tail pipe, settings.json matches, procedural gate denies) stay silent at the UI level |
+| **Tier 2** | PostToolUse | `additionalContext`      | Anti-patterns flagged after write. Claude gets a nudge to fix                                                                                                                                                                                     |
+| **Tier 3** | PreToolUse  | `allow` + context        | Informational warnings injected without blocking                                                                                                                                                                                                  |
 
 **Tier 1: Secrets (always denied):**
 AWS access keys (`AKIA...`), private keys (`-----BEGIN * PRIVATE KEY`), GitHub tokens (`ghp_/ghs_/ghu_/gho_/ghr_`), Stripe/Slack/Google API keys, GitHub Actions workflow injection.
@@ -339,16 +345,16 @@ Three-panel dashboard with project sidebar, command list, and detail panel.
 
 Compound commands (`&&`, `||`, `|`) show per-segment patterns so you can approve individual parts.
 
-| Key | Action |
-| --- | ------ |
-| `Tab` | Cycle panel focus (Sidebar -> Commands -> Detail) |
-| `Up`/`Down` or `j`/`k` | Navigate within focused panel |
-| `Left`/`Right` or `h`/`l` | Cycle pattern or scope (in detail panel) |
-| `Space` | Toggle multi-select on command |
-| `Enter` | Approve selected command(s) |
-| `d` | Skip (remove from pending) |
-| `D` | Deny (add to settings.json deny list) |
-| `q` or `Esc` | Quit |
+| Key                       | Action                                            |
+| ------------------------- | ------------------------------------------------- |
+| `Tab`                     | Cycle panel focus (Sidebar -> Commands -> Detail) |
+| `Up`/`Down` or `j`/`k`    | Navigate within focused panel                     |
+| `Left`/`Right` or `h`/`l` | Cycle pattern or scope (in detail panel)          |
+| `Space`                   | Toggle multi-select on command                    |
+| `Enter`                   | Approve selected command(s)                       |
+| `d`                       | Skip (remove from pending)                        |
+| `D`                       | Deny (add to settings.json deny list)             |
+| `q` or `Esc`              | Quit                                              |
 
 ---
 
@@ -426,11 +432,11 @@ tool-gates hooks add --codex --dry-run
 
 #### Claude Code
 
-| Scope | File | Use case |
-|-------|------|----------|
-| `user` | `~/.claude/settings.json` | Personal use (recommended) |
-| `project` | `.claude/settings.json` | Share with team |
-| `local` | `.claude/settings.local.json` | Personal project overrides |
+| Scope     | File                          | Use case                   |
+| --------- | ----------------------------- | -------------------------- |
+| `user`    | `~/.claude/settings.json`     | Personal use (recommended) |
+| `project` | `.claude/settings.json`       | Share with team            |
+| `local`   | `.claude/settings.local.json` | Personal project overrides |
 
 **All four hooks are installed:**
 
@@ -450,29 +456,59 @@ Add to `~/.claude/settings.json`:
     "PreToolUse": [
       {
         "matcher": "Bash|Monitor|Read|Write|Edit|Glob|Grep|Skill",
-        "hooks": [{ "type": "command", "command": "~/.local/bin/tool-gates", "timeout": 10 }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/bin/tool-gates",
+            "timeout": 10
+          }
+        ]
       },
       {
         "matcher": "mcp__.*",
-        "hooks": [{ "type": "command", "command": "~/.local/bin/tool-gates", "timeout": 10 }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/bin/tool-gates",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "PermissionRequest": [
       {
         "matcher": "Bash|Monitor|Write|Edit",
-        "hooks": [{ "type": "command", "command": "~/.local/bin/tool-gates", "timeout": 10 }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/bin/tool-gates",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "PermissionDenied": [
       {
         "matcher": "Bash|Monitor",
-        "hooks": [{ "type": "command", "command": "~/.local/bin/tool-gates", "timeout": 10 }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/bin/tool-gates",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "PostToolUse": [
       {
         "matcher": "Bash|Monitor|Write|Edit",
-        "hooks": [{ "type": "command", "command": "~/.local/bin/tool-gates", "timeout": 10 }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/bin/tool-gates",
+            "timeout": 10
+          }
+        ]
       }
     ]
   }
@@ -526,10 +562,10 @@ The skill lists commands you've been manually approving, shows counts and sugges
 
 Requires Gemini CLI **v0.36.0+** (`ask` decision support for BeforeTool hooks).
 
-| Scope | File | Use case |
-|-------|------|----------|
-| `user` | `~/.gemini/settings.json` | Personal use (default) |
-| `project` | `.gemini/settings.json` | Share with team |
+| Scope     | File                      | Use case               |
+| --------- | ------------------------- | ---------------------- |
+| `user`    | `~/.gemini/settings.json` | Personal use (default) |
+| `project` | `.gemini/settings.json`   | Share with team        |
 
 Two hooks are installed: `BeforeTool`, `AfterTool`
 
@@ -544,17 +580,35 @@ Add to `~/.gemini/settings.json`:
     "BeforeTool": [
       {
         "matcher": "run_shell_command|read_file|read_many_files|write_file|replace|glob|grep_search|activate_skill",
-        "hooks": [{"type": "command", "command": "~/.local/bin/tool-gates", "timeout": 5000}]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/bin/tool-gates",
+            "timeout": 5000
+          }
+        ]
       },
       {
         "matcher": "mcp_.*",
-        "hooks": [{"type": "command", "command": "~/.local/bin/tool-gates", "timeout": 5000}]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/bin/tool-gates",
+            "timeout": 5000
+          }
+        ]
       }
     ],
     "AfterTool": [
       {
         "matcher": "run_shell_command|write_file|replace",
-        "hooks": [{"type": "command", "command": "~/.local/bin/tool-gates", "timeout": 5000}]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/bin/tool-gates",
+            "timeout": 5000
+          }
+        ]
       }
     ]
   }
@@ -567,10 +621,10 @@ The Claude/Gemini client is auto-detected from the `hook_event_name` field; the 
 
 #### Codex CLI
 
-| Scope | File | Use case |
-|-------|------|----------|
-| `user` | `~/.codex/hooks.json` | Personal use (default) |
-| `project` | `.codex/hooks.json` | Share with team |
+| Scope     | File                  | Use case               |
+| --------- | --------------------- | ---------------------- |
+| `user`    | `~/.codex/hooks.json` | Personal use (default) |
+| `project` | `.codex/hooks.json`   | Share with team        |
 
 Three hooks are installed: `PreToolUse`, `PermissionRequest`, `PostToolUse`. Each command embeds `--client codex` so tool-gates routes the wire format correctly. MCP tools are covered on PreToolUse for block rules; Codex does not currently expose an `acceptEdits` mode for MCP PermissionRequest auto-approval.
 
@@ -585,23 +639,47 @@ Add to `~/.codex/hooks.json`:
     "PreToolUse": [
       {
         "matcher": "Bash|apply_patch",
-        "hooks": [{"type": "command", "command": "~/.local/bin/tool-gates --client codex", "timeout": 30}]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/bin/tool-gates --client codex",
+            "timeout": 30
+          }
+        ]
       },
       {
         "matcher": "mcp__.*",
-        "hooks": [{"type": "command", "command": "~/.local/bin/tool-gates --client codex", "timeout": 30}]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/bin/tool-gates --client codex",
+            "timeout": 30
+          }
+        ]
       }
     ],
     "PermissionRequest": [
       {
         "matcher": "Bash|apply_patch",
-        "hooks": [{"type": "command", "command": "~/.local/bin/tool-gates --client codex", "timeout": 30}]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/bin/tool-gates --client codex",
+            "timeout": 30
+          }
+        ]
       }
     ],
     "PostToolUse": [
       {
         "matcher": "Bash|apply_patch",
-        "hooks": [{"type": "command", "command": "~/.local/bin/tool-gates --client codex", "timeout": 30}]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/bin/tool-gates --client codex",
+            "timeout": 30
+          }
+        ]
       }
     ]
   }
@@ -618,8 +696,8 @@ Add to `~/.codex/hooks.json`:
 
 tool-gates recognizes its own CLI commands:
 
-| Allow                                                                                                                   | Ask                                                                                  |
-| ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Allow                                                                                                                     | Ask                                                                                                             |
+| ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | `pending list`, `pending count`, `rules list`, `rules ask-audit`, `hooks status`, `--help`, `--version`, `--tools-status` | `approve`, `rules remove`, `rules ask-audit --apply`, `pending clear`, `hooks add`, `review`, `--refresh-tools` |
 
 ### Basics
@@ -670,8 +748,8 @@ kubectl: `diff`, `kustomize`, `wait` allow. `debug` asks. terraform: `workspace 
 
 ### Network
 
-| Allow                         | Ask                                                  | Block                                    |
-| ----------------------------- | ---------------------------------------------------- | ---------------------------------------- |
+| Allow                                    | Ask                                                                                                      | Block                             |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------- | --------------------------------- |
 | `curl` (GET non-GitHub), `wget --spider` | `curl -X POST`, `wget`, `ssh`, `rsync`, `nmap`, `socat`, `telnet`, `curl/xh` against GitHub content URLs | `nc -e/-c/--exec` (reverse shell) |
 
 ### Filesystem
@@ -684,9 +762,9 @@ kubectl: `diff`, `kustomize`, `wait` allow. `debug` asks. terraform: `workspace 
 
 python3/python, node, ruby, deno, php, lua/luajit, java/javac, dotnet, swift, elixir/iex
 
-| Allow                                                     | Ask                                                |
-| --------------------------------------------------------- | -------------------------------------------------- |
-| `--version`, `--help`, syntax check (`node -c`, `ruby -c`, `php -l`) | `-c`/`-e`/`-m` (code execution), running scripts  |
+| Allow                                                                | Ask                                              |
+| -------------------------------------------------------------------- | ------------------------------------------------ |
+| `--version`, `--help`, syntax check (`node -c`, `ruby -c`, `php -l`) | `-c`/`-e`/`-m` (code execution), running scripts |
 
 deno: `check`, `lint`, `test`, `fmt --check` allow. `run`, `fmt`, `install`, `publish` ask. dotnet: `build`, `test`, `run` allow. `publish`, `new`, `add` ask.
 
@@ -868,34 +946,34 @@ disable_rules = ["eval_injection", "pickle_deserialization"]  # skip individual 
 <details>
 <summary>All 26 rule names (click to expand)</summary>
 
-| Tier | Rule Name | Detects |
-|:----:|-----------|---------|
-| 1 | `hardcoded_aws_key` | AWS access keys (`AKIA...`) |
-| 1 | `hardcoded_private_key` | RSA/EC/DSA/SSH private keys |
-| 1 | `hardcoded_github_token` | GitHub PATs (`ghp_`, `ghs_`, etc.) |
-| 1 | `hardcoded_generic_secret` | Stripe (`sk-`), Slack (`xoxb-`), Google (`AIza`) keys |
-| 1 | `github_actions_injection` | Untrusted input in GHA `run:` blocks |
-| 2 | `child_process_exec` | `child_process.exec` / `execSync` |
-| 2 | `new_function_injection` | `new Function()` code injection |
-| 2 | `eval_injection` | `eval()` arbitrary code execution |
-| 2 | `os_system_injection` | `os.system()` shell injection |
-| 2 | `pickle_deserialization` | `pickle.load` / `pickle.loads` |
-| 2 | `dangerous_inner_html` | React `dangerouslySetInnerHTML` |
-| 2 | `document_write_xss` | `document.write()` XSS |
-| 2 | `inner_html_assignment` | `.innerHTML =` XSS |
-| 2 | `unsafe_yaml_load` | `yaml.load()` without SafeLoader |
-| 2 | `sql_string_interpolation` | SQL via f-strings / `.execute(f"...")` |
-| 2 | `subprocess_shell_true` | `subprocess.run(..., shell=True)` |
-| 2 | `flask_ssti` | `render_template_string()` SSTI |
-| 2 | `marshal_deserialization` | `marshal.load` / `shelve.open` |
-| 2 | `python_dynamic_import` | `__import__()` injection |
-| 2 | `php_unserialize` | PHP `unserialize()` object injection |
-| 3 | `ssl_verification_disabled` | `verify=False` / `rejectUnauthorized: false` |
-| 3 | `chmod_777` | `chmod 777` / `0o777` overly permissive |
-| 3 | `weak_crypto_hash` | `hashlib.md5()` / `hashlib.sha1()` |
-| 3 | `cors_wildcard` | `Access-Control-Allow-Origin: *` |
-| 3 | `vue_v_html` | Vue `v-html=` XSS |
-| 3 | `template_autoescape_disabled` | Jinja2/Django `autoescape=False` |
+| Tier | Rule Name                      | Detects                                               |
+| :--: | ------------------------------ | ----------------------------------------------------- |
+|  1   | `hardcoded_aws_key`            | AWS access keys (`AKIA...`)                           |
+|  1   | `hardcoded_private_key`        | RSA/EC/DSA/SSH private keys                           |
+|  1   | `hardcoded_github_token`       | GitHub PATs (`ghp_`, `ghs_`, etc.)                    |
+|  1   | `hardcoded_generic_secret`     | Stripe (`sk-`), Slack (`xoxb-`), Google (`AIza`) keys |
+|  1   | `github_actions_injection`     | Untrusted input in GHA `run:` blocks                  |
+|  2   | `child_process_exec`           | `child_process.exec` / `execSync`                     |
+|  2   | `new_function_injection`       | `new Function()` code injection                       |
+|  2   | `eval_injection`               | `eval()` arbitrary code execution                     |
+|  2   | `os_system_injection`          | `os.system()` shell injection                         |
+|  2   | `pickle_deserialization`       | `pickle.load` / `pickle.loads`                        |
+|  2   | `dangerous_inner_html`         | React `dangerouslySetInnerHTML`                       |
+|  2   | `document_write_xss`           | `document.write()` XSS                                |
+|  2   | `inner_html_assignment`        | `.innerHTML =` XSS                                    |
+|  2   | `unsafe_yaml_load`             | `yaml.load()` without SafeLoader                      |
+|  2   | `sql_string_interpolation`     | SQL via f-strings / `.execute(f"...")`                |
+|  2   | `subprocess_shell_true`        | `subprocess.run(..., shell=True)`                     |
+|  2   | `flask_ssti`                   | `render_template_string()` SSTI                       |
+|  2   | `marshal_deserialization`      | `marshal.load` / `shelve.open`                        |
+|  2   | `python_dynamic_import`        | `__import__()` injection                              |
+|  2   | `php_unserialize`              | PHP `unserialize()` object injection                  |
+|  3   | `ssl_verification_disabled`    | `verify=False` / `rejectUnauthorized: false`          |
+|  3   | `chmod_777`                    | `chmod 777` / `0o777` overly permissive               |
+|  3   | `weak_crypto_hash`             | `hashlib.md5()` / `hashlib.sha1()`                    |
+|  3   | `cors_wildcard`                | `Access-Control-Allow-Origin: *`                      |
+|  3   | `vue_v_html`                   | Vue `v-html=` XSS                                     |
+|  3   | `template_autoescape_disabled` | Jinja2/Django `autoescape=False`                      |
 
 </details>
 
@@ -947,11 +1025,11 @@ if_project_under = ["~/projects/staging"]   # Only approve if project is under t
 
 Auto-approve Skill tool calls based on configurable rules. Supports `~` expansion in paths. Replaces external Python/bash hooks. If no rules are configured, Skill calls pass through to Claude Code's normal flow.
 
-| Condition | Description |
-|-----------|-------------|
-| `if_project_has` | Project directory must contain one of these files/directories |
-| `if_project_under` | Project directory must be at or under one of these paths |
-| *(no conditions)* | Skill is auto-approved unconditionally |
+| Condition          | Description                                                   |
+| ------------------ | ------------------------------------------------------------- |
+| `if_project_has`   | Project directory must contain one of these files/directories |
+| `if_project_under` | Project directory must be at or under one of these paths      |
+| _(no conditions)_  | Skill is auto-approved unconditionally                        |
 
 ### MCP Accept-Edits Approval
 
@@ -978,18 +1056,18 @@ Auto-approve MCP tool calls **only when the session is in `acceptEdits` mode**. 
 
 **Safety.** Block rules (e.g. the default firecrawl/ref/exa GitHub-URL blocks) run before these allow rules, so `[[accept_edits_mcp]]` cannot unlock a blocked tool.
 
-**Don't double-gate with `permissions.ask`.** Claude Code evaluates `settings.json` `permissions.ask` *after* the PreToolUse hook returns. If the MCP tool also matches an ask rule there, that rule overrides the hook's `allow` and the prompt shows anyway (logged as `Hook returned 'allow' for X, but ask rule/safety check requires full permission pipeline`). For `[[accept_edits_mcp]]` to actually auto-approve a tool, remove that tool from your `permissions.ask` list. If you want unconditional approval regardless of mode, put it in `permissions.allow` instead.
+**Don't double-gate with `permissions.ask`.** Claude Code evaluates `settings.json` `permissions.ask` _after_ the PreToolUse hook returns. If the MCP tool also matches an ask rule there, that rule overrides the hook's `allow` and the prompt shows anyway (logged as `Hook returned 'allow' for X, but ask rule/safety check requires full permission pipeline`). For `[[accept_edits_mcp]]` to actually auto-approve a tool, remove that tool from your `permissions.ask` list. If you want unconditional approval regardless of mode, put it in `permissions.allow` instead.
 
 **Substring-glob sharp edge.** `"*serena*"` is a pure substring match, so it will also catch unrelated servers whose name merely contains `serena` (e.g. `mcp__my-serenity__*`). For cross-namespace coverage of one specific server across Claude (`mcp__`) and Gemini (`mcp_`) prefixes, prefer pairing `mcp__serena*` with `mcp_serena*`.
 
 **Reason field asymmetry.** `reason` only surfaces on the main-thread PreToolUse path. On the subagent PermissionRequest path, the `allow` wire format has no reason slot (`PermissionRequestDecision::Allow` carries only `updatedInput` and `updatedPermissions`), so a custom reason is silently dropped there.
 
-| Condition | Description |
-|-----------|-------------|
-| `tool` | MCP tool name. Exact (`mcp__serena__find_symbol`), prefix (`mcp__serena*`), suffix (`*_scrape`), or contains (`*serena*` — pure substring match, see sharp-edge note above) |
-| `reason` | Optional approval message shown to the AI assistant (main-thread only; silently dropped for subagents) |
-| `if_project_has` | Project directory must contain one of these files/directories |
-| `if_project_under` | Project directory must be at or under one of these paths |
+| Condition          | Description                                                                                                                                                                 |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tool`             | MCP tool name. Exact (`mcp__serena__find_symbol`), prefix (`mcp__serena*`), suffix (`*_scrape`), or contains (`*serena*` — pure substring match, see sharp-edge note above) |
+| `reason`           | Optional approval message shown to the AI assistant (main-thread only; silently dropped for subagents)                                                                      |
+| `if_project_has`   | Project directory must contain one of these files/directories                                                                                                               |
+| `if_project_under` | Project directory must be at or under one of these paths                                                                                                                    |
 
 ### Cache
 

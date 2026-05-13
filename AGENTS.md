@@ -340,7 +340,24 @@ Gate rules are defined declaratively in `rules/*.toml`. Each rule has a `reason`
 
 ### Hints
 
-When allowed commands use legacy tools (cat, grep, find, etc.), tool-gates adds hints suggesting modern alternatives (bat, rg, fd) via `additionalContext`, only if the modern tool is installed (checked via `tool_cache.rs`, 7-day TTL at `~/.cache/tool-gates/available-tools.json`). Hint definitions are in `hints.rs`.
+When allowed commands use legacy tools, tool-gates adds hints suggesting modern alternatives via `additionalContext`. Hints are gated on the modern tool being installed (checked via `tool_cache.rs`, 7-day TTL at `~/.cache/tool-gates/available-tools.json`). Hint definitions are in `hints.rs`.
+
+| Category | Hint |
+|---|---|
+| File viewing | `cat`/`head`/`tail`/`less` -> `bat` (with line-range for head/tail; `tail -f` skipped) |
+| Code search | `grep` -> `sg` for code patterns or `rg` for text. `rg` on code paths -> Probe / ChunkHound / Serena / `sg` per the system-prompt rule, routed by pattern shape (identifier / structural / natural-language / -A body capture) |
+| File find | `find -name P -type T` -> `fd -t T P .` |
+| Text processing | `sed s/.../.../ ` -> `sd`; `awk '{print $N}'` -> `choose`; `wc -l <file>` -> `rg -c '.' file` |
+| Listing & disk | `ls -la` -> `eza -la`; `du` -> `dust` (skips `-sh`); `tree` -> `eza -T`; `ps -e`/aux -> `procs` |
+| HTTP | `curl`/`wget` against GitHub content URLs -> `gh api`; otherwise JSON/verbose -> `xh` |
+| Python | `pip`/`pip3` and `python -m pip` -> `uv pip`; `python -m venv` -> `uv venv` |
+| DNS | `dig`/`nslookup` -> `doggo` |
+| Archives | `unzip`/`zip` -> `ouch`; `tar -x` -> `ouch decompress` (create with `-c` left alone) |
+| Anti-patterns | `bat` flag misuse, `rg -A` for body capture, `git add -p`/`-i`, `git rebase -i`, `git push --force main`, colored/ext-diff output |
+
+`MODERN_TOOLS` in `tool_cache.rs` is the registry of recognized binaries. Tools not in the registry fall back to a live `which` check (slower; add to the registry to make hints instant).
+
+The hint suggestion lives in `additionalContext`; it never changes the decision. Session-scoped dedup via `hint_tracker::filter_hints` means the same hint fires at most once per session.
 
 ### Security Reminders
 
@@ -581,13 +598,17 @@ Cache files under `~/.cache/tool-gates/`:
 
 ## Gotchas
 
-- **Never edit `src/generated/`**. Files are overwritten by `build.rs` on every build
-- **`basics` must be last** in `GATES` array (priority 100). It's the catch-all for safe commands
-- **`reason` is required** on all `[[programs.ask]]` and `[[programs.block]]` rules. Build fails without it
-- **Generated function naming**: gate named `foo` generates `check_foo_gate()` in `src/generated/rules.rs`
+- **Never edit `src/generated/`**. Files are overwritten by `build.rs` on every build.
+- **`basics` must be last** in `GATES` array (priority 100). It's the catch-all for safe commands.
+- **`reason` is required** on all `[[programs.ask]]` and `[[programs.block]]` rules. Build fails without it.
+- **Reason length cap**: `build.rs` rejects any `reason` field over 250 chars (`MAX_REASON_CHARS`). Keeps prompts in help-menu form; trim before adding.
+- **Generated function naming**: gate named `foo` generates `check_foo_gate()` in `src/generated/rules.rs`.
 - **TOML + Rust wiring**: Adding a new program to `rules/*.toml` is not enough if the gate has a custom handler in `src/gates/<gate>.rs`. The Rust match statement must also route the program to the generated declarative function, or it falls through to `GateResult::skip()`. Always check both files.
-- **MCP permissions** use a different pattern format in settings.json: `mcp__<server>__<tool>` (double underscores, not `Bash(...)` format)
+- **MCP permissions** use a different pattern format in settings.json: `mcp__<server>__<tool>` (double underscores, not `Bash(...)` format).
 - **Skill auto-approval** reads `CLAUDE_PROJECT_DIR` (or `GEMINI_PROJECT_DIR`) env var at runtime to check directory conditions.
+- **build.rs rustfmt edition**: `build.rs` invokes `rustfmt --edition 2024` on generated files so they match workspace `cargo fmt`. Without the edition flag, rustfmt defaults to 2015 and produces different line-wrapping for long string literals, which leaves the working tree dirty every time HEAD changes (since `cargo:rerun-if-changed=.git/HEAD` invalidates the build cache).
+- **systemMessage tiering**: `HookOutput::deny()` returns a silent UI deny by default; only the agent sees `permissionDecisionReason`. Tier-1 secret blocks in `security_reminders.rs` chain `.user_visible()` to flip on top-level `systemMessage` so the operator sees a UI warning. Routine denies (head/tail pipe blocks, settings.json matches, procedural gate denies) stay silent.
+- **Settings.json deny reasons name the matched pattern**. `Settings::matched_deny_pattern()` returns the first matching `Bash(...)` rule; the deny reason includes it so the agent can learn what to avoid instead of seeing "Matched settings.json deny rule".
 
 ## CLI Commands
 
