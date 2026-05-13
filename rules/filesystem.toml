@@ -34,27 +34,27 @@ unknown_action = "ask"
 # Block catastrophic rm patterns
 [[programs.block]]
 if_args_contain = [" /", " /*", " ~/", " ~/*"]
-reason = "Catastrophic rm blocked (root or home)"
+reason = "`rm` against `/` or `~/` blocked: would recursively delete the system or home tree. No legitimate use in an agent workflow."
 
 [[programs.block]]
 subcommand = "-rf /"
-reason = "rm -rf / blocked"
+reason = "`rm -rf /` blocked: would recursively delete the entire root filesystem."
 
 [[programs.block]]
 subcommand = "-rf /*"
-reason = "rm -rf /* blocked"
+reason = "`rm -rf /*` blocked: would recursively delete every top-level directory under root."
 
 [[programs.block]]
 subcommand = "-rf ~"
-reason = "rm -rf ~ blocked"
+reason = "`rm -rf ~` blocked: would recursively delete the user's home directory."
 
 [[programs.block]]
 subcommand = "-fr /"
-reason = "rm -fr / blocked"
+reason = "`rm -fr /` blocked: would recursively delete the entire root filesystem."
 
 [[programs.block]]
 subcommand = "-fr ~"
-reason = "rm -fr ~ blocked"
+reason = "`rm -fr ~` blocked: would recursively delete the user's home directory."
 
 # Note: Custom handler also checks for:
 # - Path normalization (// -> /, /. -> /)
@@ -74,7 +74,7 @@ name = "mv"
 unknown_action = "ask"
 
 [[programs.ask]]
-reason = "Moving files"
+reason = "Moves or renames files. Overwrites destination if it exists unless `-n` is set."
 
 # =============================================================================
 # CP (always asks)
@@ -85,7 +85,7 @@ name = "cp"
 unknown_action = "ask"
 
 [[programs.ask]]
-reason = "Copying files"
+reason = "Copies files or directories. Overwrites destination by default; `-n` to skip existing."
 
 # =============================================================================
 # MKDIR (always asks)
@@ -96,7 +96,7 @@ name = "mkdir"
 unknown_action = "ask"
 
 [[programs.ask]]
-reason = "Creating directory"
+reason = "Creates a directory. `-p` also creates missing parent directories."
 accept_edits_auto_allow = true
 
 # =============================================================================
@@ -108,7 +108,7 @@ name = "rmdir"
 unknown_action = "ask"
 
 [[programs.ask]]
-reason = "Removing directory (if empty)"
+reason = "Removes empty directories. Fails if the directory contains files; use `rm -r` for non-empty trees."
 
 # =============================================================================
 # TOUCH (always asks)
@@ -119,7 +119,7 @@ name = "touch"
 unknown_action = "ask"
 
 [[programs.ask]]
-reason = "Creating/updating file"
+reason = "Creates an empty file or updates the mtime/atime of an existing one."
 
 # =============================================================================
 # CHMOD/CHOWN/CHGRP (always asks)
@@ -130,21 +130,21 @@ name = "chmod"
 unknown_action = "ask"
 
 [[programs.ask]]
-reason = "Changing permissions"
+reason = "Changes file/dir mode bits. Use the minimum needed: 755 for dirs, 644 for files. Avoid 777 unless you know why."
 
 [[programs]]
 name = "chown"
 unknown_action = "ask"
 
 [[programs.ask]]
-reason = "Changing permissions"
+reason = "Changes file ownership. Verify the target user/group exists before running."
 
 [[programs]]
 name = "chgrp"
 unknown_action = "ask"
 
 [[programs.ask]]
-reason = "Changing permissions"
+reason = "Changes file group. Verify the target group exists before running."
 
 # =============================================================================
 # LN (always asks)
@@ -155,7 +155,7 @@ name = "ln"
 unknown_action = "ask"
 
 [[programs.ask]]
-reason = "Creating link"
+reason = "Creates a hard or symbolic link. `-s` for symlink, `-f` to overwrite an existing link target."
 
 # =============================================================================
 # SED with -i (in-place edit)
@@ -178,7 +178,7 @@ name = "perl"
 unknown_action = "ask"
 
 [[programs.ask]]
-reason = "perl: can execute arbitrary code"
+reason = "perl can execute arbitrary code via `-e`, `-E`, `system()`, or backticks. Treat like running an inline script."
 
 # =============================================================================
 # TAR (list safe, extract/create asks)
@@ -214,7 +214,7 @@ unknown_action = "ask"
 if_flags_any = ["-l"]
 
 [[programs.ask]]
-reason = "Extracting archive"
+reason = "Extracts a zip archive. Verify trust; paths inside the archive can use `..` for directory traversal."
 
 # =============================================================================
 # ZIP (always asks - note: -l flag converts line endings, does NOT list contents)
@@ -228,4 +228,4 @@ unknown_action = "ask"
 # Use zipinfo to list zip contents (which is in basics safe_commands)
 
 [[programs.ask]]
-reason = "Creating/modifying archive"
+reason = "Creates or modifies a zip archive. Writes the destination path; existing archives are updated in place."

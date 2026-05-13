@@ -516,6 +516,28 @@ GateResult::ask("Description") // Mutation, needs approval
 GateResult::block("Explanation") // Dangerous, never allow
 ```
 
+## Reason Style (rules/*.toml)
+
+Every `reason = "..."` string is sent to the AI agent as `permissionDecisionReason`. Treat each one as a help-menu entry, not a security disclaimer.
+
+**Format:** `"<verb-phrase of what the command does (1 sentence)>. <risk/scope/reversibility note if non-obvious (1 sentence)>."`
+
+**Examples:**
+
+- Good: `"Hard reset discards uncommitted changes in the working tree and index. Safer: \`git stash\` first, or \`git reset --soft\` to keep changes staged."`
+- Good: `"Drops a stash permanently. Run \`git stash list\` first to confirm the index; cannot be undone."`
+- Bad (label only): `"git stash drop"`
+- Bad (authorization hedge): `"Port scanning. Only scan networks you own or have written authorization to test."`
+
+**Rules:**
+
+- Max 250 chars per reason. Concise; trim before adding.
+- No authorization hedges (`"verify you have permission"`, `"only do this on resources you own"`, etc.). The reason text teaches the agent about the operation, it doesn't gate access.
+- Generic placeholders only: `<file>`, `<path>`, `<host>`, `<user>`, `<region>`, `<resource>`, `<key>`, `<pid>`, etc. Never embed real hostnames, IPs, usernames, paths, or service names.
+- No em-dashes. Periods to separate clauses. ASCII-only quotes.
+- Procedural reasons (routine mutations like `"Installing packages"`, `"Formatting files"`) stay terse. Only add a second sentence when the operation has a non-obvious risk, scope, or reversibility note worth teaching.
+- Source-level prompts in `src/router.rs`, `src/security_reminders.rs`, and `src/hints.rs` follow the same style.
+
 ## Testing
 
 ```bash

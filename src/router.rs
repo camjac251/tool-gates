@@ -21,45 +21,84 @@ use std::sync::LazyLock;
 // Compiled once at first use via LazyLock. Using expect() so invalid patterns
 // panic immediately instead of silently skipping security checks.
 
+/// Build a pipe-to-shell hard-ask reason. Bash/sh/zsh share one message;
+/// sudo/doas share another. Stored as `&'static str` to match the original
+/// pattern table shape; `Box::leak` is safe here because the table is built
+/// once at process start via `LazyLock`.
+fn shell_pipe_reason(shell: &str) -> &'static str {
+    Box::leak(format!(
+        "Piping to {shell} runs whatever upstream returns, with no chance to inspect. Save the output to a file first, review it, then run."
+    ).into_boxed_str())
+}
+
+fn priv_pipe_reason(tool: &str) -> &'static str {
+    Box::leak(format!(
+        "Piping to {tool} elevates upstream output. Same risk as `curl | bash` with full privileges; save and review the upstream content first."
+    ).into_boxed_str())
+}
+
+fn interp_pipe_reason(interp: &str) -> &'static str {
+    Box::leak(format!(
+        "Piping to {interp} runs upstream as a script. Save to a file first, review it, then run."
+    ).into_boxed_str())
+}
+
 /// Pipe-to-shell / privilege escalation patterns (hard ask: not overridable by settings).
 static PIPE_HARD_PATTERNS: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new(|| {
-    [
-        (r"\|\s*bash\b", "Piping to bash"),
-        (r"\|\s*/bin/bash\b", "Piping to bash"),
-        (r"\|\s*/usr/bin/bash\b", "Piping to bash"),
-        (r"\|\s*sh\b", "Piping to sh"),
-        (r"\|\s*/bin/sh\b", "Piping to sh"),
-        (r"\|\s*/usr/bin/sh\b", "Piping to sh"),
-        (r"\|\s*zsh\b", "Piping to zsh"),
-        (r"\|\s*/bin/zsh\b", "Piping to zsh"),
-        (r"\|\s*/usr/bin/zsh\b", "Piping to zsh"),
-        (r"\|\s*sudo\b", "Piping to sudo"),
-        (r"\|\s*/usr/bin/sudo\b", "Piping to sudo"),
-        (r"\|\s*doas\b", "Piping to doas"),
-    ]
-    .into_iter()
-    .map(|(pat, reason)| {
+    let shell_groups: &[(&[&str], &str)] = &[
         (
-            Regex::new(pat).expect("PIPE_HARD_PATTERNS regex must compile"),
-            reason,
-        )
-    })
-    .collect()
+            &[r"\|\s*bash\b", r"\|\s*/bin/bash\b", r"\|\s*/usr/bin/bash\b"],
+            "bash",
+        ),
+        (
+            &[r"\|\s*sh\b", r"\|\s*/bin/sh\b", r"\|\s*/usr/bin/sh\b"],
+            "sh",
+        ),
+        (
+            &[r"\|\s*zsh\b", r"\|\s*/bin/zsh\b", r"\|\s*/usr/bin/zsh\b"],
+            "zsh",
+        ),
+    ];
+    let priv_groups: &[(&[&str], &str)] = &[
+        (&[r"\|\s*sudo\b", r"\|\s*/usr/bin/sudo\b"], "sudo"),
+        (&[r"\|\s*doas\b"], "doas"),
+    ];
+
+    let mut out = Vec::new();
+    for (pats, name) in shell_groups {
+        let reason = shell_pipe_reason(name);
+        for pat in *pats {
+            out.push((
+                Regex::new(pat).expect("PIPE_HARD_PATTERNS regex must compile"),
+                reason,
+            ));
+        }
+    }
+    for (pats, name) in priv_groups {
+        let reason = priv_pipe_reason(name);
+        for pat in *pats {
+            out.push((
+                Regex::new(pat).expect("PIPE_HARD_PATTERNS regex must compile"),
+                reason,
+            ));
+        }
+    }
+    out
 });
 
 /// Pipe-to-interpreter patterns (soft ask: overridable by settings.json allow rules).
 static PIPE_SOFT_PATTERNS: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new(|| {
     [
-        (r"\|\s*python[0-9.]*\b", "Piping to python"),
-        (r"\|\s*perl\b", "Piping to perl"),
-        (r"\|\s*ruby\b", "Piping to ruby"),
-        (r"\|\s*node\b", "Piping to node"),
+        (r"\|\s*python[0-9.]*\b", "python"),
+        (r"\|\s*perl\b", "perl"),
+        (r"\|\s*ruby\b", "ruby"),
+        (r"\|\s*node\b", "node"),
     ]
     .into_iter()
-    .map(|(pat, reason)| {
+    .map(|(pat, name)| {
         (
             Regex::new(pat).expect("PIPE_SOFT_PATTERNS regex must compile"),
-            reason,
+            interp_pipe_reason(name),
         )
     })
     .collect()
@@ -282,17 +321,21 @@ fn check_command_for_session_with_commands(
     HookOutput::allow(Some(&allow_reason))
 }
 
-/// Check if any sub-command in a compound command is denied by settings.
+/// Return the first deny pattern matched by any sub-command in a compound
+/// command, or `None` if nothing matches.
 ///
-/// For compound commands like "cd /tmp && rm -rf .", this ensures that
-/// deny rules like Bash(rm:*) still catch the dangerous sub-command even
-/// though the full string doesn't start with "rm".
-fn check_subcommands_denied(settings: &Settings, command_string: &str) -> bool {
+/// For compound commands like "cd /tmp && rm -rf .", this ensures that deny
+/// rules like Bash(rm:*) still catch the dangerous sub-command even though
+/// the full string doesn't start with "rm". Returns the matched pattern so
+/// the deny reason can name it instead of being generic.
+fn matched_subcommand_deny<'a>(settings: &'a Settings, command_string: &str) -> Option<&'a str> {
     let commands = extract_commands(command_string);
     if commands.len() <= 1 {
-        return false; // Single command already checked against full string
+        return None; // Single command already checked against full string
     }
-    commands.iter().any(|cmd| settings.is_denied(&cmd.raw))
+    commands
+        .iter()
+        .find_map(|cmd| settings.matched_deny_pattern(&cmd.raw))
 }
 
 /// Check compound command sub-commands against settings ask/allow rules.
@@ -505,8 +548,10 @@ fn check_command_with_settings_and_session_inner(
     // allow/deny rules (e.g. Bash(mise run *)) take priority over expansion.
     if is_simple_command {
         if let Some(task_name) = parse_mise_invocation(command_string) {
-            if settings.is_denied(command_string) {
-                return HookOutput::deny("Matched settings.json deny rule");
+            if let Some(pat) = settings.matched_deny_pattern(command_string) {
+                return HookOutput::deny(&format!(
+                    "Blocked by settings.json deny rule `{pat}`. Remove the rule or rewrite the command."
+                ));
             }
             match check_settings_with_subcommands(&settings, command_string) {
                 SettingsDecision::Allow => {
@@ -523,8 +568,10 @@ fn check_command_with_settings_and_session_inner(
         // Check for package.json script invocation (npm run, pnpm run, etc.)
         // Same settings-first logic as mise.
         if let Some((pm, script_name)) = parse_script_invocation(command_string) {
-            if settings.is_denied(command_string) {
-                return HookOutput::deny("Matched settings.json deny rule");
+            if let Some(pat) = settings.matched_deny_pattern(command_string) {
+                return HookOutput::deny(&format!(
+                    "Blocked by settings.json deny rule `{pat}`. Remove the rule or rewrite the command."
+                ));
             }
             match check_settings_with_subcommands(&settings, command_string) {
                 SettingsDecision::Allow => {
@@ -553,8 +600,15 @@ fn check_command_with_settings_and_session_inner(
     // This must happen before acceptEdits to prevent acceptEdits from bypassing deny rules
     // For compound commands (&&, ||, |, ;), also check each sub-command individually
     // so that deny rules like Bash(rm:*) catch "cd /tmp && rm -rf ."
-    if settings.is_denied(command_string) || check_subcommands_denied(&settings, command_string) {
-        return HookOutput::deny("Matched settings.json deny rule");
+    if let Some(pat) = settings.matched_deny_pattern(command_string) {
+        return HookOutput::deny(&format!(
+            "Blocked by settings.json deny rule `{pat}`. Remove the rule or rewrite the command."
+        ));
+    }
+    if let Some(pat) = matched_subcommand_deny(&settings, command_string) {
+        return HookOutput::deny(&format!(
+            "Blocked by settings.json deny rule `{pat}` (matched on sub-command). Rewrite the chain to avoid that step."
+        ));
     }
 
     // In acceptEdits mode, auto-allow file-editing commands that:
@@ -1089,7 +1143,9 @@ fn check_raw_string_patterns(command_string: &str) -> (Option<HookOutput>, Optio
     // eval: hard ask (arbitrary code execution, not overridable by settings)
     if EVAL_RE.is_match(&unquoted) {
         return (
-            Some(HookOutput::ask("eval: Arbitrary code execution")),
+            Some(HookOutput::ask(
+                "`eval` runs arbitrary code constructed from variables. Prefer parameter expansion (`${var}`), array indexing, or `case` statements; if eval is truly needed, validate the input first.",
+            )),
             None,
         );
     }
@@ -1098,11 +1154,18 @@ fn check_raw_string_patterns(command_string: &str) -> (Option<HookOutput>, Optio
     if SOURCE_RE.is_match(&unquoted) {
         return (
             None,
-            Some(HookOutput::ask("source: Sourcing external script")),
+            Some(HookOutput::ask(
+                "`source` runs the file in the current shell and inherits its `export`s, aliases, and `cd`s. Verify the file's contents before approving.",
+            )),
         );
     }
     if DOT_SOURCE_RE.is_match(&unquoted) {
-        return (None, Some(HookOutput::ask(".: Sourcing external script")));
+        return (
+            None,
+            Some(HookOutput::ask(
+                "`.` is equivalent to `source`: runs the file in the current shell and inherits its `export`s and aliases. Verify the file's contents before approving.",
+            )),
+        );
     }
 
     // xargs with dangerous commands
@@ -1111,7 +1174,9 @@ fn check_raw_string_patterns(command_string: &str) -> (Option<HookOutput>, Optio
             if re.is_match(&unquoted) {
                 return (
                     None,
-                    Some(HookOutput::ask(&format!("xargs piping to {cmd}"))),
+                    Some(HookOutput::ask(&format!(
+                        "xargs piping to `{cmd}` runs it once per input line. Verify the upstream filter; mistakes cascade."
+                    ))),
                 );
             }
         }
@@ -1120,7 +1185,9 @@ fn check_raw_string_patterns(command_string: &str) -> (Option<HookOutput>, Optio
         if XARGS_KUBECTL_DELETE_RE.is_match(&unquoted) {
             return (
                 None,
-                Some(HookOutput::ask("xargs piping to kubectl delete")),
+                Some(HookOutput::ask(
+                    "xargs piping to `kubectl delete` runs delete once per input line. Verify the upstream filter; mistakes cascade across many resources.",
+                )),
             );
         }
     }
@@ -1134,12 +1201,19 @@ fn check_raw_string_patterns(command_string: &str) -> (Option<HookOutput>, Optio
     // generically, content after it can be anything.
     if unquoted.contains("find ") || unquoted.contains("find\t") {
         if unquoted.contains("-delete") {
-            return (None, Some(HookOutput::ask("find with -delete")));
+            return (
+                None,
+                Some(HookOutput::ask(
+                    "`find -delete` removes every match. Run without `-delete` first to preview which paths would be removed.",
+                )),
+            );
         }
         if FIND_EXEC_RE.is_match(&unquoted) {
             return (
                 None,
-                Some(HookOutput::ask("find with -exec/-execdir/-ok/-okdir")),
+                Some(HookOutput::ask(
+                    "`find -exec` runs a command per match. Verify both the find filter and the command body; mistakes cascade across every match.",
+                )),
             );
         }
     }
@@ -1175,7 +1249,12 @@ fn check_raw_string_patterns(command_string: &str) -> (Option<HookOutput>, Optio
                 ];
                 for pattern in &patterns {
                     if unquoted.contains(pattern) {
-                        return (None, Some(HookOutput::ask(&format!("fd executing {cmd}"))));
+                        return (
+                            None,
+                            Some(HookOutput::ask(&format!(
+                                "fd executing `{cmd}` per match via -x/--exec. Verify the fd filter first (run without -x); mistakes cascade across every match."
+                            ))),
+                        );
                     }
                 }
             }
@@ -1232,7 +1311,12 @@ fn check_raw_string_patterns(command_string: &str) -> (Option<HookOutput>, Optio
 
     // Leading semicolon (potential injection)
     if command_string.trim().starts_with(';') {
-        return (None, Some(HookOutput::ask("Command starts with semicolon")));
+        return (
+            None,
+            Some(HookOutput::ask(
+                "Command starts with `;`. Usually a paste artifact or shell-injection attempt; review the full command before approving.",
+            )),
+        );
     }
 
     // Output redirections (file writes)
@@ -1251,7 +1335,9 @@ fn check_raw_string_patterns(command_string: &str) -> (Option<HookOutput>, Optio
             if target_str != "/dev/null" {
                 return (
                     None,
-                    Some(HookOutput::ask("Output redirection (writes to file)")),
+                    Some(HookOutput::ask(
+                        "Output redirection (`>`, `>>`, `tee`) writes to a file. Verify the target path; `>` overwrites without warning.",
+                    )),
                 );
             }
         }
@@ -1262,7 +1348,9 @@ fn check_raw_string_patterns(command_string: &str) -> (Option<HookOutput>, Optio
             if target_str != "/dev/null" {
                 return (
                     None,
-                    Some(HookOutput::ask("Output redirection (writes to file)")),
+                    Some(HookOutput::ask(
+                        "Output redirection (`>`, `>>`, `tee`) writes to a file. Verify the target path; `>` overwrites without warning.",
+                    )),
                 );
             }
         }
@@ -3694,7 +3782,7 @@ run = "mytool42 verify"
         fn test_leading_semicolon() {
             let result = check_command(";rm -rf /");
             assert_eq!(get_decision(&result), "ask");
-            assert!(get_reason(&result).contains("semicolon"));
+            assert!(get_reason(&result).contains("starts with"));
         }
 
         #[test]
@@ -4527,23 +4615,21 @@ run = "mytool42 verify"
         fn test_deny_catches_subcommand_in_compound() {
             let settings = make_settings(&[], &[], &["Bash(rm:*)"]);
             // "rm -rf ." is a sub-command, full string starts with "cd"
-            assert!(check_subcommands_denied(&settings, "cd /tmp && rm -rf ."));
+            let matched = matched_subcommand_deny(&settings, "cd /tmp && rm -rf .");
+            assert_eq!(matched, Some("Bash(rm:*)"));
         }
 
         #[test]
         fn test_deny_single_command_defers_to_full_string() {
             let settings = make_settings(&[], &[], &["Bash(rm:*)"]);
-            // Single command. Helper returns false (full string check handles it)
-            assert!(!check_subcommands_denied(&settings, "rm -rf ."));
+            // Single command. Helper returns None (full string check handles it)
+            assert!(matched_subcommand_deny(&settings, "rm -rf .").is_none());
         }
 
         #[test]
         fn test_deny_no_match_in_compound() {
             let settings = make_settings(&[], &[], &["Bash(rm:*)"]);
-            assert!(!check_subcommands_denied(
-                &settings,
-                "cd /tmp && npm install"
-            ));
+            assert!(matched_subcommand_deny(&settings, "cd /tmp && npm install").is_none());
         }
 
         // --- Allow checks ---

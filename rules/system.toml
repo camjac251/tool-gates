@@ -241,7 +241,7 @@ unknown_action = "ask"
 if_flags_any = ["--version", "--help", "-h", "-V"]
 
 [[programs.ask]]
-reason = "Mounting filesystem"
+reason = "Mounts a filesystem. Usually requires root in most setups; verify the source device and target mount point."
 
 [[programs]]
 name = "umount"
@@ -313,14 +313,14 @@ name = "createdb"
 unknown_action = "ask"
 
 [[programs.ask]]
-reason = "Creating database"
+reason = "Creates a new PostgreSQL database. Connects to the server using the configured role."
 
 [[programs]]
 name = "dropdb"
 unknown_action = "ask"
 
 [[programs.ask]]
-reason = "Dropping database"
+reason = "Drops a PostgreSQL database. Permanent; all schemas and data in the database are deleted."
 
 [[programs]]
 name = "pg_dump"
@@ -331,7 +331,7 @@ name = "pg_restore"
 unknown_action = "ask"
 
 [[programs.ask]]
-reason = "Restoring database"
+reason = "Restores a PostgreSQL dump into a database. Can overwrite existing objects depending on flags."
 
 # =============================================================================
 # DATABASE MIGRATION TOOLS
@@ -342,28 +342,28 @@ name = "migrate"
 unknown_action = "ask"
 
 [[programs.ask]]
-reason = "Running database migration"
+reason = "Runs a database migration via golang-migrate. Applies schema changes; review the migration files first."
 
 [[programs]]
 name = "goose"
 unknown_action = "ask"
 
 [[programs.ask]]
-reason = "Running database migration"
+reason = "Runs a database migration via goose. Applies schema changes; review the migration files first."
 
 [[programs]]
 name = "dbmate"
 unknown_action = "ask"
 
 [[programs.ask]]
-reason = "Running database migration"
+reason = "Runs a database migration via dbmate. Applies schema changes; review the migration files first."
 
 [[programs]]
 name = "flyway"
 unknown_action = "ask"
 
 [[programs.ask]]
-reason = "Running database migration"
+reason = "Runs a database migration via Flyway. Applies schema changes; review the migration files first."
 
 [[programs]]
 name = "alembic"
@@ -387,19 +387,19 @@ subcommand = "show"
 
 [[programs.ask]]
 subcommand = "upgrade"
-reason = "Running database migration"
+reason = "Applies pending Alembic migrations to the database. Schema/data changes are not auto-reversible."
 
 [[programs.ask]]
 subcommand = "downgrade"
-reason = "Rolling back database migration"
+reason = "Reverts Alembic migrations. Can drop columns/tables; review the down() body before approving."
 
 [[programs.ask]]
 subcommand = "revision"
-reason = "Creating new migration"
+reason = "Generates a new Alembic migration file in the `versions/` directory."
 
 [[programs.ask]]
 subcommand = "stamp"
-reason = "Stamping database version"
+reason = "Sets the recorded Alembic version without running migrations. Mismatches with actual schema state can corrupt later migrations."
 
 # =============================================================================
 # MYSQL
@@ -428,7 +428,7 @@ unknown_action = "ask"
 if_flags_any = ["-readonly"]
 
 [[programs.ask]]
-reason = "Database access"
+reason = "Opens a SQLite database file. Default mode allows writes; use `-readonly` to limit to queries."
 
 # =============================================================================
 # MONGOSH / MONGO
@@ -440,11 +440,11 @@ aliases = ["mongo"]
 unknown_action = "ask"
 
 [[programs.ask]]
-reason = "Database session"
+reason = "MongoDB session with `--eval` script. The eval body runs as JS in the database context and can mutate data."
 if_flags_any = ["--eval"]
 
 [[programs.ask]]
-reason = "Database session"
+reason = "Opens a MongoDB session. Verify the connection target before running mutating queries."
 
 # =============================================================================
 # REDIS-CLI
@@ -470,7 +470,7 @@ unknown_action = "ask"
 if_flags_any = ["-0"]
 
 [[programs.ask]]
-reason = "Terminating process(es)"
+reason = "Sends a signal to the listed PIDs (default SIGTERM). Verify the PID first; `-9` (SIGKILL) cannot be caught and can corrupt state."
 
 # Note: Custom handler also allows -l/-L (list signals)
 [[custom_handlers]]
@@ -483,7 +483,7 @@ name = "pkill"
 unknown_action = "ask"
 
 [[programs.ask]]
-reason = "Terminating process(es)"
+reason = "Signals processes matching a pattern. Run `pgrep <pattern>` first to verify which processes match; `-9` cannot be caught."
 
 # Note: Custom handler also allows -0 (check pattern exists)
 [[custom_handlers]]
@@ -496,14 +496,14 @@ name = "killall"
 unknown_action = "ask"
 
 [[programs.ask]]
-reason = "Terminating process(es)"
+reason = "Signals ALL processes with the given name. Verify which processes match (different from `kill <pid>`); `-9` cannot be caught."
 
 [[programs]]
 name = "xkill"
 unknown_action = "ask"
 
 [[programs.ask]]
-reason = "Terminating process(es)"
+reason = "Click-to-kill X11 utility. Sends a KILL signal to whatever window is clicked next."
 
 # =============================================================================
 # MAKE
@@ -586,7 +586,7 @@ subcommand = "--help"
 flags_any = ["-N", "--view-only"]
 
 [[programs.ask]]
-reason = "Configuring build"
+reason = "Runs CMake to configure or build. Generates build files and may invoke the underlying compiler."
 
 # Ninja - fast build system
 [[programs]]
@@ -598,7 +598,7 @@ subcommand = "-t"
 
 [[programs.ask]]
 subcommand = "clean"
-reason = "Cleaning build"
+reason = "Removes Ninja build artifacts in the current build directory."
 
 # Just - command runner
 [[programs]]
@@ -660,11 +660,11 @@ subcommand = "clean"
 
 [[programs.ask]]
 subcommand = "publish"
-reason = "Publishing artifacts"
+reason = "Publishes Gradle artifacts to a configured repository. Network operation; affects downstream consumers."
 
 [[programs.ask]]
 subcommand = "uploadArchives"
-reason = "Uploading archives"
+reason = "Uploads built archives to a configured Gradle repository."
 
 # Maven
 [[programs]]
@@ -701,11 +701,11 @@ subcommand = "dependency:analyze"
 
 [[programs.ask]]
 subcommand = "install"
-reason = "Installing to local repo"
+reason = "Installs the built Maven artifact into the local repository (`~/.m2/repository`)."
 
 [[programs.ask]]
 subcommand = "deploy"
-reason = "Deploying artifacts"
+reason = "Deploys Maven artifacts to a remote repository. Network operation; affects downstream consumers."
 
 # Bazel
 [[programs]]
@@ -742,11 +742,11 @@ subcommand = "help"
 
 [[programs.ask]]
 subcommand = "clean"
-reason = "Cleaning build"
+reason = "Removes Bazel build outputs. `--expunge` also deletes the workspace's external dependencies."
 
 [[programs.ask]]
 subcommand = "run"
-reason = "Running target"
+reason = "Builds and executes a Bazel target. The target runs as the current user with full filesystem access."
 
 # Meson - build system
 [[programs]]
@@ -767,15 +767,15 @@ subcommand = "--help"
 
 [[programs.ask]]
 subcommand = "setup"
-reason = "Setting up build"
+reason = "Configures a Meson build directory. Reads `meson.build` and writes build system files."
 
 [[programs.ask]]
 subcommand = "compile"
-reason = "Compiling project"
+reason = "Compiles a Meson project. Invokes the underlying build backend (ninja by default)."
 
 [[programs.ask]]
 subcommand = "install"
-reason = "Installing"
+reason = "Installs Meson build outputs to the configured prefix. May require root depending on prefix."
 
 # Ansible
 [[programs]]
@@ -802,7 +802,7 @@ subcommand = "--syntax-check"
 flags_any = ["--check", "-C", "--diff"]
 
 [[programs.ask]]
-reason = "Running playbook"
+reason = "Runs an Ansible playbook against the inventory. Applies configuration changes to target hosts."
 
 # Vagrant
 [[programs]]
@@ -829,27 +829,27 @@ subcommand = "--help"
 
 [[programs.ask]]
 subcommand = "up"
-reason = "Starting VM"
+reason = "Creates and boots the Vagrant VM defined in the local `Vagrantfile`."
 
 [[programs.ask]]
 subcommand = "halt"
-reason = "Stopping VM"
+reason = "Gracefully shuts down the running Vagrant VM."
 
 [[programs.ask]]
 subcommand = "destroy"
-reason = "Destroying VM"
+reason = "Deletes the Vagrant VM and its disk image. Cannot be undone; data inside the VM is lost."
 
 [[programs.ask]]
 subcommand = "provision"
-reason = "Provisioning VM"
+reason = "Re-runs Vagrant provisioners against the running VM. Can apply configuration changes."
 
 [[programs.ask]]
 subcommand = "ssh"
-reason = "SSH into VM"
+reason = "Opens an SSH session into the Vagrant VM. Commands inside bypass local tool-gates."
 
 [[programs.ask]]
 subcommand = "reload"
-reason = "Reloading VM"
+reason = "Halts the Vagrant VM and brings it back up, re-applying Vagrantfile changes."
 
 # Hyperfine - benchmarking tool
 [[programs]]
@@ -863,7 +863,7 @@ subcommand = "--version"
 subcommand = "--help"
 
 [[programs.ask]]
-reason = "Running benchmarks"
+reason = "Runs the given command repeatedly to measure timing. Executes the wrapped command on each iteration."
 
 # =============================================================================
 # SUDO / DOAS
@@ -953,63 +953,63 @@ subcommand = "--help"
 # Write commands
 [[programs.ask]]
 subcommand = "start"
-reason = "Starting service"
+reason = "Starts a systemd unit. Side effects depend on the unit type (service, socket, timer, etc.)."
 
 [[programs.ask]]
 subcommand = "stop"
-reason = "Stopping service"
+reason = "Stops a running systemd unit. Active connections/jobs handled by the unit may be cut off."
 
 [[programs.ask]]
 subcommand = "restart"
-reason = "Restarting service"
+reason = "Stops and starts a systemd unit. Brief downtime; in-flight work in the unit may be lost."
 
 [[programs.ask]]
 subcommand = "reload"
-reason = "Reloading service"
+reason = "Asks a systemd unit to reload its configuration without restarting. Unit must support SIGHUP-style reload."
 
 [[programs.ask]]
 subcommand = "enable"
-reason = "Enabling service"
+reason = "Enables a systemd unit to start automatically at boot. Creates symlinks under `/etc/systemd/system/`."
 
 [[programs.ask]]
 subcommand = "disable"
-reason = "Disabling service"
+reason = "Removes a systemd unit's autostart symlinks. Does not stop a currently running instance."
 
 [[programs.ask]]
 subcommand = "mask"
-reason = "Masking service"
+reason = "Symlinks a systemd unit to `/dev/null` so it cannot be started, even as a dependency."
 
 [[programs.ask]]
 subcommand = "unmask"
-reason = "Unmasking service"
+reason = "Removes a systemd mask, allowing the unit to be started again."
 
 [[programs.ask]]
 subcommand = "kill"
-reason = "Killing service"
+reason = "Sends a signal to processes of a systemd unit (default SIGTERM). `-s SIGKILL` cannot be caught."
 
 [[programs.ask]]
 subcommand = "reset-failed"
-reason = "Resetting failed state"
+reason = "Clears the failed state of a systemd unit so it can be restarted."
 
 [[programs.ask]]
 subcommand = "daemon-reload"
-reason = "Reloading daemon"
+reason = "Reloads systemd unit files. Required after editing a unit; doesn't restart running services on its own."
 
 [[programs.ask]]
 subcommand = "daemon-reexec"
-reason = "Re-executing daemon"
+reason = "Re-executes systemd itself. Drops PID 1 in-place and reloads its state; rarely needed."
 
 [[programs.ask]]
 subcommand = "set-default"
-reason = "Setting default target"
+reason = "Changes the default systemd target the system boots into (e.g. `graphical.target` vs `multi-user.target`)."
 
 [[programs.ask]]
 subcommand = "isolate"
-reason = "Isolating target"
+reason = "Switches systemd to the target unit and stops everything not required by it. Can take down unrelated services unexpectedly."
 
 [[programs.ask]]
 subcommand = "edit"
-reason = "Editing unit"
+reason = "Opens a systemd unit override in `$EDITOR`. Interactive; may block in agent contexts."
 
 # Note: Custom handler checks read-only operations before falling back to declarative
 [[custom_handlers]]
@@ -1045,7 +1045,7 @@ unknown_action = "ask"
 if_flags_any = ["-l"]
 
 [[programs.ask]]
-reason = "Modifying scheduled tasks"
+reason = "Modifies cron jobs. Scheduled jobs persist across logout/reboot and run as the user; verify the schedule and command body."
 
 # Note: Custom handler checks -l flag
 [[custom_handlers]]
@@ -1113,7 +1113,7 @@ subcommand = "changelog"
 
 [[programs.ask]]
 subcommand = "download"
-reason = "Downloading package files (writes to local filesystem)"
+reason = "Downloads `.deb` package files to the current directory without installing."
 
 [[programs.allow]]
 subcommand = "--version"
@@ -1134,11 +1134,11 @@ reason = "Installing packages"
 
 [[programs.ask]]
 subcommand = "remove"
-reason = "Removing packages"
+reason = "Removes packages but keeps their config files. Use `purge` to also remove configs."
 
 [[programs.ask]]
 subcommand = "purge"
-reason = "Purging packages"
+reason = "Removes packages and their config files. Stronger than `remove`."
 
 [[programs.ask]]
 subcommand = "update"
@@ -1146,43 +1146,43 @@ reason = "Updating package lists"
 
 [[programs.ask]]
 subcommand = "upgrade"
-reason = "Upgrading packages"
+reason = "Upgrades installed packages to newer versions from the configured sources."
 
 [[programs.ask]]
 subcommand = "full-upgrade"
-reason = "Full system upgrade"
+reason = "Upgrades packages and can remove others to resolve dependencies. Heavier than plain `upgrade`."
 
 [[programs.ask]]
 subcommand = "dist-upgrade"
-reason = "Distribution upgrade"
+reason = "Distribution upgrade can install/remove many packages, including kernel and base packages. Review proposed changes before approving."
 
 [[programs.ask]]
 subcommand = "autoremove"
-reason = "Removing unused packages"
+reason = "Removes packages installed as dependencies that are no longer needed."
 
 [[programs.ask]]
 subcommand = "autoclean"
-reason = "Cleaning cache"
+reason = "Removes obsolete `.deb` files from the apt download cache."
 
 [[programs.ask]]
 subcommand = "clean"
-reason = "Cleaning cache"
+reason = "Removes all cached `.deb` files from the apt download cache."
 
 [[programs.ask]]
 subcommand = "build-dep"
-reason = "Installing build dependencies"
+reason = "Installs the build dependencies of the named source package."
 
 [[programs.ask]]
 subcommand = "source"
-reason = "Downloading source"
+reason = "Downloads the source `.tar.*` and `.dsc` for a package into the current directory."
 
 [[programs.ask]]
 subcommand = "edit-sources"
-reason = "Editing sources"
+reason = "Opens `/etc/apt/sources.list` in `$EDITOR`. Interactive; affects which repositories apt trusts."
 
 [[programs.ask]]
 subcommand = "satisfy"
-reason = "Satisfying dependencies"
+reason = "Installs/removes packages as needed to satisfy a given dependency expression."
 
 [[programs]]
 name = "apt-cache"
@@ -1265,55 +1265,55 @@ reason = "Installing packages"
 
 [[programs.ask]]
 subcommand = "remove"
-reason = "Removing packages"
+reason = "Removes packages from the system."
 
 [[programs.ask]]
 subcommand = "erase"
-reason = "Removing packages"
+reason = "Removes packages from the system (alias for `remove`)."
 
 [[programs.ask]]
 subcommand = "update"
-reason = "Updating packages"
+reason = "Updates installed packages to the latest version available in the enabled repos."
 
 [[programs.ask]]
 subcommand = "upgrade"
-reason = "Upgrading packages"
+reason = "Upgrades installed packages (alias for `update`)."
 
 [[programs.ask]]
 subcommand = "downgrade"
-reason = "Downgrading packages"
+reason = "Replaces installed packages with an older available version. May break dependencies."
 
 [[programs.ask]]
 subcommand = "reinstall"
-reason = "Reinstalling packages"
+reason = "Reinstalls already-installed packages, restoring overwritten files from the package payload."
 
 [[programs.ask]]
 subcommand = "autoremove"
-reason = "Removing unused packages"
+reason = "Removes packages installed as dependencies that are no longer needed."
 
 [[programs.ask]]
 subcommand = "clean"
-reason = "Cleaning cache"
+reason = "Cleans cached package data and metadata from the dnf cache."
 
 [[programs.ask]]
 subcommand = "makecache"
-reason = "Building cache"
+reason = "Downloads and caches repository metadata for enabled repos."
 
 [[programs.ask]]
 subcommand = "group"
-reason = "Group operation"
+reason = "Installs, removes, or queries a dnf package group."
 
 [[programs.ask]]
 subcommand = "module"
-reason = "Module operation"
+reason = "Installs, removes, enables, or queries dnf modules (streams of related packages)."
 
 [[programs.ask]]
 subcommand = "swap"
-reason = "Swapping packages"
+reason = "Atomically removes one package and installs another in its place."
 
 [[programs.ask]]
 subcommand = "distro-sync"
-reason = "Syncing distribution"
+reason = "Synchronizes packages with the distribution version (can downgrade/upgrade across the repo set). Review changes before approving."
 
 # Note: Custom handler checks read-only subcommands before falling back to declarative
 [[custom_handlers]]
@@ -1466,59 +1466,59 @@ reason = "Installing packages"
 
 [[programs.ask]]
 subcommand = "uninstall"
-reason = "Uninstalling packages"
+reason = "Removes installed Homebrew packages from the prefix."
 
 [[programs.ask]]
 subcommand = "remove"
-reason = "Removing packages"
+reason = "Removes installed Homebrew packages (alias for `uninstall`)."
 
 [[programs.ask]]
 subcommand = "upgrade"
-reason = "Upgrading packages"
+reason = "Upgrades installed Homebrew formulae/casks to the latest available versions."
 
 [[programs.ask]]
 subcommand = "update"
-reason = "Updating Homebrew"
+reason = "Updates Homebrew's tap metadata. Does not upgrade installed packages."
 
 [[programs.ask]]
 subcommand = "reinstall"
-reason = "Reinstalling packages"
+reason = "Removes and re-installs a Homebrew formula or cask."
 
 [[programs.ask]]
 subcommand = "link"
-reason = "Linking packages"
+reason = "Symlinks a formula's files into the Homebrew prefix."
 
 [[programs.ask]]
 subcommand = "unlink"
-reason = "Unlinking packages"
+reason = "Removes a formula's symlinks from the Homebrew prefix without uninstalling."
 
 [[programs.ask]]
 subcommand = "pin"
-reason = "Pinning packages"
+reason = "Prevents a formula from being upgraded by `brew upgrade`."
 
 [[programs.ask]]
 subcommand = "unpin"
-reason = "Unpinning packages"
+reason = "Removes a pin so a formula can be upgraded again."
 
 [[programs.ask]]
 subcommand = "tap"
-reason = "Tapping repository"
+reason = "Adds a third-party Homebrew tap to the list of trusted sources."
 
 [[programs.ask]]
 subcommand = "untap"
-reason = "Untapping repository"
+reason = "Removes a Homebrew tap and its formulae from the local list of sources."
 
 [[programs.ask]]
 subcommand = "cleanup"
-reason = "Cleaning up"
+reason = "Removes old versions of installed formulae and the download cache."
 
 [[programs.ask]]
 subcommand = "autoremove"
-reason = "Removing unused"
+reason = "Removes Homebrew formulae installed as dependencies that are no longer needed."
 
 [[programs.ask]]
 subcommand = "services"
-reason = "Managing services"
+reason = "Manages Homebrew background services (start/stop/run/list)."
 
 # Note: Custom handler checks read-only subcommands before falling back to declarative
 [[custom_handlers]]
@@ -1602,63 +1602,63 @@ reason = "Installing packages"
 
 [[programs.ask]]
 subcommand = "in"
-reason = "Installing packages"
+reason = "Installing packages (alias for `install`)."
 
 [[programs.ask]]
 subcommand = "remove"
-reason = "Removing packages"
+reason = "Removes installed zypper packages."
 
 [[programs.ask]]
 subcommand = "rm"
-reason = "Removing packages"
+reason = "Removes installed zypper packages (alias for `remove`)."
 
 [[programs.ask]]
 subcommand = "update"
-reason = "Updating packages"
+reason = "Updates installed zypper packages to newer versions."
 
 [[programs.ask]]
 subcommand = "up"
-reason = "Updating packages"
+reason = "Updates installed zypper packages (alias for `update`)."
 
 [[programs.ask]]
 subcommand = "dist-upgrade"
-reason = "Distribution upgrade"
+reason = "Distribution upgrade can install/remove many packages, including kernel and base packages. Review proposed changes before approving."
 
 [[programs.ask]]
 subcommand = "dup"
-reason = "Distribution upgrade"
+reason = "Distribution upgrade (alias for `dist-upgrade`)."
 
 [[programs.ask]]
 subcommand = "patch"
-reason = "Installing patches"
+reason = "Installs official patches/errata for installed packages."
 
 [[programs.ask]]
 subcommand = "addrepo"
-reason = "Adding repository"
+reason = "Adds a new zypper repository to the trusted list."
 
 [[programs.ask]]
 subcommand = "ar"
-reason = "Adding repository"
+reason = "Adds a new zypper repository (alias for `addrepo`)."
 
 [[programs.ask]]
 subcommand = "removerepo"
-reason = "Removing repository"
+reason = "Removes a configured zypper repository."
 
 [[programs.ask]]
 subcommand = "rr"
-reason = "Removing repository"
+reason = "Removes a configured zypper repository (alias for `removerepo`)."
 
 [[programs.ask]]
 subcommand = "refresh"
-reason = "Refreshing repositories"
+reason = "Refreshes zypper repository metadata."
 
 [[programs.ask]]
 subcommand = "ref"
-reason = "Refreshing repositories"
+reason = "Refreshes zypper repository metadata (alias for `refresh`)."
 
 [[programs.ask]]
 subcommand = "clean"
-reason = "Cleaning cache"
+reason = "Cleans cached zypper package data and metadata."
 
 # =============================================================================
 # APK (Alpine)
@@ -1705,31 +1705,31 @@ subcommand = "-h"
 # Write
 [[programs.ask]]
 subcommand = "add"
-reason = "Installing packages"
+reason = "Installs apk packages."
 
 [[programs.ask]]
 subcommand = "del"
-reason = "Removing packages"
+reason = "Removes installed apk packages."
 
 [[programs.ask]]
 subcommand = "update"
-reason = "Updating index"
+reason = "Refreshes the apk package index from configured repositories."
 
 [[programs.ask]]
 subcommand = "upgrade"
-reason = "Upgrading packages"
+reason = "Upgrades installed apk packages to newer versions."
 
 [[programs.ask]]
 subcommand = "fix"
-reason = "Fixing packages"
+reason = "Repairs an installed apk package whose files have been altered or removed."
 
 [[programs.ask]]
 subcommand = "cache"
-reason = "Cache operation"
+reason = "Manages the apk package cache (clean, sync, download)."
 
 [[programs.ask]]
 subcommand = "fetch"
-reason = "Fetching packages"
+reason = "Downloads apk packages to the current directory without installing."
 
 # =============================================================================
 # NIX / NIX-ENV / NIX-SHELL
@@ -1779,35 +1779,35 @@ subcommand = "--help"
 # Write
 [[programs.ask]]
 subcommand = "build"
-reason = "Building derivation"
+reason = "Builds a Nix derivation. May download from substituters or compile locally."
 
 [[programs.ask]]
 subcommand = "develop"
-reason = "Entering dev shell"
+reason = "Enters a Nix development shell with the package's build dependencies in scope."
 
 [[programs.ask]]
 subcommand = "run"
-reason = "Running package"
+reason = "Builds and runs the given Nix package. The package executes as the current user."
 
 [[programs.ask]]
 subcommand = "shell"
-reason = "Entering shell"
+reason = "Opens an interactive shell with the given Nix packages available."
 
 [[programs.ask]]
 subcommand = "profile"
-reason = "Profile operation"
+reason = "Installs, removes, or upgrades packages in a Nix user profile."
 
 [[programs.ask]]
 subcommand = "upgrade-nix"
-reason = "Upgrading Nix"
+reason = "Upgrades the Nix package manager itself to the latest version."
 
 [[programs.ask]]
 subcommand = "copy"
-reason = "Copying paths"
+reason = "Copies Nix store paths between stores (local, remote, or s3). Network operation."
 
 [[programs.ask]]
 subcommand = "collect-garbage"
-reason = "Collecting garbage"
+reason = "Deletes unreachable paths from the Nix store. Frees disk; cannot be undone without rebuilding."
 
 [[programs]]
 name = "nix-env"
@@ -1823,34 +1823,34 @@ subcommand = "--query"
 # Write
 [[programs.ask]]
 subcommand = "-i"
-reason = "Installing packages"
+reason = "Installs a Nix package into the current user profile."
 
 [[programs.ask]]
 subcommand = "--install"
-reason = "Installing packages"
+reason = "Installs a Nix package into the current user profile."
 
 [[programs.ask]]
 subcommand = "-e"
-reason = "Uninstalling packages"
+reason = "Uninstalls a Nix package from the current user profile."
 
 [[programs.ask]]
 subcommand = "--uninstall"
-reason = "Uninstalling packages"
+reason = "Uninstalls a Nix package from the current user profile."
 
 [[programs.ask]]
 subcommand = "-u"
-reason = "Upgrading packages"
+reason = "Upgrades packages in the current Nix user profile."
 
 [[programs.ask]]
 subcommand = "--upgrade"
-reason = "Upgrading packages"
+reason = "Upgrades packages in the current Nix user profile."
 
 [[programs]]
 name = "nix-shell"
 unknown_action = "ask"
 
 [[programs.ask]]
-reason = "Entering Nix shell"
+reason = "Opens a shell with the given Nix expression's dependencies available. May download or build packages."
 
 # =============================================================================
 # FLATPAK / SNAP
@@ -1889,39 +1889,39 @@ subcommand = "--help"
 # Write
 [[programs.ask]]
 subcommand = "install"
-reason = "Installing"
+reason = "Installs a Flatpak/Snap application from a remote."
 
 [[programs.ask]]
 subcommand = "uninstall"
-reason = "Uninstalling"
+reason = "Removes an installed Flatpak/Snap application."
 
 [[programs.ask]]
 subcommand = "remove"
-reason = "Removing"
+reason = "Removes an installed Flatpak/Snap application (alias for `uninstall`)."
 
 [[programs.ask]]
 subcommand = "update"
-reason = "Updating"
+reason = "Updates installed Flatpak/Snap applications."
 
 [[programs.ask]]
 subcommand = "upgrade"
-reason = "Upgrading"
+reason = "Upgrades installed Flatpak/Snap applications (alias for `update`)."
 
 [[programs.ask]]
 subcommand = "run"
-reason = "Running"
+reason = "Launches an installed Flatpak/Snap application."
 
 [[programs.ask]]
 subcommand = "remote-add"
-reason = "Adding remote"
+reason = "Adds a new Flatpak remote to the trusted list. Future installs can pull from it."
 
 [[programs.ask]]
 subcommand = "remote-delete"
-reason = "Removing remote"
+reason = "Removes a configured Flatpak remote."
 
 [[programs.ask]]
 subcommand = "repair"
-reason = "Repairing"
+reason = "Repairs the local Flatpak installation. May re-download corrupted objects."
 
 # =============================================================================
 # DPKG (Debian package manager - query flags are read-only)
@@ -1946,19 +1946,19 @@ if_flags_any = ["--version", "--help", "-?"]
 
 # Mutating operations
 [[programs.ask]]
-reason = "Installing packages"
+reason = "Installs `.deb` package files directly via dpkg. Does not resolve dependencies; prefer `apt install` when possible."
 if_flags_any = ["-i", "--install"]
 
 [[programs.ask]]
-reason = "Removing packages"
+reason = "Removes or purges installed packages via dpkg. `--purge` also removes config files."
 if_flags_any = ["-r", "--remove", "-P", "--purge"]
 
 [[programs.ask]]
-reason = "Configuring packages"
+reason = "Configures or unpacks `.deb` packages. Used in low-level package management; can leave the system in a partially-configured state if interrupted."
 if_flags_any = ["--configure", "--unpack"]
 
 [[programs.ask]]
-reason = "Modifying package state"
+reason = "Modifies dpkg package state (selections or supported architectures). Affects what apt/dpkg will install or upgrade."
 if_flags_any = ["--set-selections", "--clear-selections", "--add-architecture", "--remove-architecture"]
 
 # =============================================================================
@@ -1994,23 +1994,23 @@ subcommand = "--help"
 # Mutating subcommands
 [[programs.ask]]
 subcommand = "manual"
-reason = "Marking packages as manually installed"
+reason = "Marks packages as manually installed so apt's autoremove will not remove them."
 
 [[programs.ask]]
 subcommand = "auto"
-reason = "Marking packages as automatically installed"
+reason = "Marks packages as automatically installed so apt's autoremove can remove them when unused."
 
 [[programs.ask]]
 subcommand = "hold"
-reason = "Holding package version"
+reason = "Pins a package at its current version. apt upgrade/install will refuse to change it."
 
 [[programs.ask]]
 subcommand = "unhold"
-reason = "Removing package hold"
+reason = "Releases a hold so the package can be upgraded again."
 
 [[programs.ask]]
 subcommand = "minimize-manual"
-reason = "Minimizing manually installed packages"
+reason = "Marks as auto any manually-installed packages that are dependencies of other manually-installed packages."
 
 # =============================================================================
 # PACTL (PulseAudio control - list/info/stat are read-only)
@@ -2060,39 +2060,39 @@ subcommand = "--help"
 # Mutating subcommands
 [[programs.ask]]
 subcommand = "set-sink-volume"
-reason = "Changing audio volume"
+reason = "Changes the volume of a PulseAudio output sink."
 
 [[programs.ask]]
 subcommand = "set-source-volume"
-reason = "Changing audio volume"
+reason = "Changes the volume of a PulseAudio input source."
 
 [[programs.ask]]
 subcommand = "set-sink-mute"
-reason = "Changing mute state"
+reason = "Mutes or unmutes a PulseAudio output sink."
 
 [[programs.ask]]
 subcommand = "set-source-mute"
-reason = "Changing mute state"
+reason = "Mutes or unmutes a PulseAudio input source."
 
 [[programs.ask]]
 subcommand = "set-default-sink"
-reason = "Changing default audio output"
+reason = "Changes which PulseAudio sink is the default for new streams."
 
 [[programs.ask]]
 subcommand = "set-default-source"
-reason = "Changing default audio input"
+reason = "Changes which PulseAudio source is the default for new captures."
 
 [[programs.ask]]
 subcommand = "load-module"
-reason = "Loading PulseAudio module"
+reason = "Loads a PulseAudio module into the running daemon. Modules can route, filter, or expose audio."
 
 [[programs.ask]]
 subcommand = "unload-module"
-reason = "Unloading PulseAudio module"
+reason = "Unloads a PulseAudio module from the running daemon."
 
 [[programs.ask]]
 subcommand = "exit"
-reason = "Terminating PulseAudio daemon"
+reason = "Terminates the running PulseAudio daemon. Active audio streams will drop."
 
 # =============================================================================
 # OPENSSL (crypto toolkit - inspection safe, key generation asks)
@@ -2109,7 +2109,7 @@ subcommand = "version"
 # x509 with -req is a signing operation (writes files)
 [[programs.ask]]
 subcommand = "x509"
-reason = "Signing certificate"
+reason = "Signs a certificate request (CSR) to produce an X.509 certificate. Writes the resulting cert; affects trust if installed."
 if_flags_any = ["-req"]
 
 # x509 without -req is read-only inspection
@@ -2122,7 +2122,7 @@ subcommand = "s_client"
 
 [[programs.ask]]
 subcommand = "s_server"
-reason = "Starting TLS server"
+reason = "Starts a debug TLS server bound to a local port. Accepts inbound connections until terminated."
 
 [[programs.allow]]
 subcommand = "dgst"
@@ -2160,7 +2160,7 @@ subcommand = "prime"
 # rand with -out writes to file
 [[programs.ask]]
 subcommand = "rand"
-reason = "Writing random data to file"
+reason = "Writes the requested number of random bytes to the file given by `-out`."
 if_flags_any = ["-out"]
 
 # rand without -out goes to stdout
@@ -2171,47 +2171,47 @@ unless_flags = ["-out"]
 # Key/cert generation
 [[programs.ask]]
 subcommand = "genrsa"
-reason = "Generating RSA key"
+reason = "Generates an RSA private key. Writes a private-key file; protect with passphrase and correct permissions."
 
 [[programs.ask]]
 subcommand = "genpkey"
-reason = "Generating private key"
+reason = "Generates a private key (RSA/EC/Ed25519/etc.). Writes a private-key file; protect with passphrase and correct permissions."
 
 [[programs.ask]]
 subcommand = "req"
-reason = "Creating certificate request"
+reason = "Creates a certificate signing request (CSR) or self-signed cert. Writes to disk."
 
 [[programs.ask]]
 subcommand = "ca"
-reason = "Certificate authority operation"
+reason = "Acts as a minimal certificate authority: signs CSRs, revokes certs, manages the CA database."
 
 [[programs.ask]]
 subcommand = "pkcs12"
-reason = "PKCS12 operation"
+reason = "Packs or unpacks a PKCS#12 bundle (cert + private key). Writes key material to disk."
 
 [[programs.ask]]
 subcommand = "enc"
-reason = "Encrypting/decrypting"
+reason = "Encrypts or decrypts a file with a symmetric cipher. Default cipher is weak; prefer `-aes-256-cbc` or modern alternatives."
 
 [[programs.ask]]
 subcommand = "smime"
-reason = "S/MIME operation"
+reason = "S/MIME sign, verify, encrypt, or decrypt of an email message or file."
 
 [[programs.ask]]
 subcommand = "cms"
-reason = "CMS operation"
+reason = "Cryptographic Message Syntax operation: sign, verify, encrypt, or decrypt a CMS structure."
 
 [[programs.ask]]
 subcommand = "rsautl"
-reason = "RSA operation"
+reason = "RSA primitive operation: sign, verify, encrypt, or decrypt with an RSA key. Legacy; prefer `pkeyutl`."
 
 [[programs.ask]]
 subcommand = "pkeyutl"
-reason = "Key operation"
+reason = "Generic public-key operation: sign, verify, encrypt, decrypt, or derive shared secret."
 
 [[programs.ask]]
 subcommand = "ecparam"
-reason = "Generating EC parameters"
+reason = "Generates or inspects elliptic-curve parameters. With `-genkey`, also writes an EC private key."
 
 # =============================================================================
 # GPG / GPG2 (GNU Privacy Guard)
@@ -2243,35 +2243,35 @@ if_flags_any = ["--help", "-h"]
 
 # Key operations (ask)
 [[programs.ask]]
-reason = "Signing data"
+reason = "Signs data with a GPG private key. `--clearsign` keeps the message readable; `--detach-sign` writes a separate `.sig` file."
 if_flags_any = ["--sign", "-s", "--clearsign", "--detach-sign", "-b"]
 
 [[programs.ask]]
-reason = "Encrypting data"
+reason = "Encrypts data with a GPG recipient key or a passphrase (`--symmetric`)."
 if_flags_any = ["--encrypt", "-e", "--symmetric", "-c"]
 
 [[programs.ask]]
-reason = "Decrypting data"
+reason = "Decrypts a GPG-encrypted file using the matching private key or passphrase."
 if_flags_any = ["--decrypt", "-d"]
 
 [[programs.ask]]
-reason = "Importing key"
+reason = "Imports a GPG public or private key into the local keyring. The imported key becomes trusted for signature verification."
 if_flags_any = ["--import"]
 
 [[programs.ask]]
-reason = "Exporting key"
+reason = "Exports a GPG key. `--export-secret-keys` exports private key material; protect the output file."
 if_flags_any = ["--export", "--export-secret-keys"]
 
 [[programs.ask]]
-reason = "Deleting key"
+reason = "Deletes a key from the local GPG keyring. `--delete-secret-key` removes private material; cannot be undone without a backup."
 if_flags_any = ["--delete-key", "--delete-secret-key", "--delete-secret-and-public-key"]
 
 [[programs.ask]]
-reason = "Generating key"
+reason = "Generates a new GPG keypair. Writes private material to the keyring; choose a passphrase strong enough for the use case."
 if_flags_any = ["--gen-key", "--generate-key", "--full-gen-key", "--full-generate-key", "--quick-gen-key"]
 
 [[programs.ask]]
-reason = "Editing key"
+reason = "Opens an interactive GPG key editor. May block in agent contexts; modifies the local keyring."
 if_flags_any = ["--edit-key"]
 
 # =============================================================================
@@ -2294,11 +2294,11 @@ if_flags_any = ["-B"]
 
 # Mutation operations
 [[programs.ask]]
-reason = "Removing host key"
+reason = "Removes a host from the `known_hosts` file. Next connection will re-prompt for host key verification."
 if_flags_any = ["-R"]
 
 [[programs.ask]]
-reason = "Generating/modifying SSH key"
+reason = "Generates or modifies an SSH key. Writes a private-key file; protect the output path and passphrase."
 
 # =============================================================================
 # AGE (modern encryption tool)
@@ -2313,4 +2313,4 @@ unknown_action = "ask"
 if_flags_any = ["--version"]
 
 [[programs.ask]]
-reason = "Encrypting/decrypting"
+reason = "Encrypts or decrypts a file with age. Use `-i <key>` for identity files; output replaces or writes alongside the input."

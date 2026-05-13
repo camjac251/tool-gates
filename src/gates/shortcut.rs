@@ -282,7 +282,13 @@ mod tests {
     fn test_workspace_unset_asks() {
         let result = check_shortcut(&cmd("short", &["workspace", "--unset", "myworkspace"]));
         assert_eq!(result.decision, Decision::Ask);
-        assert!(result.reason.as_ref().unwrap().contains("Removing"));
+        assert!(
+            result
+                .reason
+                .as_ref()
+                .unwrap()
+                .contains("Removes a saved workspace")
+        );
     }
 
     // ========================================================================

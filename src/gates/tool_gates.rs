@@ -79,21 +79,33 @@ mod tests {
     fn test_rules_remove_asks() {
         let result = check_tool_gates(&cmd("tool-gates", &["rules", "remove", "npm:*"]));
         assert_eq!(result.decision, Decision::Ask);
-        assert!(result.reason.as_ref().unwrap().contains("Removing"));
+        assert!(
+            result
+                .reason
+                .as_ref()
+                .unwrap()
+                .contains("Removes a permission rule")
+        );
     }
 
     #[test]
     fn test_pending_clear_asks() {
         let result = check_tool_gates(&cmd("tool-gates", &["pending", "clear"]));
         assert_eq!(result.decision, Decision::Ask);
-        assert!(result.reason.as_ref().unwrap().contains("Clearing"));
+        assert!(result.reason.as_ref().unwrap().contains("Empties"));
     }
 
     #[test]
     fn test_hooks_add_asks() {
         let result = check_tool_gates(&cmd("tool-gates", &["hooks", "add", "-s", "user"]));
         assert_eq!(result.decision, Decision::Ask);
-        assert!(result.reason.as_ref().unwrap().contains("Installing"));
+        assert!(
+            result
+                .reason
+                .as_ref()
+                .unwrap()
+                .contains("Writes tool-gates hook entries")
+        );
     }
 
     #[test]
@@ -107,7 +119,7 @@ mod tests {
     fn test_refresh_tools_asks() {
         let result = check_tool_gates(&cmd("tool-gates", &["--refresh-tools"]));
         assert_eq!(result.decision, Decision::Ask);
-        assert!(result.reason.as_ref().unwrap().contains("Refreshing"));
+        assert!(result.reason.as_ref().unwrap().contains("Re-scans"));
     }
 
     // === Unknown commands (ask) ===

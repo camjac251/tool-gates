@@ -75,108 +75,108 @@ action_prefix = "filter"
 # Write action prefixes - require approval
 [[programs.ask]]
 action_prefix = "create"
-reason = "Creating resources"
+reason = "AWS create operation: provisions a new resource in the account. Verify region, profile, and resource type; provisioning may incur cost."
 
 [[programs.ask]]
 action_prefix = "delete"
-reason = "Deleting resources"
+reason = "AWS delete operation. Verify region, profile, and resource ID before approving; most deletions cannot be reversed."
 
 [[programs.ask]]
 action_prefix = "put"
-reason = "Writing resources"
+reason = "AWS put operation: writes or overwrites a resource (object, item, policy, parameter). Existing values are replaced; previous content may be lost."
 
 [[programs.ask]]
 action_prefix = "update"
-reason = "Updating resources"
+reason = "AWS update operation: changes the configuration of an existing resource. Effect is immediate; review the diff first."
 
 [[programs.ask]]
 action_prefix = "modify"
-reason = "Modifying resources"
+reason = "AWS modify operation: changes attributes of a running resource (instance type, security group, parameter). May restart or interrupt the resource."
 
 [[programs.ask]]
 action_prefix = "remove"
-reason = "Removing resources"
+reason = "AWS remove operation: removes attached items (tags, permissions, members). Effect is immediate."
 
 [[programs.ask]]
 action_prefix = "run"
-reason = "Running resources"
+reason = "AWS run operation: launches resources such as EC2 instances or task definitions. Billing starts when they reach running state."
 
 [[programs.ask]]
 action_prefix = "start"
-reason = "Starting resources"
+reason = "AWS start operation: starts a stopped resource (instance, DB, pipeline). Billing typically resumes once running."
 
 [[programs.ask]]
 action_prefix = "stop"
-reason = "Stopping resources"
+reason = "AWS stop operation: halts a running resource. Connected clients drop; storage bills usually continue."
 
 [[programs.ask]]
 action_prefix = "terminate"
-reason = "Terminating resources"
+reason = "AWS terminate operation: permanently destroys the resource (instance, workflow execution). Attached ephemeral storage is lost."
 
 [[programs.ask]]
 action_prefix = "reboot"
-reason = "Rebooting resources"
+reason = "AWS reboot operation: restarts a running resource (instance, cache cluster, DB). Causes downtime during the reboot window."
 
 [[programs.ask]]
 action_prefix = "attach"
-reason = "Attaching resources"
+reason = "AWS attach operation: connects one resource to another (volume to instance, policy to role, gateway to VPC). Live traffic/state may shift."
 
 [[programs.ask]]
 action_prefix = "detach"
-reason = "Detaching resources"
+reason = "AWS detach operation: disconnects an attached resource (volume, policy, network interface). The detached side loses that access."
 
 [[programs.ask]]
 action_prefix = "associate"
-reason = "Associating resources"
+reason = "AWS associate operation: links resources (route table to subnet, address to instance, IAM identity to provider). May reroute live traffic."
 
 [[programs.ask]]
 action_prefix = "disassociate"
-reason = "Disassociating resources"
+reason = "AWS disassociate operation: unlinks resources (address from instance, route table from subnet). May break in-flight traffic."
 
 [[programs.ask]]
 action_prefix = "enable"
-reason = "Enabling resources"
+reason = "AWS enable operation: turns on a feature or service (logging, MFA, region, security control). Effect is immediate."
 
 [[programs.ask]]
 action_prefix = "disable"
-reason = "Disabling resources"
+reason = "AWS disable operation: turns off a feature or service (logging, MFA, security control). Coverage drops immediately."
 
 [[programs.ask]]
 action_prefix = "register"
-reason = "Registering resources"
+reason = "AWS register operation: registers a target with a service (task definition, target with load balancer, domain). Becomes live to that service."
 
 [[programs.ask]]
 action_prefix = "deregister"
-reason = "Deregistering resources"
+reason = "AWS deregister operation: removes a registered target (from load balancer, task definition). The target stops receiving traffic."
 
 [[programs.ask]]
 action_prefix = "invoke"
-reason = "Invoking resources"
+reason = "AWS invoke operation: executes a function or state machine (Lambda, Step Functions). Side effects run in the cloud and may incur cost."
 
 [[programs.ask]]
 action_prefix = "publish"
-reason = "Publishing resources"
+reason = "AWS publish operation: publishes a message, version, or layer (SNS, Lambda version, layer version). Subscribers/consumers see it immediately."
 
 [[programs.ask]]
 action_prefix = "send"
-reason = "Sending messages"
+reason = "AWS send operation: dispatches a message or signal (SQS, SES, command to instance). Delivery is real-time and may cost per message."
 
 [[programs.ask]]
 action_prefix = "tag"
-reason = "Tagging resources"
+reason = "AWS tag operation: adds tags to a resource. Tags can drive billing allocation and IAM conditions; pick keys/values intentionally."
 
 [[programs.ask]]
 action_prefix = "untag"
-reason = "Untagging resources"
+reason = "AWS untag operation: removes tags from a resource. Tag-based IAM policies and cost allocation depending on those tags will stop applying."
 
 # Blocked commands
 [[programs.block]]
 subcommand = "iam delete-user"
-reason = "Deleting IAM users is blocked"
+reason = "Blocked: `aws iam delete-user` removes an IAM identity. Detach policies and rotate access keys via individual commands instead."
 
 [[programs.block]]
 subcommand_prefix = "organizations delete"
-reason = "Organization deletion blocked"
+reason = "Blocked: `aws organizations delete-*` removes organization-level entities (accounts, OUs, policies). Effects span the whole org and are hard to reverse."
 
 # =============================================================================
 # GOOGLE CLOUD (gcloud)
@@ -228,7 +228,7 @@ subcommand = "container clusters describe"
 
 [[programs.ask]]
 subcommand = "container clusters get-credentials"
-reason = "Updating kubeconfig (writes to ~/.kube/config)"
+reason = "Updating kubeconfig (writes to `~/.kube/config`)"
 
 [[programs.allow]]
 subcommand = "storage ls"
@@ -287,95 +287,95 @@ subcommand = "info"
 # Write commands
 [[programs.ask]]
 subcommand = "compute instances create"
-reason = "Compute create"
+reason = "GCE create: provisions a new VM in the project. Billing starts when it boots; verify zone, machine type, and network."
 
 [[programs.ask]]
 subcommand = "compute instances delete"
-reason = "Compute delete"
+reason = "GCE compute delete: terminates the VM. Persistent disks may or may not be deleted depending on flags."
 
 [[programs.ask]]
 subcommand = "compute instances start"
-reason = "Compute start"
+reason = "GCE start: boots a stopped VM. Compute billing resumes once the instance is running."
 
 [[programs.ask]]
 subcommand = "compute instances stop"
-reason = "Compute stop"
+reason = "GCE stop: shuts the VM down. Connections drop; persistent disks still bill while stopped."
 
 [[programs.ask]]
 subcommand = "compute instances reset"
-reason = "Compute reset"
+reason = "GCE reset: hard-reboots the VM without a clean shutdown. In-memory state and unflushed disk writes are lost."
 
 [[programs.ask]]
 subcommand = "container clusters create"
-reason = "GKE create"
+reason = "GKE create: provisions a new Kubernetes cluster. Control plane and node pools begin billing immediately."
 
 [[programs.ask]]
 subcommand = "container clusters delete"
-reason = "GKE delete"
+reason = "GKE delete: tears down the cluster including all workloads. Cannot be reversed."
 
 [[programs.ask]]
 subcommand = "container clusters resize"
-reason = "GKE resize"
+reason = "GKE resize: changes node pool size. Scaling down evicts pods from removed nodes; scaling up adds nodes that begin billing."
 
 [[programs.ask]]
 subcommand = "container clusters upgrade"
-reason = "GKE upgrade"
+reason = "GKE upgrade: upgrades the control plane or node pool version. Workloads get rescheduled during node rollouts; cannot be downgraded mid-flight."
 
 [[programs.ask]]
 subcommand = "storage cp"
-reason = "Storage copy"
+reason = "GCS copy: writes objects into a bucket. May overwrite existing objects at the same key."
 
 [[programs.ask]]
 subcommand = "storage mv"
-reason = "Storage move"
+reason = "GCS move: copies then deletes the source. Failure mid-operation can leave partial state at the destination."
 
 [[programs.ask]]
 subcommand = "storage rm"
-reason = "Storage delete"
+reason = "GCS delete: removes objects from a bucket. Recursive (`-r`) on a prefix deletes every matching object; recovery requires object versioning."
 
 [[programs.ask]]
 subcommand = "functions deploy"
-reason = "Functions deploy"
+reason = "Cloud Functions deploy: uploads source and publishes a new revision. Traffic shifts to the new version once deployment succeeds."
 
 [[programs.ask]]
 subcommand = "functions delete"
-reason = "Functions delete"
+reason = "Cloud Functions delete: removes the function. Triggers stop firing immediately; callers get errors until recreated."
 
 [[programs.ask]]
 subcommand = "run deploy"
-reason = "Cloud Run deploy"
+reason = "Cloud Run deploy: builds/pulls the image and rolls out a new revision. Traffic shifts to it per the service's traffic policy."
 
 [[programs.ask]]
 subcommand = "run services delete"
-reason = "Cloud Run delete"
+reason = "Cloud Run delete: removes the service. Live traffic returns 404 until redeploy."
 
 [[programs.ask]]
 subcommand = "sql instances create"
-reason = "Cloud SQL create"
+reason = "Cloud SQL create: provisions a managed database instance. Billing starts at create time; tier and storage choices are sticky."
 
 [[programs.ask]]
 subcommand = "sql instances delete"
-reason = "Cloud SQL delete"
+reason = "Cloud SQL delete: removes the database instance and its data. Restore requires a prior backup; otherwise data is gone."
 
 [[programs.ask]]
 subcommand = "sql instances patch"
-reason = "Cloud SQL patch"
+reason = "Cloud SQL patch: changes instance settings (tier, flags, maintenance, network). Some changes restart the instance."
 
 [[programs.ask]]
 subcommand = "secrets create"
-reason = "Secrets create"
+reason = "Secret Manager create: creates a new secret container. Initial payload value (if provided) lands in Cloud audit logs at IAM read."
 
 [[programs.ask]]
 subcommand = "secrets delete"
-reason = "Secrets delete"
+reason = "Secret Manager delete: removes the secret and all its versions. Consumers that read it will start failing immediately."
 
 [[programs.ask]]
 subcommand = "projects create"
-reason = "Project create"
+reason = "GCP project create: provisions a new project under your org/billing. Project IDs are globally unique and cannot be reused."
 
 [[programs.ask]]
 subcommand = "projects delete"
-reason = "Project delete"
+reason = "GCP project delete: schedules the project for deletion (30-day grace). All resources go offline immediately."
 
 # Note: Custom handler for 3-word patterns (gcloud <group> <resource> <action>)
 [[custom_handlers]]
@@ -464,7 +464,7 @@ subcommand = "workspace show"
 # test with command=apply (default) creates real infrastructure
 [[programs.ask]]
 subcommand = "test"
-reason = "Terraform: Running tests (may create infrastructure)"
+reason = "Terraform test: runs `.tftest.hcl` cases. With `command = apply` (default), test cases create real infrastructure for the duration of the run."
 
 # fmt -check is read-only (just checks, doesn't modify)
 [[programs.allow]]
@@ -474,70 +474,70 @@ if_flags_any = ["-check"]
 # Write commands
 [[programs.ask]]
 subcommand = "console"
-reason = "Terraform: Interactive REPL"
+reason = "Terraform console: interactive REPL against the current state. Evaluates expressions only, but reads state from the configured backend."
 
 [[programs.ask]]
 subcommand = "force-unlock"
-reason = "Terraform: Force-unlocking state (dangerous)"
+reason = "Terraform force-unlock removes a stuck state lock. Confirm no other apply is in progress; concurrent applies corrupt state."
 
 [[programs.ask]]
 subcommand = "apply"
-reason = "Terraform: Applying changes"
+reason = "Terraform apply: applies planned changes to real infrastructure. Run `terraform plan` first and review the diff."
 
 [[programs.ask]]
 subcommand = "destroy"
-reason = "Terraform: Destroying infrastructure"
+reason = "Terraform destroy: tears down resources tracked by this state. Use `-target` to scope; cannot be undone."
 
 [[programs.ask]]
 subcommand = "import"
-reason = "Terraform: Importing resource"
+reason = "Terraform import: brings an existing real resource under terraform management. Verify the address matches your config."
 
 [[programs.ask]]
 subcommand = "taint"
-reason = "Terraform: Tainting resource"
+reason = "Terraform taint: marks a resource for replacement on the next apply. The next `apply` will destroy and recreate it."
 
 [[programs.ask]]
 subcommand = "untaint"
-reason = "Terraform: Untainting resource"
+reason = "Terraform untaint: clears the tainted mark from a resource so the next apply does not replace it."
 
 [[programs.ask]]
 subcommand = "init"
-reason = "Terraform: Initializing"
+reason = "Terraform init: downloads providers/modules and configures the backend. Writes `.terraform/` and `.terraform.lock.hcl`."
 
 [[programs.ask]]
 subcommand = "fmt"
-reason = "Terraform: Formatting files"
+reason = "Terraform fmt: rewrites `.tf` files in place to canonical style. Use `-check` to verify without modifying."
 accept_edits_auto_allow = true
 
 # state mutations
 [[programs.ask]]
 subcommand = "state mv"
-reason = "Terraform: state mv"
+reason = "Terraform state mv: renames or reparents resources in state. Validate addresses; mistakes leave resources orphaned."
 
 [[programs.ask]]
 subcommand = "state rm"
-reason = "Terraform: state rm"
+reason = "Terraform state rm: drops a resource from state without destroying it in the cloud. The resource becomes unmanaged."
 
 [[programs.ask]]
 subcommand = "state push"
-reason = "Terraform: state push"
+reason = "Terraform state push: overwrites remote state with local. Take a backup of remote state first."
 
 [[programs.ask]]
 subcommand = "state pull"
-reason = "Terraform: state pull"
+reason = "Terraform state pull: downloads the current remote state to stdout. Read-only on remote state, but exposes sensitive values."
 
 # workspace mutations
 [[programs.ask]]
 subcommand = "workspace new"
-reason = "Terraform: workspace new"
+reason = "Terraform workspace new: creates a new workspace with its own state file. Subsequent commands run against it until switched."
 
 [[programs.ask]]
 subcommand = "workspace delete"
-reason = "Terraform: workspace delete"
+reason = "Terraform workspace delete: removes the workspace and its state file. State cannot be recovered after deletion."
 
 [[programs.ask]]
 subcommand = "workspace select"
-reason = "Terraform: workspace select"
+reason = "Terraform workspace select: switches the active workspace. Subsequent plan/apply runs target the selected workspace's state."
 
 # =============================================================================
 # KUBECTL
@@ -551,11 +551,11 @@ unknown_action = "ask"
 # Blocked patterns
 [[programs.block]]
 subcommand = "delete namespace kube-system"
-reason = "Cannot delete kube-system"
+reason = "Refusing to delete the `kube-system` namespace. It hosts core cluster services; deleting it breaks the cluster."
 
 [[programs.block]]
 subcommand = "delete ns kube-system"
-reason = "Cannot delete kube-system"
+reason = "Refusing to delete the `kube-system` namespace. It hosts core cluster services; deleting it breaks the cluster."
 
 # Read-only commands
 [[programs.allow]]
@@ -624,108 +624,108 @@ subcommand = "wait"
 # Write commands
 [[programs.ask]]
 subcommand = "debug"
-reason = "Creating debug container"
+reason = "kubectl debug: attaches an ephemeral debug container to a running pod or node. The debug container runs with the target's namespace and may have elevated access."
 
 [[programs.ask]]
 subcommand = "apply"
-reason = "Applying resources"
+reason = "kubectl apply: creates or updates resources from a manifest in the current context/namespace. Drift between cluster and file is reconciled toward the file."
 
 [[programs.ask]]
 subcommand = "create"
-reason = "Creating resources"
+reason = "kubectl create: imperatively creates a resource in the current context/namespace. Fails if the resource already exists."
 
 [[programs.ask]]
 subcommand = "delete"
-reason = "Deleting resources"
+reason = "kubectl delete: removes the resource from the cluster. Verify namespace/context; many resources cascade-delete dependents."
 
 [[programs.ask]]
 subcommand = "edit"
-reason = "Editing resources"
+reason = "kubectl edit: opens the live resource in $EDITOR and applies on save. Changes go straight to the cluster; no diff review."
 
 [[programs.ask]]
 subcommand = "patch"
-reason = "Patching resources"
+reason = "kubectl patch: applies a strategic/JSON/merge patch to a live resource. Effect is immediate; rolling updates can trigger pod restarts."
 
 [[programs.ask]]
 subcommand = "replace"
-reason = "Replacing resources"
+reason = "kubectl replace: replaces a live resource entirely with the manifest. Fields absent from the file are dropped; `--force` deletes and recreates."
 
 [[programs.ask]]
 subcommand = "scale"
-reason = "Scaling resources"
+reason = "kubectl scale: changes the replica count on a Deployment/StatefulSet/ReplicaSet. Scaling to 0 stops the workload."
 
 [[programs.ask]]
 subcommand = "rollout"
-reason = "Rollout operation"
+reason = "kubectl rollout: triggers, pauses, resumes, undoes, or restarts a Deployment/DaemonSet/StatefulSet rollout. Pods get replaced per the strategy."
 
 [[programs.ask]]
 subcommand = "expose"
-reason = "Exposing service"
+reason = "kubectl expose: creates a Service in front of a workload. With type=LoadBalancer it provisions a cloud LB; type=NodePort opens a node port."
 
 [[programs.ask]]
 subcommand = "run"
-reason = "Running pod"
+reason = "kubectl run: creates a pod in the current namespace from an image. Useful for one-off shells/jobs; leaves a pod behind unless `--rm` is set."
 
 [[programs.ask]]
 subcommand = "exec"
-reason = "Executing in pod"
+reason = "kubectl exec: runs a command inside a running container. Side effects (writes, signals) happen in the live pod."
 
 [[programs.ask]]
 subcommand = "cp"
-reason = "Copying files"
+reason = "kubectl cp: copies files between local FS and a pod via `tar` in the container. Requires `tar` in the container image."
 
 [[programs.ask]]
 subcommand = "port-forward"
-reason = "Port forwarding"
+reason = "kubectl port-forward: tunnels a local port to a pod/service. Anyone on the local host can reach the forwarded target while running."
 
 [[programs.ask]]
 subcommand = "label"
-reason = "Labeling resources"
+reason = "kubectl label: adds, updates, or removes labels on a resource. Labels drive selectors (Services, NetworkPolicies, scheduling); changes can shift routing."
 
 [[programs.ask]]
 subcommand = "annotate"
-reason = "Annotating resources"
+reason = "kubectl annotate: adds, updates, or removes annotations on a resource. Annotations can configure controllers (ingress, autoscaler, sidecars)."
 
 [[programs.ask]]
 subcommand = "taint"
-reason = "Tainting nodes"
+reason = "kubectl taint: adds a taint to a node so non-tolerating pods avoid it. With `NoExecute`, existing non-tolerating pods are evicted."
 
 [[programs.ask]]
 subcommand = "drain"
-reason = "Draining nodes"
+reason = "kubectl drain: cordons the node and evicts its pods to other nodes. Confirm replicas/replacements exist before approving."
 
 [[programs.ask]]
 subcommand = "cordon"
-reason = "Cordoning nodes"
+reason = "kubectl cordon: marks a node unschedulable. Existing pods stay; new pods land elsewhere."
 
 [[programs.ask]]
 subcommand = "uncordon"
-reason = "Uncordoning nodes"
+reason = "kubectl uncordon: marks a node schedulable again. The scheduler resumes placing new pods on it."
 
 # config mutations
 [[programs.ask]]
 subcommand = "config set-context"
-reason = "config set-context"
+reason = "kubectl config set-context: writes a context entry to `~/.kube/config`. Sets cluster, user, and default namespace for that context."
 
 [[programs.ask]]
 subcommand = "config use-context"
-reason = "config use-context"
+reason = "kubectl config use-context: switches the current context in `~/.kube/config`. Subsequent kubectl commands target the new cluster/namespace."
 
 [[programs.ask]]
 subcommand = "config set-cluster"
-reason = "config set-cluster"
+reason = "kubectl config set-cluster: writes a cluster entry (server URL, CA data) to `~/.kube/config`. Misconfigured CA bypasses TLS verification."
 
 [[programs.ask]]
 subcommand = "config set-credentials"
-reason = "config set-credentials"
+reason = "kubectl config set-credentials: writes auth data (token, cert, exec plugin) to `~/.kube/config`. Anyone with read access to the file gets those credentials."
 
 [[programs.ask]]
 subcommand = "config delete-context"
-reason = "config delete-context"
+reason = "kubectl config delete-context: removes a context from `~/.kube/config`. The cluster and user entries it referenced are left intact."
 
 [[programs.ask]]
 subcommand = "config delete-cluster"
-reason = "config delete-cluster"
+reason = "kubectl config delete-cluster: removes a cluster entry from `~/.kube/config`. Contexts that referenced it stop working."
 
 # =============================================================================
 # DOCKER
@@ -815,27 +815,27 @@ subcommand = "buildx version"
 
 [[programs.ask]]
 subcommand = "buildx build"
-reason = "Docker: Building image (buildx)"
+reason = "Docker buildx build: builds an image (optionally multi-arch). Pulls base images and may push if `--push` is set."
 
 [[programs.ask]]
 subcommand = "buildx create"
-reason = "Docker: Creating builder"
+reason = "Docker buildx create: creates a new builder instance (may spin up a container or remote driver). Subsequent builds use it."
 
 [[programs.ask]]
 subcommand = "buildx rm"
-reason = "Docker: Removing builder"
+reason = "Docker buildx rm: removes a builder instance and its cache. In-progress builds against it fail."
 
 [[programs.ask]]
 subcommand = "buildx use"
-reason = "Docker: Switching builder"
+reason = "Docker buildx use: sets the active builder. Subsequent `docker buildx build` calls use the selected builder."
 
 [[programs.ask]]
 subcommand = "buildx stop"
-reason = "Docker: Stopping builder"
+reason = "Docker buildx stop: stops a running builder instance. In-progress builds on it are interrupted."
 
 [[programs.ask]]
 subcommand = "buildx prune"
-reason = "Docker: Pruning build cache"
+reason = "Docker buildx prune: deletes unused build cache. Frees disk; next builds are slower until cache rewarms."
 
 # scout subcommands (vulnerability scanning)
 [[programs.allow]]
@@ -852,7 +852,7 @@ subcommand = "scout compare"
 
 [[programs.ask]]
 subcommand = "scout enroll"
-reason = "Docker: Enrolling in Scout"
+reason = "Docker Scout enroll: opts the organization into Docker Scout vulnerability scanning. Image data is uploaded to Docker's service."
 
 # context subcommands
 [[programs.allow]]
@@ -869,15 +869,15 @@ subcommand = "context inspect"
 
 [[programs.ask]]
 subcommand = "context create"
-reason = "Docker: Creating context"
+reason = "Docker context create: registers a new daemon endpoint in the Docker config. Subsequent commands can target it."
 
 [[programs.ask]]
 subcommand = "context rm"
-reason = "Docker: Removing context"
+reason = "Docker context rm: removes a context from the Docker config. If it was active, the default context becomes active."
 
 [[programs.ask]]
 subcommand = "context use"
-reason = "Docker: Switching context"
+reason = "Docker context use: switches the active daemon endpoint. Subsequent docker commands target the new daemon (potentially remote)."
 
 # manifest subcommands
 [[programs.allow]]
@@ -885,15 +885,15 @@ subcommand = "manifest inspect"
 
 [[programs.ask]]
 subcommand = "manifest create"
-reason = "Docker: Creating manifest"
+reason = "Docker manifest create: builds a local multi-arch manifest list referencing existing image digests. Not yet pushed to a registry."
 
 [[programs.ask]]
 subcommand = "manifest push"
-reason = "Docker: Pushing manifest"
+reason = "Docker manifest push: publishes the manifest list to the registry. Consumers of that tag will pull the new manifest immediately."
 
 [[programs.ask]]
 subcommand = "manifest annotate"
-reason = "Docker: Annotating manifest"
+reason = "Docker manifest annotate: edits a local manifest list (os/arch/variant). Push is a separate step."
 
 # image subcommands (aliases for top-level commands)
 [[programs.allow]]
@@ -910,23 +910,23 @@ subcommand = "image history"
 
 [[programs.ask]]
 subcommand = "image rm"
-reason = "Docker: Removing image"
+reason = "Docker image rm: removes a local image (and its layers if unreferenced). Containers using that image still run."
 
 [[programs.ask]]
 subcommand = "image prune"
-reason = "Docker: Pruning images"
+reason = "Docker image prune: deletes dangling (or with `-a`, all unused) local images. Reclaims disk; can be expensive to repull."
 
 [[programs.ask]]
 subcommand = "image tag"
-reason = "Docker: Tagging image"
+reason = "Docker image tag: creates a new ref pointing at an existing image. Local-only until pushed."
 
 [[programs.ask]]
 subcommand = "image push"
-reason = "Docker: Pushing image"
+reason = "Docker image push: uploads the image (and layers) to the registry under the given ref. Overwrites the tag for everyone consuming it."
 
 [[programs.ask]]
 subcommand = "image pull"
-reason = "Docker: Pulling image"
+reason = "Docker image pull: downloads an image from a registry. Network/disk usage; verify the ref is the intended source."
 
 # container subcommands (aliases for top-level commands)
 [[programs.allow]]
@@ -949,23 +949,23 @@ subcommand = "container stats"
 
 [[programs.ask]]
 subcommand = "container rm"
-reason = "Docker: Removing container"
+reason = "Docker container rm: removes a stopped container (with `-f`, also force-kills a running one). Anonymous volumes are removed only with `-v`."
 
 [[programs.ask]]
 subcommand = "container start"
-reason = "Docker: Starting container"
+reason = "Docker container start: starts an existing stopped container. Bound ports and volumes from the original `run` reapply."
 
 [[programs.ask]]
 subcommand = "container stop"
-reason = "Docker: Stopping container"
+reason = "Docker container stop: sends SIGTERM then SIGKILL after the grace period. In-flight requests to the container drop."
 
 [[programs.ask]]
 subcommand = "container kill"
-reason = "Docker: Killing container"
+reason = "Docker container kill: sends a signal (SIGKILL by default) directly. No graceful shutdown; in-flight work is lost."
 
 [[programs.ask]]
 subcommand = "container prune"
-reason = "Docker: Pruning containers"
+reason = "Docker container prune: deletes all stopped containers. Their writable layers and anonymous state are gone."
 
 # docker compose (new docker CLI plugin, equivalent to docker-compose)
 [[programs.allow]]
@@ -991,165 +991,165 @@ subcommand = "compose top"
 
 [[programs.ask]]
 subcommand = "compose up"
-reason = "Compose: Starting services"
+reason = "Compose up: starts the services in the current compose file. Builds/pulls images as needed; with `-d` runs detached."
 
 [[programs.ask]]
 subcommand = "compose down"
-reason = "Compose: Stopping services"
+reason = "Compose down: stops and removes containers, networks, and (with `-v`) volumes for the project. Persistent state in named volumes survives unless `-v` is set."
 
 [[programs.ask]]
 subcommand = "compose start"
-reason = "Compose: Starting services"
+reason = "Compose start: starts already-created service containers. Does not create or rebuild."
 
 [[programs.ask]]
 subcommand = "compose stop"
-reason = "Compose: Stopping services"
+reason = "Compose stop: stops running service containers but leaves them in place. In-flight requests drop."
 
 [[programs.ask]]
 subcommand = "compose restart"
-reason = "Compose: Restarting services"
+reason = "Compose restart: restarts service containers without recreating them. Brief downtime per service."
 
 [[programs.ask]]
 subcommand = "compose build"
-reason = "Compose: Building images"
+reason = "Compose build: builds (or rebuilds) the services' images per the compose file. Local-only until pushed."
 
 [[programs.ask]]
 subcommand = "compose pull"
-reason = "Compose: Pulling images"
+reason = "Compose pull: pulls the service images from their registries. Disk/network usage."
 
 [[programs.ask]]
 subcommand = "compose push"
-reason = "Compose: Pushing images"
+reason = "Compose push: pushes the service images to their registries. Overwrites the tags for anyone consuming them."
 
 [[programs.ask]]
 subcommand = "compose exec"
-reason = "Compose: Executing in container"
+reason = "Compose exec: runs a command inside a running service container. Side effects (writes, signals) happen in that live container."
 
 [[programs.ask]]
 subcommand = "compose run"
-reason = "Compose: Running command"
+reason = "Compose run: spins up a one-off service container with the given command. Leaves a stopped container behind unless `--rm` is set."
 
 [[programs.ask]]
 subcommand = "compose rm"
-reason = "Compose: Removing containers"
+reason = "Compose rm: removes stopped service containers (with `-s` it also stops them first). Anonymous volumes go with `-v`."
 
 [[programs.ask]]
 subcommand = "compose create"
-reason = "Compose: Creating containers"
+reason = "Compose create: creates service containers without starting them. Useful before a separate `start`."
 
 [[programs.ask]]
 subcommand = "compose kill"
-reason = "Compose: Killing containers"
+reason = "Compose kill: sends SIGKILL to running service containers. No graceful shutdown."
 
 [[programs.ask]]
 subcommand = "compose pause"
-reason = "Compose: Pausing containers"
+reason = "Compose pause: freezes all processes in the service containers via cgroups. Connections hang until unpaused."
 
 [[programs.ask]]
 subcommand = "compose unpause"
-reason = "Compose: Unpausing containers"
+reason = "Compose unpause: resumes previously-paused service containers."
 
 # Write commands
 [[programs.ask]]
 subcommand = "run"
-reason = "Docker: Running container"
+reason = "Docker run: creates and starts a new container from an image. Honours `-v` mounts, port publishes, and `--privileged`; verify those before approving."
 
 [[programs.ask]]
 subcommand = "exec"
-reason = "Docker: Executing in container"
+reason = "Docker exec: runs a command inside an already-running container. Side effects happen in that live container."
 
 [[programs.ask]]
 subcommand = "build"
-reason = "Docker: Building image"
+reason = "Docker build: builds an image from a Dockerfile. Pulls base images; local-only until pushed."
 
 [[programs.ask]]
 subcommand = "push"
-reason = "Docker: Pushing image"
+reason = "Docker push: uploads an image to the registry under the given ref. Overwrites the tag for everyone consuming it."
 
 [[programs.ask]]
 subcommand = "pull"
-reason = "Docker: Pulling image"
+reason = "Docker pull: downloads an image from a registry. Network/disk usage; verify the ref."
 
 [[programs.ask]]
 subcommand = "rm"
-reason = "Docker: Removing container"
+reason = "Docker rm: removes a stopped container (with `-f`, also force-kills a running one). Anonymous volumes go with `-v`."
 
 [[programs.ask]]
 subcommand = "rmi"
-reason = "Docker: Removing image"
+reason = "Docker rmi: removes a local image. Containers using it still run; layers go when no ref remains."
 
 [[programs.ask]]
 subcommand = "kill"
-reason = "Docker: Killing container"
+reason = "Docker kill: sends a signal (SIGKILL by default) directly to the container PID 1. No graceful shutdown."
 
 [[programs.ask]]
 subcommand = "stop"
-reason = "Docker: Stopping container"
+reason = "Docker stop: sends SIGTERM then SIGKILL after the grace period. In-flight requests drop."
 
 [[programs.ask]]
 subcommand = "start"
-reason = "Docker: Starting container"
+reason = "Docker start: starts an existing stopped container. Original `run` config (ports, mounts) reapplies."
 
 [[programs.ask]]
 subcommand = "restart"
-reason = "Docker: Restarting container"
+reason = "Docker restart: stops and starts the container. Brief downtime; existing config reapplies."
 
 [[programs.ask]]
 subcommand = "pause"
-reason = "Docker: Pausing container"
+reason = "Docker pause: freezes all processes in the container via cgroups. Connections hang until unpaused."
 
 [[programs.ask]]
 subcommand = "unpause"
-reason = "Docker: Unpausing container"
+reason = "Docker unpause: resumes a previously-paused container."
 
 [[programs.ask]]
 subcommand = "tag"
-reason = "Docker: Tagging image"
+reason = "Docker tag: creates a new ref pointing at an existing image. Local-only until pushed."
 
 [[programs.ask]]
 subcommand = "commit"
-reason = "Docker: Committing container"
+reason = "Docker commit: creates a new image from a container's writable layer. Image is not reproducible from a Dockerfile."
 
 [[programs.ask]]
 subcommand = "cp"
-reason = "Docker: Copying files"
+reason = "Docker cp: copies files between the local FS and a container. Overwrites destination paths."
 
 [[programs.ask]]
 subcommand = "login"
-reason = "Docker: Logging in"
+reason = "Docker login: writes registry credentials to `~/.docker/config.json` (or the configured credential helper). Anyone with read access to the file gets those credentials."
 
 [[programs.ask]]
 subcommand = "logout"
-reason = "Docker: Logging out"
+reason = "Docker logout: removes registry credentials from the Docker config. Subsequent pulls/pushes to that registry need to re-auth."
 
 # network/volume/system mutations
 [[programs.ask]]
 subcommand = "network create"
-reason = "Docker: network create"
+reason = "Docker network create: creates a user-defined network. Containers can be attached and discover each other by name."
 
 [[programs.ask]]
 subcommand = "network rm"
-reason = "Docker: network rm"
+reason = "Docker network rm: removes a network. Fails if containers are still attached; otherwise their inter-container DNS breaks."
 
 [[programs.ask]]
 subcommand = "network connect"
-reason = "Docker: network connect"
+reason = "Docker network connect: attaches a running container to an additional network. Gives it new addresses and DNS visibility."
 
 [[programs.ask]]
 subcommand = "network disconnect"
-reason = "Docker: network disconnect"
+reason = "Docker network disconnect: detaches a container from a network. Existing connections on that network drop."
 
 [[programs.ask]]
 subcommand = "volume create"
-reason = "Docker: volume create"
+reason = "Docker volume create: creates a named volume managed by the engine. Persists across container recreates."
 
 [[programs.ask]]
 subcommand = "volume rm"
-reason = "Docker: volume rm"
+reason = "Docker volume rm: removes a named volume and its data. Fails if a container still references it; otherwise the data is gone."
 
 [[programs.ask]]
 subcommand = "system prune"
-reason = "Docker: system prune"
+reason = "Docker system prune: deletes stopped containers, unused networks, dangling images, and build cache (with `-a --volumes` also more). Reclaims disk; can be expensive to rebuild."
 
 # Note: Custom handler for docker compose with flags between "compose" and subcommand
 [[custom_handlers]]
@@ -1280,91 +1280,91 @@ subcommand = "secret inspect"
 # Write commands
 [[programs.ask]]
 subcommand = "run"
-reason = "Podman: Running container"
+reason = "Podman run: creates and starts a new container from an image. Honours `-v` mounts and port publishes; verify those before approving."
 
 [[programs.ask]]
 subcommand = "exec"
-reason = "Podman: Executing in container"
+reason = "Podman exec: runs a command inside an already-running container. Side effects happen in that live container."
 
 [[programs.ask]]
 subcommand = "build"
-reason = "Podman: Building image"
+reason = "Podman build: builds an image from a Containerfile/Dockerfile. Pulls base images; local-only until pushed."
 
 [[programs.ask]]
 subcommand = "push"
-reason = "Podman: Pushing image"
+reason = "Podman push: uploads an image to the registry under the given ref. Overwrites the tag for consumers."
 
 [[programs.ask]]
 subcommand = "pull"
-reason = "Podman: Pulling image"
+reason = "Podman pull: downloads an image from a registry. Network/disk usage; verify the ref."
 
 [[programs.ask]]
 subcommand = "rm"
-reason = "Podman: Removing container"
+reason = "Podman rm: removes a stopped container (with `-f`, also force-kills a running one). Anonymous volumes go with `-v`."
 
 [[programs.ask]]
 subcommand = "rmi"
-reason = "Podman: Removing image"
+reason = "Podman rmi: removes a local image. Containers using it still run; layers go when no ref remains."
 
 [[programs.ask]]
 subcommand = "kill"
-reason = "Podman: Killing container"
+reason = "Podman kill: sends a signal (SIGKILL by default) to the container PID 1. No graceful shutdown."
 
 [[programs.ask]]
 subcommand = "stop"
-reason = "Podman: Stopping container"
+reason = "Podman stop: sends SIGTERM then SIGKILL after the grace period. In-flight requests drop."
 
 [[programs.ask]]
 subcommand = "start"
-reason = "Podman: Starting container"
+reason = "Podman start: starts an existing stopped container. Original `run` config (ports, mounts) reapplies."
 
 [[programs.ask]]
 subcommand = "restart"
-reason = "Podman: Restarting container"
+reason = "Podman restart: stops and starts the container. Brief downtime; existing config reapplies."
 
 [[programs.ask]]
 subcommand = "pause"
-reason = "Podman: Pausing container"
+reason = "Podman pause: freezes all processes in the container via cgroups. Connections hang until unpaused."
 
 [[programs.ask]]
 subcommand = "unpause"
-reason = "Podman: Unpausing container"
+reason = "Podman unpause: resumes a previously-paused container."
 
 [[programs.ask]]
 subcommand = "tag"
-reason = "Podman: Tagging image"
+reason = "Podman tag: creates a new ref pointing at an existing image. Local-only until pushed."
 
 [[programs.ask]]
 subcommand = "commit"
-reason = "Podman: Committing container"
+reason = "Podman commit: creates a new image from a container's writable layer. Image is not reproducible from a Containerfile."
 
 [[programs.ask]]
 subcommand = "cp"
-reason = "Podman: Copying files"
+reason = "Podman cp: copies files between the local FS and a container. Overwrites destination paths."
 
 [[programs.ask]]
 subcommand = "login"
-reason = "Podman: Logging in"
+reason = "Podman login: writes registry credentials to the auth store. Anyone with read access to the file gets those credentials."
 
 [[programs.ask]]
 subcommand = "logout"
-reason = "Podman: Logging out"
+reason = "Podman logout: removes registry credentials from the auth store. Subsequent pulls/pushes need to re-auth."
 
 [[programs.ask]]
 subcommand = "create"
-reason = "Podman: Creating container"
+reason = "Podman create: creates a container without starting it. Useful before a separate `start`."
 
 [[programs.ask]]
 subcommand = "pod"
-reason = "Podman: Pod operation"
+reason = "Podman pod: pod-level operation (create/start/stop/rm). Affects all containers in the pod at once."
 
 [[programs.ask]]
 subcommand = "generate"
-reason = "Podman: Generating config"
+reason = "Podman generate: emits Kubernetes/systemd config from existing containers or pods to stdout (or a file). May write to disk depending on flags."
 
 [[programs.ask]]
 subcommand = "play"
-reason = "Podman: Playing kube YAML"
+reason = "Podman play: creates pods and containers from a Kubernetes YAML manifest. Pulls images and starts workloads locally."
 
 # =============================================================================
 # DOCKER COMPOSE / PODMAN COMPOSE
@@ -1403,63 +1403,63 @@ subcommand = "--help"
 # Write commands
 [[programs.ask]]
 subcommand = "up"
-reason = "Compose: Starting services"
+reason = "Compose up: starts the services in the current compose file. Builds/pulls images as needed; with `-d` runs detached."
 
 [[programs.ask]]
 subcommand = "down"
-reason = "Compose: Stopping services"
+reason = "Compose down: stops and removes containers, networks, and (with `-v`) volumes for the project. Named-volume data survives unless `-v` is set."
 
 [[programs.ask]]
 subcommand = "start"
-reason = "Compose: Starting services"
+reason = "Compose start: starts already-created service containers. Does not create or rebuild."
 
 [[programs.ask]]
 subcommand = "stop"
-reason = "Compose: Stopping services"
+reason = "Compose stop: stops running service containers but leaves them in place. In-flight requests drop."
 
 [[programs.ask]]
 subcommand = "restart"
-reason = "Compose: Restarting services"
+reason = "Compose restart: restarts service containers without recreating them. Brief downtime per service."
 
 [[programs.ask]]
 subcommand = "pause"
-reason = "Compose: Pausing services"
+reason = "Compose pause: freezes all processes in the service containers via cgroups. Connections hang until unpaused."
 
 [[programs.ask]]
 subcommand = "unpause"
-reason = "Compose: Unpausing services"
+reason = "Compose unpause: resumes previously-paused service containers."
 
 [[programs.ask]]
 subcommand = "build"
-reason = "Compose: Building services"
+reason = "Compose build: builds (or rebuilds) the services' images per the compose file. Local-only until pushed."
 
 [[programs.ask]]
 subcommand = "push"
-reason = "Compose: Pushing images"
+reason = "Compose push: pushes the service images to their registries. Overwrites the tags for consumers."
 
 [[programs.ask]]
 subcommand = "pull"
-reason = "Compose: Pulling images"
+reason = "Compose pull: pulls the service images from their registries. Disk/network usage."
 
 [[programs.ask]]
 subcommand = "rm"
-reason = "Compose: Removing services"
+reason = "Compose rm: removes stopped service containers (with `-s` it also stops them first). Anonymous volumes go with `-v`."
 
 [[programs.ask]]
 subcommand = "kill"
-reason = "Compose: Killing services"
+reason = "Compose kill: sends SIGKILL to running service containers. No graceful shutdown."
 
 [[programs.ask]]
 subcommand = "exec"
-reason = "Compose: Executing in service"
+reason = "Compose exec: runs a command inside a running service container. Side effects happen in that live container."
 
 [[programs.ask]]
 subcommand = "run"
-reason = "Compose: Running one-off"
+reason = "Compose run: spins up a one-off service container with the given command. Leaves a stopped container behind unless `--rm` is set."
 
 [[programs.ask]]
 subcommand = "create"
-reason = "Compose: Creating services"
+reason = "Compose create: creates service containers without starting them. Useful before a separate `start`."
 
 # =============================================================================
 # HELM
@@ -1490,15 +1490,15 @@ subcommand = "repo list"
 
 [[programs.ask]]
 subcommand = "repo add"
-reason = "Adding chart repository"
+reason = "Helm repo add: registers a chart repository in the local Helm config. Subsequent installs can pull charts from it."
 
 [[programs.ask]]
 subcommand = "repo remove"
-reason = "Removing chart repository"
+reason = "Helm repo remove: removes a chart repository from the local Helm config. Existing releases keep running."
 
 [[programs.ask]]
 subcommand = "repo update"
-reason = "Updating chart repositories"
+reason = "Helm repo update: refreshes the local index for all repos. Read-only on clusters; updates local cache files."
 
 [[programs.allow]]
 subcommand = "status"
@@ -1527,31 +1527,31 @@ subcommand = "verify"
 # Write commands
 [[programs.ask]]
 subcommand = "install"
-reason = "Helm: Installing release"
+reason = "Helm install: deploys a chart as a new release into the current kube context/namespace. Creates the resources defined in the chart."
 
 [[programs.ask]]
 subcommand = "upgrade"
-reason = "Helm: Upgrading release"
+reason = "Helm upgrade: applies a new chart version or values to an existing release. Workloads may roll; use `--atomic` to auto-rollback on failure."
 
 [[programs.ask]]
 subcommand = "uninstall"
-reason = "Helm: Uninstalling release"
+reason = "Helm uninstall: removes a release and all its Kubernetes resources from the cluster. Persistent volumes may be retained per chart settings."
 
 [[programs.ask]]
 subcommand = "rollback"
-reason = "Helm: Rolling back"
+reason = "Helm rollback: rolls a release back to a previous revision. Workloads roll to match the earlier manifests."
 
 [[programs.ask]]
 subcommand = "delete"
-reason = "Helm: Deleting release"
+reason = "Helm delete: removes a release (alias for uninstall in Helm 3). The release's Kubernetes resources are deleted."
 
 [[programs.ask]]
 subcommand = "push"
-reason = "Helm: Pushing chart"
+reason = "Helm push: uploads a packaged chart to an OCI registry. Overwrites the chart version for consumers of that ref."
 
 [[programs.ask]]
 subcommand = "package"
-reason = "Helm: Packaging chart"
+reason = "Helm package: bundles a chart directory into a `.tgz`. Local-only until pushed."
 
 # =============================================================================
 # PULUMI
@@ -1600,46 +1600,46 @@ subcommand = "config get"
 # Write commands
 [[programs.ask]]
 subcommand = "up"
-reason = "Pulumi: Deploying stack"
+reason = "Pulumi up: applies the current program to the selected stack, creating/updating/deleting cloud resources. Run `pulumi preview` first."
 
 [[programs.ask]]
 subcommand = "destroy"
-reason = "Pulumi: Destroying stack"
+reason = "Pulumi destroy: tears down every resource tracked by the selected stack. Cannot be undone without recreating from code."
 
 [[programs.ask]]
 subcommand = "refresh"
-reason = "Pulumi: Refreshing state"
+reason = "Pulumi refresh: reconciles state with the real cloud, updating the state file to match what is actually deployed."
 
 [[programs.ask]]
 subcommand = "import"
-reason = "Pulumi: Importing resource"
+reason = "Pulumi import: brings an existing cloud resource under Pulumi management and emits code for it. Verify the resource address matches the program."
 
 [[programs.ask]]
 subcommand = "cancel"
-reason = "Pulumi: Canceling update"
+reason = "Pulumi cancel: forcibly cancels an in-progress update on the stack. Partial state on the cloud side may not match the state file."
 
 [[programs.ask]]
 subcommand = "new"
-reason = "Pulumi: Creating project"
+reason = "Pulumi new: scaffolds a new project (and stack) in the current directory. Writes program files and `Pulumi.yaml`."
 
 # stack mutations
 [[programs.ask]]
 subcommand = "stack init"
-reason = "Pulumi: stack init"
+reason = "Pulumi stack init: creates a new stack under the current project. The stack starts empty until `pulumi up` runs."
 
 [[programs.ask]]
 subcommand = "stack rm"
-reason = "Pulumi: stack rm"
+reason = "Pulumi stack rm: removes the stack's state and config. Use `--force` only after `pulumi destroy`; otherwise cloud resources are orphaned."
 
 [[programs.ask]]
 subcommand = "stack select"
-reason = "Pulumi: stack select"
+reason = "Pulumi stack select: switches the active stack. Subsequent `up`/`destroy`/`config` commands target the selected stack."
 
 # config mutations
 [[programs.ask]]
 subcommand = "config set"
-reason = "Pulumi: config set"
+reason = "Pulumi config set: writes a config value (optionally encrypted with `--secret`) into the stack's config file."
 
 [[programs.ask]]
 subcommand = "config rm"
-reason = "Pulumi: config rm"
+reason = "Pulumi config rm: removes a config key from the stack. Programs that read it will fall back to defaults or error."

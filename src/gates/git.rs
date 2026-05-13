@@ -296,24 +296,24 @@ mod tests {
             (&["add", "file.txt"][..], "Staging"),
             (&["add", "."], "Staging directory"),
             (&["add", "-A"], "Staging all"),
-            (&["commit", "-m", "message"], "Committing"),
-            (&["push", "origin", "main"], "Pushing"),
-            (&["pull", "origin", "main"], "Pulling"),
-            (&["merge", "feature"], "Merging"),
-            (&["rebase", "main"], "Rebasing"),
-            (&["checkout", "feature"], "Checking out"),
-            (&["checkout", "-b", "new-branch"], "Creating branch"),
-            (&["switch", "main"], "Switching"),
-            (&["reset", "HEAD~1"], "Resetting"),
-            (&["restore", "file.txt"], "Restoring"),
-            (&["cherry-pick", "abc123"], "Cherry-picking"),
-            (&["revert", "abc123"], "Reverting"),
-            (&["fetch", "origin"], "Fetching"),
-            (&["clone", "https://github.com/user/repo"], "Cloning"),
-            (&["mv", "old.txt", "new.txt"], "Moving"),
-            (&["rm", "file.txt"], "Removing"),
-            (&["branch", "-d", "old-branch"], "Deleting branch"),
-            (&["branch", "-m", "old", "new"], "Renaming branch"),
+            (&["commit", "-m", "message"], "commit"),
+            (&["push", "origin", "main"], "publishes"),
+            (&["pull", "origin", "main"], "fetches"),
+            (&["merge", "feature"], "merges"),
+            (&["rebase", "main"], "rebasing"),
+            (&["checkout", "feature"], "switches"),
+            (&["checkout", "-b", "new-branch"], "creates a new branch"),
+            (&["switch", "main"], "switches"),
+            (&["reset", "HEAD~1"], "head"),
+            (&["restore", "file.txt"], "restores"),
+            (&["cherry-pick", "abc123"], "replays"),
+            (&["revert", "abc123"], "undoes"),
+            (&["fetch", "origin"], "downloads"),
+            (&["clone", "https://github.com/user/repo"], "clones"),
+            (&["mv", "old.txt", "new.txt"], "moves"),
+            (&["rm", "file.txt"], "removes"),
+            (&["branch", "-d", "old-branch"], "deleting a branch"),
+            (&["branch", "-m", "old", "new"], "renames a branch"),
         ];
 
         for (args, expected_in_reason) in write_cmds {
@@ -342,8 +342,8 @@ mod tests {
             (&["push", "--force", "origin", "main"][..], "Force push"),
             (&["push", "-f", "origin", "main"], "Force push"),
             (&["reset", "--hard", "HEAD~1"], "Hard reset"),
-            (&["clean", "-fd"], "Clean"),
-            (&["clean", "-fdx"], "Clean"),
+            (&["clean", "-fd"], "Permanently deletes untracked"),
+            (&["clean", "-fdx"], "Permanently deletes untracked"),
         ];
 
         for (args, expected_in_reason) in high_risk_cmds {
@@ -381,7 +381,7 @@ mod tests {
                 reason
             );
             assert!(
-                reason.contains("Pushing"),
+                reason.contains("Publishes"),
                 "Should mention pushing for {:?}",
                 args
             );
@@ -466,15 +466,12 @@ mod tests {
     #[test]
     fn test_global_opts_with_write_asks() {
         let global_write = [
-            (&["-C", "/path", "commit", "-m", "msg"][..], "Committing"),
-            (&["-C", "/path", "push", "origin", "main"], "Pushing"),
+            (&["-C", "/path", "commit", "-m", "msg"][..], "commit"),
+            (&["-C", "/path", "push", "origin", "main"], "publishes"),
             (&["-C", "/path", "add", "file.txt"], "Staging"),
-            (&["-C", "/path", "checkout", "branch"], "Checking out"),
-            (
-                &["--git-dir=/path/.git", "commit", "-m", "msg"],
-                "Committing",
-            ),
-            (&["--git-dir", "/path/.git", "push"], "Pushing"),
+            (&["-C", "/path", "checkout", "branch"], "switches"),
+            (&["--git-dir=/path/.git", "commit", "-m", "msg"], "commit"),
+            (&["--git-dir", "/path/.git", "push"], "publishes"),
             (&["-C", "/path", "push", "--force"], "Force push"),
             (&["-C", "/path", "reset", "--hard"], "Hard reset"),
             (
@@ -483,7 +480,7 @@ mod tests {
             ),
             (
                 &["-C", "/home/user/project", "branch", "-d", "old"],
-                "Deleting branch",
+                "deleting a branch",
             ),
         ];
 
@@ -575,7 +572,13 @@ mod tests {
         for args in delete_cmds {
             let result = check_git(&cmd(args));
             assert_eq!(result.decision, Decision::Ask, "Failed for: {args:?}");
-            assert!(result.reason.as_ref().unwrap().contains("Deleting tag"));
+            assert!(
+                result
+                    .reason
+                    .as_ref()
+                    .unwrap()
+                    .contains("Deletes a local tag")
+            );
         }
     }
 
@@ -591,7 +594,7 @@ mod tests {
                     .reason
                     .as_ref()
                     .unwrap()
-                    .contains("Force-replacing tag")
+                    .contains("Force-replacing a tag")
             );
         }
     }
@@ -600,7 +603,13 @@ mod tests {
     fn test_tag_with_global_opts_asks() {
         let result = check_git(&cmd(&["-C", "/path", "tag", "-d", "v1.0"]));
         assert_eq!(result.decision, Decision::Ask);
-        assert!(result.reason.as_ref().unwrap().contains("Deleting tag"));
+        assert!(
+            result
+                .reason
+                .as_ref()
+                .unwrap()
+                .contains("Deletes a local tag")
+        );
     }
 
     // === Non-git Commands ===
@@ -652,8 +661,8 @@ mod tests {
                 .as_ref()
                 .unwrap()
                 .to_lowercase()
-                .contains("checking out"),
-            "expected 'Checking out', got: {:?}",
+                .contains("switches"),
+            "expected switches/checkout in reason, got: {:?}",
             result.reason
         );
     }
@@ -669,8 +678,8 @@ mod tests {
                 .as_ref()
                 .unwrap()
                 .to_lowercase()
-                .contains("committing"),
-            "expected 'Committing', got: {:?}",
+                .contains("commit"),
+            "expected commit in reason, got: {:?}",
             result.reason
         );
     }
@@ -726,7 +735,7 @@ mod tests {
                 .as_ref()
                 .unwrap()
                 .to_lowercase()
-                .contains("committing"),
+                .contains("commit"),
             "Built-in commit should win, got: {:?}",
             result.reason
         );

@@ -40,15 +40,15 @@ if_flags_any = ["--version", "-V", "-VV"]
 if_flags_any = ["--help", "-h"]
 
 [[programs.ask]]
-reason = "Executing Python code"
+reason = "Executes inline Python via `-c`. Treat the code as an inline script; can import any installed module."
 if_flags_any = ["-c"]
 
 [[programs.ask]]
-reason = "Running Python module"
+reason = "Runs an installed Python module via `-m <module>`. Module code runs with the current interpreter; inherits the active venv if one is on PATH."
 if_flags_any = ["-m"]
 
 [[programs.ask]]
-reason = "Running Python script"
+reason = "Runs a Python script file. The script runs with the current interpreter; inherits the active venv if one is on PATH."
 
 # =============================================================================
 # NODE
@@ -70,11 +70,11 @@ if_flags_any = ["--help", "-h"]
 if_flags_any = ["-c", "--check"]
 
 [[programs.ask]]
-reason = "Executing JavaScript"
+reason = "Executes inline JavaScript via `-e`. Treat the code as an inline script; full Node API access."
 if_flags_any = ["-e", "--eval", "-p", "--print"]
 
 [[programs.ask]]
-reason = "Running Node.js script"
+reason = "Runs a Node.js script file. Full Node API access including filesystem, network, and child processes."
 
 # =============================================================================
 # RUBY
@@ -95,11 +95,11 @@ if_flags_any = ["--help", "-h"]
 if_flags_any = ["-c"]
 
 [[programs.ask]]
-reason = "Executing Ruby code"
+reason = "Executes inline Ruby via `-e`. Treat the code as an inline script; full stdlib access."
 if_flags_any = ["-e"]
 
 [[programs.ask]]
-reason = "Running Ruby script"
+reason = "Runs a Ruby script file. Full stdlib access including filesystem, network, and child processes."
 
 # =============================================================================
 # DENO
@@ -158,48 +158,48 @@ subcommand = "bench"
 # Write/execute commands
 [[programs.ask]]
 subcommand = "run"
-reason = "Running Deno script"
+reason = "Runs a Deno script. Permissions are sandboxed by default; flags like `--allow-all` / `--allow-net` / `--allow-write` widen access."
 
 [[programs.ask]]
 subcommand = "serve"
-reason = "Starting Deno server"
+reason = "Starts a Deno HTTP server. Binds a port (default 8000) and listens for incoming requests."
 
 [[programs.ask]]
 subcommand = "fmt"
-reason = "Formatting files"
+reason = "Formats source files in place. Rewrites every matching file under the target paths."
 accept_edits_auto_allow = true
 
 [[programs.ask]]
 subcommand = "compile"
-reason = "Compiling to binary"
+reason = "Produces a standalone executable for the script. Writes a binary that embeds the Deno runtime and the script's modules."
 
 [[programs.ask]]
 subcommand = "install"
-reason = "Installing package/script"
+reason = "Installs a script as a global executable on PATH, or installs project dependencies. The global form writes to the Deno install root."
 
 [[programs.ask]]
 subcommand = "uninstall"
-reason = "Uninstalling package/script"
+reason = "Removes a Deno-installed global executable from the Deno install root."
 
 [[programs.ask]]
 subcommand = "task"
-reason = "Running task"
+reason = "Runs a named task from `deno.json`. Executes the task's shell command line; treat as running that command."
 
 [[programs.ask]]
 subcommand = "upgrade"
-reason = "Upgrading Deno"
+reason = "Replaces the Deno binary with a newer release. Modifies the installed `deno` executable on PATH."
 
 [[programs.ask]]
 subcommand = "add"
-reason = "Adding dependency"
+reason = "Adds a dependency to `deno.json` imports. Network fetch on next resolve."
 
 [[programs.ask]]
 subcommand = "remove"
-reason = "Removing dependency"
+reason = "Removes a dependency from `deno.json` imports."
 
 [[programs.ask]]
 subcommand = "publish"
-reason = "Publishing module"
+reason = "Uploads the module to JSR. Public publish is irreversible: the version number cannot be reused."
 
 # =============================================================================
 # PHP
@@ -227,11 +227,11 @@ if_flags_any = ["-l", "--syntax-check"]
 if_flags_any = ["-m"]
 
 [[programs.ask]]
-reason = "Executing PHP code"
+reason = "Executes inline PHP via `-r`. Treat the code as an inline script."
 if_flags_any = ["-r"]
 
 [[programs.ask]]
-reason = "Running PHP script"
+reason = "Runs a PHP script file. Full PHP API access including filesystem, network, and shell execution."
 
 # =============================================================================
 # LUA / LUAJIT
@@ -246,11 +246,11 @@ unknown_action = "ask"
 if_flags_any = ["-v"]
 
 [[programs.ask]]
-reason = "Executing Lua code"
+reason = "Executes inline Lua via `-e`. Treat the code as an inline script."
 if_flags_any = ["-e"]
 
 [[programs.ask]]
-reason = "Running Lua script"
+reason = "Runs a Lua script file. Full Lua stdlib access including `io`, `os`, and loaded C modules."
 
 # =============================================================================
 # JAVA / JAVAC
@@ -264,7 +264,7 @@ unknown_action = "ask"
 if_flags_any = ["--version", "-version", "--help", "-help", "-h"]
 
 [[programs.ask]]
-reason = "Running Java application"
+reason = "Runs a Java class, JAR, or single source file. Full JVM access; classpath-loaded code runs unsandboxed."
 
 [[programs]]
 name = "javac"
@@ -274,7 +274,7 @@ unknown_action = "ask"
 if_flags_any = ["--version", "-version", "--help", "-help"]
 
 [[programs.ask]]
-reason = "Compiling Java source"
+reason = "Compiles Java source files into `.class` bytecode. Writes output to the configured destination directory."
 
 # =============================================================================
 # DOTNET (.NET CLI)
@@ -378,11 +378,11 @@ subcommand = "test"
 
 [[programs.ask]]
 subcommand = "run"
-reason = "Running Swift package"
+reason = "Builds and runs the Swift executable target in the current package. Full Swift runtime access."
 
 [[programs.ask]]
 subcommand = "package"
-reason = "Package operation"
+reason = "Manages the Swift package: init, update, resolve, generate-xcodeproj, clean. Mutates `Package.resolved` and the build cache."
 
 # =============================================================================
 # ELIXIR / IEX
@@ -399,11 +399,11 @@ if_flags_any = ["--version", "-v"]
 if_flags_any = ["--help", "-h"]
 
 [[programs.ask]]
-reason = "Executing Elixir code"
+reason = "Executes inline Elixir via `-e`. Treat the code as an inline script."
 if_flags_any = ["-e"]
 
 [[programs.ask]]
-reason = "Running Elixir script"
+reason = "Runs an Elixir script file (`.exs` / `.ex`). Full Elixir and Erlang stdlib access."
 
 [[programs]]
 name = "iex"
@@ -413,4 +413,4 @@ unknown_action = "ask"
 if_flags_any = ["--version", "-v"]
 
 [[programs.ask]]
-reason = "Starting Elixir REPL"
+reason = "Starts the interactive Elixir REPL. Each input is evaluated with full Elixir and Erlang stdlib access."

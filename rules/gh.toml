@@ -32,11 +32,11 @@ read_only_endpoints = ["search/"]
 
 [[programs.block]]
 subcommand = "repo delete"
-reason = "Deleting repositories is blocked"
+reason = "Deletes the repository on GitHub. Irreversible: history, issues, PRs, releases, and forks-from-this-repo are removed. Blocked unconditionally."
 
 [[programs.block]]
 subcommand = "auth logout"
-reason = "Logging out is blocked"
+reason = "Logs out the gh CLI from GitHub. The agent has no way to re-authenticate without user interaction. Blocked unconditionally."
 
 # === Read-Only Commands ===
 # These are always allowed
@@ -234,7 +234,7 @@ reason = "Adding comment"
 
 [[programs.ask]]
 subcommand = "issue delete"
-reason = "Deleting issue"
+reason = "Deletes issue `<issue>` permanently. Irreversible; comments and reactions go with it. Prefer `close` for normal workflow."
 
 [[programs.ask]]
 subcommand = "issue transfer"
@@ -279,7 +279,7 @@ reason = "Adding comment"
 
 [[programs.ask]]
 subcommand = "pr merge"
-reason = "Merging PR"
+reason = "Merges PR `<pr>` into the base branch. `--squash`/`--rebase` rewrite history; `--delete-branch` also deletes the source branch."
 
 [[programs.ask]]
 subcommand = "pr ready"
@@ -312,7 +312,7 @@ reason = "Forking repository"
 
 [[programs.ask]]
 subcommand = "repo archive"
-reason = "Archiving repository"
+reason = "Archives the repository on GitHub. Becomes read-only: no new issues, PRs, comments, or pushes. Reversible via `repo unarchive`."
 
 [[programs.ask]]
 subcommand = "repo unarchive"
@@ -333,7 +333,7 @@ reason = "Creating release"
 
 [[programs.ask]]
 subcommand = "release delete"
-reason = "Deleting release"
+reason = "Deletes release `<release>` from GitHub. Removes release notes and uploaded assets; the underlying git tag stays unless `--cleanup-tag` is passed."
 
 [[programs.ask]]
 subcommand = "release edit"
@@ -354,7 +354,7 @@ reason = "Creating gist"
 
 [[programs.ask]]
 subcommand = "gist delete"
-reason = "Deleting gist"
+reason = "Deletes gist `<gist>` permanently. Irreversible; comments and revision history go with it."
 
 [[programs.ask]]
 subcommand = "gist edit"
@@ -418,7 +418,7 @@ reason = "Creating codespace"
 
 [[programs.ask]]
 subcommand = "codespace delete"
-reason = "Deleting codespace"
+reason = "Deletes a codespace. Unsaved local changes inside the codespace are lost."
 
 [[programs.ask]]
 subcommand = "codespace edit"
@@ -438,7 +438,7 @@ reason = "Creating codespace"
 
 [[programs.ask]]
 subcommand = "cs delete"
-reason = "Deleting codespace"
+reason = "Deletes a codespace. Unsaved local changes inside the codespace are lost."
 
 # Key mutations
 [[programs.ask]]
@@ -447,7 +447,7 @@ reason = "Adding SSH key"
 
 [[programs.ask]]
 subcommand = "ssh-key delete"
-reason = "Deleting SSH key"
+reason = "Removes an SSH key from the GitHub account. SSH access from any machine using that key will stop working."
 
 [[programs.ask]]
 subcommand = "gpg-key add"
@@ -455,7 +455,7 @@ reason = "Adding GPG key"
 
 [[programs.ask]]
 subcommand = "gpg-key delete"
-reason = "Deleting GPG key"
+reason = "Removes a GPG key from the GitHub account. Existing signed commits stay valid; future signatures with this key will not be marked verified."
 
 # Config mutations
 [[programs.ask]]
@@ -473,20 +473,20 @@ reason = "Setting secret"
 
 [[programs.ask]]
 subcommand = "secret delete"
-reason = "Deleting secret"
+reason = "Deletes an Actions/Codespaces/Dependabot secret. Future workflow runs that read this secret will fail until it is recreated."
 
 [[programs.ask]]
 subcommand = "variable set"
-reason = "Setting variable"
+reason = "Sets an Actions variable for the repo, environment, or organization. Visible to future workflow runs."
 
 [[programs.ask]]
 subcommand = "variable delete"
-reason = "Deleting variable"
+reason = "Deletes an Actions variable. Future workflow runs that read this variable will see it as empty."
 
 # Cache mutations
 [[programs.ask]]
 subcommand = "cache delete"
-reason = "Deleting cache"
+reason = "Deletes one or more GitHub Actions caches. Next workflow run that expects this cache will rebuild it from scratch."
 
 # Extension mutations
 [[programs.ask]]

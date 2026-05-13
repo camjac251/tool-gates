@@ -94,7 +94,7 @@ if_flags_any = ["-o", "--owners"]
 
 [[programs.ask]]
 subcommand = "story"
-reason = "Updating story state"
+reason = "Updates the workflow state of story `<story>`. Moves it on the workflow board (e.g., To Do -> In Progress -> Done) and may trigger workflow automations."
 if_flags_any = ["-s", "--state"]
 
 [[programs.ask]]
@@ -124,7 +124,7 @@ if_flags_any = ["-y", "--type"]
 
 [[programs.ask]]
 subcommand = "story"
-reason = "Archiving story"
+reason = "Archives story `<story>`. Hides it from default views but keeps history; reversible via `--archived=false` or the web UI."
 if_flags_any = ["-a", "--archived"]
 
 # Story without update flags → allow (read-only view)
@@ -169,7 +169,7 @@ reason = "Listing projects"
 # Unsetting a workspace modifies config
 [[programs.ask]]
 subcommand = "workspace"
-reason = "Removing saved workspace"
+reason = "Removes a saved workspace (named search query) from the local `short` config. Does not delete anything on shortcut.com."
 if_flags_any = ["-u", "--unset"]
 
 # List/load workspaces is read-only

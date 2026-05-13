@@ -63,7 +63,7 @@ mod tests {
         let write_cmds = [
             (&["pr", "create"][..], "Creating PR"),
             (&["pr", "close", "123"], "Closing PR"),
-            (&["pr", "merge", "123"], "Merging PR"),
+            (&["pr", "merge", "123"], "Merges PR"),
             (&["pr", "comment", "123", "-b", "LGTM"], "Adding comment"),
             (&["issue", "create", "--title", "Bug"], "Creating issue"),
             (&["issue", "close", "456"], "Closing issue"),
@@ -103,9 +103,9 @@ mod tests {
         let blocked_cmds = [
             (
                 &["repo", "delete", "owner/repo"][..],
-                "Deleting repositories",
+                "Deletes the repository",
             ),
-            (&["auth", "logout"], "Logging out"),
+            (&["auth", "logout"], "Logs out"),
         ];
 
         for (args, expected_reason) in blocked_cmds {

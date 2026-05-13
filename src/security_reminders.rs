@@ -548,10 +548,18 @@ pub fn check_security_reminders(
                     if is_doc_file(file_path) {
                         continue;
                     }
-                    return Some(HookOutput::deny_with_context(
-                        &format!("Security: {}", m.rule_name),
-                        m.message,
-                    ));
+                    // Tier-1 secret blocks surface to the user via
+                    // systemMessage. Routine denies (head/tail, settings.json
+                    // matches) stay silent at the UI level; secret leaks
+                    // deserve a visible warning so the agent can't quietly
+                    // retry around them.
+                    return Some(
+                        HookOutput::deny_with_context(
+                            &format!("Security: {}", m.rule_name),
+                            m.message,
+                        )
+                        .user_visible(),
+                    );
                 }
                 Tier::AskOnce => {
                     // Handled by PostToolUse. Skip in PreToolUse

@@ -179,6 +179,27 @@ impl Settings {
         self.matches_any(&self.permissions.deny, command)
     }
 
+    /// Return the first deny pattern that matches `command`, if any.
+    /// Used to surface the specific rule in the deny reason so the agent
+    /// can learn what to avoid instead of seeing a generic "matched a rule".
+    pub fn matched_deny_pattern(&self, command: &str) -> Option<&str> {
+        self.find_matching(&self.permissions.deny, command)
+    }
+
+    /// Like `matches_any` but returns the matched pattern instead of a bool.
+    fn find_matching<'a>(&self, patterns: &'a [String], command: &str) -> Option<&'a str> {
+        for pattern in patterns {
+            if let Some(bash_pattern) = pattern.strip_prefix("Bash(") {
+                if let Some(inner) = bash_pattern.strip_suffix(')') {
+                    if Self::matches_bash_pattern(inner, command) {
+                        return Some(pattern);
+                    }
+                }
+            }
+        }
+        None
+    }
+
     /// Check command against settings rules.
     /// Priority: deny first, then most-specific pattern wins between ask/allow (ties go to ask).
     pub fn check_command(&self, command: &str) -> SettingsDecision {

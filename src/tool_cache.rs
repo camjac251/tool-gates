@@ -22,12 +22,16 @@ fn cache_ttl_secs() -> u64 {
 /// back to a live `which` check for tools not in this list.
 const MODERN_TOOLS: &[&str] = &[
     // File viewing
-    "bat", "batcat", // bat is sometimes installed as batcat on Debian/Ubuntu
+    "bat",
+    "batcat", // bat is sometimes installed as batcat on Debian/Ubuntu
     // Code search
-    "rg", "ripgrep", // ripgrep - faster grep (may be installed as either)
-    "sg", "ast-grep", // ast-grep (often invoked as sg)
+    "rg",
+    "ripgrep", // ripgrep - faster grep (may be installed as either)
+    "sg",
+    "ast-grep", // ast-grep (often invoked as sg)
     // File finding
-    "fd", "fdfind", // fd is sometimes fdfind on Debian/Ubuntu
+    "fd",
+    "fdfind", // fd is sometimes fdfind on Debian/Ubuntu
     // File listing
     "eza", // modern ls with git integration
     // Text processing
@@ -46,7 +50,18 @@ const MODERN_TOOLS: &[&str] = &[
     // Diff viewing
     "difft", // difftastic - structural diff
     // Documentation
-    "tldr", "tealdeer", // simplified man pages with examples
+    "tldr",
+    "tealdeer", // simplified man pages with examples
+    // Python tooling
+    "uv", // modern pip/venv - faster, lockfile-aware
+    // DNS
+    "doggo", // modern dig/nslookup - colored, structured
+    // Archives
+    "ouch", // modern unzip/zip/tar - format-agnostic
+    // GitHub
+    "gh", // GitHub CLI - auth-aware fetch for raw content
+    // Benchmarking
+    "hyperfine", // modern time - statistical
 ];
 
 /// Cached tool availability data

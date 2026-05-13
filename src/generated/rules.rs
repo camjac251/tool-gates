@@ -306,21 +306,15 @@ pub static GH_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 pub static GH_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
         ("repo clone", "Cloning repo (writes to local filesystem)"),
-        (
-            "run download",
-            "Downloading artifacts (writes to local filesystem)",
-        ),
-        (
-            "release download",
-            "Downloading release assets (writes to local filesystem)",
-        ),
+        ("run download", "Downloading artifacts (writes to local filesystem)"),
+        ("release download", "Downloading release assets (writes to local filesystem)"),
         ("gist clone", "Cloning gist (writes to local filesystem)"),
         ("issue create", "Creating issue"),
         ("issue close", "Closing issue"),
         ("issue reopen", "Reopening issue"),
         ("issue edit", "Editing issue"),
         ("issue comment", "Adding comment"),
-        ("issue delete", "Deleting issue"),
+        ("issue delete", "Deletes issue `<issue>` permanently. Irreversible; comments and reactions go with it. Prefer `close` for normal workflow."),
         ("issue transfer", "Transferring issue"),
         ("issue pin", "Pinning issue"),
         ("issue unpin", "Unpinning issue"),
@@ -331,7 +325,7 @@ pub static GH_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("pr reopen", "Reopening PR"),
         ("pr edit", "Editing PR"),
         ("pr comment", "Adding comment"),
-        ("pr merge", "Merging PR"),
+        ("pr merge", "Merges PR `<pr>` into the base branch. `--squash`/`--rebase` rewrite history; `--delete-branch` also deletes the source branch."),
         ("pr ready", "Marking PR ready"),
         ("pr review", "Submitting review"),
         ("pr checkout", "Checking out PR"),
@@ -339,17 +333,17 @@ pub static GH_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("repo rename", "Renaming repository"),
         ("repo edit", "Editing repository"),
         ("repo fork", "Forking repository"),
-        ("repo archive", "Archiving repository"),
+        ("repo archive", "Archives the repository on GitHub. Becomes read-only: no new issues, PRs, comments, or pushes. Reversible via `repo unarchive`."),
         ("repo unarchive", "Unarchiving repository"),
         ("repo sync", "Syncing repository"),
         ("repo set-default", "Setting default repo"),
         ("release create", "Creating release"),
-        ("release delete", "Deleting release"),
+        ("release delete", "Deletes release `<release>` from GitHub. Removes release notes and uploaded assets; the underlying git tag stays unless `--cleanup-tag` is passed."),
         ("release edit", "Editing release"),
         ("release upload", "Uploading asset"),
         ("release delete-asset", "Deleting asset"),
         ("gist create", "Creating gist"),
-        ("gist delete", "Deleting gist"),
+        ("gist delete", "Deletes gist `<gist>` permanently. Irreversible; comments and revision history go with it."),
         ("gist edit", "Editing gist"),
         ("gist rename", "Renaming gist"),
         ("label create", "Creating label"),
@@ -364,23 +358,23 @@ pub static GH_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("run delete", "Deleting run"),
         ("run watch", "Watching run"),
         ("codespace create", "Creating codespace"),
-        ("codespace delete", "Deleting codespace"),
+        ("codespace delete", "Deletes a codespace. Unsaved local changes inside the codespace are lost."),
         ("codespace edit", "Editing codespace"),
         ("codespace stop", "Stopping codespace"),
         ("codespace rebuild", "Rebuilding codespace"),
         ("cs create", "Creating codespace"),
-        ("cs delete", "Deleting codespace"),
+        ("cs delete", "Deletes a codespace. Unsaved local changes inside the codespace are lost."),
         ("ssh-key add", "Adding SSH key"),
-        ("ssh-key delete", "Deleting SSH key"),
+        ("ssh-key delete", "Removes an SSH key from the GitHub account. SSH access from any machine using that key will stop working."),
         ("gpg-key add", "Adding GPG key"),
-        ("gpg-key delete", "Deleting GPG key"),
+        ("gpg-key delete", "Removes a GPG key from the GitHub account. Existing signed commits stay valid; future signatures with this key will not be marked verified."),
         ("config set", "Setting config"),
         ("config clear-cache", "Clearing cache"),
         ("secret set", "Setting secret"),
-        ("secret delete", "Deleting secret"),
-        ("variable set", "Setting variable"),
-        ("variable delete", "Deleting variable"),
-        ("cache delete", "Deleting cache"),
+        ("secret delete", "Deletes an Actions/Codespaces/Dependabot secret. Future workflow runs that read this secret will fail until it is recreated."),
+        ("variable set", "Sets an Actions variable for the repo, environment, or organization. Visible to future workflow runs."),
+        ("variable delete", "Deletes an Actions variable. Future workflow runs that read this variable will see it as empty."),
+        ("cache delete", "Deletes one or more GitHub Actions caches. Next workflow run that expects this cache will rebuild it from scratch."),
         ("extension install", "Installing extension"),
         ("extension upgrade", "Upgrading extension"),
         ("extension remove", "Removing extension"),
@@ -399,18 +393,14 @@ pub static GH_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("project item-edit", "Editing item"),
         ("project field-create", "Creating field"),
         ("project field-delete", "Deleting field"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 pub static GH_BLOCK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("repo delete", "Deleting repositories is blocked"),
-        ("auth logout", "Logging out is blocked"),
-    ]
-    .into_iter()
-    .collect()
+        ("repo delete", "Deletes the repository on GitHub. Irreversible: history, issues, PRs, releases, and forks-from-this-repo are removed. Blocked unconditionally."),
+        ("auth logout", "Logs out the gh CLI from GitHub. The agent has no way to re-authenticate without user interaction. Blocked unconditionally."),
+    ].into_iter().collect()
 });
 
 /// Check gh commands declaratively
@@ -537,65 +527,57 @@ pub static GIT_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 
 pub static GIT_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("gc", "Garbage collection (modifies .git directory)"),
-        ("prune", "Pruning objects (deletes from .git directory)"),
-        ("config set", "git config set"),
-        ("config --add", "git config --add"),
-        ("config --unset", "git config --unset"),
-        ("stash drop", "git stash drop"),
-        ("stash pop", "git stash pop"),
-        ("stash clear", "git stash clear"),
-        ("stash push", "git stash push"),
-        ("stash apply", "git stash apply"),
-        ("worktree add", "git worktree add"),
-        ("worktree remove", "git worktree remove"),
-        ("worktree prune", "git worktree prune"),
-        (
-            "submodule foreach",
-            "git submodule foreach (runs arbitrary commands)",
-        ),
-        ("submodule init", "git submodule init"),
-        ("submodule update", "git submodule update"),
-        ("submodule add", "git submodule add"),
-        ("submodule deinit", "git submodule deinit"),
-        ("remote add", "git remote add"),
-        ("remote remove", "git remote remove"),
-        ("remote rename", "git remote rename"),
-        ("remote set-url", "git remote set-url"),
-        ("commit", "Committing changes"),
-        ("push", "Pushing to remote"),
-        ("pull", "Pulling from remote"),
-        ("merge", "Merging branches"),
-        ("rebase", "Rebasing"),
-        ("checkout", "Checking out"),
-        ("switch", "Switching branches"),
-        ("reset", "Resetting"),
-        ("restore", "Restoring files"),
-        ("clean", "Cleaning working tree"),
-        ("cherry-pick", "Cherry-picking"),
-        ("revert", "Reverting commits"),
-        ("am", "Applying patches"),
-        ("apply", "Applying patches"),
-        ("format-patch", "Creating patches"),
-        ("init", "Initializing repo"),
-        ("clone", "Cloning repo"),
-        ("fetch", "Fetching"),
-        ("mv", "Moving files"),
-        ("rm", "Removing files"),
-        ("bisect", "Starting bisect session"),
-        ("filter-branch", "Rewriting history (dangerous)"),
-        ("filter-repo", "Rewriting history (dangerous)"),
-        ("notes", "git notes operation"),
-        ("bundle", "Bundle operation"),
-        (
-            "maintenance",
-            "Running maintenance tasks (modifies .git directory)",
-        ),
-        ("sparse-checkout", "Modifying sparse checkout"),
-        ("worktree", "git worktree operation"),
-    ]
-    .into_iter()
-    .collect()
+        ("gc", "Runs garbage collection in `.git`. Repacks objects and may prune unreachable commits older than the gc grace window."),
+        ("prune", "Deletes unreachable objects from `.git`. Cannot be recovered without a backup or reflog entry still pointing at them."),
+        ("config set", "Sets a git config value. `--local` scopes to this repo; `--global` affects all repos for the user."),
+        ("config --add", "Adds a git config entry. `--local` for this repo, `--global` for user-wide."),
+        ("config --unset", "Removes a git config entry. Permanent for the chosen scope."),
+        ("stash drop", "Drops a stash permanently. Run `git stash list` first to confirm the index; cannot be undone."),
+        ("stash pop", "Applies the top stash and removes it. Use `git stash apply` if you want to keep the stash entry."),
+        ("stash clear", "Clears ALL stashes permanently. List with `git stash list` first; cannot be undone."),
+        ("stash push", "Saves working-tree changes to a new stash entry."),
+        ("stash apply", "Applies a stash entry without removing it from the stash list."),
+        ("worktree add", "Creates a new linked worktree checkout. Writes a new directory and registers it in `.git/worktrees/`."),
+        ("worktree remove", "Removes a worktree directory. Refuses if it has uncommitted changes unless `--force`."),
+        ("worktree prune", "Prunes stale worktree references that no longer point to a real directory."),
+        ("submodule foreach", "`git submodule foreach` runs an arbitrary shell command per submodule. Treat the command as if invoked directly."),
+        ("submodule init", "Registers submodules from `.gitmodules` into the local repo config. Does not fetch content; pair with `submodule update`."),
+        ("submodule update", "Fetches and checks out submodule commits recorded in the superproject. Can overwrite local submodule edits unless `--merge`/`--rebase` is set."),
+        ("submodule add", "Adds a new submodule entry to `.gitmodules` and clones the remote repo into the tree."),
+        ("submodule deinit", "Unregisters submodules and clears their working tree. Use `--force` to drop uncommitted submodule changes."),
+        ("remote add", "Registers a new remote URL under the given name. Subsequent fetches/pushes will trust this endpoint."),
+        ("remote remove", "Removes a remote and its tracking refs from this repo. Does not affect the remote server."),
+        ("remote rename", "Renames a remote and rewrites tracking-branch refs to use the new name."),
+        ("remote set-url", "Changes the URL of an existing remote. Future fetches/pushes will hit the new endpoint."),
+        ("commit", "Records staged changes as a new commit on the current branch."),
+        ("push", "Publishes local commits to a remote. Inspect `git log @{u}..` first to see what would be sent."),
+        ("pull", "Fetches and integrates remote changes into the current branch. Use `--rebase` to avoid merge commits."),
+        ("merge", "Merges another branch into the current one. Can produce conflicts; abort with `git merge --abort`."),
+        ("rebase", "Rebasing. Non-interactive only; interactive (`-i`) hangs the agent. Use `git revise --autosquash` for fixups."),
+        ("checkout", "Switches branches or restores files in the working tree. Uncommitted edits in affected files may be lost."),
+        ("switch", "Switches the working tree to another branch. Refuses if local edits would conflict unless `--discard-changes` is set."),
+        ("reset", "Moves HEAD and optionally the index/working tree. `--soft` keeps changes staged, `--mixed` (default) unstages, `--hard` discards."),
+        ("restore", "Restores files in the working tree from the index or a commit. Overwrites uncommitted edits in the targeted paths."),
+        ("clean", "Cleans the working tree. Preview with `-n` first if unsure what would be deleted."),
+        ("cherry-pick", "Replays the listed commits on the current branch. May produce conflicts; abort with `git cherry-pick --abort`."),
+        ("revert", "Creates a new commit that undoes the listed commits. Preserves history; does not rewrite it."),
+        ("am", "Applies a mailbox patch series as commits. Stops on conflict; resolve and `git am --continue`."),
+        ("apply", "Applies a patch to the working tree (no commit created). Use `--check` to preview without writing."),
+        ("format-patch", "Writes one `.patch` file per commit in the specified range. Output goes to the working directory."),
+        ("init", "Creates a new git repository in the current directory. Writes a `.git/` directory."),
+        ("clone", "Clones a remote repository into a new directory. Network operation; size depends on remote history."),
+        ("fetch", "Downloads refs and objects from a remote. Does not modify the working tree or current branch."),
+        ("mv", "Moves or renames a tracked file and stages the rename in one step."),
+        ("rm", "Removes a tracked file from the working tree and stages the deletion. `--cached` keeps the file on disk."),
+        ("bisect", "Starts a binary-search session over commit history. Mutates HEAD across iterations; end with `git bisect reset`."),
+        ("filter-branch", "Rewrites commit history. Safer alternatives: `git revise --autosquash` for fixups, `git absorb` for auto-folding edits. `git-filter-repo` is the maintained replacement for filter-branch."),
+        ("filter-repo", "Rewrites commit history. Refuses to run on non-fresh clones; use `--force` only with intent."),
+        ("notes", "Adds, edits, or removes notes attached to commits. Stored in `refs/notes/*`; not shown in default `git log`."),
+        ("bundle", "Creates or unpacks a git bundle file (offline-transportable pack of refs and objects)."),
+        ("maintenance", "Runs repo maintenance tasks (gc, commit-graph, prefetch, loose-objects). Modifies `.git/` in the background."),
+        ("sparse-checkout", "Modifies sparse-checkout config. Changes which files are materialized in the working tree."),
+        ("worktree", "Worktree operation. See `git worktree --help` for subcommand-specific risk."),
+    ].into_iter().collect()
 });
 
 /// Check git commands declaratively
@@ -631,10 +613,14 @@ pub fn check_git_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--force", "-f"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Force push (safer: --force-with-lease)"));
+        return Some(GateResult::ask(
+            "Force push overwrites upstream history. Safer: `--force-with-lease` fails if the remote moved.",
+        ));
     }
     if subcmd_single == "reset" && cmd.args.iter().any(|a| ["--hard"].contains(&a.as_str())) {
-        return Some(GateResult::ask("Hard reset (can lose uncommitted work)"));
+        return Some(GateResult::ask(
+            "Hard reset discards uncommitted changes in the working tree and index. Safer: `git stash` first, or `git reset --soft` to keep changes staged.",
+        ));
     }
     if subcmd_single == "clean"
         && cmd
@@ -643,14 +629,18 @@ pub fn check_git_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .any(|a| ["-fd", "-fdx", "-f"].contains(&a.as_str()))
     {
         return Some(GateResult::ask(
-            "Clean (deletes untracked files permanently)",
+            "Permanently deletes untracked files. Preview with `-n` (dry run) first; deletions cannot be undone.",
         ));
     }
     if subcmd_single == "checkout" && cmd.args.iter().any(|a| ["-b", "-B"].contains(&a.as_str())) {
-        return Some(GateResult::ask("Creating branch"));
+        return Some(GateResult::ask(
+            "Creates a new branch and switches to it. `-B` resets an existing branch of the same name to the start point.",
+        ));
     }
     if subcmd_single == "checkout" && cmd.args.iter().any(|a| ["--"].contains(&a.as_str())) {
-        return Some(GateResult::ask("Discarding changes"));
+        return Some(GateResult::ask(
+            "Discards uncommitted changes in the listed paths. Cannot be undone.",
+        ));
     }
     if subcmd_single == "tag"
         && cmd.args.iter().any(|a| {
@@ -667,7 +657,9 @@ pub fn check_git_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .contains(&a.as_str())
         })
     {
-        return Some(GateResult::ask("Creating tag"));
+        return Some(GateResult::ask(
+            "Creates a tag pointing at the named commit (HEAD by default). Local only until `git push --tags`.",
+        ));
     }
     if subcmd_single == "tag"
         && cmd
@@ -675,7 +667,9 @@ pub fn check_git_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-d", "--delete"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Deleting tag"));
+        return Some(GateResult::ask(
+            "Deletes a local tag. Use `git push --delete <remote> <tag>` separately to delete it on the remote.",
+        ));
     }
     if subcmd_single == "tag"
         && cmd
@@ -683,7 +677,9 @@ pub fn check_git_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-f", "--force"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Force-replacing tag"));
+        return Some(GateResult::ask(
+            "Force-replacing a tag breaks anyone who already pulled it. Confirm no downstream consumers.",
+        ));
     }
     if subcmd_single == "branch"
         && cmd
@@ -691,7 +687,9 @@ pub fn check_git_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-d", "-D", "--delete"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Deleting branch"));
+        return Some(GateResult::ask(
+            "Deleting a branch. Prefer `-d` (refuses if unmerged) over `-D` (force) when possible.",
+        ));
     }
     if subcmd_single == "branch"
         && cmd
@@ -699,7 +697,9 @@ pub fn check_git_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-m", "-M", "--move"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Renaming branch"));
+        return Some(GateResult::ask(
+            "Renames a branch. `-M` forces the rename even if it would overwrite an existing branch name.",
+        ));
     }
 
     if GIT_ALLOW.contains(subcmd.as_str()) || GIT_ALLOW.contains(subcmd_single) {
@@ -773,9 +773,9 @@ pub static AWS_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 });
 
 pub static AWS_BLOCK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
-    [("iam delete-user", "Deleting IAM users is blocked")]
-        .into_iter()
-        .collect()
+    [
+        ("iam delete-user", "Blocked: `aws iam delete-user` removes an IAM identity. Detach policies and rotate access keys via individual commands instead."),
+    ].into_iter().collect()
 });
 
 /// Check aws commands declaratively
@@ -801,85 +801,135 @@ pub fn check_aws_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
     // Check conditional block rules
     if subcmd.starts_with("organizations delete") {
-        return Some(GateResult::block("aws: Organization deletion blocked"));
+        return Some(GateResult::block(
+            "aws: Blocked: `aws organizations delete-*` removes organization-level entities (accounts, OUs, policies). Effects span the whole org and are hard to reverse.",
+        ));
     }
 
     // Check ask rules with flag/prefix conditions
     if cmd.args.get(1).is_some_and(|a| a.starts_with("create")) {
-        return Some(GateResult::ask("aws: Creating resources"));
+        return Some(GateResult::ask(
+            "aws: AWS create operation: provisions a new resource in the account. Verify region, profile, and resource type; provisioning may incur cost.",
+        ));
     }
     if cmd.args.get(1).is_some_and(|a| a.starts_with("delete")) {
-        return Some(GateResult::ask("aws: Deleting resources"));
+        return Some(GateResult::ask(
+            "aws: AWS delete operation. Verify region, profile, and resource ID before approving; most deletions cannot be reversed.",
+        ));
     }
     if cmd.args.get(1).is_some_and(|a| a.starts_with("put")) {
-        return Some(GateResult::ask("aws: Writing resources"));
+        return Some(GateResult::ask(
+            "aws: AWS put operation: writes or overwrites a resource (object, item, policy, parameter). Existing values are replaced; previous content may be lost.",
+        ));
     }
     if cmd.args.get(1).is_some_and(|a| a.starts_with("update")) {
-        return Some(GateResult::ask("aws: Updating resources"));
+        return Some(GateResult::ask(
+            "aws: AWS update operation: changes the configuration of an existing resource. Effect is immediate; review the diff first.",
+        ));
     }
     if cmd.args.get(1).is_some_and(|a| a.starts_with("modify")) {
-        return Some(GateResult::ask("aws: Modifying resources"));
+        return Some(GateResult::ask(
+            "aws: AWS modify operation: changes attributes of a running resource (instance type, security group, parameter). May restart or interrupt the resource.",
+        ));
     }
     if cmd.args.get(1).is_some_and(|a| a.starts_with("remove")) {
-        return Some(GateResult::ask("aws: Removing resources"));
+        return Some(GateResult::ask(
+            "aws: AWS remove operation: removes attached items (tags, permissions, members). Effect is immediate.",
+        ));
     }
     if cmd.args.get(1).is_some_and(|a| a.starts_with("run")) {
-        return Some(GateResult::ask("aws: Running resources"));
+        return Some(GateResult::ask(
+            "aws: AWS run operation: launches resources such as EC2 instances or task definitions. Billing starts when they reach running state.",
+        ));
     }
     if cmd.args.get(1).is_some_and(|a| a.starts_with("start")) {
-        return Some(GateResult::ask("aws: Starting resources"));
+        return Some(GateResult::ask(
+            "aws: AWS start operation: starts a stopped resource (instance, DB, pipeline). Billing typically resumes once running.",
+        ));
     }
     if cmd.args.get(1).is_some_and(|a| a.starts_with("stop")) {
-        return Some(GateResult::ask("aws: Stopping resources"));
+        return Some(GateResult::ask(
+            "aws: AWS stop operation: halts a running resource. Connected clients drop; storage bills usually continue.",
+        ));
     }
     if cmd.args.get(1).is_some_and(|a| a.starts_with("terminate")) {
-        return Some(GateResult::ask("aws: Terminating resources"));
+        return Some(GateResult::ask(
+            "aws: AWS terminate operation: permanently destroys the resource (instance, workflow execution). Attached ephemeral storage is lost.",
+        ));
     }
     if cmd.args.get(1).is_some_and(|a| a.starts_with("reboot")) {
-        return Some(GateResult::ask("aws: Rebooting resources"));
+        return Some(GateResult::ask(
+            "aws: AWS reboot operation: restarts a running resource (instance, cache cluster, DB). Causes downtime during the reboot window.",
+        ));
     }
     if cmd.args.get(1).is_some_and(|a| a.starts_with("attach")) {
-        return Some(GateResult::ask("aws: Attaching resources"));
+        return Some(GateResult::ask(
+            "aws: AWS attach operation: connects one resource to another (volume to instance, policy to role, gateway to VPC). Live traffic/state may shift.",
+        ));
     }
     if cmd.args.get(1).is_some_and(|a| a.starts_with("detach")) {
-        return Some(GateResult::ask("aws: Detaching resources"));
+        return Some(GateResult::ask(
+            "aws: AWS detach operation: disconnects an attached resource (volume, policy, network interface). The detached side loses that access.",
+        ));
     }
     if cmd.args.get(1).is_some_and(|a| a.starts_with("associate")) {
-        return Some(GateResult::ask("aws: Associating resources"));
+        return Some(GateResult::ask(
+            "aws: AWS associate operation: links resources (route table to subnet, address to instance, IAM identity to provider). May reroute live traffic.",
+        ));
     }
     if cmd
         .args
         .get(1)
         .is_some_and(|a| a.starts_with("disassociate"))
     {
-        return Some(GateResult::ask("aws: Disassociating resources"));
+        return Some(GateResult::ask(
+            "aws: AWS disassociate operation: unlinks resources (address from instance, route table from subnet). May break in-flight traffic.",
+        ));
     }
     if cmd.args.get(1).is_some_and(|a| a.starts_with("enable")) {
-        return Some(GateResult::ask("aws: Enabling resources"));
+        return Some(GateResult::ask(
+            "aws: AWS enable operation: turns on a feature or service (logging, MFA, region, security control). Effect is immediate.",
+        ));
     }
     if cmd.args.get(1).is_some_and(|a| a.starts_with("disable")) {
-        return Some(GateResult::ask("aws: Disabling resources"));
+        return Some(GateResult::ask(
+            "aws: AWS disable operation: turns off a feature or service (logging, MFA, security control). Coverage drops immediately.",
+        ));
     }
     if cmd.args.get(1).is_some_and(|a| a.starts_with("register")) {
-        return Some(GateResult::ask("aws: Registering resources"));
+        return Some(GateResult::ask(
+            "aws: AWS register operation: registers a target with a service (task definition, target with load balancer, domain). Becomes live to that service.",
+        ));
     }
     if cmd.args.get(1).is_some_and(|a| a.starts_with("deregister")) {
-        return Some(GateResult::ask("aws: Deregistering resources"));
+        return Some(GateResult::ask(
+            "aws: AWS deregister operation: removes a registered target (from load balancer, task definition). The target stops receiving traffic.",
+        ));
     }
     if cmd.args.get(1).is_some_and(|a| a.starts_with("invoke")) {
-        return Some(GateResult::ask("aws: Invoking resources"));
+        return Some(GateResult::ask(
+            "aws: AWS invoke operation: executes a function or state machine (Lambda, Step Functions). Side effects run in the cloud and may incur cost.",
+        ));
     }
     if cmd.args.get(1).is_some_and(|a| a.starts_with("publish")) {
-        return Some(GateResult::ask("aws: Publishing resources"));
+        return Some(GateResult::ask(
+            "aws: AWS publish operation: publishes a message, version, or layer (SNS, Lambda version, layer version). Subscribers/consumers see it immediately.",
+        ));
     }
     if cmd.args.get(1).is_some_and(|a| a.starts_with("send")) {
-        return Some(GateResult::ask("aws: Sending messages"));
+        return Some(GateResult::ask(
+            "aws: AWS send operation: dispatches a message or signal (SQS, SES, command to instance). Delivery is real-time and may cost per message.",
+        ));
     }
     if cmd.args.get(1).is_some_and(|a| a.starts_with("tag")) {
-        return Some(GateResult::ask("aws: Tagging resources"));
+        return Some(GateResult::ask(
+            "aws: AWS tag operation: adds tags to a resource. Tags can drive billing allocation and IAM conditions; pick keys/values intentionally.",
+        ));
     }
     if cmd.args.get(1).is_some_and(|a| a.starts_with("untag")) {
-        return Some(GateResult::ask("aws: Untagging resources"));
+        return Some(GateResult::ask(
+            "aws: AWS untag operation: removes tags from a resource. Tag-based IAM policies and cost allocation depending on those tags will stop applying.",
+        ));
     }
 
     if AWS_ALLOW.contains(subcmd.as_str()) || AWS_ALLOW.contains(subcmd_single) {
@@ -954,36 +1004,31 @@ pub static GCLOUD_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 
 pub static GCLOUD_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        (
-            "container clusters get-credentials",
-            "Updating kubeconfig (writes to ~/.kube/config)",
-        ),
-        ("compute instances create", "Compute create"),
-        ("compute instances delete", "Compute delete"),
-        ("compute instances start", "Compute start"),
-        ("compute instances stop", "Compute stop"),
-        ("compute instances reset", "Compute reset"),
-        ("container clusters create", "GKE create"),
-        ("container clusters delete", "GKE delete"),
-        ("container clusters resize", "GKE resize"),
-        ("container clusters upgrade", "GKE upgrade"),
-        ("storage cp", "Storage copy"),
-        ("storage mv", "Storage move"),
-        ("storage rm", "Storage delete"),
-        ("functions deploy", "Functions deploy"),
-        ("functions delete", "Functions delete"),
-        ("run deploy", "Cloud Run deploy"),
-        ("run services delete", "Cloud Run delete"),
-        ("sql instances create", "Cloud SQL create"),
-        ("sql instances delete", "Cloud SQL delete"),
-        ("sql instances patch", "Cloud SQL patch"),
-        ("secrets create", "Secrets create"),
-        ("secrets delete", "Secrets delete"),
-        ("projects create", "Project create"),
-        ("projects delete", "Project delete"),
-    ]
-    .into_iter()
-    .collect()
+        ("container clusters get-credentials", "Updating kubeconfig (writes to `~/.kube/config`)"),
+        ("compute instances create", "GCE create: provisions a new VM in the project. Billing starts when it boots; verify zone, machine type, and network."),
+        ("compute instances delete", "GCE compute delete: terminates the VM. Persistent disks may or may not be deleted depending on flags."),
+        ("compute instances start", "GCE start: boots a stopped VM. Compute billing resumes once the instance is running."),
+        ("compute instances stop", "GCE stop: shuts the VM down. Connections drop; persistent disks still bill while stopped."),
+        ("compute instances reset", "GCE reset: hard-reboots the VM without a clean shutdown. In-memory state and unflushed disk writes are lost."),
+        ("container clusters create", "GKE create: provisions a new Kubernetes cluster. Control plane and node pools begin billing immediately."),
+        ("container clusters delete", "GKE delete: tears down the cluster including all workloads. Cannot be reversed."),
+        ("container clusters resize", "GKE resize: changes node pool size. Scaling down evicts pods from removed nodes; scaling up adds nodes that begin billing."),
+        ("container clusters upgrade", "GKE upgrade: upgrades the control plane or node pool version. Workloads get rescheduled during node rollouts; cannot be downgraded mid-flight."),
+        ("storage cp", "GCS copy: writes objects into a bucket. May overwrite existing objects at the same key."),
+        ("storage mv", "GCS move: copies then deletes the source. Failure mid-operation can leave partial state at the destination."),
+        ("storage rm", "GCS delete: removes objects from a bucket. Recursive (`-r`) on a prefix deletes every matching object; recovery requires object versioning."),
+        ("functions deploy", "Cloud Functions deploy: uploads source and publishes a new revision. Traffic shifts to the new version once deployment succeeds."),
+        ("functions delete", "Cloud Functions delete: removes the function. Triggers stop firing immediately; callers get errors until recreated."),
+        ("run deploy", "Cloud Run deploy: builds/pulls the image and rolls out a new revision. Traffic shifts to it per the service's traffic policy."),
+        ("run services delete", "Cloud Run delete: removes the service. Live traffic returns 404 until redeploy."),
+        ("sql instances create", "Cloud SQL create: provisions a managed database instance. Billing starts at create time; tier and storage choices are sticky."),
+        ("sql instances delete", "Cloud SQL delete: removes the database instance and its data. Restore requires a prior backup; otherwise data is gone."),
+        ("sql instances patch", "Cloud SQL patch: changes instance settings (tier, flags, maintenance, network). Some changes restart the instance."),
+        ("secrets create", "Secret Manager create: creates a new secret container. Initial payload value (if provided) lands in Cloud audit logs at IAM read."),
+        ("secrets delete", "Secret Manager delete: removes the secret and all its versions. Consumers that read it will start failing immediately."),
+        ("projects create", "GCP project create: provisions a new project under your org/billing. Project IDs are globally unique and cannot be reused."),
+        ("projects delete", "GCP project delete: schedules the project for deletion (30-day grace). All resources go offline immediately."),
+    ].into_iter().collect()
 });
 
 /// Check gcloud commands declaratively
@@ -1072,32 +1117,24 @@ pub static TERRAFORM_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 
 pub static TERRAFORM_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        (
-            "test",
-            "Terraform: Running tests (may create infrastructure)",
-        ),
-        ("console", "Terraform: Interactive REPL"),
-        (
-            "force-unlock",
-            "Terraform: Force-unlocking state (dangerous)",
-        ),
-        ("apply", "Terraform: Applying changes"),
-        ("destroy", "Terraform: Destroying infrastructure"),
-        ("import", "Terraform: Importing resource"),
-        ("taint", "Terraform: Tainting resource"),
-        ("untaint", "Terraform: Untainting resource"),
-        ("init", "Terraform: Initializing"),
-        ("fmt", "Terraform: Formatting files"),
-        ("state mv", "Terraform: state mv"),
-        ("state rm", "Terraform: state rm"),
-        ("state push", "Terraform: state push"),
-        ("state pull", "Terraform: state pull"),
-        ("workspace new", "Terraform: workspace new"),
-        ("workspace delete", "Terraform: workspace delete"),
-        ("workspace select", "Terraform: workspace select"),
-    ]
-    .into_iter()
-    .collect()
+        ("test", "Terraform test: runs `.tftest.hcl` cases. With `command = apply` (default), test cases create real infrastructure for the duration of the run."),
+        ("console", "Terraform console: interactive REPL against the current state. Evaluates expressions only, but reads state from the configured backend."),
+        ("force-unlock", "Terraform force-unlock removes a stuck state lock. Confirm no other apply is in progress; concurrent applies corrupt state."),
+        ("apply", "Terraform apply: applies planned changes to real infrastructure. Run `terraform plan` first and review the diff."),
+        ("destroy", "Terraform destroy: tears down resources tracked by this state. Use `-target` to scope; cannot be undone."),
+        ("import", "Terraform import: brings an existing real resource under terraform management. Verify the address matches your config."),
+        ("taint", "Terraform taint: marks a resource for replacement on the next apply. The next `apply` will destroy and recreate it."),
+        ("untaint", "Terraform untaint: clears the tainted mark from a resource so the next apply does not replace it."),
+        ("init", "Terraform init: downloads providers/modules and configures the backend. Writes `.terraform/` and `.terraform.lock.hcl`."),
+        ("fmt", "Terraform fmt: rewrites `.tf` files in place to canonical style. Use `-check` to verify without modifying."),
+        ("state mv", "Terraform state mv: renames or reparents resources in state. Validate addresses; mistakes leave resources orphaned."),
+        ("state rm", "Terraform state rm: drops a resource from state without destroying it in the cloud. The resource becomes unmanaged."),
+        ("state push", "Terraform state push: overwrites remote state with local. Take a backup of remote state first."),
+        ("state pull", "Terraform state pull: downloads the current remote state to stdout. Read-only on remote state, but exposes sensitive values."),
+        ("workspace new", "Terraform workspace new: creates a new workspace with its own state file. Subsequent commands run against it until switched."),
+        ("workspace delete", "Terraform workspace delete: removes the workspace and its state file. State cannot be recovered after deletion."),
+        ("workspace select", "Terraform workspace select: switches the active workspace. Subsequent plan/apply runs target the selected workspace's state."),
+    ].into_iter().collect()
 });
 
 /// Check terraform commands declaratively
@@ -1167,44 +1204,40 @@ pub static KUBECTL_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 
 pub static KUBECTL_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("debug", "Creating debug container"),
-        ("apply", "Applying resources"),
-        ("create", "Creating resources"),
-        ("delete", "Deleting resources"),
-        ("edit", "Editing resources"),
-        ("patch", "Patching resources"),
-        ("replace", "Replacing resources"),
-        ("scale", "Scaling resources"),
-        ("rollout", "Rollout operation"),
-        ("expose", "Exposing service"),
-        ("run", "Running pod"),
-        ("exec", "Executing in pod"),
-        ("cp", "Copying files"),
-        ("port-forward", "Port forwarding"),
-        ("label", "Labeling resources"),
-        ("annotate", "Annotating resources"),
-        ("taint", "Tainting nodes"),
-        ("drain", "Draining nodes"),
-        ("cordon", "Cordoning nodes"),
-        ("uncordon", "Uncordoning nodes"),
-        ("config set-context", "config set-context"),
-        ("config use-context", "config use-context"),
-        ("config set-cluster", "config set-cluster"),
-        ("config set-credentials", "config set-credentials"),
-        ("config delete-context", "config delete-context"),
-        ("config delete-cluster", "config delete-cluster"),
-    ]
-    .into_iter()
-    .collect()
+        ("debug", "kubectl debug: attaches an ephemeral debug container to a running pod or node. The debug container runs with the target's namespace and may have elevated access."),
+        ("apply", "kubectl apply: creates or updates resources from a manifest in the current context/namespace. Drift between cluster and file is reconciled toward the file."),
+        ("create", "kubectl create: imperatively creates a resource in the current context/namespace. Fails if the resource already exists."),
+        ("delete", "kubectl delete: removes the resource from the cluster. Verify namespace/context; many resources cascade-delete dependents."),
+        ("edit", "kubectl edit: opens the live resource in $EDITOR and applies on save. Changes go straight to the cluster; no diff review."),
+        ("patch", "kubectl patch: applies a strategic/JSON/merge patch to a live resource. Effect is immediate; rolling updates can trigger pod restarts."),
+        ("replace", "kubectl replace: replaces a live resource entirely with the manifest. Fields absent from the file are dropped; `--force` deletes and recreates."),
+        ("scale", "kubectl scale: changes the replica count on a Deployment/StatefulSet/ReplicaSet. Scaling to 0 stops the workload."),
+        ("rollout", "kubectl rollout: triggers, pauses, resumes, undoes, or restarts a Deployment/DaemonSet/StatefulSet rollout. Pods get replaced per the strategy."),
+        ("expose", "kubectl expose: creates a Service in front of a workload. With type=LoadBalancer it provisions a cloud LB; type=NodePort opens a node port."),
+        ("run", "kubectl run: creates a pod in the current namespace from an image. Useful for one-off shells/jobs; leaves a pod behind unless `--rm` is set."),
+        ("exec", "kubectl exec: runs a command inside a running container. Side effects (writes, signals) happen in the live pod."),
+        ("cp", "kubectl cp: copies files between local FS and a pod via `tar` in the container. Requires `tar` in the container image."),
+        ("port-forward", "kubectl port-forward: tunnels a local port to a pod/service. Anyone on the local host can reach the forwarded target while running."),
+        ("label", "kubectl label: adds, updates, or removes labels on a resource. Labels drive selectors (Services, NetworkPolicies, scheduling); changes can shift routing."),
+        ("annotate", "kubectl annotate: adds, updates, or removes annotations on a resource. Annotations can configure controllers (ingress, autoscaler, sidecars)."),
+        ("taint", "kubectl taint: adds a taint to a node so non-tolerating pods avoid it. With `NoExecute`, existing non-tolerating pods are evicted."),
+        ("drain", "kubectl drain: cordons the node and evicts its pods to other nodes. Confirm replicas/replacements exist before approving."),
+        ("cordon", "kubectl cordon: marks a node unschedulable. Existing pods stay; new pods land elsewhere."),
+        ("uncordon", "kubectl uncordon: marks a node schedulable again. The scheduler resumes placing new pods on it."),
+        ("config set-context", "kubectl config set-context: writes a context entry to `~/.kube/config`. Sets cluster, user, and default namespace for that context."),
+        ("config use-context", "kubectl config use-context: switches the current context in `~/.kube/config`. Subsequent kubectl commands target the new cluster/namespace."),
+        ("config set-cluster", "kubectl config set-cluster: writes a cluster entry (server URL, CA data) to `~/.kube/config`. Misconfigured CA bypasses TLS verification."),
+        ("config set-credentials", "kubectl config set-credentials: writes auth data (token, cert, exec plugin) to `~/.kube/config`. Anyone with read access to the file gets those credentials."),
+        ("config delete-context", "kubectl config delete-context: removes a context from `~/.kube/config`. The cluster and user entries it referenced are left intact."),
+        ("config delete-cluster", "kubectl config delete-cluster: removes a cluster entry from `~/.kube/config`. Contexts that referenced it stop working."),
+    ].into_iter().collect()
 });
 
 pub static KUBECTL_BLOCK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("delete namespace kube-system", "Cannot delete kube-system"),
-        ("delete ns kube-system", "Cannot delete kube-system"),
-    ]
-    .into_iter()
-    .collect()
+        ("delete namespace kube-system", "Refusing to delete the `kube-system` namespace. It hosts core cluster services; deleting it breaks the cluster."),
+        ("delete ns kube-system", "Refusing to delete the `kube-system` namespace. It hosts core cluster services; deleting it breaks the cluster."),
+    ].into_iter().collect()
 });
 
 /// Check kubectl commands declaratively
@@ -1304,72 +1337,70 @@ pub static DOCKER_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 
 pub static DOCKER_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("buildx build", "Docker: Building image (buildx)"),
-        ("buildx create", "Docker: Creating builder"),
-        ("buildx rm", "Docker: Removing builder"),
-        ("buildx use", "Docker: Switching builder"),
-        ("buildx stop", "Docker: Stopping builder"),
-        ("buildx prune", "Docker: Pruning build cache"),
-        ("scout enroll", "Docker: Enrolling in Scout"),
-        ("context create", "Docker: Creating context"),
-        ("context rm", "Docker: Removing context"),
-        ("context use", "Docker: Switching context"),
-        ("manifest create", "Docker: Creating manifest"),
-        ("manifest push", "Docker: Pushing manifest"),
-        ("manifest annotate", "Docker: Annotating manifest"),
-        ("image rm", "Docker: Removing image"),
-        ("image prune", "Docker: Pruning images"),
-        ("image tag", "Docker: Tagging image"),
-        ("image push", "Docker: Pushing image"),
-        ("image pull", "Docker: Pulling image"),
-        ("container rm", "Docker: Removing container"),
-        ("container start", "Docker: Starting container"),
-        ("container stop", "Docker: Stopping container"),
-        ("container kill", "Docker: Killing container"),
-        ("container prune", "Docker: Pruning containers"),
-        ("compose up", "Compose: Starting services"),
-        ("compose down", "Compose: Stopping services"),
-        ("compose start", "Compose: Starting services"),
-        ("compose stop", "Compose: Stopping services"),
-        ("compose restart", "Compose: Restarting services"),
-        ("compose build", "Compose: Building images"),
-        ("compose pull", "Compose: Pulling images"),
-        ("compose push", "Compose: Pushing images"),
-        ("compose exec", "Compose: Executing in container"),
-        ("compose run", "Compose: Running command"),
-        ("compose rm", "Compose: Removing containers"),
-        ("compose create", "Compose: Creating containers"),
-        ("compose kill", "Compose: Killing containers"),
-        ("compose pause", "Compose: Pausing containers"),
-        ("compose unpause", "Compose: Unpausing containers"),
-        ("run", "Docker: Running container"),
-        ("exec", "Docker: Executing in container"),
-        ("build", "Docker: Building image"),
-        ("push", "Docker: Pushing image"),
-        ("pull", "Docker: Pulling image"),
-        ("rm", "Docker: Removing container"),
-        ("rmi", "Docker: Removing image"),
-        ("kill", "Docker: Killing container"),
-        ("stop", "Docker: Stopping container"),
-        ("start", "Docker: Starting container"),
-        ("restart", "Docker: Restarting container"),
-        ("pause", "Docker: Pausing container"),
-        ("unpause", "Docker: Unpausing container"),
-        ("tag", "Docker: Tagging image"),
-        ("commit", "Docker: Committing container"),
-        ("cp", "Docker: Copying files"),
-        ("login", "Docker: Logging in"),
-        ("logout", "Docker: Logging out"),
-        ("network create", "Docker: network create"),
-        ("network rm", "Docker: network rm"),
-        ("network connect", "Docker: network connect"),
-        ("network disconnect", "Docker: network disconnect"),
-        ("volume create", "Docker: volume create"),
-        ("volume rm", "Docker: volume rm"),
-        ("system prune", "Docker: system prune"),
-    ]
-    .into_iter()
-    .collect()
+        ("buildx build", "Docker buildx build: builds an image (optionally multi-arch). Pulls base images and may push if `--push` is set."),
+        ("buildx create", "Docker buildx create: creates a new builder instance (may spin up a container or remote driver). Subsequent builds use it."),
+        ("buildx rm", "Docker buildx rm: removes a builder instance and its cache. In-progress builds against it fail."),
+        ("buildx use", "Docker buildx use: sets the active builder. Subsequent `docker buildx build` calls use the selected builder."),
+        ("buildx stop", "Docker buildx stop: stops a running builder instance. In-progress builds on it are interrupted."),
+        ("buildx prune", "Docker buildx prune: deletes unused build cache. Frees disk; next builds are slower until cache rewarms."),
+        ("scout enroll", "Docker Scout enroll: opts the organization into Docker Scout vulnerability scanning. Image data is uploaded to Docker's service."),
+        ("context create", "Docker context create: registers a new daemon endpoint in the Docker config. Subsequent commands can target it."),
+        ("context rm", "Docker context rm: removes a context from the Docker config. If it was active, the default context becomes active."),
+        ("context use", "Docker context use: switches the active daemon endpoint. Subsequent docker commands target the new daemon (potentially remote)."),
+        ("manifest create", "Docker manifest create: builds a local multi-arch manifest list referencing existing image digests. Not yet pushed to a registry."),
+        ("manifest push", "Docker manifest push: publishes the manifest list to the registry. Consumers of that tag will pull the new manifest immediately."),
+        ("manifest annotate", "Docker manifest annotate: edits a local manifest list (os/arch/variant). Push is a separate step."),
+        ("image rm", "Docker image rm: removes a local image (and its layers if unreferenced). Containers using that image still run."),
+        ("image prune", "Docker image prune: deletes dangling (or with `-a`, all unused) local images. Reclaims disk; can be expensive to repull."),
+        ("image tag", "Docker image tag: creates a new ref pointing at an existing image. Local-only until pushed."),
+        ("image push", "Docker image push: uploads the image (and layers) to the registry under the given ref. Overwrites the tag for everyone consuming it."),
+        ("image pull", "Docker image pull: downloads an image from a registry. Network/disk usage; verify the ref is the intended source."),
+        ("container rm", "Docker container rm: removes a stopped container (with `-f`, also force-kills a running one). Anonymous volumes are removed only with `-v`."),
+        ("container start", "Docker container start: starts an existing stopped container. Bound ports and volumes from the original `run` reapply."),
+        ("container stop", "Docker container stop: sends SIGTERM then SIGKILL after the grace period. In-flight requests to the container drop."),
+        ("container kill", "Docker container kill: sends a signal (SIGKILL by default) directly. No graceful shutdown; in-flight work is lost."),
+        ("container prune", "Docker container prune: deletes all stopped containers. Their writable layers and anonymous state are gone."),
+        ("compose up", "Compose up: starts the services in the current compose file. Builds/pulls images as needed; with `-d` runs detached."),
+        ("compose down", "Compose down: stops and removes containers, networks, and (with `-v`) volumes for the project. Persistent state in named volumes survives unless `-v` is set."),
+        ("compose start", "Compose start: starts already-created service containers. Does not create or rebuild."),
+        ("compose stop", "Compose stop: stops running service containers but leaves them in place. In-flight requests drop."),
+        ("compose restart", "Compose restart: restarts service containers without recreating them. Brief downtime per service."),
+        ("compose build", "Compose build: builds (or rebuilds) the services' images per the compose file. Local-only until pushed."),
+        ("compose pull", "Compose pull: pulls the service images from their registries. Disk/network usage."),
+        ("compose push", "Compose push: pushes the service images to their registries. Overwrites the tags for anyone consuming them."),
+        ("compose exec", "Compose exec: runs a command inside a running service container. Side effects (writes, signals) happen in that live container."),
+        ("compose run", "Compose run: spins up a one-off service container with the given command. Leaves a stopped container behind unless `--rm` is set."),
+        ("compose rm", "Compose rm: removes stopped service containers (with `-s` it also stops them first). Anonymous volumes go with `-v`."),
+        ("compose create", "Compose create: creates service containers without starting them. Useful before a separate `start`."),
+        ("compose kill", "Compose kill: sends SIGKILL to running service containers. No graceful shutdown."),
+        ("compose pause", "Compose pause: freezes all processes in the service containers via cgroups. Connections hang until unpaused."),
+        ("compose unpause", "Compose unpause: resumes previously-paused service containers."),
+        ("run", "Docker run: creates and starts a new container from an image. Honours `-v` mounts, port publishes, and `--privileged`; verify those before approving."),
+        ("exec", "Docker exec: runs a command inside an already-running container. Side effects happen in that live container."),
+        ("build", "Docker build: builds an image from a Dockerfile. Pulls base images; local-only until pushed."),
+        ("push", "Docker push: uploads an image to the registry under the given ref. Overwrites the tag for everyone consuming it."),
+        ("pull", "Docker pull: downloads an image from a registry. Network/disk usage; verify the ref."),
+        ("rm", "Docker rm: removes a stopped container (with `-f`, also force-kills a running one). Anonymous volumes go with `-v`."),
+        ("rmi", "Docker rmi: removes a local image. Containers using it still run; layers go when no ref remains."),
+        ("kill", "Docker kill: sends a signal (SIGKILL by default) directly to the container PID 1. No graceful shutdown."),
+        ("stop", "Docker stop: sends SIGTERM then SIGKILL after the grace period. In-flight requests drop."),
+        ("start", "Docker start: starts an existing stopped container. Original `run` config (ports, mounts) reapplies."),
+        ("restart", "Docker restart: stops and starts the container. Brief downtime; existing config reapplies."),
+        ("pause", "Docker pause: freezes all processes in the container via cgroups. Connections hang until unpaused."),
+        ("unpause", "Docker unpause: resumes a previously-paused container."),
+        ("tag", "Docker tag: creates a new ref pointing at an existing image. Local-only until pushed."),
+        ("commit", "Docker commit: creates a new image from a container's writable layer. Image is not reproducible from a Dockerfile."),
+        ("cp", "Docker cp: copies files between the local FS and a container. Overwrites destination paths."),
+        ("login", "Docker login: writes registry credentials to `~/.docker/config.json` (or the configured credential helper). Anyone with read access to the file gets those credentials."),
+        ("logout", "Docker logout: removes registry credentials from the Docker config. Subsequent pulls/pushes to that registry need to re-auth."),
+        ("network create", "Docker network create: creates a user-defined network. Containers can be attached and discover each other by name."),
+        ("network rm", "Docker network rm: removes a network. Fails if containers are still attached; otherwise their inter-container DNS breaks."),
+        ("network connect", "Docker network connect: attaches a running container to an additional network. Gives it new addresses and DNS visibility."),
+        ("network disconnect", "Docker network disconnect: detaches a container from a network. Existing connections on that network drop."),
+        ("volume create", "Docker volume create: creates a named volume managed by the engine. Persists across container recreates."),
+        ("volume rm", "Docker volume rm: removes a named volume and its data. Fails if a container still references it; otherwise the data is gone."),
+        ("system prune", "Docker system prune: deletes stopped containers, unused networks, dangling images, and build cache (with `-a --volumes` also more). Reclaims disk; can be expensive to rebuild."),
+    ].into_iter().collect()
 });
 
 /// Check docker commands declaratively
@@ -1450,31 +1481,29 @@ pub static PODMAN_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 
 pub static PODMAN_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("run", "Podman: Running container"),
-        ("exec", "Podman: Executing in container"),
-        ("build", "Podman: Building image"),
-        ("push", "Podman: Pushing image"),
-        ("pull", "Podman: Pulling image"),
-        ("rm", "Podman: Removing container"),
-        ("rmi", "Podman: Removing image"),
-        ("kill", "Podman: Killing container"),
-        ("stop", "Podman: Stopping container"),
-        ("start", "Podman: Starting container"),
-        ("restart", "Podman: Restarting container"),
-        ("pause", "Podman: Pausing container"),
-        ("unpause", "Podman: Unpausing container"),
-        ("tag", "Podman: Tagging image"),
-        ("commit", "Podman: Committing container"),
-        ("cp", "Podman: Copying files"),
-        ("login", "Podman: Logging in"),
-        ("logout", "Podman: Logging out"),
-        ("create", "Podman: Creating container"),
-        ("pod", "Podman: Pod operation"),
-        ("generate", "Podman: Generating config"),
-        ("play", "Podman: Playing kube YAML"),
-    ]
-    .into_iter()
-    .collect()
+        ("run", "Podman run: creates and starts a new container from an image. Honours `-v` mounts and port publishes; verify those before approving."),
+        ("exec", "Podman exec: runs a command inside an already-running container. Side effects happen in that live container."),
+        ("build", "Podman build: builds an image from a Containerfile/Dockerfile. Pulls base images; local-only until pushed."),
+        ("push", "Podman push: uploads an image to the registry under the given ref. Overwrites the tag for consumers."),
+        ("pull", "Podman pull: downloads an image from a registry. Network/disk usage; verify the ref."),
+        ("rm", "Podman rm: removes a stopped container (with `-f`, also force-kills a running one). Anonymous volumes go with `-v`."),
+        ("rmi", "Podman rmi: removes a local image. Containers using it still run; layers go when no ref remains."),
+        ("kill", "Podman kill: sends a signal (SIGKILL by default) to the container PID 1. No graceful shutdown."),
+        ("stop", "Podman stop: sends SIGTERM then SIGKILL after the grace period. In-flight requests drop."),
+        ("start", "Podman start: starts an existing stopped container. Original `run` config (ports, mounts) reapplies."),
+        ("restart", "Podman restart: stops and starts the container. Brief downtime; existing config reapplies."),
+        ("pause", "Podman pause: freezes all processes in the container via cgroups. Connections hang until unpaused."),
+        ("unpause", "Podman unpause: resumes a previously-paused container."),
+        ("tag", "Podman tag: creates a new ref pointing at an existing image. Local-only until pushed."),
+        ("commit", "Podman commit: creates a new image from a container's writable layer. Image is not reproducible from a Containerfile."),
+        ("cp", "Podman cp: copies files between the local FS and a container. Overwrites destination paths."),
+        ("login", "Podman login: writes registry credentials to the auth store. Anyone with read access to the file gets those credentials."),
+        ("logout", "Podman logout: removes registry credentials from the auth store. Subsequent pulls/pushes need to re-auth."),
+        ("create", "Podman create: creates a container without starting it. Useful before a separate `start`."),
+        ("pod", "Podman pod: pod-level operation (create/start/stop/rm). Affects all containers in the pod at once."),
+        ("generate", "Podman generate: emits Kubernetes/systemd config from existing containers or pods to stdout (or a file). May write to disk depending on flags."),
+        ("play", "Podman play: creates pods and containers from a Kubernetes YAML manifest. Pulls images and starts workloads locally."),
+    ].into_iter().collect()
 });
 
 /// Check podman commands declaratively
@@ -1520,24 +1549,22 @@ pub static DOCKER_COMPOSE_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 
 pub static DOCKER_COMPOSE_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("up", "Compose: Starting services"),
-        ("down", "Compose: Stopping services"),
-        ("start", "Compose: Starting services"),
-        ("stop", "Compose: Stopping services"),
-        ("restart", "Compose: Restarting services"),
-        ("pause", "Compose: Pausing services"),
-        ("unpause", "Compose: Unpausing services"),
-        ("build", "Compose: Building services"),
-        ("push", "Compose: Pushing images"),
-        ("pull", "Compose: Pulling images"),
-        ("rm", "Compose: Removing services"),
-        ("kill", "Compose: Killing services"),
-        ("exec", "Compose: Executing in service"),
-        ("run", "Compose: Running one-off"),
-        ("create", "Compose: Creating services"),
-    ]
-    .into_iter()
-    .collect()
+        ("up", "Compose up: starts the services in the current compose file. Builds/pulls images as needed; with `-d` runs detached."),
+        ("down", "Compose down: stops and removes containers, networks, and (with `-v`) volumes for the project. Named-volume data survives unless `-v` is set."),
+        ("start", "Compose start: starts already-created service containers. Does not create or rebuild."),
+        ("stop", "Compose stop: stops running service containers but leaves them in place. In-flight requests drop."),
+        ("restart", "Compose restart: restarts service containers without recreating them. Brief downtime per service."),
+        ("pause", "Compose pause: freezes all processes in the service containers via cgroups. Connections hang until unpaused."),
+        ("unpause", "Compose unpause: resumes previously-paused service containers."),
+        ("build", "Compose build: builds (or rebuilds) the services' images per the compose file. Local-only until pushed."),
+        ("push", "Compose push: pushes the service images to their registries. Overwrites the tags for consumers."),
+        ("pull", "Compose pull: pulls the service images from their registries. Disk/network usage."),
+        ("rm", "Compose rm: removes stopped service containers (with `-s` it also stops them first). Anonymous volumes go with `-v`."),
+        ("kill", "Compose kill: sends SIGKILL to running service containers. No graceful shutdown."),
+        ("exec", "Compose exec: runs a command inside a running service container. Side effects happen in that live container."),
+        ("run", "Compose run: spins up a one-off service container with the given command. Leaves a stopped container behind unless `--rm` is set."),
+        ("create", "Compose create: creates service containers without starting them. Useful before a separate `start`."),
+    ].into_iter().collect()
 });
 
 /// Check docker-compose commands declaratively
@@ -1601,19 +1628,17 @@ pub static HELM_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 
 pub static HELM_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("repo add", "Adding chart repository"),
-        ("repo remove", "Removing chart repository"),
-        ("repo update", "Updating chart repositories"),
-        ("install", "Helm: Installing release"),
-        ("upgrade", "Helm: Upgrading release"),
-        ("uninstall", "Helm: Uninstalling release"),
-        ("rollback", "Helm: Rolling back"),
-        ("delete", "Helm: Deleting release"),
-        ("push", "Helm: Pushing chart"),
-        ("package", "Helm: Packaging chart"),
-    ]
-    .into_iter()
-    .collect()
+        ("repo add", "Helm repo add: registers a chart repository in the local Helm config. Subsequent installs can pull charts from it."),
+        ("repo remove", "Helm repo remove: removes a chart repository from the local Helm config. Existing releases keep running."),
+        ("repo update", "Helm repo update: refreshes the local index for all repos. Read-only on clusters; updates local cache files."),
+        ("install", "Helm install: deploys a chart as a new release into the current kube context/namespace. Creates the resources defined in the chart."),
+        ("upgrade", "Helm upgrade: applies a new chart version or values to an existing release. Workloads may roll; use `--atomic` to auto-rollback on failure."),
+        ("uninstall", "Helm uninstall: removes a release and all its Kubernetes resources from the cluster. Persistent volumes may be retained per chart settings."),
+        ("rollback", "Helm rollback: rolls a release back to a previous revision. Workloads roll to match the earlier manifests."),
+        ("delete", "Helm delete: removes a release (alias for uninstall in Helm 3). The release's Kubernetes resources are deleted."),
+        ("push", "Helm push: uploads a packaged chart to an OCI registry. Overwrites the chart version for consumers of that ref."),
+        ("package", "Helm package: bundles a chart directory into a `.tgz`. Local-only until pushed."),
+    ].into_iter().collect()
 });
 
 /// Check helm commands declaratively
@@ -1669,20 +1694,18 @@ pub static PULUMI_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 
 pub static PULUMI_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("up", "Pulumi: Deploying stack"),
-        ("destroy", "Pulumi: Destroying stack"),
-        ("refresh", "Pulumi: Refreshing state"),
-        ("import", "Pulumi: Importing resource"),
-        ("cancel", "Pulumi: Canceling update"),
-        ("new", "Pulumi: Creating project"),
-        ("stack init", "Pulumi: stack init"),
-        ("stack rm", "Pulumi: stack rm"),
-        ("stack select", "Pulumi: stack select"),
-        ("config set", "Pulumi: config set"),
-        ("config rm", "Pulumi: config rm"),
-    ]
-    .into_iter()
-    .collect()
+        ("up", "Pulumi up: applies the current program to the selected stack, creating/updating/deleting cloud resources. Run `pulumi preview` first."),
+        ("destroy", "Pulumi destroy: tears down every resource tracked by the selected stack. Cannot be undone without recreating from code."),
+        ("refresh", "Pulumi refresh: reconciles state with the real cloud, updating the state file to match what is actually deployed."),
+        ("import", "Pulumi import: brings an existing cloud resource under Pulumi management and emits code for it. Verify the resource address matches the program."),
+        ("cancel", "Pulumi cancel: forcibly cancels an in-progress update on the stack. Partial state on the cloud side may not match the state file."),
+        ("new", "Pulumi new: scaffolds a new project (and stack) in the current directory. Writes program files and `Pulumi.yaml`."),
+        ("stack init", "Pulumi stack init: creates a new stack under the current project. The stack starts empty until `pulumi up` runs."),
+        ("stack rm", "Pulumi stack rm: removes the stack's state and config. Use `--force` only after `pulumi destroy`; otherwise cloud resources are orphaned."),
+        ("stack select", "Pulumi stack select: switches the active stack. Subsequent `up`/`destroy`/`config` commands target the selected stack."),
+        ("config set", "Pulumi config set: writes a config value (optionally encrypted with `--secret`) into the stack's config file."),
+        ("config rm", "Pulumi config rm: removes a config key from the stack. Programs that read it will fall back to defaults or error."),
+    ].into_iter().collect()
 });
 
 /// Check pulumi commands declaratively
@@ -1777,24 +1800,22 @@ pub static NPM_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("update", "Updating packages"),
         ("up", "Updating packages"),
         ("upgrade", "Updating packages"),
-        ("link", "Linking package"),
-        ("unlink", "Unlinking package"),
-        ("publish", "Publishing package"),
-        ("unpublish", "Unpublishing package"),
-        ("deprecate", "Deprecating package"),
-        ("init", "Initializing package"),
-        ("create", "Creating package"),
-        ("exec", "Executing package"),
-        ("npx", "Executing package"),
-        ("prune", "Pruning packages"),
-        ("dedupe", "Deduplicating"),
-        ("shrinkwrap", "Locking dependencies"),
-        ("cache", "Cache operation"),
-        ("pack", "Creating tarball"),
-        ("set", "Setting config"),
-    ]
-    .into_iter()
-    .collect()
+        ("link", "Creates a global symlink to this package and links it into node_modules. Modifies the global npm prefix; can shadow real installs of `<package>` system-wide."),
+        ("unlink", "Removes the global symlink created by `npm link`. Affects every project that consumed the linked package."),
+        ("publish", "Publishes the package to its registry. Public publish is irreversible: the version number cannot be reused."),
+        ("unpublish", "Removes a published version from the registry. Public unpublish is restricted by npm policy and can break downstream consumers."),
+        ("deprecate", "Marks a published version as deprecated on the registry. Shows a warning to every future install of that version."),
+        ("init", "Initializes a new package in the current directory by writing `package.json`. With `npm init <initializer>` it runs an arbitrary `create-<initializer>` package."),
+        ("create", "Runs a `create-<name>` package to scaffold a project, downloading it if missing. Same trust boundary as `curl | bash` for untrusted initializers."),
+        ("exec", "Runs an arbitrary command through the package manager (downloads the package if missing). Same trust boundary as `curl | bash` for untrusted packages."),
+        ("npx", "Runs an arbitrary command through `npx` (downloads the package if missing). Same trust boundary as `curl | bash` for untrusted packages."),
+        ("prune", "Removes packages from `node_modules` that are not listed in `package.json`."),
+        ("dedupe", "Rewrites `node_modules` and `package-lock.json` to reduce duplication. Can change resolved versions."),
+        ("shrinkwrap", "Writes `npm-shrinkwrap.json` to lock the dependency tree for publishing."),
+        ("cache", "Mutates the npm cache (verify, clean, add). `npm cache clean --force` wipes all cached tarballs and metadata."),
+        ("pack", "Builds a tarball of the package as it would be published. Writes a `.tgz` file to the cwd."),
+        ("set", "Sets an npm config key. Default scope is the user-level `.npmrc`; `--global` writes to the global prefix."),
+    ].into_iter().collect()
 });
 
 /// Check npm commands declaratively
@@ -1886,7 +1907,7 @@ pub static PNPM_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
         ("run", "Running script from package.json"),
         ("start", "Running start script"),
-        ("exec", "Executing arbitrary command"),
+        ("exec", "Runs an arbitrary command through the package manager (downloads the package if missing). Same trust boundary as `curl | bash` for untrusted packages."),
         ("install", "Installing packages"),
         ("i", "Installing packages"),
         ("add", "Adding packages"),
@@ -1895,18 +1916,16 @@ pub static PNPM_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("uninstall", "Removing packages"),
         ("update", "Updating packages"),
         ("up", "Updating packages"),
-        ("link", "Linking package"),
-        ("unlink", "Unlinking package"),
-        ("publish", "Publishing package"),
-        ("init", "Initializing package"),
-        ("create", "Creating package"),
-        ("dlx", "Executing package"),
-        ("prune", "Pruning packages"),
-        ("store", "Store operation"),
-        ("patch", "Patching package"),
-    ]
-    .into_iter()
-    .collect()
+        ("link", "Creates a global symlink and links the package into node_modules. Modifies the global pnpm store and can shadow real installs of `<package>`."),
+        ("unlink", "Removes the global symlink created by `pnpm link`. Affects every project that consumed the linked package."),
+        ("publish", "Publishes the package to its registry. Public publish is irreversible: the version number cannot be reused."),
+        ("init", "Initializes a new package in the current directory by writing `package.json`."),
+        ("create", "Runs a `create-<name>` package to scaffold a project, downloading it if missing. Same trust boundary as `curl | bash` for untrusted initializers."),
+        ("dlx", "Runs an arbitrary command through the package manager (downloads the package if missing). Same trust boundary as `curl | bash` for untrusted packages."),
+        ("prune", "Removes packages from `node_modules` and the pnpm store that are not listed in `package.json`."),
+        ("store", "Mutates the shared pnpm content-addressable store (prune, add, status). `store prune` deletes orphaned packages used by no project on this machine."),
+        ("patch", "Creates an editable copy of a dependency in a temp dir; `patch-commit` writes a persistent patch file consumed by future installs."),
+    ].into_iter().collect()
 });
 
 /// Check pnpm commands declaratively
@@ -1981,24 +2000,22 @@ pub static YARN_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
         ("run", "Running script from package.json"),
         ("start", "Running start script"),
-        ("exec", "Executing arbitrary command"),
+        ("exec", "Runs an arbitrary command through the package manager (downloads the package if missing). Same trust boundary as `curl | bash` for untrusted packages."),
         ("install", "Installing packages"),
         ("add", "Adding packages"),
         ("remove", "Removing packages"),
         ("upgrade", "Upgrading packages"),
         ("upgrade-interactive", "Upgrading packages"),
-        ("link", "Linking package"),
-        ("unlink", "Unlinking package"),
-        ("publish", "Publishing package"),
-        ("init", "Initializing package"),
-        ("create", "Creating package"),
-        ("dlx", "Executing package"),
-        ("cache", "Cache operation"),
-        ("global", "Global operation"),
-        ("set", "Setting config"),
-    ]
-    .into_iter()
-    .collect()
+        ("link", "Creates a global symlink and links the package into node_modules. Modifies the user-level yarn link registry; can shadow real installs of `<package>`."),
+        ("unlink", "Removes the global symlink created by `yarn link`. Affects every project that consumed the linked package."),
+        ("publish", "Publishes the package to its registry. Public publish is irreversible: the version number cannot be reused."),
+        ("init", "Initializes a new package in the current directory by writing `package.json`."),
+        ("create", "Runs a `create-<name>` package to scaffold a project, downloading it if missing. Same trust boundary as `curl | bash` for untrusted initializers."),
+        ("dlx", "Runs an arbitrary command through the package manager (downloads the package if missing). Same trust boundary as `curl | bash` for untrusted packages."),
+        ("cache", "Mutates the yarn cache (clean, list). `yarn cache clean` deletes all cached package tarballs."),
+        ("global", "Operates on the user-global install location: add, remove, upgrade, bin, list. Modifies binaries on PATH for the current user."),
+        ("set", "Sets a yarn config key. Affects the project's `.yarnrc.yml` (Berry) or the user-level `.yarnrc` (Classic)."),
+    ].into_iter().collect()
 });
 
 /// Check yarn commands declaratively
@@ -2181,23 +2198,21 @@ pub static UV_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 
 pub static UV_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("run", "Running command in environment"),
-        ("sync", "Syncing virtual environment"),
-        ("lock", "Updating lockfile"),
-        ("venv", "Creating virtual environment"),
+        ("run", "Runs a command inside the project venv. Will create the venv and download missing dependencies from the lockfile on first run."),
+        ("sync", "Reconciles the project venv with the lockfile. Installs missing deps and removes extras; can mutate the active `.venv`."),
+        ("lock", "Resolves dependencies and writes `uv.lock`. Network access; pinned versions may change."),
+        ("venv", "Creates a new virtual environment at `<path>` (default `.venv`). Overwrites an existing venv at the same path."),
         ("add", "Adding dependency"),
         ("remove", "Removing dependency"),
-        ("tool", "Tool operation"),
-        ("python", "Python operation"),
-        ("cache", "Cache operation"),
-        ("init", "Initializing project"),
-        ("build", "Building package"),
-        ("publish", "Publishing package"),
-        ("pip install", "uv pip: install"),
-        ("pip uninstall", "uv pip: uninstall"),
-    ]
-    .into_iter()
-    .collect()
+        ("tool", "Manages uv-installed standalone tools: install, uninstall, upgrade, run. Modifies the user-level uv tool directory and binaries on PATH."),
+        ("python", "Manages uv-managed Python interpreters: install, uninstall, pin, find. Downloads interpreter builds and writes to the user-level uv data dir."),
+        ("cache", "Mutates the uv cache (clean, prune). `uv cache clean` deletes all cached wheels and source distributions."),
+        ("init", "Initializes a new uv project in the current directory by writing `pyproject.toml` and supporting files."),
+        ("build", "Builds source and wheel distributions into `dist/`. Writes artifacts; does not publish."),
+        ("publish", "Publishes the package to its registry. Public publish is irreversible: the version number cannot be reused."),
+        ("pip install", "Installs packages into the currently active venv via uv's pip-compatible frontend. Writes to site-packages of `<venv>`."),
+        ("pip uninstall", "Removes packages from the currently active venv via uv's pip-compatible frontend."),
+    ].into_iter().collect()
 });
 
 /// Check uv commands declaratively
@@ -2275,7 +2290,7 @@ pub static CARGO_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 pub static CARGO_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
         ("watch", "Running commands on file changes"),
-        ("mutants", "Mutation testing (modifies source files)"),
+        ("mutants", "Mutation testing rewrites source files to introduce synthetic bugs and checks test coverage. Files are restored on completion; interrupting mid-run can leave the tree mutated."),
         ("install", "Installing"),
         ("uninstall", "Uninstalling"),
         ("new", "Creating project"),
@@ -2287,9 +2302,7 @@ pub static CARGO_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("yank", "Yanking version"),
         ("fix", "Auto-fixing code"),
         ("generate-lockfile", "Generating lockfile"),
-    ]
-    .into_iter()
-    .collect()
+    ].into_iter().collect()
 });
 
 /// Check cargo commands declaratively
@@ -2572,15 +2585,13 @@ pub static BUN_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("remove", "Removing packages"),
         ("rm", "Removing packages"),
         ("update", "Updating packages"),
-        ("link", "Linking package"),
-        ("unlink", "Unlinking package"),
-        ("x", "Executing package"),
-        ("init", "Initializing project"),
-        ("create", "Creating project"),
-        ("publish", "Publishing"),
-    ]
-    .into_iter()
-    .collect()
+        ("link", "Creates a global symlink and links the package into node_modules. Modifies bun's global link registry; can shadow real installs of `<package>`."),
+        ("unlink", "Removes the global symlink created by `bun link`. Affects every project that consumed the linked package."),
+        ("x", "Runs an arbitrary command through bun (downloads the package if missing). Same trust boundary as `curl | bash` for untrusted packages."),
+        ("init", "Initializes a new bun project in the current directory by writing `package.json` and supporting files."),
+        ("create", "Scaffolds a project from a `create-<name>` template, downloading it if missing. Same trust boundary as `curl | bash` for untrusted initializers."),
+        ("publish", "Publishes the package to its registry. Public publish is irreversible: the version number cannot be reused."),
+    ].into_iter().collect()
 });
 
 /// Check bun commands declaratively
@@ -2645,15 +2656,13 @@ pub static CONDA_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("create", "Creating environment"),
         ("activate", "Activating environment"),
         ("deactivate", "Deactivating environment"),
-        ("clean", "Cleaning cache"),
-        ("build", "Building package"),
-        ("init", "Initializing conda"),
-        ("run", "Running in environment"),
-        ("env create", "env create"),
-        ("env remove", "env remove"),
-    ]
-    .into_iter()
-    .collect()
+        ("clean", "Mutates the conda cache (packages, tarballs, indexes). Frees disk; next install re-downloads."),
+        ("build", "Builds a conda package from a recipe. Writes artifacts under the conda-bld directory."),
+        ("init", "Modifies shell rc files (`.bashrc`, `.zshrc`, etc.) to initialize conda on shell startup."),
+        ("run", "Runs a command inside a named conda environment. Treat as executing that command with the env's interpreter on PATH."),
+        ("env create", "Creates a new conda environment from a name or YAML spec. Downloads packages and writes under the conda envs dir."),
+        ("env remove", "Deletes a named conda environment and everything installed in it. Not reversible without re-creation."),
+    ].into_iter().collect()
 });
 
 /// Check conda commands declaratively
@@ -2757,14 +2766,12 @@ pub static POETRY_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("update", "Updating dependencies"),
         ("init", "Initializing project"),
         ("new", "Creating project"),
-        ("publish", "Publishing package"),
-        ("cache", "Cache operation"),
-        ("export", "Exporting dependencies"),
-        ("self", "Self operation"),
-        ("source", "Source operation"),
-    ]
-    .into_iter()
-    .collect()
+        ("publish", "Publishes the package to its registry. Public publish is irreversible: the version number cannot be reused."),
+        ("cache", "Mutates the poetry cache (clear, list). `poetry cache clear --all` deletes cached package tarballs and wheels."),
+        ("export", "Writes the locked dependencies to a `requirements.txt`-style file. Output path may overwrite existing files."),
+        ("self", "Manages the poetry installation itself: add, update, lock, sync of poetry plugins. Modifies the user-global poetry environment."),
+        ("source", "Adds, removes, or shows package index sources in `pyproject.toml`. Changes where future installs resolve from."),
+    ].into_iter().collect()
 });
 
 /// Check poetry commands declaratively
@@ -2896,8 +2903,8 @@ pub static MISE_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 pub static MISE_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
         ("run", "Running mise task"),
-        ("task", "Task operation"),
-        ("tasks", "Task operation"),
+        ("task", "Manages or runs mise tasks (run, ls, edit, add). `mise task run` executes shell from the task file; treat as running that script."),
+        ("tasks", "Manages or runs mise tasks (run, ls, edit, add). `mise tasks run` executes shell from the task file; treat as running that script."),
         ("install", "Installing tool versions"),
         ("i", "Installing tool versions"),
         ("use", "Setting tool version"),
@@ -2915,11 +2922,9 @@ pub static MISE_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("plugins add", "Installing plugin"),
         ("plugins remove", "Removing plugin"),
         ("plugins update", "Updating plugins"),
-        ("cache", "Cache operation"),
-        ("link", "Linking tool version"),
-    ]
-    .into_iter()
-    .collect()
+        ("cache", "Mutates the mise cache (clear). Deletes cached tool downloads; next install will re-download."),
+        ("link", "Symlinks an externally-installed tool version into mise's data dir so it can be selected like a managed version."),
+    ].into_iter().collect()
 });
 
 /// Check mise commands declaratively
@@ -3071,15 +3076,15 @@ pub static BD_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("setup", "Setting up integration"),
         ("config set", "Changing configuration"),
         ("config unset", "Unsetting configuration"),
-        ("daemons start", "Starting daemon"),
-        ("daemons stop", "Stopping daemon"),
-        ("daemons restart", "Restarting daemon"),
-        ("daemons killall", "Killing all daemons"),
-        ("daemon start", "Starting daemon"),
-        ("daemon stop", "Stopping daemon"),
-        ("daemon restart", "Restarting daemon"),
-        ("daemon kill", "Killing daemon"),
-        ("daemon run", "Running daemon"),
+        ("daemons start", "Starts a beads daemon process in the background. Daemons handle sync, hooks, and event delivery."),
+        ("daemons stop", "Stops a running beads daemon process. Pauses background sync, hooks, and event delivery until restarted."),
+        ("daemons restart", "Restarts a beads daemon process. Briefly pauses background sync, hooks, and event delivery."),
+        ("daemons killall", "Kills every running beads daemon process on this machine. Stops background sync, hooks, and event delivery until restarted."),
+        ("daemon start", "Starts a beads daemon process in the background. Daemons handle sync, hooks, and event delivery."),
+        ("daemon stop", "Stops a running beads daemon process. Pauses background sync, hooks, and event delivery until restarted."),
+        ("daemon restart", "Restarts a beads daemon process. Briefly pauses background sync, hooks, and event delivery."),
+        ("daemon kill", "Force-kills a beads daemon process. May leave temporary state if the daemon was mid-write."),
+        ("daemon run", "Runs a beads daemon in the foreground. Holds the terminal until interrupted."),
         ("hooks", "Managing git hooks"),
         ("migrate sync", "Migrating sync"),
         ("migrate issues", "Migrating issues"),
@@ -3088,11 +3093,11 @@ pub static BD_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("admin", "Admin operation"),
         ("admin cleanup", "Cleaning up issues"),
         ("admin compact", "Compacting issues"),
-        ("admin reset", "Resetting database"),
+        ("admin reset", "Resets the beads database. Drops all issues, history, and local state. Cannot be undone without a backup or remote sync."),
         ("compact", "Compacting old issues"),
         ("cleanup", "Cleaning up issues"),
         ("merge", "Merging issues"),
-        ("repair", "Repairing database"),
+        ("repair", "Repairs the beads database from local logs and remote state. Can modify or roll back issue records to resolve inconsistencies."),
         ("restore", "Restoring issue"),
         ("upgrade ack", "Acknowledging upgrade"),
         ("epic create", "Creating epic"),
@@ -3149,10 +3154,8 @@ pub static BD_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("linear import", "Importing from Linear"),
         ("linear create", "Creating in Linear"),
         ("mail", "Delegating to mail provider"),
-        ("reset", "Resetting database"),
-    ]
-    .into_iter()
-    .collect()
+        ("reset", "Resets the beads database. Drops all issues, history, and local state. Cannot be undone without a backup or remote sync."),
+    ].into_iter().collect()
 });
 
 /// Check bd commands declaratively
@@ -3450,14 +3453,12 @@ pub static TOOL_GATES_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 
 pub static TOOL_GATES_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("approve", "Adding permanent permission rule"),
-        ("rules remove", "Removing permission rule"),
-        ("pending clear", "Clearing pending approval queue"),
-        ("hooks add", "Installing hooks into Claude Code settings"),
-        ("review", "Opening interactive approval TUI"),
-    ]
-    .into_iter()
-    .collect()
+        ("approve", "Adds a permanent permission rule to a Claude/Gemini/Codex settings file. Future matching tool calls auto-allow without prompting."),
+        ("rules remove", "Removes a permission rule from a settings file. Future matching tool calls revert to the default gate decision."),
+        ("pending clear", "Empties `~/.cache/tool-gates/pending.jsonl`. Drops every queued approval; cannot be undone."),
+        ("hooks add", "Writes tool-gates hook entries into a Claude/Gemini/Codex settings file. Changes how every future tool call in that scope is gated."),
+        ("review", "Opens the interactive approval TUI. Selecting Approve writes a permanent permission rule to a settings file."),
+    ].into_iter().collect()
 });
 
 /// Check tool-gates commands declaratively
@@ -3484,7 +3485,9 @@ pub fn check_tool_gates_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--refresh-tools"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Refreshing tool detection cache"));
+        return Some(GateResult::ask(
+            "Re-scans the system for modern CLI tools (bat, rg, fd, etc.) and rewrites `~/.cache/tool-gates/available-tools.json`. Used to surface hints.",
+        ));
     }
 
     if TOOL_GATES_ALLOW.contains(subcmd.as_str()) || TOOL_GATES_ALLOW.contains(subcmd_single) {
@@ -3547,7 +3550,9 @@ pub fn check_sd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Bare ask rule - any sd invocation asks
-    Some(GateResult::ask("sd: In-place text replacement"))
+    Some(GateResult::ask(
+        "sd: sd in-place: rewrites the given files (regex find/replace). Without file args sd is a stdin->stdout pipe; with file args it modifies in place.",
+    ))
 }
 
 // === SAD (from devtools.toml) ===
@@ -3571,7 +3576,9 @@ pub fn check_sad_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
     // Check ask rules with flag/prefix conditions
     if true && cmd.args.iter().any(|a| ["--commit"].contains(&a.as_str())) {
-        return Some(GateResult::ask("Applying replacements"));
+        return Some(GateResult::ask(
+            "sad --commit: applies the proposed search-and-replace to the matched files. Default sad without `--commit` is preview-only.",
+        ));
     }
 
     Some(GateResult::allow())
@@ -3603,7 +3610,9 @@ pub fn check_ast_grep_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-U", "--update-all"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Rewriting code"));
+        return Some(GateResult::ask(
+            "ast-grep -U: applies the rewrite pattern across matched files. Default ast-grep is search-only; `-U`/`--update-all` writes the changes.",
+        ));
     }
 
     Some(GateResult::allow())
@@ -3635,7 +3644,9 @@ pub fn check_yq_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-i", "--inplace"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("In-place YAML edit"));
+        return Some(GateResult::ask(
+            "yq -i: rewrites the YAML file in place per the given expression. Default yq prints to stdout; `-i`/`--inplace` writes the file.",
+        ));
     }
 
     Some(GateResult::allow())
@@ -3689,7 +3700,9 @@ pub fn check_semgrep_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--autofix", "--fix"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Auto-fixing code"));
+        return Some(GateResult::ask(
+            "semgrep --autofix: applies rule-driven code rewrites to matched files. Default semgrep only reports findings.",
+        ));
     }
 
     Some(GateResult::allow())
@@ -3721,7 +3734,9 @@ pub fn check_comby_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-in-place", "-i"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("In-place replacement"));
+        return Some(GateResult::ask(
+            "comby -in-place: applies the structural match-and-rewrite to the matched files. Default comby prints diffs to stdout.",
+        ));
     }
 
     Some(GateResult::allow())
@@ -3729,8 +3744,11 @@ pub fn check_comby_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === GRIT (from devtools.toml) ===
 
-pub static GRIT_ASK: LazyLock<HashMap<&str, &str>> =
-    LazyLock::new(|| [("apply", "Applying migrations")].into_iter().collect());
+pub static GRIT_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
+    [
+        ("apply", "grit apply: applies a Grit migration pattern to matched files. Other grit subcommands are read-only/listing operations."),
+    ].into_iter().collect()
+});
 
 /// Check grit commands declaratively
 pub fn check_grit_declarative(cmd: &CommandInfo) -> Option<GateResult> {
@@ -3779,7 +3797,9 @@ pub fn check_watchexec_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Bare ask rule - any watchexec invocation asks
-    Some(GateResult::ask("watchexec: Runs commands on file changes"))
+    Some(GateResult::ask(
+        "watchexec: watchexec: runs the given command whenever matching files change. The wrapped command's side effects fire on every change.",
+    ))
 }
 
 // === BIOME (from devtools.toml) ===
@@ -4166,12 +4186,10 @@ pub static LEFTHOOK_ALLOW: LazyLock<HashSet<&str>> =
 
 pub static LEFTHOOK_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("install", "Installing git hooks"),
-        ("uninstall", "Removing git hooks"),
-        ("add", "Adding hook configuration"),
-    ]
-    .into_iter()
-    .collect()
+        ("install", "lefthook install: writes hook scripts to `.git/hooks/` per `lefthook.yml`. Subsequent git operations invoke them."),
+        ("uninstall", "lefthook uninstall: removes lefthook-managed hook scripts from `.git/hooks/`. Git stops invoking the configured hooks."),
+        ("add", "lefthook add: creates hook script files under `.git/hooks/` for the named hook. Edits the git hooks directory."),
+    ].into_iter().collect()
 });
 
 /// Check lefthook commands declaratively
@@ -5250,16 +5268,14 @@ pub static COVERAGE_ALLOW: LazyLock<HashSet<&str>> =
 
 pub static COVERAGE_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("run", "Running code with coverage"),
-        ("html", "Generating HTML coverage report"),
-        ("json", "Writing coverage.json"),
-        ("xml", "Writing coverage.xml"),
-        ("lcov", "Writing coverage.lcov"),
-        ("erase", "Erasing coverage data"),
-        ("combine", "Combining coverage data"),
-    ]
-    .into_iter()
-    .collect()
+        ("run", "coverage run: executes the given Python script/module under coverage. Writes a `.coverage` data file in cwd."),
+        ("html", "coverage html: writes an HTML report tree (default `htmlcov/`) from the current `.coverage` data file."),
+        ("json", "coverage json: writes a `coverage.json` report file from the current `.coverage` data file."),
+        ("xml", "coverage xml: writes a `coverage.xml` (Cobertura) report file from the current `.coverage` data file."),
+        ("lcov", "coverage lcov: writes a `coverage.lcov` report file from the current `.coverage` data file."),
+        ("erase", "coverage erase: deletes the `.coverage` data file in cwd. Pending reports cannot be regenerated without rerunning."),
+        ("combine", "coverage combine: merges multiple `.coverage.*` data files into a single `.coverage` file. Inputs are consumed."),
+    ].into_iter().collect()
 });
 
 /// Check coverage commands declaratively
@@ -5330,7 +5346,9 @@ pub fn check_tox_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare ask rule - any tox invocation asks
-    Some(GateResult::ask("tox: Running test environments"))
+    Some(GateResult::ask(
+        "tox: tox: runs the configured environments from `tox.ini` / `pyproject.toml`. Each env creates/uses a virtualenv and runs arbitrary commands per config.",
+    ))
 }
 
 // === NOX (from devtools.toml) ===
@@ -5370,7 +5388,9 @@ pub fn check_nox_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare ask rule - any nox invocation asks
-    Some(GateResult::ask("nox: Running session"))
+    Some(GateResult::ask(
+        "nox: nox: runs the configured sessions from `noxfile.py`. Each session creates/uses a virtualenv and runs arbitrary Python code per the noxfile.",
+    ))
 }
 
 // === AUTOFLAKE (from devtools.toml) ===
@@ -5399,7 +5419,9 @@ pub fn check_autoflake_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--in-place", "-i"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Removing unused imports"));
+        return Some(GateResult::ask(
+            "autoflake --in-place: rewrites Python files to remove unused imports/variables. Default autoflake prints suggested diffs only.",
+        ));
     }
 
     // Check conditional allow rules
@@ -5442,7 +5464,9 @@ pub fn check_tsx_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare ask rule - any tsx invocation asks
-    Some(GateResult::ask("tsx: Executing TypeScript"))
+    Some(GateResult::ask(
+        "tsx: tsx: runs the given TypeScript file directly (Node + esbuild). The script's side effects (network, FS, child processes) execute.",
+    ))
 }
 
 // === TS-NODE (from devtools.toml) ===
@@ -5472,7 +5496,9 @@ pub fn check_ts_node_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare ask rule - any ts-node invocation asks
-    Some(GateResult::ask("ts-node: Executing TypeScript"))
+    Some(GateResult::ask(
+        "ts-node: ts-node: runs the given TypeScript file under Node. The script's side effects (network, FS, child processes) execute.",
+    ))
 }
 
 // === WEBPACK (from devtools.toml) ===
@@ -5548,11 +5574,9 @@ pub static PARCEL_ALLOW: LazyLock<HashSet<&str>> =
 
 pub static PARCEL_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("serve", "Starting dev server"),
-        ("watch", "Watching files"),
-    ]
-    .into_iter()
-    .collect()
+        ("serve", "parcel serve: starts the Parcel dev server on a local port. Binds to localhost until interrupted."),
+        ("watch", "parcel watch: rebuilds the bundle on file changes. Long-running; writes output to the configured dist dir."),
+    ].into_iter().collect()
 });
 
 /// Check parcel commands declaratively
@@ -5596,11 +5620,9 @@ pub static PLAYWRIGHT_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 
 pub static PLAYWRIGHT_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("install", "Installing browsers"),
-        ("codegen", "Generating test code"),
-    ]
-    .into_iter()
-    .collect()
+        ("install", "playwright install: downloads Chromium/Firefox/WebKit binaries to the Playwright cache (~300MB-1GB total)."),
+        ("codegen", "playwright codegen: opens a browser and records user actions as test code. Writes the generated spec to stdout or `-o <file>`."),
+    ].into_iter().collect()
 });
 
 /// Check playwright commands declaratively
@@ -5644,11 +5666,9 @@ pub static CYPRESS_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 
 pub static CYPRESS_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("open", "Opening Cypress GUI"),
-        ("install", "Installing Cypress"),
-    ]
-    .into_iter()
-    .collect()
+        ("open", "cypress open: launches the Cypress test runner GUI. Long-running until the window is closed."),
+        ("install", "cypress install: downloads the Cypress binary to the local cache (~200MB)."),
+    ].into_iter().collect()
 });
 
 /// Check cypress commands declaratively
@@ -5692,14 +5712,12 @@ pub static WRANGLER_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 
 pub static WRANGLER_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("dev", "Starting local dev server"),
-        ("deploy", "Deploying worker"),
-        ("publish", "Publishing worker"),
-        ("login", "Authenticating"),
-        ("pages", "Pages operation"),
-    ]
-    .into_iter()
-    .collect()
+        ("dev", "wrangler dev: runs the Worker locally on a dev port. Long-running; binds to localhost until interrupted."),
+        ("deploy", "Cloudflare wrangler deploy: publishes the Worker live to Cloudflare. Verify env vs preview vs production; the Worker starts handling traffic immediately."),
+        ("publish", "Cloudflare wrangler publish: pushes the Worker live (older form of deploy). Verify env; the Worker starts handling traffic immediately."),
+        ("login", "wrangler login: starts the OAuth flow and writes Cloudflare credentials to `~/.wrangler` (or `~/.config/.wrangler`). Anyone with read access to the file gets those credentials."),
+        ("pages", "wrangler pages: Cloudflare Pages operation (deploy/dev/project). `pages deploy` publishes a site live to Cloudflare's edge."),
+    ].into_iter().collect()
 });
 
 /// Check wrangler commands declaratively
@@ -5759,7 +5777,9 @@ pub fn check_ty_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--add-ignore"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Adding ignore comments to source files"));
+        return Some(GateResult::ask(
+            "ty --add-ignore: inserts `ty: ignore` comments into source files at flagged diagnostics. Default ty only reports.",
+        ));
     }
 
     Some(GateResult::allow())
@@ -5827,10 +5847,14 @@ pub fn check_python3_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
     // Check ask rules with flag/prefix conditions
     if true && cmd.args.iter().any(|a| ["-c"].contains(&a.as_str())) {
-        return Some(GateResult::ask("Executing Python code"));
+        return Some(GateResult::ask(
+            "Executes inline Python via `-c`. Treat the code as an inline script; can import any installed module.",
+        ));
     }
     if true && cmd.args.iter().any(|a| ["-m"].contains(&a.as_str())) {
-        return Some(GateResult::ask("Running Python module"));
+        return Some(GateResult::ask(
+            "Runs an installed Python module via `-m <module>`. Module code runs with the current interpreter; inherits the active venv if one is on PATH.",
+        ));
     }
 
     // Check conditional allow rules
@@ -5852,7 +5876,9 @@ pub fn check_python3_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare ask rule - any python3 invocation asks
-    Some(GateResult::ask("python3: Running Python script"))
+    Some(GateResult::ask(
+        "python3: Runs a Python script file. The script runs with the current interpreter; inherits the active venv if one is on PATH.",
+    ))
 }
 
 // === NODE (from runtimes.toml) ===
@@ -5881,7 +5907,9 @@ pub fn check_node_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-e", "--eval", "-p", "--print"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Executing JavaScript"));
+        return Some(GateResult::ask(
+            "Executes inline JavaScript via `-e`. Treat the code as an inline script; full Node API access.",
+        ));
     }
 
     // Check conditional allow rules
@@ -5911,7 +5939,9 @@ pub fn check_node_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare ask rule - any node invocation asks
-    Some(GateResult::ask("node: Running Node.js script"))
+    Some(GateResult::ask(
+        "node: Runs a Node.js script file. Full Node API access including filesystem, network, and child processes.",
+    ))
 }
 
 // === RUBY (from runtimes.toml) ===
@@ -5935,7 +5965,9 @@ pub fn check_ruby_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
     // Check ask rules with flag/prefix conditions
     if true && cmd.args.iter().any(|a| ["-e"].contains(&a.as_str())) {
-        return Some(GateResult::ask("Executing Ruby code"));
+        return Some(GateResult::ask(
+            "Executes inline Ruby via `-e`. Treat the code as an inline script; full stdlib access.",
+        ));
     }
 
     // Check conditional allow rules
@@ -5960,7 +5992,9 @@ pub fn check_ruby_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare ask rule - any ruby invocation asks
-    Some(GateResult::ask("ruby: Running Ruby script"))
+    Some(GateResult::ask(
+        "ruby: Runs a Ruby script file. Full stdlib access including filesystem, network, and child processes.",
+    ))
 }
 
 // === DENO (from runtimes.toml) ===
@@ -5987,20 +6021,18 @@ pub static DENO_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 
 pub static DENO_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("run", "Running Deno script"),
-        ("serve", "Starting Deno server"),
-        ("fmt", "Formatting files"),
-        ("compile", "Compiling to binary"),
-        ("install", "Installing package/script"),
-        ("uninstall", "Uninstalling package/script"),
-        ("task", "Running task"),
-        ("upgrade", "Upgrading Deno"),
-        ("add", "Adding dependency"),
-        ("remove", "Removing dependency"),
-        ("publish", "Publishing module"),
-    ]
-    .into_iter()
-    .collect()
+        ("run", "Runs a Deno script. Permissions are sandboxed by default; flags like `--allow-all` / `--allow-net` / `--allow-write` widen access."),
+        ("serve", "Starts a Deno HTTP server. Binds a port (default 8000) and listens for incoming requests."),
+        ("fmt", "Formats source files in place. Rewrites every matching file under the target paths."),
+        ("compile", "Produces a standalone executable for the script. Writes a binary that embeds the Deno runtime and the script's modules."),
+        ("install", "Installs a script as a global executable on PATH, or installs project dependencies. The global form writes to the Deno install root."),
+        ("uninstall", "Removes a Deno-installed global executable from the Deno install root."),
+        ("task", "Runs a named task from `deno.json`. Executes the task's shell command line; treat as running that command."),
+        ("upgrade", "Replaces the Deno binary with a newer release. Modifies the installed `deno` executable on PATH."),
+        ("add", "Adds a dependency to `deno.json` imports. Network fetch on next resolve."),
+        ("remove", "Removes a dependency from `deno.json` imports."),
+        ("publish", "Uploads the module to JSR. Public publish is irreversible: the version number cannot be reused."),
+    ].into_iter().collect()
 });
 
 /// Check deno commands declaratively
@@ -6060,7 +6092,9 @@ pub fn check_php_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
     // Check ask rules with flag/prefix conditions
     if true && cmd.args.iter().any(|a| ["-r"].contains(&a.as_str())) {
-        return Some(GateResult::ask("Executing PHP code"));
+        return Some(GateResult::ask(
+            "Executes inline PHP via `-r`. Treat the code as an inline script.",
+        ));
     }
 
     // Check conditional allow rules
@@ -6101,7 +6135,9 @@ pub fn check_php_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare ask rule - any php invocation asks
-    Some(GateResult::ask("php: Running PHP script"))
+    Some(GateResult::ask(
+        "php: Runs a PHP script file. Full PHP API access including filesystem, network, and shell execution.",
+    ))
 }
 
 // === LUA (from runtimes.toml) ===
@@ -6125,7 +6161,9 @@ pub fn check_lua_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
     // Check ask rules with flag/prefix conditions
     if true && cmd.args.iter().any(|a| ["-e"].contains(&a.as_str())) {
-        return Some(GateResult::ask("Executing Lua code"));
+        return Some(GateResult::ask(
+            "Executes inline Lua via `-e`. Treat the code as an inline script.",
+        ));
     }
 
     // Check conditional allow rules
@@ -6134,7 +6172,9 @@ pub fn check_lua_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare ask rule - any lua invocation asks
-    Some(GateResult::ask("lua: Running Lua script"))
+    Some(GateResult::ask(
+        "lua: Runs a Lua script file. Full Lua stdlib access including `io`, `os`, and loaded C modules.",
+    ))
 }
 
 // === JAVA (from runtimes.toml) ===
@@ -6167,7 +6207,9 @@ pub fn check_java_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare ask rule - any java invocation asks
-    Some(GateResult::ask("java: Running Java application"))
+    Some(GateResult::ask(
+        "java: Runs a Java class, JAR, or single source file. Full JVM access; classpath-loaded code runs unsandboxed.",
+    ))
 }
 
 // === JAVAC (from runtimes.toml) ===
@@ -6200,7 +6242,9 @@ pub fn check_javac_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare ask rule - any javac invocation asks
-    Some(GateResult::ask("javac: Compiling Java source"))
+    Some(GateResult::ask(
+        "javac: Compiles Java source files into `.class` bytecode. Writes output to the configured destination directory.",
+    ))
 }
 
 // === DOTNET (from runtimes.toml) ===
@@ -6283,11 +6327,9 @@ pub static SWIFT_ALLOW: LazyLock<HashSet<&str>> =
 
 pub static SWIFT_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("run", "Running Swift package"),
-        ("package", "Package operation"),
-    ]
-    .into_iter()
-    .collect()
+        ("run", "Builds and runs the Swift executable target in the current package. Full Swift runtime access."),
+        ("package", "Manages the Swift package: init, update, resolve, generate-xcodeproj, clean. Mutates `Package.resolved` and the build cache."),
+    ].into_iter().collect()
 });
 
 /// Check swift commands declaratively
@@ -6352,7 +6394,9 @@ pub fn check_elixir_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
     // Check ask rules with flag/prefix conditions
     if true && cmd.args.iter().any(|a| ["-e"].contains(&a.as_str())) {
-        return Some(GateResult::ask("Executing Elixir code"));
+        return Some(GateResult::ask(
+            "Executes inline Elixir via `-e`. Treat the code as an inline script.",
+        ));
     }
 
     // Check conditional allow rules
@@ -6374,7 +6418,9 @@ pub fn check_elixir_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare ask rule - any elixir invocation asks
-    Some(GateResult::ask("elixir: Running Elixir script"))
+    Some(GateResult::ask(
+        "elixir: Runs an Elixir script file (`.exs` / `.ex`). Full Elixir and Erlang stdlib access.",
+    ))
 }
 
 // === IEX (from runtimes.toml) ===
@@ -6407,18 +6453,35 @@ pub fn check_iex_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare ask rule - any iex invocation asks
-    Some(GateResult::ask("iex: Starting Elixir REPL"))
+    Some(GateResult::ask(
+        "iex: Starts the interactive Elixir REPL. Each input is evaluated with full Elixir and Erlang stdlib access.",
+    ))
 }
 
 // === RM (from filesystem.toml) ===
 
 pub static RM_BLOCK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("-rf /", "rm -rf / blocked"),
-        ("-rf /*", "rm -rf /* blocked"),
-        ("-rf ~", "rm -rf ~ blocked"),
-        ("-fr /", "rm -fr / blocked"),
-        ("-fr ~", "rm -fr ~ blocked"),
+        (
+            "-rf /",
+            "`rm -rf /` blocked: would recursively delete the entire root filesystem.",
+        ),
+        (
+            "-rf /*",
+            "`rm -rf /*` blocked: would recursively delete every top-level directory under root.",
+        ),
+        (
+            "-rf ~",
+            "`rm -rf ~` blocked: would recursively delete the user's home directory.",
+        ),
+        (
+            "-fr /",
+            "`rm -fr /` blocked: would recursively delete the entire root filesystem.",
+        ),
+        (
+            "-fr ~",
+            "`rm -fr ~` blocked: would recursively delete the user's home directory.",
+        ),
     ]
     .into_iter()
     .collect()
@@ -6470,7 +6533,9 @@ pub fn check_mv_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Bare ask rule - any mv invocation asks
-    Some(GateResult::ask("mv: Moving files"))
+    Some(GateResult::ask(
+        "mv: Moves or renames files. Overwrites destination if it exists unless `-n` is set.",
+    ))
 }
 
 // === CP (from filesystem.toml) ===
@@ -6493,7 +6558,9 @@ pub fn check_cp_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Bare ask rule - any cp invocation asks
-    Some(GateResult::ask("cp: Copying files"))
+    Some(GateResult::ask(
+        "cp: Copies files or directories. Overwrites destination by default; `-n` to skip existing.",
+    ))
 }
 
 // === MKDIR (from filesystem.toml) ===
@@ -6516,7 +6583,9 @@ pub fn check_mkdir_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Bare ask rule - any mkdir invocation asks
-    Some(GateResult::ask("mkdir: Creating directory"))
+    Some(GateResult::ask(
+        "mkdir: Creates a directory. `-p` also creates missing parent directories.",
+    ))
 }
 
 // === RMDIR (from filesystem.toml) ===
@@ -6539,7 +6608,9 @@ pub fn check_rmdir_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Bare ask rule - any rmdir invocation asks
-    Some(GateResult::ask("rmdir: Removing directory (if empty)"))
+    Some(GateResult::ask(
+        "rmdir: Removes empty directories. Fails if the directory contains files; use `rm -r` for non-empty trees.",
+    ))
 }
 
 // === TOUCH (from filesystem.toml) ===
@@ -6562,7 +6633,9 @@ pub fn check_touch_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Bare ask rule - any touch invocation asks
-    Some(GateResult::ask("touch: Creating/updating file"))
+    Some(GateResult::ask(
+        "touch: Creates an empty file or updates the mtime/atime of an existing one.",
+    ))
 }
 
 // === CHMOD (from filesystem.toml) ===
@@ -6585,7 +6658,9 @@ pub fn check_chmod_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Bare ask rule - any chmod invocation asks
-    Some(GateResult::ask("chmod: Changing permissions"))
+    Some(GateResult::ask(
+        "chmod: Changes file/dir mode bits. Use the minimum needed: 755 for dirs, 644 for files. Avoid 777 unless you know why.",
+    ))
 }
 
 // === CHOWN (from filesystem.toml) ===
@@ -6608,7 +6683,9 @@ pub fn check_chown_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Bare ask rule - any chown invocation asks
-    Some(GateResult::ask("chown: Changing permissions"))
+    Some(GateResult::ask(
+        "chown: Changes file ownership. Verify the target user/group exists before running.",
+    ))
 }
 
 // === CHGRP (from filesystem.toml) ===
@@ -6631,7 +6708,9 @@ pub fn check_chgrp_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Bare ask rule - any chgrp invocation asks
-    Some(GateResult::ask("chgrp: Changing permissions"))
+    Some(GateResult::ask(
+        "chgrp: Changes file group. Verify the target group exists before running.",
+    ))
 }
 
 // === LN (from filesystem.toml) ===
@@ -6654,7 +6733,9 @@ pub fn check_ln_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Bare ask rule - any ln invocation asks
-    Some(GateResult::ask("ln: Creating link"))
+    Some(GateResult::ask(
+        "ln: Creates a hard or symbolic link. `-s` for symlink, `-f` to overwrite an existing link target.",
+    ))
 }
 
 // === PERL (from filesystem.toml) ===
@@ -6677,7 +6758,9 @@ pub fn check_perl_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Bare ask rule - any perl invocation asks
-    Some(GateResult::ask("perl: perl: can execute arbitrary code"))
+    Some(GateResult::ask(
+        "perl: perl can execute arbitrary code via `-e`, `-E`, `system()`, or backticks. Treat like running an inline script.",
+    ))
 }
 
 // === TAR (from filesystem.toml) ===
@@ -6734,7 +6817,9 @@ pub fn check_unzip_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare ask rule - any unzip invocation asks
-    Some(GateResult::ask("unzip: Extracting archive"))
+    Some(GateResult::ask(
+        "unzip: Extracts a zip archive. Verify trust; paths inside the archive can use `..` for directory traversal.",
+    ))
 }
 
 // === ZIP (from filesystem.toml) ===
@@ -6757,7 +6842,9 @@ pub fn check_zip_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Bare ask rule - any zip invocation asks
-    Some(GateResult::ask("zip: Creating/modifying archive"))
+    Some(GateResult::ask(
+        "zip: Creates or modifies a zip archive. Writes the destination path; existing archives are updated in place.",
+    ))
 }
 
 // === CURL (from network.toml) ===
@@ -6828,7 +6915,9 @@ pub fn check_wget_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-O", "--output-document", "-P", "--directory-prefix"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Downloading file"));
+        return Some(GateResult::ask(
+            "Downloads a file from the given URL. Writes to disk; `-O` chooses the output name, `-P` chooses the directory.",
+        ));
     }
     if true
         && cmd
@@ -6836,7 +6925,9 @@ pub fn check_wget_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-r", "--recursive"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Recursive download"));
+        return Some(GateResult::ask(
+            "Recursively downloads pages and linked resources. Can fetch a large amount of data; control depth with `-l`.",
+        ));
     }
     if true
         && cmd
@@ -6844,7 +6935,9 @@ pub fn check_wget_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-m", "--mirror"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Mirroring site"));
+        return Some(GateResult::ask(
+            "Mirrors a site to local disk. Implies infinite recursion, timestamping, and link conversion.",
+        ));
     }
     if true
         && cmd
@@ -6852,7 +6945,9 @@ pub fn check_wget_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--post-data", "--post-file"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("POST request"));
+        return Some(GateResult::ask(
+            "Sends a POST request with the given body. Mutating HTTP method; server-side effects depend on the endpoint.",
+        ));
     }
 
     if WGET_ALLOW.contains(subcmd.as_str()) || WGET_ALLOW.contains(subcmd_single) {
@@ -6865,7 +6960,9 @@ pub fn check_wget_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare ask rule - any wget invocation asks
-    Some(GateResult::ask("wget: Downloading"))
+    Some(GateResult::ask(
+        "wget: Downloads the given URL to the current directory by default. Writes to disk.",
+    ))
 }
 
 // === SSH (from network.toml) ===
@@ -6888,7 +6985,9 @@ pub fn check_ssh_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Bare ask rule - any ssh invocation asks
-    Some(GateResult::ask("ssh: Remote connection"))
+    Some(GateResult::ask(
+        "ssh: Opens an SSH connection. Commands executed on the remote bypass local tool-gates; treat the remote as a separate trust boundary.",
+    ))
 }
 
 // === SCP (from network.toml) ===
@@ -6911,7 +7010,9 @@ pub fn check_scp_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Bare ask rule - any scp invocation asks
-    Some(GateResult::ask("scp: File transfer"))
+    Some(GateResult::ask(
+        "scp: Copies files over SSH. Overwrites the destination by default; can transfer in either direction.",
+    ))
 }
 
 // === SFTP (from network.toml) ===
@@ -6934,7 +7035,9 @@ pub fn check_sftp_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Bare ask rule - any sftp invocation asks
-    Some(GateResult::ask("sftp: File transfer"))
+    Some(GateResult::ask(
+        "sftp: Opens an interactive SFTP session for transferring files over SSH.",
+    ))
 }
 
 // === RSYNC (from network.toml) ===
@@ -6966,7 +7069,9 @@ pub fn check_rsync_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Bare ask rule - any rsync invocation asks
-    Some(GateResult::ask("rsync: File sync"))
+    Some(GateResult::ask(
+        "rsync: Synchronizes files between source and destination. `--delete` removes files at the destination not present at source; preview with `-n` first.",
+    ))
 }
 
 // === NC (from network.toml) ===
@@ -6992,11 +7097,15 @@ pub fn check_nc_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
     // Check ask rules with flag/prefix conditions
     if true && cmd.args.iter().any(|a| ["-l"].contains(&a.as_str())) {
-        return Some(GateResult::ask("Listen mode (opens port)"));
+        return Some(GateResult::ask(
+            "Opens a listening port. The `-e` flag (reverse shell) is blocked separately; verify firewall scope and that you intend to accept inbound connections.",
+        ));
     }
 
     // Bare ask rule - any nc invocation asks
-    Some(GateResult::ask("nc: Network connection"))
+    Some(GateResult::ask(
+        "nc: Opens a netcat connection to the given host/port. Sends/receives raw bytes; verify both endpoints.",
+    ))
 }
 
 // === HTTP (from network.toml) ===
@@ -7006,13 +7115,11 @@ pub static HTTP_ALLOW: LazyLock<HashSet<&str>> =
 
 pub static HTTP_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("POST", "HTTPie: POST request"),
-        ("PUT", "HTTPie: PUT request"),
-        ("DELETE", "HTTPie: DELETE request"),
-        ("PATCH", "HTTPie: PATCH request"),
-    ]
-    .into_iter()
-    .collect()
+        ("POST", "Sends an HTTP POST request. Mutating method; server-side effects depend on the endpoint."),
+        ("PUT", "Sends an HTTP PUT request. Typically replaces a resource at the target URL."),
+        ("DELETE", "Sends an HTTP DELETE request. Typically removes the resource at the target URL."),
+        ("PATCH", "Sends an HTTP PATCH request. Typically applies a partial update to the resource at the target URL."),
+    ].into_iter().collect()
 });
 
 /// Check http commands declaratively
@@ -7073,7 +7180,9 @@ pub fn check_nmap_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare ask rule - any nmap invocation asks
-    Some(GateResult::ask("nmap: Port scanning"))
+    Some(GateResult::ask(
+        "nmap: Sends port-scan probes to remote hosts. Can be slow on large ranges and is logged by most network security tools.",
+    ))
 }
 
 // === SOCAT (from network.toml) ===
@@ -7103,7 +7212,9 @@ pub fn check_socat_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare ask rule - any socat invocation asks
-    Some(GateResult::ask("socat: Network relay"))
+    Some(GateResult::ask(
+        "socat: socat sets up bidirectional I/O between two endpoints (network, file, process). Confirm both endpoints; can be used to tunnel out of restricted environments.",
+    ))
 }
 
 // === TELNET (from network.toml) ===
@@ -7126,7 +7237,9 @@ pub fn check_telnet_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Bare ask rule - any telnet invocation asks
-    Some(GateResult::ask("telnet: Network connection"))
+    Some(GateResult::ask(
+        "telnet: Opens a cleartext telnet session to a host/port. No encryption; credentials sent in the clear.",
+    ))
 }
 
 // === SHUTDOWN (from system.toml) ===
@@ -7525,7 +7638,9 @@ pub fn check_mount_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare ask rule - any mount invocation asks
-    Some(GateResult::ask("mount: Mounting filesystem"))
+    Some(GateResult::ask(
+        "mount: Mounts a filesystem. Usually requires root in most setups; verify the source device and target mount point.",
+    ))
 }
 
 // === UMOUNT (from system.toml) ===
@@ -7652,7 +7767,9 @@ pub fn check_createdb_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Bare ask rule - any createdb invocation asks
-    Some(GateResult::ask("createdb: Creating database"))
+    Some(GateResult::ask(
+        "createdb: Creates a new PostgreSQL database. Connects to the server using the configured role.",
+    ))
 }
 
 // === DROPDB (from system.toml) ===
@@ -7675,7 +7792,9 @@ pub fn check_dropdb_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Bare ask rule - any dropdb invocation asks
-    Some(GateResult::ask("dropdb: Dropping database"))
+    Some(GateResult::ask(
+        "dropdb: Drops a PostgreSQL database. Permanent; all schemas and data in the database are deleted.",
+    ))
 }
 
 // === PG_DUMP (from system.toml) ===
@@ -7720,7 +7839,9 @@ pub fn check_pg_restore_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Bare ask rule - any pg_restore invocation asks
-    Some(GateResult::ask("pg_restore: Restoring database"))
+    Some(GateResult::ask(
+        "pg_restore: Restores a PostgreSQL dump into a database. Can overwrite existing objects depending on flags.",
+    ))
 }
 
 // === MIGRATE (from system.toml) ===
@@ -7743,7 +7864,9 @@ pub fn check_migrate_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Bare ask rule - any migrate invocation asks
-    Some(GateResult::ask("migrate: Running database migration"))
+    Some(GateResult::ask(
+        "migrate: Runs a database migration via golang-migrate. Applies schema changes; review the migration files first.",
+    ))
 }
 
 // === GOOSE (from system.toml) ===
@@ -7766,7 +7889,9 @@ pub fn check_goose_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Bare ask rule - any goose invocation asks
-    Some(GateResult::ask("goose: Running database migration"))
+    Some(GateResult::ask(
+        "goose: Runs a database migration via goose. Applies schema changes; review the migration files first.",
+    ))
 }
 
 // === DBMATE (from system.toml) ===
@@ -7789,7 +7914,9 @@ pub fn check_dbmate_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Bare ask rule - any dbmate invocation asks
-    Some(GateResult::ask("dbmate: Running database migration"))
+    Some(GateResult::ask(
+        "dbmate: Runs a database migration via dbmate. Applies schema changes; review the migration files first.",
+    ))
 }
 
 // === FLYWAY (from system.toml) ===
@@ -7812,7 +7939,9 @@ pub fn check_flyway_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Bare ask rule - any flyway invocation asks
-    Some(GateResult::ask("flyway: Running database migration"))
+    Some(GateResult::ask(
+        "flyway: Runs a database migration via Flyway. Applies schema changes; review the migration files first.",
+    ))
 }
 
 // === ALEMBIC (from system.toml) ===
@@ -7825,13 +7954,11 @@ pub static ALEMBIC_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 
 pub static ALEMBIC_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("upgrade", "Running database migration"),
-        ("downgrade", "Rolling back database migration"),
-        ("revision", "Creating new migration"),
-        ("stamp", "Stamping database version"),
-    ]
-    .into_iter()
-    .collect()
+        ("upgrade", "Applies pending Alembic migrations to the database. Schema/data changes are not auto-reversible."),
+        ("downgrade", "Reverts Alembic migrations. Can drop columns/tables; review the down() body before approving."),
+        ("revision", "Generates a new Alembic migration file in the `versions/` directory."),
+        ("stamp", "Sets the recorded Alembic version without running migrations. Mismatches with actual schema state can corrupt later migrations."),
+    ].into_iter().collect()
 });
 
 /// Check alembic commands declaratively
@@ -7912,7 +8039,9 @@ pub fn check_sqlite3_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare ask rule - any sqlite3 invocation asks
-    Some(GateResult::ask("sqlite3: Database access"))
+    Some(GateResult::ask(
+        "sqlite3: Opens a SQLite database file. Default mode allows writes; use `-readonly` to limit to queries.",
+    ))
 }
 
 // === MONGOSH (from system.toml) ===
@@ -7936,11 +8065,15 @@ pub fn check_mongosh_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
     // Check ask rules with flag/prefix conditions
     if true && cmd.args.iter().any(|a| ["--eval"].contains(&a.as_str())) {
-        return Some(GateResult::ask("Database session"));
+        return Some(GateResult::ask(
+            "MongoDB session with `--eval` script. The eval body runs as JS in the database context and can mutate data.",
+        ));
     }
 
     // Bare ask rule - any mongosh invocation asks
-    Some(GateResult::ask("mongosh: Database session"))
+    Some(GateResult::ask(
+        "mongosh: Opens a MongoDB session. Verify the connection target before running mutating queries.",
+    ))
 }
 
 // === REDIS-CLI (from system.toml) ===
@@ -7990,7 +8123,9 @@ pub fn check_kill_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare ask rule - any kill invocation asks
-    Some(GateResult::ask("kill: Terminating process(es)"))
+    Some(GateResult::ask(
+        "kill: Sends a signal to the listed PIDs (default SIGTERM). Verify the PID first; `-9` (SIGKILL) cannot be caught and can corrupt state.",
+    ))
 }
 
 // === PKILL (from system.toml) ===
@@ -8013,7 +8148,9 @@ pub fn check_pkill_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Bare ask rule - any pkill invocation asks
-    Some(GateResult::ask("pkill: Terminating process(es)"))
+    Some(GateResult::ask(
+        "pkill: Signals processes matching a pattern. Run `pgrep <pattern>` first to verify which processes match; `-9` cannot be caught.",
+    ))
 }
 
 // === KILLALL (from system.toml) ===
@@ -8036,7 +8173,9 @@ pub fn check_killall_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Bare ask rule - any killall invocation asks
-    Some(GateResult::ask("killall: Terminating process(es)"))
+    Some(GateResult::ask(
+        "killall: Signals ALL processes with the given name. Verify which processes match (different from `kill <pid>`); `-9` cannot be caught.",
+    ))
 }
 
 // === XKILL (from system.toml) ===
@@ -8059,7 +8198,9 @@ pub fn check_xkill_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Bare ask rule - any xkill invocation asks
-    Some(GateResult::ask("xkill: Terminating process(es)"))
+    Some(GateResult::ask(
+        "xkill: Click-to-kill X11 utility. Sends a KILL signal to whatever window is clicked next.",
+    ))
 }
 
 // === MAKE (from system.toml) ===
@@ -8160,15 +8301,23 @@ pub fn check_cmake_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare ask rule - any cmake invocation asks
-    Some(GateResult::ask("cmake: Configuring build"))
+    Some(GateResult::ask(
+        "cmake: Runs CMake to configure or build. Generates build files and may invoke the underlying compiler.",
+    ))
 }
 
 // === NINJA (from system.toml) ===
 
 pub static NINJA_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| ["-t"].into_iter().collect());
 
-pub static NINJA_ASK: LazyLock<HashMap<&str, &str>> =
-    LazyLock::new(|| [("clean", "Cleaning build")].into_iter().collect());
+pub static NINJA_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
+    [(
+        "clean",
+        "Removes Ninja build artifacts in the current build directory.",
+    )]
+    .into_iter()
+    .collect()
+});
 
 /// Check ninja commands declaratively
 pub fn check_ninja_declarative(cmd: &CommandInfo) -> Option<GateResult> {
@@ -8281,11 +8430,9 @@ pub static GRADLE_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 
 pub static GRADLE_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("publish", "Publishing artifacts"),
-        ("uploadArchives", "Uploading archives"),
-    ]
-    .into_iter()
-    .collect()
+        ("publish", "Publishes Gradle artifacts to a configured repository. Network operation; affects downstream consumers."),
+        ("uploadArchives", "Uploads built archives to a configured Gradle repository."),
+    ].into_iter().collect()
 });
 
 /// Check gradle commands declaratively
@@ -8339,11 +8486,9 @@ pub static MVN_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 
 pub static MVN_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("install", "Installing to local repo"),
-        ("deploy", "Deploying artifacts"),
-    ]
-    .into_iter()
-    .collect()
+        ("install", "Installs the built Maven artifact into the local repository (`~/.m2/repository`)."),
+        ("deploy", "Deploys Maven artifacts to a remote repository. Network operation; affects downstream consumers."),
+    ].into_iter().collect()
 });
 
 /// Check mvn commands declaratively
@@ -8388,9 +8533,10 @@ pub static BAZEL_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 });
 
 pub static BAZEL_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
-    [("clean", "Cleaning build"), ("run", "Running target")]
-        .into_iter()
-        .collect()
+    [
+        ("clean", "Removes Bazel build outputs. `--expunge` also deletes the workspace's external dependencies."),
+        ("run", "Builds and executes a Bazel target. The target runs as the current user with full filesystem access."),
+    ].into_iter().collect()
 });
 
 /// Check bazel commands declaratively
@@ -8434,12 +8580,10 @@ pub static MESON_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 
 pub static MESON_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("setup", "Setting up build"),
-        ("compile", "Compiling project"),
-        ("install", "Installing"),
-    ]
-    .into_iter()
-    .collect()
+        ("setup", "Configures a Meson build directory. Reads `meson.build` and writes build system files."),
+        ("compile", "Compiles a Meson project. Invokes the underlying build backend (ninja by default)."),
+        ("install", "Installs Meson build outputs to the configured prefix. May require root depending on prefix."),
+    ].into_iter().collect()
 });
 
 /// Check meson commands declaratively
@@ -8525,7 +8669,9 @@ pub fn check_ansible_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare ask rule - any ansible invocation asks
-    Some(GateResult::ask("ansible: Running playbook"))
+    Some(GateResult::ask(
+        "ansible: Runs an Ansible playbook against the inventory. Applies configuration changes to target hosts.",
+    ))
 }
 
 // === VAGRANT (from system.toml) ===
@@ -8545,15 +8691,13 @@ pub static VAGRANT_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 
 pub static VAGRANT_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("up", "Starting VM"),
-        ("halt", "Stopping VM"),
-        ("destroy", "Destroying VM"),
-        ("provision", "Provisioning VM"),
-        ("ssh", "SSH into VM"),
-        ("reload", "Reloading VM"),
-    ]
-    .into_iter()
-    .collect()
+        ("up", "Creates and boots the Vagrant VM defined in the local `Vagrantfile`."),
+        ("halt", "Gracefully shuts down the running Vagrant VM."),
+        ("destroy", "Deletes the Vagrant VM and its disk image. Cannot be undone; data inside the VM is lost."),
+        ("provision", "Re-runs Vagrant provisioners against the running VM. Can apply configuration changes."),
+        ("ssh", "Opens an SSH session into the Vagrant VM. Commands inside bypass local tool-gates."),
+        ("reload", "Halts the Vagrant VM and brings it back up, re-applying Vagrantfile changes."),
+    ].into_iter().collect()
 });
 
 /// Check vagrant commands declaratively
@@ -8614,7 +8758,9 @@ pub fn check_hyperfine_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare ask rule - any hyperfine invocation asks
-    Some(GateResult::ask("hyperfine: Running benchmarks"))
+    Some(GateResult::ask(
+        "hyperfine: Runs the given command repeatedly to measure timing. Executes the wrapped command on each iteration.",
+    ))
 }
 
 // === SUDO (from system.toml) ===
@@ -8693,24 +8839,22 @@ pub static SYSTEMCTL_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 
 pub static SYSTEMCTL_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("start", "Starting service"),
-        ("stop", "Stopping service"),
-        ("restart", "Restarting service"),
-        ("reload", "Reloading service"),
-        ("enable", "Enabling service"),
-        ("disable", "Disabling service"),
-        ("mask", "Masking service"),
-        ("unmask", "Unmasking service"),
-        ("kill", "Killing service"),
-        ("reset-failed", "Resetting failed state"),
-        ("daemon-reload", "Reloading daemon"),
-        ("daemon-reexec", "Re-executing daemon"),
-        ("set-default", "Setting default target"),
-        ("isolate", "Isolating target"),
-        ("edit", "Editing unit"),
-    ]
-    .into_iter()
-    .collect()
+        ("start", "Starts a systemd unit. Side effects depend on the unit type (service, socket, timer, etc.)."),
+        ("stop", "Stops a running systemd unit. Active connections/jobs handled by the unit may be cut off."),
+        ("restart", "Stops and starts a systemd unit. Brief downtime; in-flight work in the unit may be lost."),
+        ("reload", "Asks a systemd unit to reload its configuration without restarting. Unit must support SIGHUP-style reload."),
+        ("enable", "Enables a systemd unit to start automatically at boot. Creates symlinks under `/etc/systemd/system/`."),
+        ("disable", "Removes a systemd unit's autostart symlinks. Does not stop a currently running instance."),
+        ("mask", "Symlinks a systemd unit to `/dev/null` so it cannot be started, even as a dependency."),
+        ("unmask", "Removes a systemd mask, allowing the unit to be started again."),
+        ("kill", "Sends a signal to processes of a systemd unit (default SIGTERM). `-s SIGKILL` cannot be caught."),
+        ("reset-failed", "Clears the failed state of a systemd unit so it can be restarted."),
+        ("daemon-reload", "Reloads systemd unit files. Required after editing a unit; doesn't restart running services on its own."),
+        ("daemon-reexec", "Re-executes systemd itself. Drops PID 1 in-place and reloads its state; rarely needed."),
+        ("set-default", "Changes the default systemd target the system boots into (e.g. `graphical.target` vs `multi-user.target`)."),
+        ("isolate", "Switches systemd to the target unit and stops everything not required by it. Can take down unrelated services unexpectedly."),
+        ("edit", "Opens a systemd unit override in `$EDITOR`. Interactive; may block in agent contexts."),
+    ].into_iter().collect()
 });
 
 /// Check systemctl commands declaratively
@@ -8801,7 +8945,9 @@ pub fn check_crontab_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare ask rule - any crontab invocation asks
-    Some(GateResult::ask("crontab: Modifying scheduled tasks"))
+    Some(GateResult::ask(
+        "crontab: Modifies cron jobs. Scheduled jobs persist across logout/reboot and run as the user; verify the schedule and command body.",
+    ))
 }
 
 // === APT (from system.toml) ===
@@ -8835,27 +8981,22 @@ pub static APT_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 
 pub static APT_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        (
-            "download",
-            "Downloading package files (writes to local filesystem)",
-        ),
+        ("download", "Downloads `.deb` package files to the current directory without installing."),
         ("install", "Installing packages"),
-        ("remove", "Removing packages"),
-        ("purge", "Purging packages"),
+        ("remove", "Removes packages but keeps their config files. Use `purge` to also remove configs."),
+        ("purge", "Removes packages and their config files. Stronger than `remove`."),
         ("update", "Updating package lists"),
-        ("upgrade", "Upgrading packages"),
-        ("full-upgrade", "Full system upgrade"),
-        ("dist-upgrade", "Distribution upgrade"),
-        ("autoremove", "Removing unused packages"),
-        ("autoclean", "Cleaning cache"),
-        ("clean", "Cleaning cache"),
-        ("build-dep", "Installing build dependencies"),
-        ("source", "Downloading source"),
-        ("edit-sources", "Editing sources"),
-        ("satisfy", "Satisfying dependencies"),
-    ]
-    .into_iter()
-    .collect()
+        ("upgrade", "Upgrades installed packages to newer versions from the configured sources."),
+        ("full-upgrade", "Upgrades packages and can remove others to resolve dependencies. Heavier than plain `upgrade`."),
+        ("dist-upgrade", "Distribution upgrade can install/remove many packages, including kernel and base packages. Review proposed changes before approving."),
+        ("autoremove", "Removes packages installed as dependencies that are no longer needed."),
+        ("autoclean", "Removes obsolete `.deb` files from the apt download cache."),
+        ("clean", "Removes all cached `.deb` files from the apt download cache."),
+        ("build-dep", "Installs the build dependencies of the named source package."),
+        ("source", "Downloads the source `.tar.*` and `.dsc` for a package into the current directory."),
+        ("edit-sources", "Opens `/etc/apt/sources.list` in `$EDITOR`. Interactive; affects which repositories apt trusts."),
+        ("satisfy", "Installs/removes packages as needed to satisfy a given dependency expression."),
+    ].into_iter().collect()
 });
 
 /// Check apt commands declaratively
@@ -8940,22 +9081,20 @@ pub static DNF_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 pub static DNF_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
         ("install", "Installing packages"),
-        ("remove", "Removing packages"),
-        ("erase", "Removing packages"),
-        ("update", "Updating packages"),
-        ("upgrade", "Upgrading packages"),
-        ("downgrade", "Downgrading packages"),
-        ("reinstall", "Reinstalling packages"),
-        ("autoremove", "Removing unused packages"),
-        ("clean", "Cleaning cache"),
-        ("makecache", "Building cache"),
-        ("group", "Group operation"),
-        ("module", "Module operation"),
-        ("swap", "Swapping packages"),
-        ("distro-sync", "Syncing distribution"),
-    ]
-    .into_iter()
-    .collect()
+        ("remove", "Removes packages from the system."),
+        ("erase", "Removes packages from the system (alias for `remove`)."),
+        ("update", "Updates installed packages to the latest version available in the enabled repos."),
+        ("upgrade", "Upgrades installed packages (alias for `update`)."),
+        ("downgrade", "Replaces installed packages with an older available version. May break dependencies."),
+        ("reinstall", "Reinstalls already-installed packages, restoring overwritten files from the package payload."),
+        ("autoremove", "Removes packages installed as dependencies that are no longer needed."),
+        ("clean", "Cleans cached package data and metadata from the dnf cache."),
+        ("makecache", "Downloads and caches repository metadata for enabled repos."),
+        ("group", "Installs, removes, or queries a dnf package group."),
+        ("module", "Installs, removes, enables, or queries dnf modules (streams of related packages)."),
+        ("swap", "Atomically removes one package and installs another in its place."),
+        ("distro-sync", "Synchronizes packages with the distribution version (can downgrade/upgrade across the repo set). Review changes before approving."),
+    ].into_iter().collect()
 });
 
 /// Check dnf commands declaratively
@@ -9071,20 +9210,59 @@ pub static BREW_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 pub static BREW_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
         ("install", "Installing packages"),
-        ("uninstall", "Uninstalling packages"),
-        ("remove", "Removing packages"),
-        ("upgrade", "Upgrading packages"),
-        ("update", "Updating Homebrew"),
-        ("reinstall", "Reinstalling packages"),
-        ("link", "Linking packages"),
-        ("unlink", "Unlinking packages"),
-        ("pin", "Pinning packages"),
-        ("unpin", "Unpinning packages"),
-        ("tap", "Tapping repository"),
-        ("untap", "Untapping repository"),
-        ("cleanup", "Cleaning up"),
-        ("autoremove", "Removing unused"),
-        ("services", "Managing services"),
+        (
+            "uninstall",
+            "Removes installed Homebrew packages from the prefix.",
+        ),
+        (
+            "remove",
+            "Removes installed Homebrew packages (alias for `uninstall`).",
+        ),
+        (
+            "upgrade",
+            "Upgrades installed Homebrew formulae/casks to the latest available versions.",
+        ),
+        (
+            "update",
+            "Updates Homebrew's tap metadata. Does not upgrade installed packages.",
+        ),
+        (
+            "reinstall",
+            "Removes and re-installs a Homebrew formula or cask.",
+        ),
+        (
+            "link",
+            "Symlinks a formula's files into the Homebrew prefix.",
+        ),
+        (
+            "unlink",
+            "Removes a formula's symlinks from the Homebrew prefix without uninstalling.",
+        ),
+        (
+            "pin",
+            "Prevents a formula from being upgraded by `brew upgrade`.",
+        ),
+        ("unpin", "Removes a pin so a formula can be upgraded again."),
+        (
+            "tap",
+            "Adds a third-party Homebrew tap to the list of trusted sources.",
+        ),
+        (
+            "untap",
+            "Removes a Homebrew tap and its formulae from the local list of sources.",
+        ),
+        (
+            "cleanup",
+            "Removes old versions of installed formulae and the download cache.",
+        ),
+        (
+            "autoremove",
+            "Removes Homebrew formulae installed as dependencies that are no longer needed.",
+        ),
+        (
+            "services",
+            "Manages Homebrew background services (start/stop/run/list).",
+        ),
     ]
     .into_iter()
     .collect()
@@ -9153,24 +9331,22 @@ pub static ZYPPER_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 pub static ZYPPER_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
         ("install", "Installing packages"),
-        ("in", "Installing packages"),
-        ("remove", "Removing packages"),
-        ("rm", "Removing packages"),
-        ("update", "Updating packages"),
-        ("up", "Updating packages"),
-        ("dist-upgrade", "Distribution upgrade"),
-        ("dup", "Distribution upgrade"),
-        ("patch", "Installing patches"),
-        ("addrepo", "Adding repository"),
-        ("ar", "Adding repository"),
-        ("removerepo", "Removing repository"),
-        ("rr", "Removing repository"),
-        ("refresh", "Refreshing repositories"),
-        ("ref", "Refreshing repositories"),
-        ("clean", "Cleaning cache"),
-    ]
-    .into_iter()
-    .collect()
+        ("in", "Installing packages (alias for `install`)."),
+        ("remove", "Removes installed zypper packages."),
+        ("rm", "Removes installed zypper packages (alias for `remove`)."),
+        ("update", "Updates installed zypper packages to newer versions."),
+        ("up", "Updates installed zypper packages (alias for `update`)."),
+        ("dist-upgrade", "Distribution upgrade can install/remove many packages, including kernel and base packages. Review proposed changes before approving."),
+        ("dup", "Distribution upgrade (alias for `dist-upgrade`)."),
+        ("patch", "Installs official patches/errata for installed packages."),
+        ("addrepo", "Adds a new zypper repository to the trusted list."),
+        ("ar", "Adds a new zypper repository (alias for `addrepo`)."),
+        ("removerepo", "Removes a configured zypper repository."),
+        ("rr", "Removes a configured zypper repository (alias for `removerepo`)."),
+        ("refresh", "Refreshes zypper repository metadata."),
+        ("ref", "Refreshes zypper repository metadata (alias for `refresh`)."),
+        ("clean", "Cleans cached zypper package data and metadata."),
+    ].into_iter().collect()
 });
 
 /// Check zypper commands declaratively
@@ -9226,13 +9402,28 @@ pub static APK_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 
 pub static APK_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("add", "Installing packages"),
-        ("del", "Removing packages"),
-        ("update", "Updating index"),
-        ("upgrade", "Upgrading packages"),
-        ("fix", "Fixing packages"),
-        ("cache", "Cache operation"),
-        ("fetch", "Fetching packages"),
+        ("add", "Installs apk packages."),
+        ("del", "Removes installed apk packages."),
+        (
+            "update",
+            "Refreshes the apk package index from configured repositories.",
+        ),
+        (
+            "upgrade",
+            "Upgrades installed apk packages to newer versions.",
+        ),
+        (
+            "fix",
+            "Repairs an installed apk package whose files have been altered or removed.",
+        ),
+        (
+            "cache",
+            "Manages the apk package cache (clean, sync, download).",
+        ),
+        (
+            "fetch",
+            "Downloads apk packages to the current directory without installing.",
+        ),
     ]
     .into_iter()
     .collect()
@@ -9292,17 +9483,15 @@ pub static NIX_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 
 pub static NIX_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("build", "Building derivation"),
-        ("develop", "Entering dev shell"),
-        ("run", "Running package"),
-        ("shell", "Entering shell"),
-        ("profile", "Profile operation"),
-        ("upgrade-nix", "Upgrading Nix"),
-        ("copy", "Copying paths"),
-        ("collect-garbage", "Collecting garbage"),
-    ]
-    .into_iter()
-    .collect()
+        ("build", "Builds a Nix derivation. May download from substituters or compile locally."),
+        ("develop", "Enters a Nix development shell with the package's build dependencies in scope."),
+        ("run", "Builds and runs the given Nix package. The package executes as the current user."),
+        ("shell", "Opens an interactive shell with the given Nix packages available."),
+        ("profile", "Installs, removes, or upgrades packages in a Nix user profile."),
+        ("upgrade-nix", "Upgrades the Nix package manager itself to the latest version."),
+        ("copy", "Copies Nix store paths between stores (local, remote, or s3). Network operation."),
+        ("collect-garbage", "Deletes unreachable paths from the Nix store. Frees disk; cannot be undone without rebuilding."),
+    ].into_iter().collect()
 });
 
 /// Check nix commands declaratively
@@ -9343,12 +9532,27 @@ pub static NIX_ENV_ALLOW: LazyLock<HashSet<&str>> =
 
 pub static NIX_ENV_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("-i", "Installing packages"),
-        ("--install", "Installing packages"),
-        ("-e", "Uninstalling packages"),
-        ("--uninstall", "Uninstalling packages"),
-        ("-u", "Upgrading packages"),
-        ("--upgrade", "Upgrading packages"),
+        (
+            "-i",
+            "Installs a Nix package into the current user profile.",
+        ),
+        (
+            "--install",
+            "Installs a Nix package into the current user profile.",
+        ),
+        (
+            "-e",
+            "Uninstalls a Nix package from the current user profile.",
+        ),
+        (
+            "--uninstall",
+            "Uninstalls a Nix package from the current user profile.",
+        ),
+        ("-u", "Upgrades packages in the current Nix user profile."),
+        (
+            "--upgrade",
+            "Upgrades packages in the current Nix user profile.",
+        ),
     ]
     .into_iter()
     .collect()
@@ -9405,7 +9609,9 @@ pub fn check_nix_shell_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Bare ask rule - any nix-shell invocation asks
-    Some(GateResult::ask("nix-shell: Entering Nix shell"))
+    Some(GateResult::ask(
+        "nix-shell: Opens a shell with the given Nix expression's dependencies available. May download or build packages.",
+    ))
 }
 
 // === FLATPAK (from system.toml) ===
@@ -9427,15 +9633,33 @@ pub static FLATPAK_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 
 pub static FLATPAK_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("install", "Installing"),
-        ("uninstall", "Uninstalling"),
-        ("remove", "Removing"),
-        ("update", "Updating"),
-        ("upgrade", "Upgrading"),
-        ("run", "Running"),
-        ("remote-add", "Adding remote"),
-        ("remote-delete", "Removing remote"),
-        ("repair", "Repairing"),
+        (
+            "install",
+            "Installs a Flatpak/Snap application from a remote.",
+        ),
+        (
+            "uninstall",
+            "Removes an installed Flatpak/Snap application.",
+        ),
+        (
+            "remove",
+            "Removes an installed Flatpak/Snap application (alias for `uninstall`).",
+        ),
+        ("update", "Updates installed Flatpak/Snap applications."),
+        (
+            "upgrade",
+            "Upgrades installed Flatpak/Snap applications (alias for `update`).",
+        ),
+        ("run", "Launches an installed Flatpak/Snap application."),
+        (
+            "remote-add",
+            "Adds a new Flatpak remote to the trusted list. Future installs can pull from it.",
+        ),
+        ("remote-delete", "Removes a configured Flatpak remote."),
+        (
+            "repair",
+            "Repairs the local Flatpak installation. May re-download corrupted objects.",
+        ),
     ]
     .into_iter()
     .collect()
@@ -9498,7 +9722,9 @@ pub fn check_dpkg_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-i", "--install"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Installing packages"));
+        return Some(GateResult::ask(
+            "Installs `.deb` package files directly via dpkg. Does not resolve dependencies; prefer `apt install` when possible.",
+        ));
     }
     if true
         && cmd
@@ -9506,7 +9732,9 @@ pub fn check_dpkg_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-r", "--remove", "-P", "--purge"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Removing packages"));
+        return Some(GateResult::ask(
+            "Removes or purges installed packages via dpkg. `--purge` also removes config files.",
+        ));
     }
     if true
         && cmd
@@ -9514,7 +9742,9 @@ pub fn check_dpkg_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--configure", "--unpack"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Configuring packages"));
+        return Some(GateResult::ask(
+            "Configures or unpacks `.deb` packages. Used in low-level package management; can leave the system in a partially-configured state if interrupted.",
+        ));
     }
     if true
         && cmd.args.iter().any(|a| {
@@ -9527,7 +9757,9 @@ pub fn check_dpkg_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .contains(&a.as_str())
         })
     {
-        return Some(GateResult::ask("Modifying package state"));
+        return Some(GateResult::ask(
+            "Modifies dpkg package state (selections or supported architectures). Affects what apt/dpkg will install or upgrade.",
+        ));
     }
 
     // Check conditional allow rules
@@ -9607,14 +9839,12 @@ pub static APT_MARK_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 
 pub static APT_MARK_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("manual", "Marking packages as manually installed"),
-        ("auto", "Marking packages as automatically installed"),
-        ("hold", "Holding package version"),
-        ("unhold", "Removing package hold"),
-        ("minimize-manual", "Minimizing manually installed packages"),
-    ]
-    .into_iter()
-    .collect()
+        ("manual", "Marks packages as manually installed so apt's autoremove will not remove them."),
+        ("auto", "Marks packages as automatically installed so apt's autoremove can remove them when unused."),
+        ("hold", "Pins a package at its current version. apt upgrade/install will refuse to change it."),
+        ("unhold", "Releases a hold so the package can be upgraded again."),
+        ("minimize-manual", "Marks as auto any manually-installed packages that are dependencies of other manually-installed packages."),
+    ].into_iter().collect()
 });
 
 /// Check apt-mark commands declaratively
@@ -9671,18 +9901,16 @@ pub static PACTL_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 
 pub static PACTL_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("set-sink-volume", "Changing audio volume"),
-        ("set-source-volume", "Changing audio volume"),
-        ("set-sink-mute", "Changing mute state"),
-        ("set-source-mute", "Changing mute state"),
-        ("set-default-sink", "Changing default audio output"),
-        ("set-default-source", "Changing default audio input"),
-        ("load-module", "Loading PulseAudio module"),
-        ("unload-module", "Unloading PulseAudio module"),
-        ("exit", "Terminating PulseAudio daemon"),
-    ]
-    .into_iter()
-    .collect()
+        ("set-sink-volume", "Changes the volume of a PulseAudio output sink."),
+        ("set-source-volume", "Changes the volume of a PulseAudio input source."),
+        ("set-sink-mute", "Mutes or unmutes a PulseAudio output sink."),
+        ("set-source-mute", "Mutes or unmutes a PulseAudio input source."),
+        ("set-default-sink", "Changes which PulseAudio sink is the default for new streams."),
+        ("set-default-source", "Changes which PulseAudio source is the default for new captures."),
+        ("load-module", "Loads a PulseAudio module into the running daemon. Modules can route, filter, or expose audio."),
+        ("unload-module", "Unloads a PulseAudio module from the running daemon."),
+        ("exit", "Terminates the running PulseAudio daemon. Active audio streams will drop."),
+    ].into_iter().collect()
 });
 
 /// Check pactl commands declaratively
@@ -9740,21 +9968,19 @@ pub static OPENSSL_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
 
 pub static OPENSSL_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("s_server", "Starting TLS server"),
-        ("genrsa", "Generating RSA key"),
-        ("genpkey", "Generating private key"),
-        ("req", "Creating certificate request"),
-        ("ca", "Certificate authority operation"),
-        ("pkcs12", "PKCS12 operation"),
-        ("enc", "Encrypting/decrypting"),
-        ("smime", "S/MIME operation"),
-        ("cms", "CMS operation"),
-        ("rsautl", "RSA operation"),
-        ("pkeyutl", "Key operation"),
-        ("ecparam", "Generating EC parameters"),
-    ]
-    .into_iter()
-    .collect()
+        ("s_server", "Starts a debug TLS server bound to a local port. Accepts inbound connections until terminated."),
+        ("genrsa", "Generates an RSA private key. Writes a private-key file; protect with passphrase and correct permissions."),
+        ("genpkey", "Generates a private key (RSA/EC/Ed25519/etc.). Writes a private-key file; protect with passphrase and correct permissions."),
+        ("req", "Creates a certificate signing request (CSR) or self-signed cert. Writes to disk."),
+        ("ca", "Acts as a minimal certificate authority: signs CSRs, revokes certs, manages the CA database."),
+        ("pkcs12", "Packs or unpacks a PKCS#12 bundle (cert + private key). Writes key material to disk."),
+        ("enc", "Encrypts or decrypts a file with a symmetric cipher. Default cipher is weak; prefer `-aes-256-cbc` or modern alternatives."),
+        ("smime", "S/MIME sign, verify, encrypt, or decrypt of an email message or file."),
+        ("cms", "Cryptographic Message Syntax operation: sign, verify, encrypt, or decrypt a CMS structure."),
+        ("rsautl", "RSA primitive operation: sign, verify, encrypt, or decrypt with an RSA key. Legacy; prefer `pkeyutl`."),
+        ("pkeyutl", "Generic public-key operation: sign, verify, encrypt, decrypt, or derive shared secret."),
+        ("ecparam", "Generates or inspects elliptic-curve parameters. With `-genkey`, also writes an EC private key."),
+    ].into_iter().collect()
 });
 
 /// Check openssl commands declaratively
@@ -9776,10 +10002,14 @@ pub fn check_openssl_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
     // Check ask rules with flag/prefix conditions
     if subcmd_single == "x509" && cmd.args.iter().any(|a| ["-req"].contains(&a.as_str())) {
-        return Some(GateResult::ask("Signing certificate"));
+        return Some(GateResult::ask(
+            "Signs a certificate request (CSR) to produce an X.509 certificate. Writes the resulting cert; affects trust if installed.",
+        ));
     }
     if subcmd_single == "rand" && cmd.args.iter().any(|a| ["-out"].contains(&a.as_str())) {
-        return Some(GateResult::ask("Writing random data to file"));
+        return Some(GateResult::ask(
+            "Writes the requested number of random bytes to the file given by `-out`.",
+        ));
     }
 
     if OPENSSL_ALLOW.contains(subcmd.as_str()) || OPENSSL_ALLOW.contains(subcmd_single) {
@@ -9830,7 +10060,9 @@ pub fn check_gpg_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--sign", "-s", "--clearsign", "--detach-sign", "-b"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Signing data"));
+        return Some(GateResult::ask(
+            "Signs data with a GPG private key. `--clearsign` keeps the message readable; `--detach-sign` writes a separate `.sig` file.",
+        ));
     }
     if true
         && cmd
@@ -9838,7 +10070,9 @@ pub fn check_gpg_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--encrypt", "-e", "--symmetric", "-c"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Encrypting data"));
+        return Some(GateResult::ask(
+            "Encrypts data with a GPG recipient key or a passphrase (`--symmetric`).",
+        ));
     }
     if true
         && cmd
@@ -9846,10 +10080,14 @@ pub fn check_gpg_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--decrypt", "-d"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Decrypting data"));
+        return Some(GateResult::ask(
+            "Decrypts a GPG-encrypted file using the matching private key or passphrase.",
+        ));
     }
     if true && cmd.args.iter().any(|a| ["--import"].contains(&a.as_str())) {
-        return Some(GateResult::ask("Importing key"));
+        return Some(GateResult::ask(
+            "Imports a GPG public or private key into the local keyring. The imported key becomes trusted for signature verification.",
+        ));
     }
     if true
         && cmd
@@ -9857,7 +10095,9 @@ pub fn check_gpg_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--export", "--export-secret-keys"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Exporting key"));
+        return Some(GateResult::ask(
+            "Exports a GPG key. `--export-secret-keys` exports private key material; protect the output file.",
+        ));
     }
     if true
         && cmd.args.iter().any(|a| {
@@ -9869,7 +10109,9 @@ pub fn check_gpg_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .contains(&a.as_str())
         })
     {
-        return Some(GateResult::ask("Deleting key"));
+        return Some(GateResult::ask(
+            "Deletes a key from the local GPG keyring. `--delete-secret-key` removes private material; cannot be undone without a backup.",
+        ));
     }
     if true
         && cmd.args.iter().any(|a| {
@@ -9883,7 +10125,9 @@ pub fn check_gpg_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .contains(&a.as_str())
         })
     {
-        return Some(GateResult::ask("Generating key"));
+        return Some(GateResult::ask(
+            "Generates a new GPG keypair. Writes private material to the keyring; choose a passphrase strong enough for the use case.",
+        ));
     }
     if true
         && cmd
@@ -9891,7 +10135,9 @@ pub fn check_gpg_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--edit-key"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Editing key"));
+        return Some(GateResult::ask(
+            "Opens an interactive GPG key editor. May block in agent contexts; modifies the local keyring.",
+        ));
     }
 
     // Check conditional allow rules
@@ -9958,7 +10204,9 @@ pub fn check_ssh_keygen_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
     // Check ask rules with flag/prefix conditions
     if true && cmd.args.iter().any(|a| ["-R"].contains(&a.as_str())) {
-        return Some(GateResult::ask("Removing host key"));
+        return Some(GateResult::ask(
+            "Removes a host from the `known_hosts` file. Next connection will re-prompt for host key verification.",
+        ));
     }
 
     // Check conditional allow rules
@@ -9978,7 +10226,9 @@ pub fn check_ssh_keygen_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare ask rule - any ssh-keygen invocation asks
-    Some(GateResult::ask("ssh-keygen: Generating/modifying SSH key"))
+    Some(GateResult::ask(
+        "ssh-keygen: Generates or modifies an SSH key. Writes a private-key file; protect the output path and passphrase.",
+    ))
 }
 
 // === AGE (from system.toml) ===
@@ -10006,7 +10256,9 @@ pub fn check_age_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare ask rule - any age invocation asks
-    Some(GateResult::ask("age: Encrypting/decrypting"))
+    Some(GateResult::ask(
+        "age: Encrypts or decrypts a file with age. Use `-i <key>` for identity files; output replaces or writes alongside the input.",
+    ))
 }
 
 // === SHORT (from shortcut.toml) ===
@@ -10126,7 +10378,9 @@ pub fn check_short_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-s", "--state"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Updating story state"));
+        return Some(GateResult::ask(
+            "Updates the workflow state of story `<story>`. Moves it on the workflow board (e.g., To Do -> In Progress -> Done) and may trigger workflow automations.",
+        ));
     }
     if subcmd_single == "story"
         && cmd
@@ -10169,7 +10423,9 @@ pub fn check_short_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-a", "--archived"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Archiving story"));
+        return Some(GateResult::ask(
+            "Archives story `<story>`. Hides it from default views but keeps history; reversible via `--archived=false` or the web UI.",
+        ));
     }
     if subcmd_single == "workspace"
         && cmd
@@ -10177,7 +10433,9 @@ pub fn check_short_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-u", "--unset"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Removing saved workspace"));
+        return Some(GateResult::ask(
+            "Removes a saved workspace (named search query) from the local `short` config. Does not delete anything on shortcut.com.",
+        ));
     }
 
     // Check conditional allow rules

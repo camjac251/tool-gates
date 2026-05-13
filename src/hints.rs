@@ -69,6 +69,15 @@ pub fn get_modern_hint(cmd: &CommandInfo) -> Option<ModernHint> {
         "cloc" => Some(hint_cloc(cmd)),
         // Documentation (understanding APIs/libraries)
         "man" => hint_man(cmd),
+        // Python tooling
+        "pip" | "pip3" => Some(hint_pip(cmd)),
+        "python" | "python3" => hint_python(cmd),
+        // DNS
+        "dig" | "nslookup" => Some(hint_dns(cmd)),
+        // Archives
+        "unzip" => Some(hint_unzip(cmd)),
+        "zip" => hint_zip(cmd),
+        "tar" => hint_tar(cmd),
         // Anti-patterns (bad flags, wrong tool for job)
         "bat" => hint_bat_flags(cmd),
         "rg" => hint_rg_body_capture(cmd),
@@ -788,7 +797,7 @@ fn hint_git_antipatterns(cmd: &CommandInfo) -> Option<ModernHint> {
                 return Some(ModernHint {
                     legacy_command: "git",
                     modern_command: "git",
-                    hint: "Avoid `git status -uall` on large repos (memory issues). Use `git status` without -uall.".to_string(),
+                    hint: "Avoid `git status -uall` on large repos (memory issues). Use `git status` without `-uall`.".to_string(),
                 });
             }
             None
@@ -800,14 +809,11 @@ fn hint_git_antipatterns(cmd: &CommandInfo) -> Option<ModernHint> {
                 .iter()
                 .any(|a| a == "-p" || a == "--patch" || a == "-i" || a == "--interactive")
             {
-                let diff_cmd =
-                    git_alias_or_raw("adiff", "git -c core.pager= diff --no-color --no-ext-diff");
                 return Some(ModernHint {
                     legacy_command: "git",
                     modern_command: "git",
-                    hint: format!(
-                        "Never use `git add -p` or `git add -i` (interactive, hangs agent). Use `{diff_cmd} | grepdiff 'pattern' --output-matching=hunk | git apply --cached` for surgical staging, or `git absorb --and-rebase` to auto-fold changes."
-                    ),
+                    hint: "Never use `git add -p` or `git add -i` (interactive, hangs the agent). Use the `git-history-and-staging` skill for surgical staging recipes."
+                        .to_string(),
                 });
             }
             let is_bulk = cmd
@@ -882,6 +888,140 @@ fn hint_git_antipatterns(cmd: &CommandInfo) -> Option<ModernHint> {
         }
         _ => None,
     }
+}
+
+// === Python tooling hints ===
+
+fn hint_pip(cmd: &CommandInfo) -> ModernHint {
+    let subcommand = cmd.args.iter().find(|a| !a.starts_with('-'));
+    let hint = match subcommand.map(String::as_str) {
+        Some("install") => {
+            "Use `uv pip install` (or `uv add` for project deps) instead of `pip install`. Faster, lockfile-aware, cache-shared."
+        }
+        Some("uninstall") => {
+            "Use `uv pip uninstall` instead of `pip uninstall`. Drop-in replacement, faster."
+        }
+        Some("list") | Some("freeze") | Some("show") => {
+            "Use `uv pip` instead of `pip` for inspection. Same subcommands, faster."
+        }
+        _ => {
+            "Use `uv pip` instead of `pip` (or `uv add`/`uv sync` for project deps). Faster, lockfile-aware."
+        }
+    };
+    ModernHint {
+        legacy_command: if cmd.program == "pip3" { "pip3" } else { "pip" },
+        modern_command: "uv",
+        hint: hint.to_string(),
+    }
+}
+
+fn hint_python(cmd: &CommandInfo) -> Option<ModernHint> {
+    // Only hint for `python -m pip ...` or `python -m venv ...`. Bare
+    // `python script.py` is fine and has no uv equivalent.
+    let m_target = cmd
+        .args
+        .windows(2)
+        .find(|w| w[0] == "-m")
+        .map(|w| w[1].as_str())?;
+
+    let hint = match m_target {
+        "pip" => "Use `uv pip <subcommand>` instead of `python -m pip`. Faster, lockfile-aware.",
+        "venv" => {
+            "Use `uv venv` instead of `python -m venv`. Faster, picks up your project's Python pin."
+        }
+        _ => return None,
+    };
+
+    Some(ModernHint {
+        legacy_command: if cmd.program == "python3" {
+            "python3"
+        } else {
+            "python"
+        },
+        modern_command: "uv",
+        hint: hint.to_string(),
+    })
+}
+
+// === DNS hints ===
+
+fn hint_dns(cmd: &CommandInfo) -> ModernHint {
+    let legacy = if cmd.program == "nslookup" {
+        "nslookup"
+    } else {
+        "dig"
+    };
+    ModernHint {
+        legacy_command: legacy,
+        modern_command: "doggo",
+        hint: format!(
+            "Use `doggo <name>` instead of `{}`. Colored output, structured JSON with `--json`, modern defaults.",
+            legacy
+        ),
+    }
+}
+
+// === Archive hints ===
+
+fn hint_unzip(_cmd: &CommandInfo) -> ModernHint {
+    ModernHint {
+        legacy_command: "unzip",
+        modern_command: "ouch",
+        hint: "Use `ouch decompress <file.zip>` instead of `unzip`. Format-agnostic (zip/tar/gz/xz/7z), auto-detects.".to_string(),
+    }
+}
+
+fn hint_zip(cmd: &CommandInfo) -> Option<ModernHint> {
+    // `zip --version` and similar info queries don't need a hint
+    let has_positional = cmd.args.iter().any(|a| !a.starts_with('-'));
+    if !has_positional {
+        return None;
+    }
+    Some(ModernHint {
+        legacy_command: "zip",
+        modern_command: "ouch",
+        hint: "Use `ouch compress <inputs...> <out.zip>` instead of `zip`. Format inferred from extension.".to_string(),
+    })
+}
+
+fn hint_tar(cmd: &CommandInfo) -> Option<ModernHint> {
+    // Treat short-option bundles like `-xzf` / `xzf` as a single flag token.
+    // Only extract usage gets the hint; create (`-c`) stays useful for
+    // streaming pipelines that ouch can't replicate cleanly.
+    let mut extract = false;
+    let mut create = false;
+    for arg in &cmd.args {
+        if arg == "--extract" || arg == "--get" {
+            extract = true;
+        } else if arg == "--create" {
+            create = true;
+        } else if arg.starts_with('-') && !arg.starts_with("--") {
+            let flags = &arg[1..];
+            if flags.contains('x') {
+                extract = true;
+            }
+            if flags.contains('c') {
+                create = true;
+            }
+        } else if !arg.contains('/') && !arg.contains('.') && arg.len() <= 4 {
+            // Bare short-bundle like `xzf` or `czvf` (no leading dash, BSD tar style).
+            if arg.contains('x') {
+                extract = true;
+            }
+            if arg.contains('c') {
+                create = true;
+            }
+        }
+    }
+
+    if extract && !create {
+        return Some(ModernHint {
+            legacy_command: "tar",
+            modern_command: "ouch",
+            hint: "Use `ouch decompress <archive>` instead of `tar -x`. Format-agnostic, auto-detects compression.".to_string(),
+        });
+    }
+    None
 }
 
 /// Format hints as a single context string for Claude.
@@ -1154,14 +1294,14 @@ mod tests {
     fn test_git_add_patch_hint() {
         let hint = hint_git_antipatterns(&cmd("git", &["add", "-p"]));
         assert!(hint.is_some());
-        assert!(hint.unwrap().hint.contains("grepdiff"));
+        assert!(hint.unwrap().hint.contains("git-history-and-staging"));
     }
 
     #[test]
     fn test_git_add_interactive_hint() {
         let hint = hint_git_antipatterns(&cmd("git", &["add", "-i"]));
         assert!(hint.is_some());
-        assert!(hint.unwrap().hint.contains("hangs agent"));
+        assert!(hint.unwrap().hint.contains("hangs the agent"));
     }
 
     #[test]
@@ -1210,6 +1350,130 @@ mod tests {
             "git",
             &["push", "--force", "origin", "feature-branch"],
         ));
+        assert!(hint.is_none());
+    }
+
+    // === pip / python venv -> uv tests ===
+
+    #[test]
+    fn test_pip_install_hint() {
+        let hint = hint_pip(&cmd("pip", &["install", "requests"]));
+        assert_eq!(hint.modern_command, "uv");
+        assert!(hint.hint.contains("uv pip install"));
+    }
+
+    #[test]
+    fn test_pip3_install_hint_uses_legacy_name() {
+        let hint = hint_pip(&cmd("pip3", &["install", "-r", "requirements.txt"]));
+        assert_eq!(hint.legacy_command, "pip3");
+        assert_eq!(hint.modern_command, "uv");
+    }
+
+    #[test]
+    fn test_pip_list_hint() {
+        let hint = hint_pip(&cmd("pip", &["list"]));
+        assert!(hint.hint.contains("uv pip"));
+    }
+
+    #[test]
+    fn test_python_m_pip_hint() {
+        let hint = hint_python(&cmd("python3", &["-m", "pip", "install", "requests"]));
+        assert!(hint.is_some());
+        let hint = hint.unwrap();
+        assert_eq!(hint.modern_command, "uv");
+        assert!(hint.hint.contains("uv pip"));
+    }
+
+    #[test]
+    fn test_python_m_venv_hint() {
+        let hint = hint_python(&cmd("python3", &["-m", "venv", ".venv"]));
+        assert!(hint.is_some());
+        assert!(hint.unwrap().hint.contains("uv venv"));
+    }
+
+    #[test]
+    fn test_python_script_no_hint() {
+        // python script.py is fine, no uv equivalent
+        let hint = hint_python(&cmd("python3", &["script.py", "--arg"]));
+        assert!(hint.is_none());
+    }
+
+    #[test]
+    fn test_python_m_pytest_no_hint() {
+        // python -m pytest is a different concern (test runner, not pip)
+        let hint = hint_python(&cmd("python3", &["-m", "pytest", "tests/"]));
+        assert!(hint.is_none());
+    }
+
+    // === dig / nslookup -> doggo tests ===
+
+    #[test]
+    fn test_dig_hint() {
+        let hint = hint_dns(&cmd("dig", &["example.com"]));
+        assert_eq!(hint.legacy_command, "dig");
+        assert_eq!(hint.modern_command, "doggo");
+        assert!(hint.hint.contains("doggo"));
+    }
+
+    #[test]
+    fn test_nslookup_hint() {
+        let hint = hint_dns(&cmd("nslookup", &["example.com"]));
+        assert_eq!(hint.legacy_command, "nslookup");
+        assert!(hint.hint.contains("doggo"));
+    }
+
+    // === unzip / zip / tar -> ouch tests ===
+
+    #[test]
+    fn test_unzip_hint() {
+        let hint = hint_unzip(&cmd("unzip", &["file.zip"]));
+        assert_eq!(hint.modern_command, "ouch");
+        assert!(hint.hint.contains("ouch decompress"));
+    }
+
+    #[test]
+    fn test_zip_create_hint() {
+        let hint = hint_zip(&cmd("zip", &["out.zip", "a.txt", "b.txt"]));
+        assert!(hint.is_some());
+        assert!(hint.unwrap().hint.contains("ouch compress"));
+    }
+
+    #[test]
+    fn test_zip_version_no_hint() {
+        let hint = hint_zip(&cmd("zip", &["--version"]));
+        assert!(hint.is_none());
+    }
+
+    #[test]
+    fn test_tar_extract_dash_hint() {
+        let hint = hint_tar(&cmd("tar", &["-xzf", "archive.tar.gz"]));
+        assert!(hint.is_some());
+        assert!(hint.unwrap().hint.contains("ouch decompress"));
+    }
+
+    #[test]
+    fn test_tar_extract_long_hint() {
+        let hint = hint_tar(&cmd("tar", &["--extract", "-f", "archive.tar"]));
+        assert!(hint.is_some());
+    }
+
+    #[test]
+    fn test_tar_extract_bsd_bundle_hint() {
+        // BSD-style: no leading dash
+        let hint = hint_tar(&cmd("tar", &["xzf", "archive.tar.gz"]));
+        assert!(hint.is_some());
+    }
+
+    #[test]
+    fn test_tar_create_no_hint() {
+        // tar -czf is fine, streaming/create has no clean ouch replacement
+        let hint = hint_tar(&cmd("tar", &["-czf", "out.tar.gz", "dir"]));
+        assert!(hint.is_none());
+    }
+
+    #[test]
+    fn test_tar_help_no_hint() {
+        let hint = hint_tar(&cmd("tar", &["--version"]));
         assert!(hint.is_none());
     }
 }

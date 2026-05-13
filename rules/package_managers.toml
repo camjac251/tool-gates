@@ -213,63 +213,63 @@ reason = "Updating packages"
 
 [[programs.ask]]
 subcommand = "link"
-reason = "Linking package"
+reason = "Creates a global symlink to this package and links it into node_modules. Modifies the global npm prefix; can shadow real installs of `<package>` system-wide."
 
 [[programs.ask]]
 subcommand = "unlink"
-reason = "Unlinking package"
+reason = "Removes the global symlink created by `npm link`. Affects every project that consumed the linked package."
 
 [[programs.ask]]
 subcommand = "publish"
-reason = "Publishing package"
+reason = "Publishes the package to its registry. Public publish is irreversible: the version number cannot be reused."
 
 [[programs.ask]]
 subcommand = "unpublish"
-reason = "Unpublishing package"
+reason = "Removes a published version from the registry. Public unpublish is restricted by npm policy and can break downstream consumers."
 
 [[programs.ask]]
 subcommand = "deprecate"
-reason = "Deprecating package"
+reason = "Marks a published version as deprecated on the registry. Shows a warning to every future install of that version."
 
 [[programs.ask]]
 subcommand = "init"
-reason = "Initializing package"
+reason = "Initializes a new package in the current directory by writing `package.json`. With `npm init <initializer>` it runs an arbitrary `create-<initializer>` package."
 
 [[programs.ask]]
 subcommand = "create"
-reason = "Creating package"
+reason = "Runs a `create-<name>` package to scaffold a project, downloading it if missing. Same trust boundary as `curl | bash` for untrusted initializers."
 
 [[programs.ask]]
 subcommand = "exec"
-reason = "Executing package"
+reason = "Runs an arbitrary command through the package manager (downloads the package if missing). Same trust boundary as `curl | bash` for untrusted packages."
 
 [[programs.ask]]
 subcommand = "npx"
-reason = "Executing package"
+reason = "Runs an arbitrary command through `npx` (downloads the package if missing). Same trust boundary as `curl | bash` for untrusted packages."
 
 [[programs.ask]]
 subcommand = "prune"
-reason = "Pruning packages"
+reason = "Removes packages from `node_modules` that are not listed in `package.json`."
 
 [[programs.ask]]
 subcommand = "dedupe"
-reason = "Deduplicating"
+reason = "Rewrites `node_modules` and `package-lock.json` to reduce duplication. Can change resolved versions."
 
 [[programs.ask]]
 subcommand = "shrinkwrap"
-reason = "Locking dependencies"
+reason = "Writes `npm-shrinkwrap.json` to lock the dependency tree for publishing."
 
 [[programs.ask]]
 subcommand = "cache"
-reason = "Cache operation"
+reason = "Mutates the npm cache (verify, clean, add). `npm cache clean --force` wipes all cached tarballs and metadata."
 
 [[programs.ask]]
 subcommand = "pack"
-reason = "Creating tarball"
+reason = "Builds a tarball of the package as it would be published. Writes a `.tgz` file to the cwd."
 
 [[programs.ask]]
 subcommand = "set"
-reason = "Setting config"
+reason = "Sets an npm config key. Default scope is the user-level `.npmrc`; `--global` writes to the global prefix."
 
 # Note: Custom handler for devtool invocation and unknown command handling
 [[custom_handlers]]
@@ -359,7 +359,7 @@ subcommand = "tsc"
 # Risky commands
 [[programs.ask]]
 subcommand = "exec"
-reason = "Executing arbitrary command"
+reason = "Runs an arbitrary command through the package manager (downloads the package if missing). Same trust boundary as `curl | bash` for untrusted packages."
 
 [[programs.ask]]
 subcommand = "install"
@@ -395,39 +395,39 @@ reason = "Updating packages"
 
 [[programs.ask]]
 subcommand = "link"
-reason = "Linking package"
+reason = "Creates a global symlink and links the package into node_modules. Modifies the global pnpm store and can shadow real installs of `<package>`."
 
 [[programs.ask]]
 subcommand = "unlink"
-reason = "Unlinking package"
+reason = "Removes the global symlink created by `pnpm link`. Affects every project that consumed the linked package."
 
 [[programs.ask]]
 subcommand = "publish"
-reason = "Publishing package"
+reason = "Publishes the package to its registry. Public publish is irreversible: the version number cannot be reused."
 
 [[programs.ask]]
 subcommand = "init"
-reason = "Initializing package"
+reason = "Initializes a new package in the current directory by writing `package.json`."
 
 [[programs.ask]]
 subcommand = "create"
-reason = "Creating package"
+reason = "Runs a `create-<name>` package to scaffold a project, downloading it if missing. Same trust boundary as `curl | bash` for untrusted initializers."
 
 [[programs.ask]]
 subcommand = "dlx"
-reason = "Executing package"
+reason = "Runs an arbitrary command through the package manager (downloads the package if missing). Same trust boundary as `curl | bash` for untrusted packages."
 
 [[programs.ask]]
 subcommand = "prune"
-reason = "Pruning packages"
+reason = "Removes packages from `node_modules` and the pnpm store that are not listed in `package.json`."
 
 [[programs.ask]]
 subcommand = "store"
-reason = "Store operation"
+reason = "Mutates the shared pnpm content-addressable store (prune, add, status). `store prune` deletes orphaned packages used by no project on this machine."
 
 [[programs.ask]]
 subcommand = "patch"
-reason = "Patching package"
+reason = "Creates an editable copy of a dependency in a temp dir; `patch-commit` writes a persistent patch file consumed by future installs."
 
 # Note: Custom handler for devtool invocation and unknown command handling
 [[custom_handlers]]
@@ -516,7 +516,7 @@ subcommand = "format"
 # Risky commands
 [[programs.ask]]
 subcommand = "exec"
-reason = "Executing arbitrary command"
+reason = "Runs an arbitrary command through the package manager (downloads the package if missing). Same trust boundary as `curl | bash` for untrusted packages."
 
 [[programs.ask]]
 subcommand = "install"
@@ -540,39 +540,39 @@ reason = "Upgrading packages"
 
 [[programs.ask]]
 subcommand = "link"
-reason = "Linking package"
+reason = "Creates a global symlink and links the package into node_modules. Modifies the user-level yarn link registry; can shadow real installs of `<package>`."
 
 [[programs.ask]]
 subcommand = "unlink"
-reason = "Unlinking package"
+reason = "Removes the global symlink created by `yarn link`. Affects every project that consumed the linked package."
 
 [[programs.ask]]
 subcommand = "publish"
-reason = "Publishing package"
+reason = "Publishes the package to its registry. Public publish is irreversible: the version number cannot be reused."
 
 [[programs.ask]]
 subcommand = "init"
-reason = "Initializing package"
+reason = "Initializes a new package in the current directory by writing `package.json`."
 
 [[programs.ask]]
 subcommand = "create"
-reason = "Creating package"
+reason = "Runs a `create-<name>` package to scaffold a project, downloading it if missing. Same trust boundary as `curl | bash` for untrusted initializers."
 
 [[programs.ask]]
 subcommand = "dlx"
-reason = "Executing package"
+reason = "Runs an arbitrary command through the package manager (downloads the package if missing). Same trust boundary as `curl | bash` for untrusted packages."
 
 [[programs.ask]]
 subcommand = "cache"
-reason = "Cache operation"
+reason = "Mutates the yarn cache (clean, list). `yarn cache clean` deletes all cached package tarballs."
 
 [[programs.ask]]
 subcommand = "global"
-reason = "Global operation"
+reason = "Operates on the user-global install location: add, remove, upgrade, bin, list. Modifies binaries on PATH for the current user."
 
 [[programs.ask]]
 subcommand = "set"
-reason = "Setting config"
+reason = "Sets a yarn config key. Affects the project's `.yarnrc.yml` (Berry) or the user-level `.yarnrc` (Classic)."
 
 # Note: Custom handler for bare "yarn" = install, devtool invocation, and unknown commands
 [[custom_handlers]]
@@ -701,20 +701,20 @@ subcommand = "--help"
 # Script execution
 [[programs.ask]]
 subcommand = "run"
-reason = "Running command in environment"
+reason = "Runs a command inside the project venv. Will create the venv and download missing dependencies from the lockfile on first run."
 
 # Local environment commands (write to venv/lockfile)
 [[programs.ask]]
 subcommand = "sync"
-reason = "Syncing virtual environment"
+reason = "Reconciles the project venv with the lockfile. Installs missing deps and removes extras; can mutate the active `.venv`."
 
 [[programs.ask]]
 subcommand = "lock"
-reason = "Updating lockfile"
+reason = "Resolves dependencies and writes `uv.lock`. Network access; pinned versions may change."
 
 [[programs.ask]]
 subcommand = "venv"
-reason = "Creating virtual environment"
+reason = "Creates a new virtual environment at `<path>` (default `.venv`). Overwrites an existing venv at the same path."
 
 # uv pip subcommands (safe)
 [[programs.allow]]
@@ -740,36 +740,36 @@ reason = "Removing dependency"
 
 [[programs.ask]]
 subcommand = "tool"
-reason = "Tool operation"
+reason = "Manages uv-installed standalone tools: install, uninstall, upgrade, run. Modifies the user-level uv tool directory and binaries on PATH."
 
 [[programs.ask]]
 subcommand = "python"
-reason = "Python operation"
+reason = "Manages uv-managed Python interpreters: install, uninstall, pin, find. Downloads interpreter builds and writes to the user-level uv data dir."
 
 [[programs.ask]]
 subcommand = "cache"
-reason = "Cache operation"
+reason = "Mutates the uv cache (clean, prune). `uv cache clean` deletes all cached wheels and source distributions."
 
 [[programs.ask]]
 subcommand = "init"
-reason = "Initializing project"
+reason = "Initializes a new uv project in the current directory by writing `pyproject.toml` and supporting files."
 
 [[programs.ask]]
 subcommand = "build"
-reason = "Building package"
+reason = "Builds source and wheel distributions into `dist/`. Writes artifacts; does not publish."
 
 [[programs.ask]]
 subcommand = "publish"
-reason = "Publishing package"
+reason = "Publishes the package to its registry. Public publish is irreversible: the version number cannot be reused."
 
 # uv pip risky subcommands
 [[programs.ask]]
 subcommand = "pip install"
-reason = "uv pip: install"
+reason = "Installs packages into the currently active venv via uv's pip-compatible frontend. Writes to site-packages of `<venv>`."
 
 [[programs.ask]]
 subcommand = "pip uninstall"
-reason = "uv pip: uninstall"
+reason = "Removes packages from the currently active venv via uv's pip-compatible frontend."
 
 # Note: Custom handler for run subcommand (delegates to devtools or asks)
 [[custom_handlers]]
@@ -911,7 +911,7 @@ reason = "Running commands on file changes"
 
 [[programs.ask]]
 subcommand = "mutants"
-reason = "Mutation testing (modifies source files)"
+reason = "Mutation testing rewrites source files to introduce synthetic bugs and checks test coverage. Files are restored on completion; interrupting mid-run can leave the tree mutated."
 
 # Risky commands
 [[programs.ask]]
@@ -1252,27 +1252,27 @@ reason = "Updating packages"
 
 [[programs.ask]]
 subcommand = "link"
-reason = "Linking package"
+reason = "Creates a global symlink and links the package into node_modules. Modifies bun's global link registry; can shadow real installs of `<package>`."
 
 [[programs.ask]]
 subcommand = "unlink"
-reason = "Unlinking package"
+reason = "Removes the global symlink created by `bun link`. Affects every project that consumed the linked package."
 
 [[programs.ask]]
 subcommand = "x"
-reason = "Executing package"
+reason = "Runs an arbitrary command through bun (downloads the package if missing). Same trust boundary as `curl | bash` for untrusted packages."
 
 [[programs.ask]]
 subcommand = "init"
-reason = "Initializing project"
+reason = "Initializes a new bun project in the current directory by writing `package.json` and supporting files."
 
 [[programs.ask]]
 subcommand = "create"
-reason = "Creating project"
+reason = "Scaffolds a project from a `create-<name>` template, downloading it if missing. Same trust boundary as `curl | bash` for untrusted initializers."
 
 [[programs.ask]]
 subcommand = "publish"
-reason = "Publishing"
+reason = "Publishes the package to its registry. Public publish is irreversible: the version number cannot be reused."
 
 # =============================================================================
 # CONDA / MAMBA / MICROMAMBA
@@ -1365,28 +1365,28 @@ reason = "Deactivating environment"
 
 [[programs.ask]]
 subcommand = "clean"
-reason = "Cleaning cache"
+reason = "Mutates the conda cache (packages, tarballs, indexes). Frees disk; next install re-downloads."
 
 [[programs.ask]]
 subcommand = "build"
-reason = "Building package"
+reason = "Builds a conda package from a recipe. Writes artifacts under the conda-bld directory."
 
 [[programs.ask]]
 subcommand = "init"
-reason = "Initializing conda"
+reason = "Modifies shell rc files (`.bashrc`, `.zshrc`, etc.) to initialize conda on shell startup."
 
 [[programs.ask]]
 subcommand = "run"
-reason = "Running in environment"
+reason = "Runs a command inside a named conda environment. Treat as executing that command with the env's interpreter on PATH."
 
 # env mutations
 [[programs.ask]]
 subcommand = "env create"
-reason = "env create"
+reason = "Creates a new conda environment from a name or YAML spec. Downloads packages and writes under the conda envs dir."
 
 [[programs.ask]]
 subcommand = "env remove"
-reason = "env remove"
+reason = "Deletes a named conda environment and everything installed in it. Not reversible without re-creation."
 
 # =============================================================================
 # POETRY
@@ -1491,23 +1491,23 @@ reason = "Creating project"
 
 [[programs.ask]]
 subcommand = "publish"
-reason = "Publishing package"
+reason = "Publishes the package to its registry. Public publish is irreversible: the version number cannot be reused."
 
 [[programs.ask]]
 subcommand = "cache"
-reason = "Cache operation"
+reason = "Mutates the poetry cache (clear, list). `poetry cache clear --all` deletes cached package tarballs and wheels."
 
 [[programs.ask]]
 subcommand = "export"
-reason = "Exporting dependencies"
+reason = "Writes the locked dependencies to a `requirements.txt`-style file. Output path may overwrite existing files."
 
 [[programs.ask]]
 subcommand = "self"
-reason = "Self operation"
+reason = "Manages the poetry installation itself: add, update, lock, sync of poetry plugins. Modifies the user-global poetry environment."
 
 [[programs.ask]]
 subcommand = "source"
-reason = "Source operation"
+reason = "Adds, removes, or shows package index sources in `pyproject.toml`. Changes where future installs resolve from."
 
 # Note: Custom handler for run subcommand (delegates to devtools or asks)
 [[custom_handlers]]
@@ -1673,11 +1673,11 @@ reason = "Running mise task"
 
 [[programs.ask]]
 subcommand = "task"
-reason = "Task operation"
+reason = "Manages or runs mise tasks (run, ls, edit, add). `mise task run` executes shell from the task file; treat as running that script."
 
 [[programs.ask]]
 subcommand = "tasks"
-reason = "Task operation"
+reason = "Manages or runs mise tasks (run, ls, edit, add). `mise tasks run` executes shell from the task file; treat as running that script."
 
 # Risky commands (modify toolchain)
 [[programs.ask]]
@@ -1750,11 +1750,11 @@ reason = "Updating plugins"
 
 [[programs.ask]]
 subcommand = "cache"
-reason = "Cache operation"
+reason = "Mutates the mise cache (clear). Deletes cached tool downloads; next install will re-download."
 
 [[programs.ask]]
 subcommand = "link"
-reason = "Linking tool version"
+reason = "Symlinks an externally-installed tool version into mise's data dir so it can be selected like a managed version."
 
 [[programs.allow]]
 subcommand = "registry"

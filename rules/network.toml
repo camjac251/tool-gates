@@ -74,23 +74,23 @@ if_flags_any = ["--spider"]
 
 # Specific risky patterns
 [[programs.ask]]
-reason = "Downloading file"
+reason = "Downloads a file from the given URL. Writes to disk; `-O` chooses the output name, `-P` chooses the directory."
 if_flags_any = ["-O", "--output-document", "-P", "--directory-prefix"]
 
 [[programs.ask]]
-reason = "Recursive download"
+reason = "Recursively downloads pages and linked resources. Can fetch a large amount of data; control depth with `-l`."
 if_flags_any = ["-r", "--recursive"]
 
 [[programs.ask]]
-reason = "Mirroring site"
+reason = "Mirrors a site to local disk. Implies infinite recursion, timestamping, and link conversion."
 if_flags_any = ["-m", "--mirror"]
 
 [[programs.ask]]
-reason = "POST request"
+reason = "Sends a POST request with the given body. Mutating HTTP method; server-side effects depend on the endpoint."
 if_flags_any = ["--post-data", "--post-file"]
 
 [[programs.ask]]
-reason = "Downloading"
+reason = "Downloads the given URL to the current directory by default. Writes to disk."
 
 # Note: Custom handler checks spider mode and dangerous download patterns
 [[custom_handlers]]
@@ -107,7 +107,7 @@ name = "ssh"
 unknown_action = "ask"
 
 [[programs.ask]]
-reason = "Remote connection"
+reason = "Opens an SSH connection. Commands executed on the remote bypass local tool-gates; treat the remote as a separate trust boundary."
 
 # =============================================================================
 # SCP
@@ -118,7 +118,7 @@ name = "scp"
 unknown_action = "ask"
 
 [[programs.ask]]
-reason = "File transfer"
+reason = "Copies files over SSH. Overwrites the destination by default; can transfer in either direction."
 
 # =============================================================================
 # SFTP
@@ -129,7 +129,7 @@ name = "sftp"
 unknown_action = "ask"
 
 [[programs.ask]]
-reason = "File transfer"
+reason = "Opens an interactive SFTP session for transferring files over SSH."
 
 # =============================================================================
 # RSYNC
@@ -144,7 +144,7 @@ unknown_action = "ask"
 flags_any = ["-n", "--dry-run"]
 
 [[programs.ask]]
-reason = "File sync"
+reason = "Synchronizes files between source and destination. `--delete` removes files at the destination not present at source; preview with `-n` first."
 
 # Note: Custom handler checks dry-run flag
 [[custom_handlers]]
@@ -163,16 +163,16 @@ unknown_action = "ask"
 
 # -e is blocked (reverse shell)
 [[programs.block]]
-reason = "Netcat -e blocked (reverse shell risk)"
+reason = "netcat `-e` blocked: connects a remote process to a shell on this host (classic reverse shell). No legitimate use in an agent workflow."
 if_args_contain = ["-e"]
 
 # -l is listen mode
 [[programs.ask]]
-reason = "Listen mode (opens port)"
+reason = "Opens a listening port. The `-e` flag (reverse shell) is blocked separately; verify firewall scope and that you intend to accept inbound connections."
 if_flags_any = ["-l"]
 
 [[programs.ask]]
-reason = "Network connection"
+reason = "Opens a netcat connection to the given host/port. Sends/receives raw bytes; verify both endpoints."
 
 # Note: Custom handler blocks -e (reverse shell) and asks for -l (listen)
 [[custom_handlers]]
@@ -210,19 +210,19 @@ description = "Allow GET and URL-only (default GET), ask for POST/PUT/DELETE/PAT
 # Mutating methods ask
 [[programs.ask]]
 subcommand = "POST"
-reason = "HTTPie: POST request"
+reason = "Sends an HTTP POST request. Mutating method; server-side effects depend on the endpoint."
 
 [[programs.ask]]
 subcommand = "PUT"
-reason = "HTTPie: PUT request"
+reason = "Sends an HTTP PUT request. Typically replaces a resource at the target URL."
 
 [[programs.ask]]
 subcommand = "DELETE"
-reason = "HTTPie: DELETE request"
+reason = "Sends an HTTP DELETE request. Typically removes the resource at the target URL."
 
 [[programs.ask]]
 subcommand = "PATCH"
-reason = "HTTPie: PATCH request"
+reason = "Sends an HTTP PATCH request. Typically applies a partial update to the resource at the target URL."
 
 # =============================================================================
 # NMAP (port scanner - all usage requires approval)
@@ -245,7 +245,7 @@ subcommand = "--help"
 subcommand = "-h"
 
 [[programs.ask]]
-reason = "Port scanning"
+reason = "Sends port-scan probes to remote hosts. Can be slow on large ranges and is logged by most network security tools."
 
 # =============================================================================
 # SOCAT (network relay/tunnel)
@@ -268,7 +268,7 @@ subcommand = "--help"
 subcommand = "-h"
 
 [[programs.ask]]
-reason = "Network relay"
+reason = "socat sets up bidirectional I/O between two endpoints (network, file, process). Confirm both endpoints; can be used to tunnel out of restricted environments."
 
 # =============================================================================
 # TELNET (network connection)
@@ -279,4 +279,4 @@ name = "telnet"
 unknown_action = "ask"
 
 [[programs.ask]]
-reason = "Network connection"
+reason = "Opens a cleartext telnet session to a host/port. No encryption; credentials sent in the clear."

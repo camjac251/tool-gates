@@ -113,11 +113,11 @@ subcommand = "show-ref"
 
 [[programs.ask]]
 subcommand = "gc"
-reason = "Garbage collection (modifies .git directory)"
+reason = "Runs garbage collection in `.git`. Repacks objects and may prune unreachable commits older than the gc grace window."
 
 [[programs.ask]]
 subcommand = "prune"
-reason = "Pruning objects (deletes from .git directory)"
+reason = "Deletes unreachable objects from `.git`. Cannot be recovered without a backup or reflog entry still pointing at them."
 
 [[programs.allow]]
 subcommand = "help"
@@ -157,15 +157,15 @@ subcommand = "config --list"
 
 [[programs.ask]]
 subcommand = "config set"
-reason = "git config set"
+reason = "Sets a git config value. `--local` scopes to this repo; `--global` affects all repos for the user."
 
 [[programs.ask]]
 subcommand = "config --add"
-reason = "git config --add"
+reason = "Adds a git config entry. `--local` for this repo, `--global` for user-wide."
 
 [[programs.ask]]
 subcommand = "config --unset"
-reason = "git config --unset"
+reason = "Removes a git config entry. Permanent for the chosen scope."
 
 # === Stash Subcommands ===
 
@@ -177,23 +177,23 @@ subcommand = "stash show"
 
 [[programs.ask]]
 subcommand = "stash drop"
-reason = "git stash drop"
+reason = "Drops a stash permanently. Run `git stash list` first to confirm the index; cannot be undone."
 
 [[programs.ask]]
 subcommand = "stash pop"
-reason = "git stash pop"
+reason = "Applies the top stash and removes it. Use `git stash apply` if you want to keep the stash entry."
 
 [[programs.ask]]
 subcommand = "stash clear"
-reason = "git stash clear"
+reason = "Clears ALL stashes permanently. List with `git stash list` first; cannot be undone."
 
 [[programs.ask]]
 subcommand = "stash push"
-reason = "git stash push"
+reason = "Saves working-tree changes to a new stash entry."
 
 [[programs.ask]]
 subcommand = "stash apply"
-reason = "git stash apply"
+reason = "Applies a stash entry without removing it from the stash list."
 
 # === Worktree Subcommands ===
 
@@ -202,15 +202,15 @@ subcommand = "worktree list"
 
 [[programs.ask]]
 subcommand = "worktree add"
-reason = "git worktree add"
+reason = "Creates a new linked worktree checkout. Writes a new directory and registers it in `.git/worktrees/`."
 
 [[programs.ask]]
 subcommand = "worktree remove"
-reason = "git worktree remove"
+reason = "Removes a worktree directory. Refuses if it has uncommitted changes unless `--force`."
 
 [[programs.ask]]
 subcommand = "worktree prune"
-reason = "git worktree prune"
+reason = "Prunes stale worktree references that no longer point to a real directory."
 
 # === Submodule Subcommands ===
 
@@ -220,23 +220,23 @@ subcommand = "submodule status"
 # Note: submodule foreach runs arbitrary commands, so it must ask
 [[programs.ask]]
 subcommand = "submodule foreach"
-reason = "git submodule foreach (runs arbitrary commands)"
+reason = "`git submodule foreach` runs an arbitrary shell command per submodule. Treat the command as if invoked directly."
 
 [[programs.ask]]
 subcommand = "submodule init"
-reason = "git submodule init"
+reason = "Registers submodules from `.gitmodules` into the local repo config. Does not fetch content; pair with `submodule update`."
 
 [[programs.ask]]
 subcommand = "submodule update"
-reason = "git submodule update"
+reason = "Fetches and checks out submodule commits recorded in the superproject. Can overwrite local submodule edits unless `--merge`/`--rebase` is set."
 
 [[programs.ask]]
 subcommand = "submodule add"
-reason = "git submodule add"
+reason = "Adds a new submodule entry to `.gitmodules` and clones the remote repo into the tree."
 
 [[programs.ask]]
 subcommand = "submodule deinit"
-reason = "git submodule deinit"
+reason = "Unregisters submodules and clears their working tree. Use `--force` to drop uncommitted submodule changes."
 
 # === Remote Subcommands ===
 
@@ -255,37 +255,37 @@ subcommand = "remote get-url"
 
 [[programs.ask]]
 subcommand = "remote add"
-reason = "git remote add"
+reason = "Registers a new remote URL under the given name. Subsequent fetches/pushes will trust this endpoint."
 
 [[programs.ask]]
 subcommand = "remote remove"
-reason = "git remote remove"
+reason = "Removes a remote and its tracking refs from this repo. Does not affect the remote server."
 
 [[programs.ask]]
 subcommand = "remote rename"
-reason = "git remote rename"
+reason = "Renames a remote and rewrites tracking-branch refs to use the new name."
 
 [[programs.ask]]
 subcommand = "remote set-url"
-reason = "git remote set-url"
+reason = "Changes the URL of an existing remote. Future fetches/pushes will hit the new endpoint."
 
 # === High-Risk Commands (ask with warning) ===
 
 [[programs.ask]]
 subcommand = "push"
-reason = "Force push (safer: --force-with-lease)"
+reason = "Force push overwrites upstream history. Safer: `--force-with-lease` fails if the remote moved."
 if_flags_any = ["--force", "-f"]
 warn = true
 
 [[programs.ask]]
 subcommand = "reset"
-reason = "Hard reset (can lose uncommitted work)"
+reason = "Hard reset discards uncommitted changes in the working tree and index. Safer: `git stash` first, or `git reset --soft` to keep changes staged."
 if_flags_any = ["--hard"]
 warn = true
 
 [[programs.ask]]
 subcommand = "clean"
-reason = "Clean (deletes untracked files permanently)"
+reason = "Permanently deletes untracked files. Preview with `-n` (dry run) first; deletions cannot be undone."
 if_flags_any = ["-fd", "-fdx", "-f"]
 warn = true
 
@@ -294,160 +294,160 @@ warn = true
 
 [[programs.ask]]
 subcommand = "commit"
-reason = "Committing changes"
+reason = "Records staged changes as a new commit on the current branch."
 
 [[programs.ask]]
 subcommand = "push"
-reason = "Pushing to remote"
+reason = "Publishes local commits to a remote. Inspect `git log @{u}..` first to see what would be sent."
 
 [[programs.ask]]
 subcommand = "pull"
-reason = "Pulling from remote"
+reason = "Fetches and integrates remote changes into the current branch. Use `--rebase` to avoid merge commits."
 
 [[programs.ask]]
 subcommand = "merge"
-reason = "Merging branches"
+reason = "Merges another branch into the current one. Can produce conflicts; abort with `git merge --abort`."
 
 [[programs.ask]]
 subcommand = "rebase"
-reason = "Rebasing"
+reason = "Rebasing. Non-interactive only; interactive (`-i`) hangs the agent. Use `git revise --autosquash` for fixups."
 
 # checkout with specific flag conditions (checked before general checkout)
 [[programs.ask]]
 subcommand = "checkout"
-reason = "Creating branch"
+reason = "Creates a new branch and switches to it. `-B` resets an existing branch of the same name to the start point."
 if_flags_any = ["-b", "-B"]
 
 [[programs.ask]]
 subcommand = "checkout"
-reason = "Discarding changes"
+reason = "Discards uncommitted changes in the listed paths. Cannot be undone."
 if_flags_any = ["--"]
 
 [[programs.ask]]
 subcommand = "checkout"
-reason = "Checking out"
+reason = "Switches branches or restores files in the working tree. Uncommitted edits in affected files may be lost."
 
 [[programs.ask]]
 subcommand = "switch"
-reason = "Switching branches"
+reason = "Switches the working tree to another branch. Refuses if local edits would conflict unless `--discard-changes` is set."
 
 [[programs.ask]]
 subcommand = "reset"
-reason = "Resetting"
+reason = "Moves HEAD and optionally the index/working tree. `--soft` keeps changes staged, `--mixed` (default) unstages, `--hard` discards."
 
 [[programs.ask]]
 subcommand = "restore"
-reason = "Restoring files"
+reason = "Restores files in the working tree from the index or a commit. Overwrites uncommitted edits in the targeted paths."
 
 [[programs.ask]]
 subcommand = "clean"
-reason = "Cleaning working tree"
+reason = "Cleans the working tree. Preview with `-n` first if unsure what would be deleted."
 
 [[programs.ask]]
 subcommand = "cherry-pick"
-reason = "Cherry-picking"
+reason = "Replays the listed commits on the current branch. May produce conflicts; abort with `git cherry-pick --abort`."
 
 [[programs.ask]]
 subcommand = "revert"
-reason = "Reverting commits"
+reason = "Creates a new commit that undoes the listed commits. Preserves history; does not rewrite it."
 
 [[programs.ask]]
 subcommand = "am"
-reason = "Applying patches"
+reason = "Applies a mailbox patch series as commits. Stops on conflict; resolve and `git am --continue`."
 
 [[programs.ask]]
 subcommand = "apply"
-reason = "Applying patches"
+reason = "Applies a patch to the working tree (no commit created). Use `--check` to preview without writing."
 
 [[programs.ask]]
 subcommand = "format-patch"
-reason = "Creating patches"
+reason = "Writes one `.patch` file per commit in the specified range. Output goes to the working directory."
 
 [[programs.ask]]
 subcommand = "init"
-reason = "Initializing repo"
+reason = "Creates a new git repository in the current directory. Writes a `.git/` directory."
 
 [[programs.ask]]
 subcommand = "clone"
-reason = "Cloning repo"
+reason = "Clones a remote repository into a new directory. Network operation; size depends on remote history."
 
 [[programs.ask]]
 subcommand = "fetch"
-reason = "Fetching"
+reason = "Downloads refs and objects from a remote. Does not modify the working tree or current branch."
 
 [[programs.ask]]
 subcommand = "mv"
-reason = "Moving files"
+reason = "Moves or renames a tracked file and stages the rename in one step."
 
 [[programs.ask]]
 subcommand = "rm"
-reason = "Removing files"
+reason = "Removes a tracked file from the working tree and stages the deletion. `--cached` keeps the file on disk."
 
 # Tag mutations
 [[programs.ask]]
 subcommand = "tag"
-reason = "Creating tag"
+reason = "Creates a tag pointing at the named commit (HEAD by default). Local only until `git push --tags`."
 if_flags_any = ["-a", "--annotate", "-s", "--sign", "-u", "--local-user", "-m", "--message"]
 
 [[programs.ask]]
 subcommand = "tag"
-reason = "Deleting tag"
+reason = "Deletes a local tag. Use `git push --delete <remote> <tag>` separately to delete it on the remote."
 if_flags_any = ["-d", "--delete"]
 
 [[programs.ask]]
 subcommand = "tag"
-reason = "Force-replacing tag"
+reason = "Force-replacing a tag breaks anyone who already pulled it. Confirm no downstream consumers."
 if_flags_any = ["-f", "--force"]
 
 # Branch mutations
 [[programs.ask]]
 subcommand = "branch"
-reason = "Deleting branch"
+reason = "Deleting a branch. Prefer `-d` (refuses if unmerged) over `-D` (force) when possible."
 if_flags_any = ["-d", "-D", "--delete"]
 
 [[programs.ask]]
 subcommand = "branch"
-reason = "Renaming branch"
+reason = "Renames a branch. `-M` forces the rename even if it would overwrite an existing branch name."
 if_flags_any = ["-m", "-M", "--move"]
 
 # Interactive debugging
 [[programs.ask]]
 subcommand = "bisect"
-reason = "Starting bisect session"
+reason = "Starts a binary-search session over commit history. Mutates HEAD across iterations; end with `git bisect reset`."
 
 # History rewriting (dangerous)
 [[programs.ask]]
 subcommand = "filter-branch"
-reason = "Rewriting history (dangerous)"
+reason = "Rewrites commit history. Safer alternatives: `git revise --autosquash` for fixups, `git absorb` for auto-folding edits. `git-filter-repo` is the maintained replacement for filter-branch."
 
 [[programs.ask]]
 subcommand = "filter-repo"
-reason = "Rewriting history (dangerous)"
+reason = "Rewrites commit history. Refuses to run on non-fresh clones; use `--force` only with intent."
 
 # Git notes - modifies commit metadata
 [[programs.ask]]
 subcommand = "notes"
-reason = "git notes operation"
+reason = "Adds, edits, or removes notes attached to commits. Stored in `refs/notes/*`; not shown in default `git log`."
 
 # Bundle operations
 [[programs.ask]]
 subcommand = "bundle"
-reason = "Bundle operation"
+reason = "Creates or unpacks a git bundle file (offline-transportable pack of refs and objects)."
 
 # Maintenance
 [[programs.ask]]
 subcommand = "maintenance"
-reason = "Running maintenance tasks (modifies .git directory)"
+reason = "Runs repo maintenance tasks (gc, commit-graph, prefetch, loose-objects). Modifies `.git/` in the background."
 
 # Sparse checkout
 [[programs.ask]]
 subcommand = "sparse-checkout"
-reason = "Modifying sparse checkout"
+reason = "Modifies sparse-checkout config. Changes which files are materialized in the working tree."
 
 # Worktree operations
 [[programs.ask]]
 subcommand = "worktree"
-reason = "git worktree operation"
+reason = "Worktree operation. See `git worktree --help` for subcommand-specific risk."
 
 # === Custom Handlers ===
 # Complex logic that requires Rust code

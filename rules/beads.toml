@@ -660,39 +660,39 @@ reason = "Unsetting configuration"
 
 [[programs.ask]]
 subcommand = "daemons start"
-reason = "Starting daemon"
+reason = "Starts a beads daemon process in the background. Daemons handle sync, hooks, and event delivery."
 
 [[programs.ask]]
 subcommand = "daemons stop"
-reason = "Stopping daemon"
+reason = "Stops a running beads daemon process. Pauses background sync, hooks, and event delivery until restarted."
 
 [[programs.ask]]
 subcommand = "daemons restart"
-reason = "Restarting daemon"
+reason = "Restarts a beads daemon process. Briefly pauses background sync, hooks, and event delivery."
 
 [[programs.ask]]
 subcommand = "daemons killall"
-reason = "Killing all daemons"
+reason = "Kills every running beads daemon process on this machine. Stops background sync, hooks, and event delivery until restarted."
 
 [[programs.ask]]
 subcommand = "daemon start"
-reason = "Starting daemon"
+reason = "Starts a beads daemon process in the background. Daemons handle sync, hooks, and event delivery."
 
 [[programs.ask]]
 subcommand = "daemon stop"
-reason = "Stopping daemon"
+reason = "Stops a running beads daemon process. Pauses background sync, hooks, and event delivery until restarted."
 
 [[programs.ask]]
 subcommand = "daemon restart"
-reason = "Restarting daemon"
+reason = "Restarts a beads daemon process. Briefly pauses background sync, hooks, and event delivery."
 
 [[programs.ask]]
 subcommand = "daemon kill"
-reason = "Killing daemon"
+reason = "Force-kills a beads daemon process. May leave temporary state if the daemon was mid-write."
 
 [[programs.ask]]
 subcommand = "daemon run"
-reason = "Running daemon"
+reason = "Runs a beads daemon in the foreground. Holds the terminal until interrupted."
 
 # -----------------------------------------------------------------------------
 # Git Hooks
@@ -745,7 +745,7 @@ reason = "Compacting issues"
 
 [[programs.ask]]
 subcommand = "admin reset"
-reason = "Resetting database"
+reason = "Resets the beads database. Drops all issues, history, and local state. Cannot be undone without a backup or remote sync."
 warn = true
 
 # -----------------------------------------------------------------------------
@@ -779,7 +779,7 @@ if_flags_any = ["--auto-merge"]
 
 [[programs.ask]]
 subcommand = "repair"
-reason = "Repairing database"
+reason = "Repairs the beads database from local logs and remote state. Can modify or roll back issue records to resolve inconsistencies."
 
 [[programs.ask]]
 subcommand = "restore"
@@ -1093,7 +1093,7 @@ reason = "Delegating to mail provider"
 
 [[programs.ask]]
 subcommand = "reset"
-reason = "Resetting database"
+reason = "Resets the beads database. Drops all issues, history, and local state. Cannot be undone without a backup or remote sync."
 warn = true
 
 # =============================================================================

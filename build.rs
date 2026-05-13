@@ -128,6 +128,25 @@ pub mod rules;
 // Validation
 // ============================================================================
 
+/// Maximum characters allowed in any `reason` field across rules/*.toml.
+///
+/// Reasons land in the agent's context as `permissionDecisionReason`. Keeping
+/// them short forces help-menu style (verb-phrase + optional risk note) and
+/// prevents verbose teaching prose from creeping back in. The 250-char cap
+/// matches the style guide in AGENTS.md. Bump only after auditing the
+/// audit's word-count math (see the prior token-cost audit).
+const MAX_REASON_CHARS: usize = 250;
+
+fn check_reason_length(file_name: &str, prog_name: &str, kind: &str, key: &str, reason: &str) {
+    let len = reason.chars().count();
+    if len > MAX_REASON_CHARS {
+        panic!(
+            "{}: {}: {} '{}' reason is {} chars (max {}). Trim to fit the help-menu style guide in AGENTS.md.\n  reason: {}",
+            file_name, prog_name, kind, key, len, MAX_REASON_CHARS, reason
+        );
+    }
+}
+
 fn validate_rule_file(path: &Path, rules: &RuleFile) {
     let file_name = path.display().to_string();
 
@@ -219,6 +238,12 @@ fn validate_program_rules(path: &Path, program: &ProgramRules) {
                 file_name, prog_name, subcmd
             );
         }
+        let key = if !parts.is_empty() {
+            parts.join(" ")
+        } else {
+            format!("rule #{}", i)
+        };
+        check_reason_length(&file_name, prog_name, "ask", &key, &rule.reason);
 
         // Track bare ask rules (no subcommand, no prefix, no flags - matches any invocation)
         if parts.is_empty()
@@ -265,19 +290,20 @@ fn validate_program_rules(path: &Path, program: &ProgramRules) {
             // Bare block is valid - it matches the program itself (e.g., shutdown)
         }
 
+        let key = if !parts.is_empty() {
+            parts.join(" ")
+        } else if let Some(ref prefix) = rule.subcommand_prefix {
+            format!("{}*", prefix)
+        } else {
+            format!("rule #{}", i)
+        };
         if rule.reason.trim().is_empty() {
-            let key = if !parts.is_empty() {
-                parts.join(" ")
-            } else if let Some(ref prefix) = rule.subcommand_prefix {
-                format!("{}*", prefix)
-            } else {
-                format!("rule #{}", i)
-            };
             panic!(
                 "{}: {}: block '{}' has empty reason",
                 file_name, prog_name, key
             );
         }
+        check_reason_length(&file_name, prog_name, "block", &key, &rule.reason);
 
         // Track for duplicate/conflict detection (only for rules with subcommand, not prefix-only)
         if !parts.is_empty() {

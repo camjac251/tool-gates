@@ -130,12 +130,15 @@ Fires after a tool completes.
   "hookSpecificOutput": {
     "hookEventName": "PostToolUse",
     "additionalContext": "Optional context added to Claude's view",
+    "updatedToolOutput": {},
     "updatedMCPToolOutput": {}
   }
 }
 ```
 
-`updatedMCPToolOutput` (optional) replaces the output for MCP tools only.
+`updatedToolOutput` (optional) replaces the tool output before it is sent to the model. Works for all tools and is preferred over `updatedMCPToolOutput`.
+
+`updatedMCPToolOutput` (optional, legacy) replaces the output for MCP tools only.
 
 PostToolUse output from tool-gates is currently empty (silent) to avoid cluttering Claude's context.
 

@@ -379,6 +379,13 @@ pub struct HookOutput {
     pub reason: Option<String>,
     pub context: Option<String>,
     pub updated_command: Option<String>,
+    /// When true and decision is `Deny`, emit a top-level `systemMessage`
+    /// alongside the nested `permissionDecisionReason` so the user sees a
+    /// UI warning. Tier-1 secret blocks use this; routine denies (head/tail
+    /// pipe blocks, settings.json deny rules, procedural gate denies) do
+    /// not, to avoid UI noise from frequent blocks the agent already knows
+    /// the rule for.
+    pub surface_to_user: bool,
 }
 
 impl HookOutput {
@@ -390,6 +397,7 @@ impl HookOutput {
             reason: None,
             context: None,
             updated_command: None,
+            surface_to_user: false,
         }
     }
 
@@ -400,6 +408,7 @@ impl HookOutput {
             reason: reason.map(String::from),
             context: None,
             updated_command: None,
+            surface_to_user: false,
         }
     }
 
@@ -410,6 +419,7 @@ impl HookOutput {
             reason: reason.map(String::from),
             context: Some(context.to_string()),
             updated_command: None,
+            surface_to_user: false,
         }
     }
 
@@ -420,6 +430,7 @@ impl HookOutput {
             reason: Some(reason.to_string()),
             context: None,
             updated_command: None,
+            surface_to_user: false,
         }
     }
 
@@ -430,6 +441,7 @@ impl HookOutput {
             reason: Some(reason.to_string()),
             context: Some(context.to_string()),
             updated_command: None,
+            surface_to_user: false,
         }
     }
 
@@ -443,6 +455,7 @@ impl HookOutput {
             reason: Some(reason.into()),
             context,
             updated_command: None,
+            surface_to_user: false,
         }
     }
 
@@ -457,27 +470,47 @@ impl HookOutput {
             reason: Some(reason.to_string()),
             context: context.map(String::from),
             updated_command: Some(new_command.to_string()),
+            surface_to_user: false,
         }
     }
 
-    /// Return deny (block the command)
+    /// Return deny (block the command).
+    ///
+    /// Default behavior: does NOT emit a top-level `systemMessage` on the
+    /// Claude wire format. Chain `.user_visible()` for Tier-1 secret blocks
+    /// or other denies the user should see as a UI warning.
     pub fn deny(reason: &str) -> Self {
         Self {
             decision: PermissionDecision::Deny,
             reason: Some(reason.to_string()),
             context: None,
             updated_command: None,
+            surface_to_user: false,
         }
     }
 
-    /// Return deny with additional context explaining the danger
+    /// Return deny with additional context explaining the danger.
+    ///
+    /// Default behavior: does NOT emit a top-level `systemMessage`. Chain
+    /// `.user_visible()` for Tier-1 secret blocks.
     pub fn deny_with_context(reason: &str, context: &str) -> Self {
         Self {
             decision: PermissionDecision::Deny,
             reason: Some(reason.to_string()),
             context: Some(context.to_string()),
             updated_command: None,
+            surface_to_user: false,
         }
+    }
+
+    /// Mark this deny as user-visible. Emits a top-level `systemMessage`
+    /// on the Claude wire format alongside `permissionDecisionReason`, so
+    /// the user sees a UI warning instead of only the agent seeing the
+    /// block reason. Use for Tier-1 secret blocks and other denies where
+    /// silent agent retries would mask the issue.
+    pub fn user_visible(mut self) -> Self {
+        self.surface_to_user = true;
+        self
     }
 
     /// Serialize for the given client.
@@ -499,6 +532,11 @@ impl HookOutput {
     /// Approve: `{"decision":"approve"}`
     /// Defer:   `{"hookSpecificOutput":{"hookEventName":"PreToolUse",...}}` (no permissionDecision)
     /// Others:  `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow",...}}`
+    ///
+    /// Deny additionally surfaces the reason through top-level `systemMessage`
+    /// so the user sees a visible warning instead of only the agent seeing
+    /// `permissionDecisionReason`. Tier-1 secret blocks and head/tail pipe
+    /// denies are otherwise silent from the user's perspective.
     fn to_claude_json(&self) -> serde_json::Value {
         if self.decision == PermissionDecision::Approve {
             return serde_json::json!({ "decision": "approve" });
@@ -534,7 +572,27 @@ impl HookOutput {
             hso.insert("additionalContext".to_string(), serde_json::json!(ctx));
         }
 
-        serde_json::json!({ "hookSpecificOutput": serde_json::Value::Object(hso) })
+        let mut out = serde_json::Map::new();
+        out.insert(
+            "hookSpecificOutput".to_string(),
+            serde_json::Value::Object(hso),
+        );
+
+        // Only emit a user-visible warning when the call site opted in.
+        // Routine denies (head/tail pipe blocks, settings.json deny matches,
+        // procedural gate denies) stay silent at the UI level; Tier-1 secret
+        // blocks call `.user_visible()` to flip this on.
+        if self.decision == PermissionDecision::Deny && self.surface_to_user {
+            let user_msg = self
+                .reason
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .unwrap_or("Blocked by tool-gates");
+            out.insert("systemMessage".to_string(), serde_json::json!(user_msg));
+        }
+
+        serde_json::Value::Object(out)
     }
 
     /// Serialize to Gemini CLI wire format.
@@ -1065,6 +1123,76 @@ mod tests {
     }
 
     #[test]
+    fn test_claude_deny_default_no_system_message() {
+        // Routine denies stay silent at the UI level. The agent still sees
+        // `permissionDecisionReason`; the user does not get a duplicated
+        // UI warning for high-frequency procedural blocks (head/tail pipe,
+        // matched settings.json deny rules, etc.).
+        let output = HookOutput::deny("Blocked: pipe to head");
+        let value = output.to_claude_json();
+        assert!(
+            value.get("systemMessage").is_none(),
+            "Default deny should not emit systemMessage: {value}"
+        );
+        assert_eq!(
+            value["hookSpecificOutput"]["permissionDecisionReason"],
+            "Blocked: pipe to head"
+        );
+    }
+
+    #[test]
+    fn test_claude_deny_user_visible_emits_system_message() {
+        // Tier-1 secret blocks call `.user_visible()` so the operator sees
+        // a UI warning instead of the agent silently retrying.
+        let output = HookOutput::deny("Hardcoded AWS key detected").user_visible();
+        let value = output.to_claude_json();
+        assert_eq!(
+            value["systemMessage"], "Hardcoded AWS key detected",
+            "systemMessage should mirror deny reason: {value}"
+        );
+        assert_eq!(
+            value["hookSpecificOutput"]["permissionDecisionReason"],
+            "Hardcoded AWS key detected"
+        );
+    }
+
+    #[test]
+    fn test_claude_deny_user_visible_empty_reason_falls_back() {
+        // Even when the call site marks the deny user-visible, an empty
+        // reason should fall back to a static label so the warning is
+        // never blank.
+        let output = HookOutput {
+            decision: PermissionDecision::Deny,
+            reason: Some(String::new()),
+            context: None,
+            updated_command: None,
+            surface_to_user: true,
+        };
+        let value = output.to_claude_json();
+        assert_eq!(value["systemMessage"], "Blocked by tool-gates");
+    }
+
+    #[test]
+    fn test_claude_allow_no_system_message() {
+        let output = HookOutput::allow(Some("Read-only operation"));
+        let value = output.to_claude_json();
+        assert!(
+            value.get("systemMessage").is_none(),
+            "Allow should not emit systemMessage: {value}"
+        );
+    }
+
+    #[test]
+    fn test_claude_ask_no_system_message() {
+        let output = HookOutput::ask("Needs approval");
+        let value = output.to_claude_json();
+        assert!(
+            value.get("systemMessage").is_none(),
+            "Ask should not emit systemMessage: {value}"
+        );
+    }
+
+    #[test]
     fn test_claude_serialization_ask_with_updated_command() {
         let output = HookOutput::ask_with_updated_command("safer", "ls -la", Some("hint"));
         let json = serde_json::to_string(&output.to_claude_json()).unwrap();
@@ -1428,6 +1556,7 @@ mod tests {
             reason: Some(String::new()),
             context: None,
             updated_command: None,
+            surface_to_user: false,
         };
         let value = output.serialize(Client::Codex);
         let reason = &value["hookSpecificOutput"]["permissionDecisionReason"];
@@ -1445,6 +1574,7 @@ mod tests {
             reason: Some("Hardcoded AWS key detected".to_string()),
             context: Some("Also: weak hash (MD5)".to_string()),
             updated_command: None,
+            surface_to_user: false,
         };
         let value = output.serialize(Client::Codex);
         let reason = value["hookSpecificOutput"]["permissionDecisionReason"]

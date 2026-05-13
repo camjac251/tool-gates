@@ -34,7 +34,7 @@ unknown_action = "ask"
 
 # sd modifies files in-place when file args given, but reads stdin when piped
 [[programs.ask]]
-reason = "In-place text replacement"
+reason = "sd in-place: rewrites the given files (regex find/replace). Without file args sd is a stdin->stdout pipe; with file args it modifies in place."
 accept_edits_auto_allow = true
 
 [[custom_handlers]]
@@ -51,7 +51,7 @@ name = "sad"
 unknown_action = "allow"  # Default is preview mode
 
 [[programs.ask]]
-reason = "Applying replacements"
+reason = "sad --commit: applies the proposed search-and-replace to the matched files. Default sad without `--commit` is preview-only."
 if_flags_any = ["--commit"]
 accept_edits_auto_allow = true
 
@@ -65,7 +65,7 @@ aliases = ["sg"]
 unknown_action = "allow"  # Default is search mode
 
 [[programs.ask]]
-reason = "Rewriting code"
+reason = "ast-grep -U: applies the rewrite pattern across matched files. Default ast-grep is search-only; `-U`/`--update-all` writes the changes."
 if_flags_any = ["-U", "--update-all"]
 accept_edits_auto_allow = true
 
@@ -78,7 +78,7 @@ name = "yq"
 unknown_action = "allow"  # Default is read mode
 
 [[programs.ask]]
-reason = "In-place YAML edit"
+reason = "yq -i: rewrites the YAML file in place per the given expression. Default yq prints to stdout; `-i`/`--inplace` writes the file."
 if_flags_any = ["-i", "--inplace"]
 accept_edits_auto_allow = true
 
@@ -99,7 +99,7 @@ name = "semgrep"
 unknown_action = "allow"  # Default is scan mode
 
 [[programs.ask]]
-reason = "Auto-fixing code"
+reason = "semgrep --autofix: applies rule-driven code rewrites to matched files. Default semgrep only reports findings."
 if_flags_any = ["--autofix", "--fix"]
 accept_edits_auto_allow = true
 
@@ -112,7 +112,7 @@ name = "comby"
 unknown_action = "allow"  # Default is match mode
 
 [[programs.ask]]
-reason = "In-place replacement"
+reason = "comby -in-place: applies the structural match-and-rewrite to the matched files. Default comby prints diffs to stdout."
 if_flags_any = ["-in-place", "-i"]
 accept_edits_auto_allow = true
 
@@ -126,7 +126,7 @@ unknown_action = "allow"
 
 [[programs.ask]]
 subcommand = "apply"
-reason = "Applying migrations"
+reason = "grit apply: applies a Grit migration pattern to matched files. Other grit subcommands are read-only/listing operations."
 accept_edits_auto_allow = true
 
 # =============================================================================
@@ -138,7 +138,7 @@ name = "watchexec"
 unknown_action = "ask"
 
 [[programs.ask]]
-reason = "Runs commands on file changes"
+reason = "watchexec: runs the given command whenever matching files change. The wrapped command's side effects fire on every change."
 
 # =============================================================================
 # BIOME (check safe, --write asks)
@@ -325,15 +325,15 @@ subcommand = "dump"
 
 [[programs.ask]]
 subcommand = "install"
-reason = "Installing git hooks"
+reason = "lefthook install: writes hook scripts to `.git/hooks/` per `lefthook.yml`. Subsequent git operations invoke them."
 
 [[programs.ask]]
 subcommand = "uninstall"
-reason = "Removing git hooks"
+reason = "lefthook uninstall: removes lefthook-managed hook scripts from `.git/hooks/`. Git stops invoking the configured hooks."
 
 [[programs.ask]]
 subcommand = "add"
-reason = "Adding hook configuration"
+reason = "lefthook add: creates hook script files under `.git/hooks/` for the named hook. Edits the git hooks directory."
 
 # =============================================================================
 # VITE (dev server / build tool)
@@ -817,31 +817,31 @@ subcommand = "--help"
 # Commands that run code or write files
 [[programs.ask]]
 subcommand = "run"
-reason = "Running code with coverage"
+reason = "coverage run: executes the given Python script/module under coverage. Writes a `.coverage` data file in cwd."
 
 [[programs.ask]]
 subcommand = "html"
-reason = "Generating HTML coverage report"
+reason = "coverage html: writes an HTML report tree (default `htmlcov/`) from the current `.coverage` data file."
 
 [[programs.ask]]
 subcommand = "json"
-reason = "Writing coverage.json"
+reason = "coverage json: writes a `coverage.json` report file from the current `.coverage` data file."
 
 [[programs.ask]]
 subcommand = "xml"
-reason = "Writing coverage.xml"
+reason = "coverage xml: writes a `coverage.xml` (Cobertura) report file from the current `.coverage` data file."
 
 [[programs.ask]]
 subcommand = "lcov"
-reason = "Writing coverage.lcov"
+reason = "coverage lcov: writes a `coverage.lcov` report file from the current `.coverage` data file."
 
 [[programs.ask]]
 subcommand = "erase"
-reason = "Erasing coverage data"
+reason = "coverage erase: deletes the `.coverage` data file in cwd. Pending reports cannot be regenerated without rerunning."
 
 [[programs.ask]]
 subcommand = "combine"
-reason = "Combining coverage data"
+reason = "coverage combine: merges multiple `.coverage.*` data files into a single `.coverage` file. Inputs are consumed."
 
 # =============================================================================
 # TOX (Python test automation - runs arbitrary commands from tox.ini)
@@ -861,7 +861,7 @@ subcommand = "--help"
 if_flags_any = ["-l", "--list", "--listenvs"]
 
 [[programs.ask]]
-reason = "Running test environments"
+reason = "tox: runs the configured environments from `tox.ini` / `pyproject.toml`. Each env creates/uses a virtualenv and runs arbitrary commands per config."
 
 # =============================================================================
 # NOX (Python test automation - runs arbitrary commands from noxfile.py)
@@ -881,7 +881,7 @@ subcommand = "--help"
 if_flags_any = ["-l", "--list"]
 
 [[programs.ask]]
-reason = "Running session"
+reason = "nox: runs the configured sessions from `noxfile.py`. Each session creates/uses a virtualenv and runs arbitrary Python code per the noxfile."
 
 # =============================================================================
 # AUTOFLAKE (removes unused imports - --check safe, --in-place asks)
@@ -895,7 +895,7 @@ unknown_action = "ask"
 if_flags_any = ["--check", "--check-diff"]
 
 [[programs.ask]]
-reason = "Removing unused imports"
+reason = "autoflake --in-place: rewrites Python files to remove unused imports/variables. Default autoflake prints suggested diffs only."
 if_flags_any = ["--in-place", "-i"]
 accept_edits_auto_allow = true
 
@@ -914,7 +914,7 @@ subcommand = "--version"
 subcommand = "--help"
 
 [[programs.ask]]
-reason = "Executing TypeScript"
+reason = "tsx: runs the given TypeScript file directly (Node + esbuild). The script's side effects (network, FS, child processes) execute."
 
 # =============================================================================
 # TS-NODE (TypeScript execute - runs code, always needs approval)
@@ -931,7 +931,7 @@ subcommand = "--version"
 subcommand = "--help"
 
 [[programs.ask]]
-reason = "Executing TypeScript"
+reason = "ts-node: runs the given TypeScript file under Node. The script's side effects (network, FS, child processes) execute."
 
 # =============================================================================
 # WEBPACK (JavaScript bundler - local build)
@@ -977,11 +977,11 @@ subcommand = "--help"
 
 [[programs.ask]]
 subcommand = "serve"
-reason = "Starting dev server"
+reason = "parcel serve: starts the Parcel dev server on a local port. Binds to localhost until interrupted."
 
 [[programs.ask]]
 subcommand = "watch"
-reason = "Watching files"
+reason = "parcel watch: rebuilds the bundle on file changes. Long-running; writes output to the configured dist dir."
 
 # =============================================================================
 # PLAYWRIGHT (browser testing)
@@ -1008,11 +1008,11 @@ subcommand = "--help"
 
 [[programs.ask]]
 subcommand = "install"
-reason = "Installing browsers"
+reason = "playwright install: downloads Chromium/Firefox/WebKit binaries to the Playwright cache (~300MB-1GB total)."
 
 [[programs.ask]]
 subcommand = "codegen"
-reason = "Generating test code"
+reason = "playwright codegen: opens a browser and records user actions as test code. Writes the generated spec to stdout or `-o <file>`."
 
 # =============================================================================
 # CYPRESS (browser testing)
@@ -1042,11 +1042,11 @@ subcommand = "--help"
 
 [[programs.ask]]
 subcommand = "open"
-reason = "Opening Cypress GUI"
+reason = "cypress open: launches the Cypress test runner GUI. Long-running until the window is closed."
 
 [[programs.ask]]
 subcommand = "install"
-reason = "Installing Cypress"
+reason = "cypress install: downloads the Cypress binary to the local cache (~200MB)."
 
 # =============================================================================
 # WRANGLER (Cloudflare Workers CLI)
@@ -1070,23 +1070,23 @@ subcommand = "tail"
 
 [[programs.ask]]
 subcommand = "dev"
-reason = "Starting local dev server"
+reason = "wrangler dev: runs the Worker locally on a dev port. Long-running; binds to localhost until interrupted."
 
 [[programs.ask]]
 subcommand = "deploy"
-reason = "Deploying worker"
+reason = "Cloudflare wrangler deploy: publishes the Worker live to Cloudflare. Verify env vs preview vs production; the Worker starts handling traffic immediately."
 
 [[programs.ask]]
 subcommand = "publish"
-reason = "Publishing worker"
+reason = "Cloudflare wrangler publish: pushes the Worker live (older form of deploy). Verify env; the Worker starts handling traffic immediately."
 
 [[programs.ask]]
 subcommand = "login"
-reason = "Authenticating"
+reason = "wrangler login: starts the OAuth flow and writes Cloudflare credentials to `~/.wrangler` (or `~/.config/.wrangler`). Anyone with read access to the file gets those credentials."
 
 [[programs.ask]]
 subcommand = "pages"
-reason = "Pages operation"
+reason = "wrangler pages: Cloudflare Pages operation (deploy/dev/project). `pages deploy` publishes a site live to Cloudflare's edge."
 
 # =============================================================================
 # TY (Astral Python type checker - read-only)
@@ -1098,7 +1098,7 @@ unknown_action = "allow"
 
 # --add-ignore inserts ty: ignore comments into source files
 [[programs.ask]]
-reason = "Adding ignore comments to source files"
+reason = "ty --add-ignore: inserts `ty: ignore` comments into source files at flagged diagnostics. Default ty only reports."
 if_flags_any = ["--add-ignore"]
 accept_edits_auto_allow = true
 
