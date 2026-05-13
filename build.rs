@@ -108,9 +108,17 @@ pub mod rules;
     // Format generated files so they match cargo fmt output and don't dirty
     // the working tree. Try rustfmt first (exact match), fall back to
     // prettyplease (close enough, no external dependency).
+    //
+    // `--edition` must match the workspace's edition in Cargo.toml. Without
+    // it, rustfmt defaults to edition 2015 and produces slightly different
+    // line-wrapping for long string literals than workspace `cargo fmt`
+    // does on edition 2024. That divergence leaves the working tree dirty
+    // every time `cargo build` re-runs build.rs (which happens after every
+    // commit because `cargo:rerun-if-changed=.git/HEAD` is set above).
     for file in &["rules.rs", "mod.rs"] {
         let path = out_dir.join(file);
         let ok = std::process::Command::new("rustfmt")
+            .args(["--edition", "2024"])
             .arg(&path)
             .status()
             .is_ok_and(|s| s.success());
