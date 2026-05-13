@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.21.0](https://github.com/camjac251/tool-gates/compare/v1.20.0...v1.21.0) - 2026-05-13
+
+### Added
+
+- *(hints)* enforce no-rg-on-code rule, route to probe/chunkhound/serena/sg
+
+### Other
+
+- hints catalog, systemMessage tiering, length guard
+
 ## [1.20.0](https://github.com/camjac251/tool-gates/compare/v1.19.2...v1.20.0) - 2026-05-13
 
 ### Added
