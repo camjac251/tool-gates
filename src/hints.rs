@@ -80,7 +80,7 @@ pub fn get_modern_hint(cmd: &CommandInfo) -> Option<ModernHint> {
         "tar" => hint_tar(cmd),
         // Anti-patterns (bad flags, wrong tool for job)
         "bat" => hint_bat_flags(cmd),
-        "rg" => hint_rg_body_capture(cmd),
+        "rg" => hint_rg_on_code(cmd),
         "git" => hint_git_antipatterns(cmd),
         _ => None,
     }?;
@@ -229,12 +229,16 @@ fn hint_grep(cmd: &CommandInfo) -> Option<ModernHint> {
     };
 
     let code_search =
-        looks_like_code_pattern(pattern) || targets.iter().any(|t| is_code_search_target(t));
+        looks_like_code_pattern(pattern) || targets.iter().any(|t| is_strict_code_target(t));
     if code_search {
+        let has_context = cmd
+            .args
+            .iter()
+            .any(|a| a.starts_with("-A") || a.starts_with("-B") || a.starts_with("-C"));
         return Some(ModernHint {
             legacy_command: "grep",
             modern_command: "sg",
-            hint: "Use `sg -p <pattern> <path>` instead of `grep` for code searches. AST-aware structural matching. Use `rg` for plain text.".to_string(),
+            hint: code_search_hint_text(pattern, has_context),
         });
     }
 
@@ -312,35 +316,6 @@ fn hint_find(cmd: &CommandInfo) -> ModernHint {
         modern_command: "fd",
         hint,
     }
-}
-
-fn is_code_search_target(target: &str) -> bool {
-    let lower = target
-        .trim_matches(|c| c == '"' || c == '\'')
-        .to_ascii_lowercase();
-    if lower.is_empty() {
-        return false;
-    }
-
-    const CODE_DIR_MARKERS: &[&str] = &[
-        "src", "lib", "app", "pkg", "cmd", "internal", "tests", "test", "spec", "crates",
-        "include", "examples",
-    ];
-    if CODE_DIR_MARKERS.iter().any(|marker| {
-        lower == *marker
-            || lower.starts_with(&format!("{marker}/"))
-            || lower.starts_with(&format!("./{marker}/"))
-            || lower.contains(&format!("/{marker}/"))
-    }) {
-        return true;
-    }
-
-    const CODE_EXTENSIONS: &[&str] = &[
-        ".rs", ".py", ".js", ".jsx", ".ts", ".tsx", ".go", ".java", ".kt", ".kts", ".c", ".h",
-        ".cpp", ".hpp", ".cs", ".rb", ".php", ".swift", ".scala", ".sh", ".bash", ".zsh", ".sql",
-        ".yaml", ".yml", ".toml", ".json", ".md",
-    ];
-    CODE_EXTENSIONS.iter().any(|ext| lower.ends_with(ext))
 }
 
 fn looks_like_code_pattern(pattern: &str) -> bool {
@@ -755,28 +730,167 @@ fn hint_bat_flags(cmd: &CommandInfo) -> Option<ModernHint> {
     })
 }
 
-fn hint_rg_body_capture(cmd: &CommandInfo) -> Option<ModernHint> {
-    // Detect rg -A (after context) targeting code directories, which suggests
-    // trying to capture function/class bodies. sg is better for this.
-    let has_after_context = cmd.args.iter().any(|a| {
-        a == "-A"
-            || (a.starts_with("-A") && a.len() > 2 && a[2..].chars().all(|c| c.is_ascii_digit()))
-    });
+/// Strict code-target check matching the system-prompt rule "NEVER use rg on
+/// code files". Only programming-language source files and code directories
+/// count as "code". Configs (.yaml/.toml/.json), docs (.md), and logs are
+/// non-code per the rule and rg is fine on them.
+fn is_strict_code_target(target: &str) -> bool {
+    let lower = target
+        .trim_matches(|c| c == '"' || c == '\'')
+        .to_ascii_lowercase();
+    if lower.is_empty() {
+        return false;
+    }
 
-    if !has_after_context {
+    const CODE_EXTENSIONS: &[&str] = &[
+        ".rs", ".py", ".js", ".jsx", ".ts", ".tsx", ".go", ".java", ".kt", ".kts", ".c", ".h",
+        ".cpp", ".hpp", ".cs", ".rb", ".php", ".swift", ".scala", ".sh", ".bash", ".zsh",
+    ];
+
+    if let Some(dot) = lower.rfind('.') {
+        let ext = &lower[dot..];
+        return CODE_EXTENSIONS.contains(&ext);
+    }
+
+    const CODE_DIRS: &[&str] = &[
+        "src", "lib", "app", "pkg", "cmd", "internal", "tests", "test", "spec", "crates",
+        "include", "examples",
+    ];
+    let stripped = lower.trim_start_matches("./").trim_end_matches('/');
+    CODE_DIRS.iter().any(|d| {
+        stripped == *d
+            || stripped.starts_with(&format!("{d}/"))
+            || stripped.contains(&format!("/{d}/"))
+    })
+}
+
+/// Pure-identifier shape (camelCase, snake_case, PascalCase). No spaces, no
+/// regex metacharacters, no quotes. Single token only.
+fn is_identifier_shape(pattern: &str) -> bool {
+    let trimmed = pattern.trim_matches(|c| c == '"' || c == '\'');
+    if trimmed.is_empty() {
+        return false;
+    }
+    let mut chars = trimmed.chars();
+    let first = chars.next().unwrap();
+    if !(first.is_ascii_alphabetic() || first == '_') {
+        return false;
+    }
+    chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// Natural-language shape: 3+ alphabetic words separated by spaces, no regex
+/// metacharacters or special chars. Heuristic for "the user is asking a
+/// conceptual question, route to ChunkHound semantic".
+fn is_natural_language_shape(pattern: &str) -> bool {
+    let trimmed = pattern.trim_matches(|c| c == '"' || c == '\'');
+    if trimmed.len() < 8 {
+        return false;
+    }
+    // Reject regex / shell special chars
+    if trimmed.chars().any(|c| {
+        matches!(
+            c,
+            '(' | ')'
+                | '['
+                | ']'
+                | '{'
+                | '}'
+                | '\\'
+                | '|'
+                | '*'
+                | '+'
+                | '?'
+                | '$'
+                | '^'
+                | '<'
+                | '>'
+                | '='
+        )
+    }) {
+        return false;
+    }
+    let words: Vec<&str> = trimmed.split_whitespace().collect();
+    if words.len() < 3 {
+        return false;
+    }
+    words.iter().all(|w| {
+        w.chars()
+            .all(|c| c.is_ascii_alphabetic() || c == '-' || c == '\'')
+    })
+}
+
+/// Build the right hint for a code-targeted grep/rg invocation, routing to
+/// Probe/ChunkHound/Serena/sg per /etc/claude-code/system-prompt.md.
+fn code_search_hint_text(pattern: &str, has_context_flag: bool) -> String {
+    if has_context_flag {
+        return "Use `sg -p 'pattern' src/` instead of `rg -A`/`-B`/`-C` for capturing function/class bodies. AST-aware matching gives exact boundaries.".to_string();
+    }
+
+    if is_identifier_shape(pattern) {
+        return "Don't `rg` on code. For exact symbol lookup use `mcp__probe__search_code` with `exact: true`; for navigation (definitions, references), `mcp__serena__find_symbol`.".to_string();
+    }
+
+    if looks_like_code_pattern(pattern) || pattern.contains('(') || pattern.contains('{') {
+        return "Don't `rg` on code. For structural patterns use `sg -p '<pattern>' src/` (AST-aware, supports `$VAR` metavars).".to_string();
+    }
+
+    if is_natural_language_shape(pattern) {
+        return "Don't `rg` on code. For conceptual queries use `mcp__chunkhound__search` (`type: \"semantic\"`); `code_research` for cross-file flows.".to_string();
+    }
+
+    "Don't `rg` on code. Use `mcp__probe__search_code` (known terms), `mcp__chunkhound__search` (conceptual), `mcp__serena__find_symbol` (symbols), or `sg -p` (structural). `rg` is for non-code text only.".to_string()
+}
+
+fn hint_rg_on_code(cmd: &CommandInfo) -> Option<ModernHint> {
+    if cmd.args.is_empty() {
         return None;
     }
 
-    // Check if targeting code directories
-    let targets_code = cmd.args.iter().any(|a| is_code_search_target(a));
+    // Extract non-flag args (pattern first, then targets).
+    let mut non_flag: Vec<&str> = Vec::new();
+    let mut iter = cmd.args.iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "-e" | "--regexp" | "-f" | "--file" | "-g" | "--glob" | "-t" | "--type" => {
+                // Skip the flag's value.
+                iter.next();
+            }
+            a if !a.starts_with('-') => non_flag.push(a),
+            _ => {}
+        }
+    }
+
+    let pattern = non_flag.first().copied().unwrap_or("");
+    let targets = if non_flag.len() > 1 {
+        &non_flag[1..]
+    } else {
+        &[][..]
+    };
+
+    // Fire when any target is a code file or code directory. Pattern-only
+    // detection (e.g. searching for `function foo` in any path) routes through
+    // hint_grep already; here we focus on the target check that matches the
+    // strict "NEVER use rg on code files" rule.
+    let targets_code = targets.iter().any(|t| is_strict_code_target(t));
     if !targets_code {
         return None;
     }
 
+    let has_context_flag = cmd.args.iter().any(|a| {
+        let s = a.as_str();
+        s == "-A"
+            || s == "-B"
+            || s == "-C"
+            || (s.starts_with("-A") && s.len() > 2 && s[2..].chars().all(|c| c.is_ascii_digit()))
+            || (s.starts_with("-B") && s.len() > 2 && s[2..].chars().all(|c| c.is_ascii_digit()))
+            || (s.starts_with("-C") && s.len() > 2 && s[2..].chars().all(|c| c.is_ascii_digit()))
+    });
+
     Some(ModernHint {
         legacy_command: "rg",
         modern_command: "sg",
-        hint: "Use `sg -p 'pattern' src/` instead of `rg -A` for capturing function/class bodies. AST-aware matching gives exact boundaries.".to_string(),
+        hint: code_search_hint_text(pattern, has_context_flag),
     })
 }
 
@@ -1142,7 +1256,12 @@ mod tests {
         assert!(hint.is_some());
         let hint = hint.unwrap();
         assert_eq!(hint.modern_command, "sg");
-        assert!(hint.hint.contains("AST-aware"));
+        // Pattern has `(` so routes to structural hint mentioning sg + metavars
+        assert!(
+            hint.hint.contains("sg -p"),
+            "expected sg suggestion, got: {}",
+            hint.hint
+        );
     }
 
     #[test]
@@ -1240,16 +1359,83 @@ mod tests {
 
     #[test]
     fn test_rg_body_capture_hint() {
-        let hint = hint_rg_body_capture(&cmd("rg", &["-A20", "function handleAuth", "src/"]));
+        // rg -A on a code dir suggests sg for body capture
+        let hint = hint_rg_on_code(&cmd("rg", &["-A20", "function handleAuth", "src/"]));
         assert!(hint.is_some());
-        assert!(hint.unwrap().hint.contains("sg"));
+        let hint = hint.unwrap();
+        assert_eq!(hint.modern_command, "sg");
+        assert!(
+            hint.hint.contains("sg -p"),
+            "expected sg body-capture hint, got: {}",
+            hint.hint
+        );
     }
 
     #[test]
     fn test_rg_context_on_logs_no_hint() {
         // rg -A on non-code targets is fine
-        let hint = hint_rg_body_capture(&cmd("rg", &["-A5", "ERROR", "logs/"]));
+        let hint = hint_rg_on_code(&cmd("rg", &["-A5", "ERROR", "logs/"]));
         assert!(hint.is_none());
+    }
+
+    #[test]
+    fn test_rg_identifier_on_code_suggests_probe() {
+        // Bare identifier on a code dir routes to probe + serena
+        let hint = hint_rg_on_code(&cmd("rg", &["getUserById", "src/"]));
+        assert!(hint.is_some());
+        let hint = hint.unwrap();
+        assert!(
+            hint.hint.contains("mcp__probe__search_code"),
+            "expected probe suggestion, got: {}",
+            hint.hint
+        );
+        assert!(
+            hint.hint.contains("mcp__serena__find_symbol"),
+            "expected serena suggestion, got: {}",
+            hint.hint
+        );
+    }
+
+    #[test]
+    fn test_rg_natural_language_suggests_chunkhound() {
+        // Multi-word English phrase on code routes to chunkhound semantic
+        let hint = hint_rg_on_code(&cmd("rg", &["where authentication is handled", "src/"]));
+        assert!(hint.is_some());
+        let hint = hint.unwrap();
+        assert!(
+            hint.hint.contains("mcp__chunkhound__search"),
+            "expected chunkhound suggestion, got: {}",
+            hint.hint
+        );
+    }
+
+    #[test]
+    fn test_rg_on_yaml_no_hint() {
+        // YAML is config, not code. rg is fine here per the rule.
+        let hint = hint_rg_on_code(&cmd("rg", &["redis_url", "config.yaml"]));
+        assert!(hint.is_none());
+    }
+
+    #[test]
+    fn test_rg_on_md_no_hint() {
+        // Markdown is docs, not code.
+        let hint = hint_rg_on_code(&cmd("rg", &["TODO", "README.md"]));
+        assert!(hint.is_none());
+    }
+
+    #[test]
+    fn test_rg_on_log_in_src_no_hint() {
+        // src/app.log is a log file, not code, even though it's under src/.
+        let hint = hint_rg_on_code(&cmd("rg", &["ERROR", "src/app.log"]));
+        assert!(hint.is_none());
+    }
+
+    #[test]
+    fn test_rg_on_rs_file_suggests_routing() {
+        // Single .rs file is a code target
+        let hint = hint_rg_on_code(&cmd("rg", &["fn main", "src/main.rs"]));
+        assert!(hint.is_some());
+        assert!(hint.unwrap().hint.contains("sg -p"));
     }
 
     #[test]
