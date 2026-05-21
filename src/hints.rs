@@ -105,22 +105,12 @@ fn hint_cat(cmd: &CommandInfo) -> Option<ModernHint> {
     }
 
     let file = files[0];
-    let ext_hint = if file.ends_with(".json") {
-        " (JSON syntax highlighting)"
-    } else if file.ends_with(".md") {
-        " (Markdown rendering)"
-    } else if file.ends_with(".rs") || file.ends_with(".py") || file.ends_with(".ts") {
-        " (code syntax highlighting)"
-    } else {
-        ""
-    };
 
     Some(ModernHint {
         legacy_command: "cat",
         modern_command: "bat",
         hint: format!(
-            "Use `bat {}` instead of `cat`. Syntax highlighting and line numbers{}.",
-            file, ext_hint
+            "Use `bat {file}` instead of `cat`. Line-numbered output makes follow-up `Edit` and `Read` calls target specific lines precisely."
         ),
     })
 }
@@ -152,7 +142,7 @@ fn hint_head(cmd: &CommandInfo) -> Option<ModernHint> {
         legacy_command: "head",
         modern_command: "bat",
         hint: format!(
-            "Use `bat -r {} {}` instead of `head` for file viewing. Syntax highlighting and line numbers.",
+            "Use `bat -r {} {}` instead of `head`. bat supports arbitrary ranges (`-r 30:50` for middle slices, not just first-N) and prints line numbers for precise follow-up edits.",
             bat_range, file,
         ),
     })
@@ -194,7 +184,7 @@ fn hint_tail(cmd: &CommandInfo) -> Option<ModernHint> {
         legacy_command: "tail",
         modern_command: "bat",
         hint: format!(
-            "Use `bat -r {} {}` instead of `tail` for file viewing. Syntax highlighting and line numbers.",
+            "Use `bat -r {} {}` instead of `tail`. bat supports arbitrary ranges (`-r 30:50` for middle slices, not just last-N) and prints line numbers for precise follow-up edits.",
             bat_range, file,
         ),
     })
@@ -628,7 +618,7 @@ fn hint_less(_cmd: &CommandInfo) -> ModernHint {
     ModernHint {
         legacy_command: "less",
         modern_command: "bat",
-        hint: "Use `bat <file>` instead of `less`. Syntax highlighting and line numbers included."
+        hint: "Use `bat <file>` instead of `less`. Line-numbered output makes follow-up `Edit` and `Read` calls target specific lines precisely."
             .to_string(),
     }
 }
@@ -1195,7 +1185,7 @@ mod tests {
         assert!(hint.is_some());
         let hint = hint.unwrap();
         assert_eq!(hint.modern_command, "bat");
-        assert!(hint.hint.contains("syntax highlighting"));
+        assert!(hint.hint.contains("Line-numbered"));
     }
 
     #[test]
