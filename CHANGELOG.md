@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.21.1](https://github.com/camjac251/tool-gates/compare/v1.21.0...v1.21.1) - 2026-05-21
+
+### Fixed
+
+- improve head/tail and github block deny messages
+
+### Other
+
+- replace generic "syntax highlighting" hint suffix with agent-actionable benefits
+- polish modern hint messages for consistency
+- rewrite hook deny messages with risk and remediation
+
 ## [1.21.0](https://github.com/camjac251/tool-gates/compare/v1.20.0...v1.21.0) - 2026-05-13
 
 ### Added
