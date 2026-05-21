@@ -1107,10 +1107,8 @@ fn check_head_tail_pipe(command_string: &str) -> Option<HookOutput> {
             "`{trimmed}` blocked. Use a producer-native cap: `rg -m N`, \
              `fd --max-results N`, `bat -r START:END`, `git log -n N`, \
              `gh api ... --jq '.[0:N]'`, `gh pr/issue/run list --limit N`, \
-             `docker compose logs --tail N`. For commands with no native cap \
-             (openssl, brew install, build output), pass `output_tail: true` \
-             on the Bash call. Streaming `tail -f` / `tail -F` through the \
-             Monitor tool is fine."
+             `docker compose logs --tail N`. Streaming `tail -f` / `tail -F` \
+             through the Monitor tool is fine."
         )));
     }
     None
