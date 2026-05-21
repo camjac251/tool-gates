@@ -152,7 +152,7 @@ fn hint_head(cmd: &CommandInfo) -> Option<ModernHint> {
         legacy_command: "head",
         modern_command: "bat",
         hint: format!(
-            "Use `bat -r {} {}` instead of `head` for file viewing.",
+            "Use `bat -r {} {}` instead of `head` for file viewing. Syntax highlighting and line numbers.",
             bat_range, file,
         ),
     })
@@ -194,7 +194,7 @@ fn hint_tail(cmd: &CommandInfo) -> Option<ModernHint> {
         legacy_command: "tail",
         modern_command: "bat",
         hint: format!(
-            "Use `bat -r {} {}` instead of `tail` for file viewing.",
+            "Use `bat -r {} {}` instead of `tail` for file viewing. Syntax highlighting and line numbers.",
             bat_range, file,
         ),
     })
@@ -601,7 +601,9 @@ fn hint_hex(cmd: &CommandInfo) -> ModernHint {
     ModernHint {
         legacy_command: legacy,
         modern_command: "hexyl",
-        hint: "Use `hexyl <file>` instead of the legacy hex viewer. Colored output, better formatting.".to_string(),
+        hint: format!(
+            "Use `hexyl <file>` instead of `{legacy}`. Colored output, better formatting."
+        ),
     }
 }
 
