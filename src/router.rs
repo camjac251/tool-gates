@@ -1284,7 +1284,7 @@ fn check_raw_string_patterns(command_string: &str) -> (Option<HookOutput>, Optio
                 };
                 return (
                     Some(HookOutput::ask(&format!(
-                        "Dangerous command in substitution: {truncated}"
+                        "Command substitution `$(...)` blocked: contains a dangerous inner command (`{truncated}`). Substitutions execute and inject the result into the outer command, so the destructive call runs even when nested. Run the inner command separately first, inspect its output, then use the literal result."
                     ))),
                     None,
                 );
@@ -1305,7 +1305,7 @@ fn check_raw_string_patterns(command_string: &str) -> (Option<HookOutput>, Optio
                 };
                 return (
                     Some(HookOutput::ask(&format!(
-                        "Dangerous command in backticks: {truncated}"
+                        "Backtick substitution blocked: contains a dangerous inner command (`{truncated}`). Backticks execute and inject the result into the outer command, so the destructive call runs even when nested. Run the inner command separately first, inspect its output, then use the literal result. (Prefer `$(...)` over backticks for new commands.)"
                     ))),
                     None,
                 );

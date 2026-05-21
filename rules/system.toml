@@ -27,210 +27,210 @@ name = "shutdown"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "System power command blocked"
+reason = "System power command blocked: agent has no authority to shut down or reboot the machine. If genuinely needed, ask the user to run this themselves."
 
 [[programs]]
 name = "reboot"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "System power command blocked"
+reason = "System power command blocked: agent has no authority to shut down or reboot the machine. If genuinely needed, ask the user to run this themselves."
 
 [[programs]]
 name = "poweroff"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "System power command blocked"
+reason = "System power command blocked: agent has no authority to shut down or reboot the machine. If genuinely needed, ask the user to run this themselves."
 
 [[programs]]
 name = "halt"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "System power command blocked"
+reason = "System power command blocked: agent has no authority to shut down or reboot the machine. If genuinely needed, ask the user to run this themselves."
 
 [[programs]]
 name = "init"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "System power command blocked"
+reason = "System power command blocked: agent has no authority to shut down or reboot the machine. If genuinely needed, ask the user to run this themselves."
 
 [[programs]]
 name = "mkfs"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "Disk partitioning blocked"
+reason = "Disk partitioning blocked: agent has no authority to repartition disks. Mistakes here destroy data permanently. Ask the user to run partitioning themselves."
 
 [[programs]]
 name = "fdisk"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "Disk partitioning blocked"
+reason = "Disk partitioning blocked: agent has no authority to repartition disks. Mistakes here destroy data permanently. Ask the user to run partitioning themselves."
 
 [[programs]]
 name = "parted"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "Disk partitioning blocked"
+reason = "Disk partitioning blocked: agent has no authority to repartition disks. Mistakes here destroy data permanently. Ask the user to run partitioning themselves."
 
 [[programs]]
 name = "gdisk"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "Disk partitioning blocked"
+reason = "Disk partitioning blocked: agent has no authority to repartition disks. Mistakes here destroy data permanently. Ask the user to run partitioning themselves."
 
 [[programs]]
 name = "dd"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "Low-level disk operation blocked"
+reason = "Low-level disk operation blocked: agent has no authority to run raw block-device writes. The wrong destination overwrites a disk without warning. Ask the user to run dd themselves."
 
 [[programs]]
 name = "shred"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "Secure delete blocked"
+reason = "Secure delete blocked: agent has no authority to wipe files irreversibly. Ask the user to run shred themselves."
 
 [[programs]]
 name = "wipe"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "Secure wipe blocked"
+reason = "Secure wipe blocked: agent has no authority to wipe devices irreversibly. Ask the user to run wipe themselves."
 
 [[programs]]
 name = "mke2fs"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "Filesystem creation blocked"
+reason = "Filesystem creation blocked: agent has no authority to format filesystems. The wrong target erases data permanently. Ask the user to run mke2fs themselves."
 
 [[programs]]
 name = "mkswap"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "Swap creation blocked"
+reason = "Swap creation blocked: agent has no authority to create swap areas on devices. The wrong target overwrites a device. Ask the user to run mkswap themselves."
 
 [[programs]]
 name = "wipefs"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "Filesystem wipe blocked"
+reason = "Filesystem wipe blocked: agent has no authority to wipe filesystem signatures. The wrong target destroys the partition table. Ask the user to run wipefs themselves."
 
 [[programs]]
 name = "hdparm"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "Disk parameters blocked"
+reason = "Disk parameters blocked: agent has no authority to change disk-firmware parameters. Wrong values can brick drives. Ask the user to run hdparm themselves."
 
 [[programs]]
 name = "insmod"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "Kernel module loading blocked"
+reason = "Kernel module loading blocked: agent has no authority to load kernel modules. Module changes affect the entire running kernel. Ask the user to run this themselves."
 
 [[programs]]
 name = "rmmod"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "Kernel module removal blocked"
+reason = "Kernel module removal blocked: agent has no authority to unload kernel modules. Removal can destabilize the running kernel. Ask the user to run this themselves."
 
 [[programs]]
 name = "modprobe"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "Kernel module loading blocked"
+reason = "Kernel module loading blocked: agent has no authority to load kernel modules. Module changes affect the entire running kernel. Ask the user to run this themselves."
 
 [[programs]]
 name = "grub-install"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "Bootloader modification blocked"
+reason = "Bootloader modification blocked: agent has no authority to modify the bootloader. A bad bootloader leaves the system unbootable. Ask the user to run this themselves."
 
 [[programs]]
 name = "update-grub"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "Bootloader modification blocked"
+reason = "Bootloader modification blocked: agent has no authority to modify the bootloader. A bad bootloader leaves the system unbootable. Ask the user to run this themselves."
 
 [[programs]]
 name = "useradd"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "User management blocked"
+reason = "User management blocked: agent has no authority to create, delete, or modify user accounts. Account changes affect login and file ownership system-wide. Ask the user to run this themselves."
 
 [[programs]]
 name = "userdel"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "User management blocked"
+reason = "User management blocked: agent has no authority to create, delete, or modify user accounts. Account changes affect login and file ownership system-wide. Ask the user to run this themselves."
 
 [[programs]]
 name = "usermod"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "User management blocked"
+reason = "User management blocked: agent has no authority to create, delete, or modify user accounts. Account changes affect login and file ownership system-wide. Ask the user to run this themselves."
 
 [[programs]]
 name = "passwd"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "Password change blocked"
+reason = "Password change blocked: agent has no authority to change account passwords. Ask the user to run passwd themselves."
 
 [[programs]]
 name = "chsh"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "Shell change blocked"
+reason = "Shell change blocked: agent has no authority to change a user's login shell. Ask the user to run chsh themselves."
 
 [[programs]]
 name = "iptables"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "Firewall modification blocked"
+reason = "Firewall modification blocked: agent has no authority to modify firewall rules. Misconfigured rules can lock the user out of the system. Ask the user to run this themselves."
 
 [[programs]]
 name = "ufw"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "Firewall modification blocked"
+reason = "Firewall modification blocked: agent has no authority to modify firewall rules. Misconfigured rules can lock the user out of the system. Ask the user to run this themselves."
 
 [[programs]]
 name = "firewall-cmd"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "Firewall modification blocked"
+reason = "Firewall modification blocked: agent has no authority to modify firewall rules. Misconfigured rules can lock the user out of the system. Ask the user to run this themselves."
 
 [[programs]]
 name = "chattr"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "File attribute change blocked"
+reason = "File attribute change blocked: agent has no authority to change extended file attributes. Misconfigured attributes can render files unmodifiable. Ask the user to run chattr themselves."
 
 [[programs]]
 name = "mount"
@@ -248,42 +248,42 @@ name = "umount"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "Unmounting blocked"
+reason = "Unmounting blocked: agent has no authority to unmount filesystems. Could disrupt running processes or system services depending on what's mounted. Ask the user to run umount themselves."
 
 [[programs]]
 name = "swapoff"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "Swap management blocked"
+reason = "Swap management blocked: agent has no authority to enable or disable swap. Changes affect virtual memory behavior system-wide and can trigger OOM kills if swap is removed under load. Ask the user to run this themselves."
 
 [[programs]]
 name = "swapon"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "Swap management blocked"
+reason = "Swap management blocked: agent has no authority to enable or disable swap. Changes affect virtual memory behavior system-wide and can trigger OOM kills if swap is removed under load. Ask the user to run this themselves."
 
 [[programs]]
 name = "lvremove"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "LVM management blocked"
+reason = "LVM management blocked: agent has no authority to remove physical volumes, volume groups, or logical volumes. Removal is irreversible and can destroy mounted filesystems on top of the LVM stack. Ask the user to run this themselves."
 
 [[programs]]
 name = "vgremove"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "LVM management blocked"
+reason = "LVM management blocked: agent has no authority to remove physical volumes, volume groups, or logical volumes. Removal is irreversible and can destroy mounted filesystems on top of the LVM stack. Ask the user to run this themselves."
 
 [[programs]]
 name = "pvremove"
 unknown_action = "block"
 
 [[programs.block]]
-reason = "LVM management blocked"
+reason = "LVM management blocked: agent has no authority to remove physical volumes, volume groups, or logical volumes. Removal is irreversible and can destroy mounted filesystems on top of the LVM stack. Ask the user to run this themselves."
 
 # =============================================================================
 # PSQL

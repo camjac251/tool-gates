@@ -399,7 +399,7 @@ fn handle_pre_tool_use_hook(input: &str, client: Client) {
             let parsed = tool_gates::apply_patch_parser::parse_patch(command);
             if tool_gates::apply_patch_parser::looks_unparseable(command, &parsed) {
                 let output = HookOutput::deny(
-                    "apply_patch payload has no parseable file headers; tool-gates refuses to pass through unrecognized patch shapes.",
+                    "apply_patch payload has no parseable file headers; tool-gates refuses to pass through unrecognized patch shapes. The payload must be wrapped in `*** Begin Patch` and `*** End Patch` envelopes, with file headers between them: `*** Add File: /abs/path` for new files, `*** Update File: /abs/path` for edits (optionally followed by `*** Move to: /abs/path` for renames), or `*** Delete File: /abs/path` for deletions. Verify the patch was constructed with the standard apply_patch grammar and that paths are absolute.",
                 );
                 let value = output.serialize(client);
                 if !emit_hook_value(&value) && !value.is_null() {

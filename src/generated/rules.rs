@@ -7251,7 +7251,9 @@ pub fn check_shutdown_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any shutdown invocation is blocked
-    Some(GateResult::block("shutdown: System power command blocked"))
+    Some(GateResult::block(
+        "shutdown: System power command blocked: agent has no authority to shut down or reboot the machine. If genuinely needed, ask the user to run this themselves.",
+    ))
 }
 
 // === REBOOT (from system.toml) ===
@@ -7263,7 +7265,9 @@ pub fn check_reboot_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any reboot invocation is blocked
-    Some(GateResult::block("reboot: System power command blocked"))
+    Some(GateResult::block(
+        "reboot: System power command blocked: agent has no authority to shut down or reboot the machine. If genuinely needed, ask the user to run this themselves.",
+    ))
 }
 
 // === POWEROFF (from system.toml) ===
@@ -7275,7 +7279,9 @@ pub fn check_poweroff_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any poweroff invocation is blocked
-    Some(GateResult::block("poweroff: System power command blocked"))
+    Some(GateResult::block(
+        "poweroff: System power command blocked: agent has no authority to shut down or reboot the machine. If genuinely needed, ask the user to run this themselves.",
+    ))
 }
 
 // === HALT (from system.toml) ===
@@ -7287,7 +7293,9 @@ pub fn check_halt_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any halt invocation is blocked
-    Some(GateResult::block("halt: System power command blocked"))
+    Some(GateResult::block(
+        "halt: System power command blocked: agent has no authority to shut down or reboot the machine. If genuinely needed, ask the user to run this themselves.",
+    ))
 }
 
 // === INIT (from system.toml) ===
@@ -7299,7 +7307,9 @@ pub fn check_init_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any init invocation is blocked
-    Some(GateResult::block("init: System power command blocked"))
+    Some(GateResult::block(
+        "init: System power command blocked: agent has no authority to shut down or reboot the machine. If genuinely needed, ask the user to run this themselves.",
+    ))
 }
 
 // === MKFS (from system.toml) ===
@@ -7311,7 +7321,9 @@ pub fn check_mkfs_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any mkfs invocation is blocked
-    Some(GateResult::block("mkfs: Disk partitioning blocked"))
+    Some(GateResult::block(
+        "mkfs: Disk partitioning blocked: agent has no authority to repartition disks. Mistakes here destroy data permanently. Ask the user to run partitioning themselves.",
+    ))
 }
 
 // === FDISK (from system.toml) ===
@@ -7323,7 +7335,9 @@ pub fn check_fdisk_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any fdisk invocation is blocked
-    Some(GateResult::block("fdisk: Disk partitioning blocked"))
+    Some(GateResult::block(
+        "fdisk: Disk partitioning blocked: agent has no authority to repartition disks. Mistakes here destroy data permanently. Ask the user to run partitioning themselves.",
+    ))
 }
 
 // === PARTED (from system.toml) ===
@@ -7335,7 +7349,9 @@ pub fn check_parted_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any parted invocation is blocked
-    Some(GateResult::block("parted: Disk partitioning blocked"))
+    Some(GateResult::block(
+        "parted: Disk partitioning blocked: agent has no authority to repartition disks. Mistakes here destroy data permanently. Ask the user to run partitioning themselves.",
+    ))
 }
 
 // === GDISK (from system.toml) ===
@@ -7347,7 +7363,9 @@ pub fn check_gdisk_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any gdisk invocation is blocked
-    Some(GateResult::block("gdisk: Disk partitioning blocked"))
+    Some(GateResult::block(
+        "gdisk: Disk partitioning blocked: agent has no authority to repartition disks. Mistakes here destroy data permanently. Ask the user to run partitioning themselves.",
+    ))
 }
 
 // === DD (from system.toml) ===
@@ -7359,7 +7377,9 @@ pub fn check_dd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any dd invocation is blocked
-    Some(GateResult::block("dd: Low-level disk operation blocked"))
+    Some(GateResult::block(
+        "dd: Low-level disk operation blocked: agent has no authority to run raw block-device writes. The wrong destination overwrites a disk without warning. Ask the user to run dd themselves.",
+    ))
 }
 
 // === SHRED (from system.toml) ===
@@ -7371,7 +7391,9 @@ pub fn check_shred_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any shred invocation is blocked
-    Some(GateResult::block("shred: Secure delete blocked"))
+    Some(GateResult::block(
+        "shred: Secure delete blocked: agent has no authority to wipe files irreversibly. Ask the user to run shred themselves.",
+    ))
 }
 
 // === WIPE (from system.toml) ===
@@ -7383,7 +7405,9 @@ pub fn check_wipe_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any wipe invocation is blocked
-    Some(GateResult::block("wipe: Secure wipe blocked"))
+    Some(GateResult::block(
+        "wipe: Secure wipe blocked: agent has no authority to wipe devices irreversibly. Ask the user to run wipe themselves.",
+    ))
 }
 
 // === MKE2FS (from system.toml) ===
@@ -7395,7 +7419,9 @@ pub fn check_mke2fs_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any mke2fs invocation is blocked
-    Some(GateResult::block("mke2fs: Filesystem creation blocked"))
+    Some(GateResult::block(
+        "mke2fs: Filesystem creation blocked: agent has no authority to format filesystems. The wrong target erases data permanently. Ask the user to run mke2fs themselves.",
+    ))
 }
 
 // === MKSWAP (from system.toml) ===
@@ -7407,7 +7433,9 @@ pub fn check_mkswap_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any mkswap invocation is blocked
-    Some(GateResult::block("mkswap: Swap creation blocked"))
+    Some(GateResult::block(
+        "mkswap: Swap creation blocked: agent has no authority to create swap areas on devices. The wrong target overwrites a device. Ask the user to run mkswap themselves.",
+    ))
 }
 
 // === WIPEFS (from system.toml) ===
@@ -7419,7 +7447,9 @@ pub fn check_wipefs_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any wipefs invocation is blocked
-    Some(GateResult::block("wipefs: Filesystem wipe blocked"))
+    Some(GateResult::block(
+        "wipefs: Filesystem wipe blocked: agent has no authority to wipe filesystem signatures. The wrong target destroys the partition table. Ask the user to run wipefs themselves.",
+    ))
 }
 
 // === HDPARM (from system.toml) ===
@@ -7431,7 +7461,9 @@ pub fn check_hdparm_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any hdparm invocation is blocked
-    Some(GateResult::block("hdparm: Disk parameters blocked"))
+    Some(GateResult::block(
+        "hdparm: Disk parameters blocked: agent has no authority to change disk-firmware parameters. Wrong values can brick drives. Ask the user to run hdparm themselves.",
+    ))
 }
 
 // === INSMOD (from system.toml) ===
@@ -7443,7 +7475,9 @@ pub fn check_insmod_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any insmod invocation is blocked
-    Some(GateResult::block("insmod: Kernel module loading blocked"))
+    Some(GateResult::block(
+        "insmod: Kernel module loading blocked: agent has no authority to load kernel modules. Module changes affect the entire running kernel. Ask the user to run this themselves.",
+    ))
 }
 
 // === RMMOD (from system.toml) ===
@@ -7455,7 +7489,9 @@ pub fn check_rmmod_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any rmmod invocation is blocked
-    Some(GateResult::block("rmmod: Kernel module removal blocked"))
+    Some(GateResult::block(
+        "rmmod: Kernel module removal blocked: agent has no authority to unload kernel modules. Removal can destabilize the running kernel. Ask the user to run this themselves.",
+    ))
 }
 
 // === MODPROBE (from system.toml) ===
@@ -7467,7 +7503,9 @@ pub fn check_modprobe_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any modprobe invocation is blocked
-    Some(GateResult::block("modprobe: Kernel module loading blocked"))
+    Some(GateResult::block(
+        "modprobe: Kernel module loading blocked: agent has no authority to load kernel modules. Module changes affect the entire running kernel. Ask the user to run this themselves.",
+    ))
 }
 
 // === GRUB-INSTALL (from system.toml) ===
@@ -7480,7 +7518,7 @@ pub fn check_grub_install_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
     // Bare block rule - any grub-install invocation is blocked
     Some(GateResult::block(
-        "grub-install: Bootloader modification blocked",
+        "grub-install: Bootloader modification blocked: agent has no authority to modify the bootloader. A bad bootloader leaves the system unbootable. Ask the user to run this themselves.",
     ))
 }
 
@@ -7494,7 +7532,7 @@ pub fn check_update_grub_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
     // Bare block rule - any update-grub invocation is blocked
     Some(GateResult::block(
-        "update-grub: Bootloader modification blocked",
+        "update-grub: Bootloader modification blocked: agent has no authority to modify the bootloader. A bad bootloader leaves the system unbootable. Ask the user to run this themselves.",
     ))
 }
 
@@ -7507,7 +7545,9 @@ pub fn check_useradd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any useradd invocation is blocked
-    Some(GateResult::block("useradd: User management blocked"))
+    Some(GateResult::block(
+        "useradd: User management blocked: agent has no authority to create, delete, or modify user accounts. Account changes affect login and file ownership system-wide. Ask the user to run this themselves.",
+    ))
 }
 
 // === USERDEL (from system.toml) ===
@@ -7519,7 +7559,9 @@ pub fn check_userdel_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any userdel invocation is blocked
-    Some(GateResult::block("userdel: User management blocked"))
+    Some(GateResult::block(
+        "userdel: User management blocked: agent has no authority to create, delete, or modify user accounts. Account changes affect login and file ownership system-wide. Ask the user to run this themselves.",
+    ))
 }
 
 // === USERMOD (from system.toml) ===
@@ -7531,7 +7573,9 @@ pub fn check_usermod_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any usermod invocation is blocked
-    Some(GateResult::block("usermod: User management blocked"))
+    Some(GateResult::block(
+        "usermod: User management blocked: agent has no authority to create, delete, or modify user accounts. Account changes affect login and file ownership system-wide. Ask the user to run this themselves.",
+    ))
 }
 
 // === PASSWD (from system.toml) ===
@@ -7543,7 +7587,9 @@ pub fn check_passwd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any passwd invocation is blocked
-    Some(GateResult::block("passwd: Password change blocked"))
+    Some(GateResult::block(
+        "passwd: Password change blocked: agent has no authority to change account passwords. Ask the user to run passwd themselves.",
+    ))
 }
 
 // === CHSH (from system.toml) ===
@@ -7555,7 +7601,9 @@ pub fn check_chsh_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any chsh invocation is blocked
-    Some(GateResult::block("chsh: Shell change blocked"))
+    Some(GateResult::block(
+        "chsh: Shell change blocked: agent has no authority to change a user's login shell. Ask the user to run chsh themselves.",
+    ))
 }
 
 // === IPTABLES (from system.toml) ===
@@ -7567,7 +7615,9 @@ pub fn check_iptables_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any iptables invocation is blocked
-    Some(GateResult::block("iptables: Firewall modification blocked"))
+    Some(GateResult::block(
+        "iptables: Firewall modification blocked: agent has no authority to modify firewall rules. Misconfigured rules can lock the user out of the system. Ask the user to run this themselves.",
+    ))
 }
 
 // === UFW (from system.toml) ===
@@ -7579,7 +7629,9 @@ pub fn check_ufw_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any ufw invocation is blocked
-    Some(GateResult::block("ufw: Firewall modification blocked"))
+    Some(GateResult::block(
+        "ufw: Firewall modification blocked: agent has no authority to modify firewall rules. Misconfigured rules can lock the user out of the system. Ask the user to run this themselves.",
+    ))
 }
 
 // === FIREWALL-CMD (from system.toml) ===
@@ -7592,7 +7644,7 @@ pub fn check_firewall_cmd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
     // Bare block rule - any firewall-cmd invocation is blocked
     Some(GateResult::block(
-        "firewall-cmd: Firewall modification blocked",
+        "firewall-cmd: Firewall modification blocked: agent has no authority to modify firewall rules. Misconfigured rules can lock the user out of the system. Ask the user to run this themselves.",
     ))
 }
 
@@ -7605,7 +7657,9 @@ pub fn check_chattr_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any chattr invocation is blocked
-    Some(GateResult::block("chattr: File attribute change blocked"))
+    Some(GateResult::block(
+        "chattr: File attribute change blocked: agent has no authority to change extended file attributes. Misconfigured attributes can render files unmodifiable. Ask the user to run chattr themselves.",
+    ))
 }
 
 // === MOUNT (from system.toml) ===
@@ -7652,7 +7706,9 @@ pub fn check_umount_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any umount invocation is blocked
-    Some(GateResult::block("umount: Unmounting blocked"))
+    Some(GateResult::block(
+        "umount: Unmounting blocked: agent has no authority to unmount filesystems. Could disrupt running processes or system services depending on what's mounted. Ask the user to run umount themselves.",
+    ))
 }
 
 // === SWAPOFF (from system.toml) ===
@@ -7664,7 +7720,9 @@ pub fn check_swapoff_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any swapoff invocation is blocked
-    Some(GateResult::block("swapoff: Swap management blocked"))
+    Some(GateResult::block(
+        "swapoff: Swap management blocked: agent has no authority to enable or disable swap. Changes affect virtual memory behavior system-wide and can trigger OOM kills if swap is removed under load. Ask the user to run this themselves.",
+    ))
 }
 
 // === SWAPON (from system.toml) ===
@@ -7676,7 +7734,9 @@ pub fn check_swapon_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any swapon invocation is blocked
-    Some(GateResult::block("swapon: Swap management blocked"))
+    Some(GateResult::block(
+        "swapon: Swap management blocked: agent has no authority to enable or disable swap. Changes affect virtual memory behavior system-wide and can trigger OOM kills if swap is removed under load. Ask the user to run this themselves.",
+    ))
 }
 
 // === LVREMOVE (from system.toml) ===
@@ -7688,7 +7748,9 @@ pub fn check_lvremove_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any lvremove invocation is blocked
-    Some(GateResult::block("lvremove: LVM management blocked"))
+    Some(GateResult::block(
+        "lvremove: LVM management blocked: agent has no authority to remove physical volumes, volume groups, or logical volumes. Removal is irreversible and can destroy mounted filesystems on top of the LVM stack. Ask the user to run this themselves.",
+    ))
 }
 
 // === VGREMOVE (from system.toml) ===
@@ -7700,7 +7762,9 @@ pub fn check_vgremove_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any vgremove invocation is blocked
-    Some(GateResult::block("vgremove: LVM management blocked"))
+    Some(GateResult::block(
+        "vgremove: LVM management blocked: agent has no authority to remove physical volumes, volume groups, or logical volumes. Removal is irreversible and can destroy mounted filesystems on top of the LVM stack. Ask the user to run this themselves.",
+    ))
 }
 
 // === PVREMOVE (from system.toml) ===
@@ -7712,7 +7776,9 @@ pub fn check_pvremove_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     // Bare block rule - any pvremove invocation is blocked
-    Some(GateResult::block("pvremove: LVM management blocked"))
+    Some(GateResult::block(
+        "pvremove: LVM management blocked: agent has no authority to remove physical volumes, volume groups, or logical volumes. Removal is irreversible and can destroy mounted filesystems on top of the LVM stack. Ask the user to run this themselves.",
+    ))
 }
 
 // === PSQL (from system.toml) ===

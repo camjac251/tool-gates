@@ -116,14 +116,20 @@ pub fn check_system(cmd: &CommandInfo) -> GateResult {
 
         // Dangerous system commands - blocked
         "shutdown" | "reboot" | "poweroff" | "halt" | "init" => {
-            GateResult::block(format!("{program}: System power command blocked"))
+            GateResult::block(format!(
+                "{program} blocked: agent has no authority to shut down or reboot the machine. If genuinely needed, ask the user to run this themselves."
+            ))
         }
         "mkfs" | "fdisk" | "parted" | "gdisk" => {
-            GateResult::block(format!("{program}: Disk partitioning blocked"))
+            GateResult::block(format!(
+                "{program} blocked: agent has no authority to repartition disks. Mistakes here destroy data permanently. Ask the user to run partitioning themselves."
+            ))
         }
 
         "dd" => check_dd_declarative(cmd)
-            .unwrap_or_else(|| GateResult::block("dd: Low-level disk operation blocked")),
+            .unwrap_or_else(|| GateResult::block(
+                "dd blocked: agent has no authority to run raw block-device writes. The wrong destination overwrites a disk without warning. Ask the user to run dd themselves."
+            )),
         "crontab" => check_crontab(cmd),
 
         // Crypto/security tools

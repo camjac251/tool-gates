@@ -724,7 +724,7 @@ fn hint_bat_flags(cmd: &CommandInfo) -> Option<ModernHint> {
         legacy_command: "bat",
         modern_command: "bat",
         hint: format!(
-            "bat flags {} are no-ops or counterproductive. Only use `-r START:END` (line range) and `-A` (show whitespace).",
+            "bat flag(s) {} are no-ops or counterproductive in agent piped output. Only `-r START:END` (line range) and `-A` (show whitespace) work as expected. For straight file viewing, use `bat <file>` without extra flags.",
             used_bad.join(", ")
         ),
     })

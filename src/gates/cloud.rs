@@ -189,7 +189,9 @@ fn check_kubectl(cmd: &CommandInfo) -> GateResult {
     if args.len() >= 3 {
         let three_word = format!("{} {} {}", args[0], args[1], args[2]);
         if three_word == "delete namespace kube-system" || three_word == "delete ns kube-system" {
-            return GateResult::block("kubectl: Cannot delete kube-system");
+            return GateResult::block(
+                "kubectl: deleting the kube-system namespace blocked. kube-system holds the control plane (apiserver, kubelet, coredns, kube-proxy). Deleting it breaks the cluster permanently and is unrecoverable without a fresh cluster build. If genuinely needed, ask the user to confirm and run it themselves.",
+            );
         }
     }
 

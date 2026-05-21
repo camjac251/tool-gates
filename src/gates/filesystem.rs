@@ -88,7 +88,9 @@ fn check_rm(cmd: &CommandInfo) -> GateResult {
 
         // 1. Literal symbolic match (works even without HOME).
         if literal_catastrophic.contains(&arg.as_str()) {
-            return GateResult::block(format!("rm '{arg}' blocked (catastrophic data loss)"));
+            return GateResult::block(format!(
+                "rm '{arg}' blocked: recursive deletion of this path would destroy critical system or home directory contents. No legitimate agent use case. To clear scratch files, target a specific subpath and verify with `eza` first."
+            ));
         }
 
         // 2. Fail closed on unresolvable home/user vars in rm targets.
@@ -96,7 +98,7 @@ fn check_rm(cmd: &CommandInfo) -> GateResult {
             Some(e) => e,
             None => {
                 return GateResult::block(format!(
-                    "rm '{arg}' blocked (unresolvable home/user variable, failing closed)"
+                    "rm '{arg}' blocked: the path contains an unset variable like `$HOME` that didn't expand, so the literal text would be passed to rm. tool-gates fails closed when it can't tell what path will be deleted. Verify the variable is set, or pass an absolute path."
                 ));
             }
         };
@@ -108,7 +110,9 @@ fn check_rm(cmd: &CommandInfo) -> GateResult {
         // Check the literal catastrophic set against the normalized arg
         // (catches // , /./ , /// etc.).
         if literal_catastrophic.contains(&arg_normalized.as_str()) {
-            return GateResult::block(format!("rm '{arg}' blocked (catastrophic data loss)"));
+            return GateResult::block(format!(
+                "rm '{arg}' blocked: recursive deletion of this path would destroy critical system or home directory contents. No legitimate agent use case. To clear scratch files, target a specific subpath and verify with `eza` first."
+            ));
         }
 
         // Check the runtime catastrophic set against both the expanded
@@ -118,7 +122,9 @@ fn check_rm(cmd: &CommandInfo) -> GateResult {
                 || expanded_normalized == *cat
                 || expanded_normalized.trim_end_matches('/') == cat.trim_end_matches('/')
             {
-                return GateResult::block(format!("rm '{arg}' blocked (catastrophic data loss)"));
+                return GateResult::block(format!(
+                    "rm '{arg}' blocked: recursive deletion of this path would destroy critical system or home directory contents. No legitimate agent use case. To clear scratch files, target a specific subpath and verify with `eza` first."
+                ));
             }
         }
 
@@ -128,13 +134,17 @@ fn check_rm(cmd: &CommandInfo) -> GateResult {
         for prefix in &resolved_catastrophic_prefix {
             let p_with_slash = format!("{prefix}/");
             if expanded_normalized == *prefix || expanded_normalized.starts_with(&p_with_slash) {
-                return GateResult::block(format!("rm '{arg}' blocked (security-critical path)"));
+                return GateResult::block(format!(
+                    "rm '{arg}' blocked: this targets a security-critical directory (`.ssh`, `.gnupg`, `.aws`, `.kube`, `.docker`, `.config/gh`, `.password-store`, or `.vault-token`). Deleting these breaks credentials or trust state. If genuinely needed, ask the user to run rm themselves."
+                ));
             }
         }
 
         // /tmp/../ style traversal.
         if is_suspicious_path(arg) || is_suspicious_path(&expanded) {
-            return GateResult::block(format!("rm '{arg}' blocked (path traversal to root)"));
+            return GateResult::block(format!(
+                "rm '{arg}' blocked: the path uses `..` traversal that resolves to `/` or near-root. Likely a malformed path or injection attempt. Use an absolute path that doesn't traverse upward."
+            ));
         }
     }
 
