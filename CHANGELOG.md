@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.21.2](https://github.com/camjac251/tool-gates/compare/v1.21.1...v1.21.2) - 2026-05-21
+
+### Other
+
+- drop vendor-specific output_tail reference from head/tail deny
+
 ## [1.21.1](https://github.com/camjac251/tool-gates/compare/v1.21.0...v1.21.1) - 2026-05-21
 
 ### Fixed
