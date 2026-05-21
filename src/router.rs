@@ -164,13 +164,13 @@ static AMP_REDIRECT_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"&>\s*([^\s]+)").expect("AMP_REDIRECT_RE must compile"));
 
 /// `| head` / `| tail` pipe pattern (hard deny).
-/// Captures the offending segment up to the next pipe/and/or/semicolon boundary so
-/// the deny message can echo what triggered the block. Streaming `tail -f` / `-F`
-/// is handled by a secondary check before denying. The optional `&` after `|`
-/// catches bash's stderr-combining `|&` form (equivalent to `2>&1 |`) so it
-/// can't bypass the rule.
+/// Captures the offending segment up to the next pipe/and/or/semicolon/newline boundary so
+/// the deny message can echo just the triggering pipe instead of every subsequent line
+/// of a multi-line script. Streaming `tail -f` / `-F` is handled by a secondary check
+/// before denying. The optional `&` after `|` catches bash's stderr-combining `|&` form
+/// (equivalent to `2>&1 |`) so it can't bypass the rule.
 static HEAD_TAIL_PIPE_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"\|&?\s*(head|tail)\b[^|&;]*").expect("HEAD_TAIL_PIPE_RE must compile")
+    Regex::new(r"\|&?\s*(head|tail)\b[^|&;\n]*").expect("HEAD_TAIL_PIPE_RE must compile")
 });
 
 /// Streaming-tail exception: `| tail -f` / `| tail -F` (and the `|&` variant)
@@ -1104,9 +1104,13 @@ fn check_head_tail_pipe(command_string: &str) -> Option<HookOutput> {
         }
         let trimmed = segment.trim();
         return Some(HookOutput::deny(&format!(
-            "`{trimmed}` blocked. Use `rg -m N`, `fd --max-results N`, or \
-             `bat -r START:END` to cap output at the source. Streaming \
-             `tail -f` / `tail -F` through the Monitor tool is fine."
+            "`{trimmed}` blocked. Use a producer-native cap: `rg -m N`, \
+             `fd --max-results N`, `bat -r START:END`, `git log -n N`, \
+             `gh api ... --jq '.[0:N]'`, `gh pr/issue/run list --limit N`, \
+             `docker compose logs --tail N`. For commands with no native cap \
+             (openssl, brew install, build output), pass `output_tail: true` \
+             on the Bash call. Streaming `tail -f` / `tail -F` through the \
+             Monitor tool is fine."
         )));
     }
     None

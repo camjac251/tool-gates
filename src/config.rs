@@ -435,7 +435,7 @@ fn github_content_domains_owned() -> Vec<String> {
         .collect()
 }
 
-const GITHUB_BLOCK_MESSAGE: &str = "GitHub URL blocked - use `gh api repos/OWNER/REPO/contents/PATH` (or `gh release download TAG` for release assets) instead. Preserves auth, rate limits, and private-repo access.";
+const GITHUB_BLOCK_MESSAGE: &str = "GitHub URL blocked - use `gh api repos/OWNER/REPO/contents/PATH -H 'Accept: application/vnd.github.raw'` for file content (skips base64), or `gh release download TAG` for release assets. Preserves auth, rate limits, and private-repo access.";
 
 static DEFAULT_BLOCK_RULES: std::sync::LazyLock<Vec<BlockRule>> = std::sync::LazyLock::new(|| {
     vec![
