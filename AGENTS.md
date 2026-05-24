@@ -382,9 +382,9 @@ disable_rules = ["eval_injection"]  # skip specific rules
 
 ### Task Expansion
 
-**Mise**: `mise run <task>` expands to underlying commands from `.mise.toml`/`mise.toml`, recursively including `depends` tasks and handling `dir`. Built-in mise subcommands (`install`, `use`, etc.) are not expanded.
+**Mise**: `mise run <task>` expands to underlying commands from `.mise.toml`/`mise.toml`, recursively including `depends` tasks and handling `dir`. Built-in mise subcommands (`install`, `use`, etc.) are not expanded. The `usage`-arg-forwarding prefix `eval "set -- ${usage_args-}"` (mise-templated, with splat/array variants) is stripped before the security check so it doesn't trip the eval hard-ask.
 
-**Package.json**: `npm run <script>`, `pnpm run <script>`, `yarn <script>` expand to the script's command from `package.json`. Shorthands like `pnpm lint` -> `pnpm run lint` are supported.
+**Package.json**: `npm run <script>`, `pnpm run <script>`, `yarn <script>` expand to the script's command from `package.json`. Shorthands like `pnpm lint` -> `pnpm run lint` are supported. `bun <file>` / `bun run <file>` (arg with a `/` or code-file extension) is treated as file execution and routed to the gate engine, not looked up as a script name.
 
 Both pass expanded commands through the gate engine; strictest decision wins.
 

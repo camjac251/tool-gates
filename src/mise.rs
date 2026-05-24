@@ -4,8 +4,27 @@
 //! shell commands from task definitions, enabling permission checks on
 //! the actual commands that will run.
 
+use regex::Regex;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
+
+/// Matches mise's `eval "set -- ${usage_args-}"` arg-forwarding idiom (with
+/// splat/array variants) and its trailing `;`/newline separator. mise templates
+/// this value itself, so it is a false positive for the eval security check.
+static USAGE_ARGS_EVAL_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?m)^\s*eval\s+"set\s+--\s+\$\{usage_args[\[\]@*\-:0-9]*\}"\s*[;\n]\s*"#)
+        .expect("USAGE_ARGS_EVAL_RE must compile")
+});
+
+/// Strip the mise `usage_args` arg-forwarding eval prefix, leaving the real
+/// task body. Returns the body unchanged when the idiom is not at the start.
+fn strip_usage_args_eval_prefix(body: &str) -> &str {
+    match USAGE_ARGS_EVAL_RE.find(body) {
+        Some(m) if m.start() == 0 => &body[m.end()..],
+        _ => body,
+    }
+}
 
 /// Mise configuration file structure (subset we care about)
 #[derive(Debug, Default)]
@@ -136,6 +155,11 @@ fn collect_task_commands(
             } else {
                 trimmed.to_string()
             };
+
+            let script = strip_usage_args_eval_prefix(&script).trim().to_string();
+            if script.is_empty() {
+                return;
+            }
 
             // Add dir prefix if specified
             if let Some(dir) = &task.dir {
@@ -377,6 +401,81 @@ depends = ["a"]
         // Should not infinite loop
         let commands = extract_task_commands(&config, "a");
         assert!(commands.len() <= 2);
+    }
+
+    #[test]
+    fn test_strip_usage_args_eval_prefix_default_form() {
+        assert_eq!(
+            strip_usage_args_eval_prefix(r#"eval "set -- ${usage_args-}"; cargo run "$@""#),
+            r#"cargo run "$@""#
+        );
+    }
+
+    #[test]
+    fn test_strip_usage_args_eval_prefix_splat_form() {
+        assert_eq!(
+            strip_usage_args_eval_prefix(r#"eval "set -- ${usage_args*}"; pnpm test"#),
+            r#"pnpm test"#
+        );
+    }
+
+    #[test]
+    fn test_strip_usage_args_eval_prefix_array_form() {
+        assert_eq!(
+            strip_usage_args_eval_prefix(r#"eval "set -- ${usage_args[@]}"; cargo test"#),
+            r#"cargo test"#
+        );
+    }
+
+    #[test]
+    fn test_strip_usage_args_eval_prefix_newline_separator() {
+        assert_eq!(
+            strip_usage_args_eval_prefix("eval \"set -- ${usage_args-}\"\ncargo build \"$@\""),
+            r#"cargo build "$@""#
+        );
+    }
+
+    #[test]
+    fn test_strip_usage_args_eval_prefix_not_at_start() {
+        let s = r#"echo before; eval "set -- ${usage_args-}"; cargo run"#;
+        assert_eq!(strip_usage_args_eval_prefix(s), s);
+    }
+
+    #[test]
+    fn test_strip_usage_args_eval_prefix_unrelated_eval() {
+        let s = r#"eval "$(some_command)"; rm -rf /tmp/foo"#;
+        assert_eq!(strip_usage_args_eval_prefix(s), s);
+    }
+
+    #[test]
+    fn test_strip_usage_args_eval_prefix_no_separator() {
+        let s = r#"eval "set -- ${usage_args-}""#;
+        assert_eq!(strip_usage_args_eval_prefix(s), s);
+    }
+
+    #[test]
+    fn test_extract_task_commands_strips_usage_args_eval() {
+        let toml = r#"
+[tasks.mytask]
+usage = 'arg "[args]..."'
+run = 'eval "set -- ${usage_args-}"; cargo run "$@"'
+"#;
+        let config = parse_mise_toml_str(toml).unwrap();
+        let commands = extract_task_commands(&config, "mytask");
+        assert_eq!(commands, vec![r#"cargo run "$@""#]);
+    }
+
+    #[test]
+    fn test_extract_task_commands_strips_usage_args_eval_with_dir() {
+        let toml = r#"
+[tasks.mytask]
+dir = "sub"
+usage = 'arg "[args]..."'
+run = 'eval "set -- ${usage_args-}"; pnpm dev "$@"'
+"#;
+        let config = parse_mise_toml_str(toml).unwrap();
+        let commands = extract_task_commands(&config, "mytask");
+        assert_eq!(commands, vec![r#"cd sub && pnpm dev "$@""#]);
     }
 
     #[test]

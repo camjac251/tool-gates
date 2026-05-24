@@ -41,6 +41,21 @@ pub fn get_script_command(pkg: &PackageJson, script_name: &str) -> Option<String
     pkg.scripts.get(script_name).cloned()
 }
 
+/// True when the candidate names a file (has a `/` or code-file extension)
+/// rather than a package.json script. `bun <file>` executes a file directly,
+/// so it must not be looked up as a script (yields a spurious "Script not found").
+fn looks_like_file_path(candidate: &str) -> bool {
+    if candidate.contains('/') {
+        return true;
+    }
+    // A dotted code-file extension (foo.ts, build.mjs) is a file, not a script.
+    candidate.contains('.')
+        && matches!(
+            candidate.rsplit('.').next(),
+            Some("ts" | "tsx" | "js" | "jsx" | "mjs" | "cjs" | "cts" | "mts")
+        )
+}
+
 /// Check if a command is a package manager script invocation and extract the script name.
 /// Returns (package_manager, script_name) if matched.
 pub fn parse_script_invocation(command: &str) -> Option<(&'static str, String)> {
@@ -56,6 +71,10 @@ pub fn parse_script_invocation(command: &str) -> Option<(&'static str, String)> 
             // Also: pnpm <script> (shorthand), yarn <script>, bun run <script>
             // Note: "exec" is NOT the same as "run" - exec runs arbitrary binaries, not scripts
             if parts.len() >= 3 && parts[1] == "run" {
+                // `bun run <file>` executes a file, not a named script.
+                if looks_like_file_path(parts[2]) {
+                    return None;
+                }
                 let pm = match parts[0] {
                     "npm" => "npm",
                     "pnpm" => "pnpm",
@@ -145,6 +164,10 @@ pub fn parse_script_invocation(command: &str) -> Option<(&'static str, String)> 
                 // If it's not a built-in, treat as script shorthand
                 // But only for pnpm/yarn/bun (npm requires explicit "run")
                 if parts[0] != "npm" && !builtin_commands.contains(&parts[1]) {
+                    // `bun <file>` executes a file directly, not a named script.
+                    if looks_like_file_path(parts[1]) {
+                        return None;
+                    }
                     let pm = match parts[0] {
                         "pnpm" => "pnpm",
                         "yarn" => "yarn",
@@ -235,6 +258,43 @@ mod tests {
             parse_script_invocation("bun run dev"),
             Some(("bun", "dev".to_string()))
         );
+    }
+
+    #[test]
+    fn test_parse_script_invocation_bun_file_execution() {
+        // `bun <file>` and `bun run <file>` execute a file, not a named script.
+        assert_eq!(parse_script_invocation("bun src/main.ts"), None);
+        assert_eq!(parse_script_invocation("bun run src/main.ts"), None);
+        assert_eq!(parse_script_invocation("bun ./scripts/build.js"), None);
+        assert_eq!(parse_script_invocation("bun run dist/app.mjs"), None);
+        assert_eq!(parse_script_invocation("bun lib/entry.tsx"), None);
+    }
+
+    #[test]
+    fn test_parse_script_invocation_script_names_with_dots_or_colons() {
+        // Script names that are NOT files must still expand.
+        assert_eq!(
+            parse_script_invocation("bun run my-custom-script"),
+            Some(("bun", "my-custom-script".to_string()))
+        );
+        assert_eq!(
+            parse_script_invocation("pnpm build:prod"),
+            Some(("pnpm", "build:prod".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_looks_like_file_path() {
+        assert!(looks_like_file_path("src/main.ts"));
+        assert!(looks_like_file_path("./build.js"));
+        assert!(looks_like_file_path("main.mjs"));
+        assert!(looks_like_file_path("a/b"));
+        // Script names, not files.
+        assert!(!looks_like_file_path("lint"));
+        assert!(!looks_like_file_path("my-custom-script"));
+        assert!(!looks_like_file_path("build:prod"));
+        // A bare extension word without a dotted name is not a file.
+        assert!(!looks_like_file_path("js"));
     }
 
     #[test]
