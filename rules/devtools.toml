@@ -1115,3 +1115,26 @@ unknown_action = "allow"
 reason = "Auto-fixing markdown"
 if_flags_any = ["--fix", "-f"]
 accept_edits_auto_allow = true
+
+# =============================================================================
+# MEDIA / DIAGRAMS
+# =============================================================================
+
+# ffprobe: inspects media files, never writes. Always safe.
+[[programs]]
+name = "ffprobe"
+unknown_action = "allow"
+
+# d2: deterministic diagram renderer (text -> svg/png), same class as a formatter.
+[[programs]]
+name = "d2"
+unknown_action = "allow"
+
+# ffmpeg: transcoding writes output files, so ask by default. Allow only the
+# standalone info flags that never accompany a transcode.
+[[programs]]
+name = "ffmpeg"
+unknown_action = "ask"
+
+[[programs.allow]]
+if_flags_any = ["-version", "-buildconf", "-L", "-h", "--help"]

@@ -5820,6 +5820,82 @@ pub fn check_markdownlint_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     Some(GateResult::allow())
 }
 
+// === FFPROBE (from devtools.toml) ===
+
+/// Check ffprobe commands declaratively
+pub fn check_ffprobe_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["ffprobe"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    Some(GateResult::allow())
+}
+
+// === D2 (from devtools.toml) ===
+
+/// Check d2 commands declaratively
+pub fn check_d2_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["d2"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    Some(GateResult::allow())
+}
+
+// === FFMPEG (from devtools.toml) ===
+
+/// Check ffmpeg commands declaratively
+pub fn check_ffmpeg_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["ffmpeg"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    // Check conditional allow rules
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["-version", "-buildconf", "-L", "-h", "--help"].contains(&a.as_str()))
+    {
+        return Some(GateResult::allow());
+    }
+
+    Some(GateResult::ask(format!("ffmpeg: {}", subcmd_single)))
+}
+
 // === PYTHON3 (from runtimes.toml) ===
 
 /// Check python3 commands declaratively
@@ -10878,6 +10954,15 @@ pub fn check_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if let Some(result) = check_markdownlint_declarative(cmd) {
         return Some(result);
     }
+    if let Some(result) = check_ffprobe_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_d2_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_ffmpeg_declarative(cmd) {
+        return Some(result);
+    }
     if let Some(result) = check_python3_declarative(cmd) {
         return Some(result);
     }
@@ -11398,7 +11483,7 @@ pub fn check_tool_gates_gate(cmd: &CommandInfo) -> GateResult {
 /// Programs handled by the tool_gates gate
 pub static TOOL_GATES_PROGRAMS: &[&str] = &["tool-gates", "bash-gates"];
 
-/// Generated gate for devtools - handles: sd, sad, ast-grep, sg, yq, jq, semgrep, comby, grit, watchexec, biome, prettier, eslint, ruff, black, isort, shellcheck, hadolint, golangci-lint, gci, air, actionlint, gitleaks, lefthook, vite, vitest, jest, mocha, tsc, tsup, esbuild, turbo, nx, knip, oxlint, gofmt, gofumpt, goimports, shfmt, rustfmt, stylua, clang-format, autopep8, rubocop, standardrb, patch, dos2unix, unix2dos, stylelint, mix, perltidy, dartfmt, dart, elm-format, scalafmt, ktlint, swiftformat, buf, pytest, py.test, mypy, pyright, basedpyright, pylint, flake8, bandit, coverage, tox, nox, autoflake, tsx, ts-node, webpack, webpack-cli, rollup, swc, parcel, playwright, cypress, wrangler, ty, markdownlint
+/// Generated gate for devtools - handles: sd, sad, ast-grep, sg, yq, jq, semgrep, comby, grit, watchexec, biome, prettier, eslint, ruff, black, isort, shellcheck, hadolint, golangci-lint, gci, air, actionlint, gitleaks, lefthook, vite, vitest, jest, mocha, tsc, tsup, esbuild, turbo, nx, knip, oxlint, gofmt, gofumpt, goimports, shfmt, rustfmt, stylua, clang-format, autopep8, rubocop, standardrb, patch, dos2unix, unix2dos, stylelint, mix, perltidy, dartfmt, dart, elm-format, scalafmt, ktlint, swiftformat, buf, pytest, py.test, mypy, pyright, basedpyright, pylint, flake8, bandit, coverage, tox, nox, autoflake, tsx, ts-node, webpack, webpack-cli, rollup, swc, parcel, playwright, cypress, wrangler, ty, markdownlint, ffprobe, d2, ffmpeg
 /// Custom handlers needed for: ["sd"]
 pub fn check_devtools_gate(cmd: &CommandInfo) -> GateResult {
     match cmd.program.as_str() {
@@ -11484,6 +11569,9 @@ pub fn check_devtools_gate(cmd: &CommandInfo) -> GateResult {
         "wrangler" => check_wrangler_declarative(cmd).unwrap_or_else(GateResult::skip),
         "ty" => check_ty_declarative(cmd).unwrap_or_else(GateResult::skip),
         "markdownlint" => check_markdownlint_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "ffprobe" => check_ffprobe_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "d2" => check_d2_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "ffmpeg" => check_ffmpeg_declarative(cmd).unwrap_or_else(GateResult::skip),
         _ => GateResult::skip(),
     }
 }
@@ -11572,6 +11660,9 @@ pub static DEVTOOLS_PROGRAMS: &[&str] = &[
     "wrangler",
     "ty",
     "markdownlint",
+    "ffprobe",
+    "d2",
+    "ffmpeg",
 ];
 
 /// Generated gate for runtimes - handles: python3, python, python3.11, python3.12, python3.13, python3.14, node, ruby, deno, php, lua, luajit, lua5.1, lua5.2, lua5.3, lua5.4, java, javac, dotnet, swift, elixir, iex

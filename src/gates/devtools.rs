@@ -736,6 +736,32 @@ mod tests {
         assert_eq!(result.decision, Decision::Ask);
     }
 
+    // === Media / diagrams ===
+
+    #[test]
+    fn test_ffprobe_allows() {
+        let result = check_devtools(&cmd("ffprobe", &["-show_streams", "clip.mp4"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_d2_render_allows() {
+        let result = check_devtools(&cmd("d2", &["diagram.d2", "out.svg"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_ffmpeg_version_allows() {
+        let result = check_devtools(&cmd("ffmpeg", &["-version"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_ffmpeg_transcode_asks() {
+        let result = check_devtools(&cmd("ffmpeg", &["-i", "in.mp4", "out.webm"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
     // === Non-devtools ===
 
     #[test]
