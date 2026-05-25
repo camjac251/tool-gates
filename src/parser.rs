@@ -49,6 +49,93 @@ fn extract_from_tree(tree: &Tree, source: &str, commands: &mut Vec<CommandInfo>)
     visit_node(&mut cursor, source, commands);
 }
 
+/// Neutralize heredoc body text so security checks (raw-string regexes,
+/// settings deny matching) don't scan data that is fed to a command's stdin
+/// rather than executed as shell.
+///
+/// Returns the command string with quoted-heredoc body content blanked to
+/// spaces (newlines preserved, so byte offsets and line boundaries stay
+/// identical). Returns `None` when there is nothing to neutralize, so callers
+/// keep using the original string without an allocation.
+///
+/// Quoting follows bash: the delimiter quote decides expansion.
+/// - Quoted delimiter (`<<'EOF'`, `<<"EOF"`, `<<-'EOF'`): the body is pure
+///   literal data with no expansion, so the whole body is blanked.
+/// - Unquoted delimiter (`<<EOF`, `<<-EOF`): the shell expands `$(...)` /
+///   backtick substitutions inside the body, so the body is left untouched
+///   and still scanned. Those substitutions are a real execution path the
+///   checks must keep catching.
+pub fn neutralize_heredoc_bodies(command_string: &str) -> Option<String> {
+    let tree = {
+        let mut parser = PARSER.lock().unwrap_or_else(|e| e.into_inner());
+        parser.parse(command_string, None)?
+    };
+
+    let mut blank_ranges: Vec<(usize, usize)> = Vec::new();
+    let mut cursor = tree.walk();
+    collect_quoted_heredoc_body_ranges(&mut cursor, command_string, &mut blank_ranges);
+
+    if blank_ranges.is_empty() {
+        return None;
+    }
+
+    // Blank in place: swap every non-newline byte in the range for an ASCII
+    // space. Length, byte offsets, and line boundaries are preserved, and the
+    // result stays valid UTF-8 (any multi-byte char lies fully inside a body
+    // range and each of its bytes becomes a space).
+    let mut bytes = command_string.as_bytes().to_vec();
+    for (start, end) in blank_ranges {
+        for b in &mut bytes[start..end] {
+            if *b != b'\n' {
+                *b = b' ';
+            }
+        }
+    }
+    Some(String::from_utf8_lossy(&bytes).into_owned())
+}
+
+/// Collect byte ranges of `heredoc_body` nodes whose delimiter is quoted.
+fn collect_quoted_heredoc_body_ranges(
+    cursor: &mut TreeCursor,
+    source: &str,
+    ranges: &mut Vec<(usize, usize)>,
+) {
+    let node = cursor.node();
+
+    if node.kind() == "heredoc_redirect" {
+        let mut quoted = false;
+        let mut body: Option<tree_sitter::Node> = None;
+        let mut child_cursor = node.walk();
+        for child in node.children(&mut child_cursor) {
+            match child.kind() {
+                "heredoc_start" => {
+                    if let Ok(text) = child.utf8_text(source.as_bytes()) {
+                        let t = text.trim_start();
+                        quoted = t.starts_with('\'') || t.starts_with('"');
+                    }
+                }
+                "heredoc_body" => body = Some(child),
+                _ => {}
+            }
+        }
+        if quoted {
+            if let Some(body) = body {
+                ranges.push((body.start_byte(), body.end_byte()));
+            }
+        }
+    }
+
+    if cursor.goto_first_child() {
+        loop {
+            collect_quoted_heredoc_body_ranges(cursor, source, ranges);
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
+        cursor.goto_parent();
+    }
+}
+
 fn visit_node(cursor: &mut TreeCursor, source: &str, commands: &mut Vec<CommandInfo>) {
     let node = cursor.node();
     let kind = node.kind();
@@ -708,6 +795,61 @@ mod tests {
     fn test_heredoc() {
         let cmds = extract_commands("cat <<EOF\nhello\nEOF");
         assert!(!cmds.is_empty());
+    }
+
+    // === Heredoc Body Neutralization Tests ===
+
+    #[test]
+    fn test_neutralize_single_quoted_delimiter_blanks_body() {
+        let src = "cat <<'EOF'\n| head danger\nEOF";
+        let out = neutralize_heredoc_bodies(src).expect("single-quoted body blanked");
+        assert_eq!(out.len(), src.len());
+        assert!(!out.contains("head"));
+        // Newlines and the surrounding command structure are preserved.
+        assert_eq!(out.matches('\n').count(), src.matches('\n').count());
+        assert!(out.starts_with("cat <<'EOF'"));
+        assert!(out.trim_end().ends_with("EOF"));
+    }
+
+    #[test]
+    fn test_neutralize_double_quoted_delimiter_blanks_body() {
+        let src = "cat <<\"EOF\"\neval risky text\nEOF";
+        let out = neutralize_heredoc_bodies(src).expect("double-quoted body blanked");
+        assert_eq!(out.len(), src.len());
+        assert!(!out.contains("eval"));
+    }
+
+    #[test]
+    fn test_neutralize_dash_quoted_delimiter_blanks_body() {
+        // `<<-` strips leading tabs; the delimiter quote still decides expansion.
+        let src = "cat <<-'EOF'\n\teval risky text\n\tEOF";
+        let out = neutralize_heredoc_bodies(src).expect("dash-quoted body blanked");
+        assert_eq!(out.len(), src.len());
+        assert!(!out.contains("eval"));
+    }
+
+    #[test]
+    fn test_neutralize_unquoted_delimiter_left_intact() {
+        // Unquoted bodies expand, so they must be returned untouched (None).
+        for src in [
+            "cat <<EOF\n$(rm -rf x)\nEOF",
+            "cat <<-EOF\n\tplain text\n\tEOF",
+        ] {
+            assert!(
+                neutralize_heredoc_bodies(src).is_none(),
+                "unquoted heredoc must be left intact: {src:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_neutralize_no_heredoc_returns_none() {
+        for src in ["git status", "echo hi | head -5", "rg '<<EOF' file.txt"] {
+            assert!(
+                neutralize_heredoc_bodies(src).is_none(),
+                "no heredoc must return None: {src:?}"
+            );
+        }
     }
 
     // === Transparent Wrapper Stripping Tests ===

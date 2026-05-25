@@ -12,7 +12,7 @@ use crate::models::{
 use crate::package_json::{
     find_package_json, get_script_command, load_package_json, parse_script_invocation,
 };
-use crate::parser::extract_commands;
+use crate::parser::{extract_commands, neutralize_heredoc_bodies};
 use crate::settings::{Settings, SettingsDecision};
 use regex::Regex;
 use std::sync::LazyLock;
@@ -199,15 +199,22 @@ pub fn check_command_for_session(command_string: &str, session_id: &str) -> Hook
         return HookOutput::no_opinion();
     }
 
+    // Blank quoted-heredoc body text before raw-string scanning. The body is
+    // stdin data, not executed shell, so patterns like `| head` in a commit
+    // message must not trip the deny rules. Unquoted bodies are left intact
+    // (their `$(...)` / backtick substitutions still execute).
+    let scan_owned = neutralize_heredoc_bodies(command_string);
+    let scan_string = scan_owned.as_deref().unwrap_or(command_string);
+
     // Hard-deny raw-string patterns (e.g. `| head` / `| tail` pipes) come first:
     // they have no legitimate use case and never fall through to ask/allow.
-    if let Some(output) = check_hard_deny_patterns(command_string) {
+    if let Some(output) = check_hard_deny_patterns(scan_string) {
         return output;
     }
 
     // Check for patterns at the raw string level
     // These require approval regardless of how they're parsed
-    let (hard_ask, soft_ask) = check_raw_string_patterns(command_string);
+    let (hard_ask, soft_ask) = check_raw_string_patterns(scan_string);
     if let Some(result) = hard_ask.or(soft_ask) {
         return result;
     }
@@ -518,10 +525,15 @@ fn check_command_with_settings_and_session_inner(
     // which is reasoning-blind to tool-gates' rationale. Hard-ask patterns
     // (pipe-to-shell, eval) have no legitimate use case and belong in the
     // deterministic safety floor, so promote them to deny instead of ask.
-    if let Some(output) = check_hard_deny_patterns(command_string) {
+    //
+    // Blank quoted-heredoc body text first: it is stdin data, not executed
+    // shell. Unquoted bodies stay intact so their substitutions still scan.
+    let scan_owned = neutralize_heredoc_bodies(command_string);
+    let scan_string = scan_owned.as_deref().unwrap_or(command_string);
+    if let Some(output) = check_hard_deny_patterns(scan_string) {
         return output;
     }
-    let (hard_ask, soft_ask) = check_raw_string_patterns(command_string);
+    let (hard_ask, soft_ask) = check_raw_string_patterns(scan_string);
     if let Some(result) = hard_ask {
         if is_auto_mode(permission_mode) {
             return HookOutput::deny(
@@ -866,10 +878,15 @@ fn check_command_expanded(command_string: &str, cwd: &str, permission_mode: &str
     // First do raw string security checks. Hard-deny patterns short-circuit;
     // hard-ask patterns promote to deny under auto mode (see
     // `check_command_with_settings_and_session` for rationale).
-    if let Some(output) = check_hard_deny_patterns(command_string) {
+    //
+    // Blank quoted-heredoc body text first: it is stdin data, not executed
+    // shell. Unquoted bodies stay intact so their substitutions still scan.
+    let scan_owned = neutralize_heredoc_bodies(command_string);
+    let scan_string = scan_owned.as_deref().unwrap_or(command_string);
+    if let Some(output) = check_hard_deny_patterns(scan_string) {
         return output;
     }
-    let (hard_ask, soft_ask) = check_raw_string_patterns(command_string);
+    let (hard_ask, soft_ask) = check_raw_string_patterns(scan_string);
     if let Some(output) = hard_ask {
         if is_auto_mode(permission_mode) {
             return HookOutput::deny(
@@ -4452,6 +4469,91 @@ run = "mytool42 verify"
                     "False positive for: {cmd}"
                 );
             }
+        }
+
+        #[test]
+        fn test_quoted_heredoc_body_does_not_trigger_head_tail_deny() {
+            // A quoted-delimiter heredoc body is literal stdin data, not shell.
+            // `| head` written as prose in a commit message must not self-block.
+            let cmd = "git commit -F - <<'EOF'\ncap output\n\nUse rg -m N not | head -5 for capping.\nEOF";
+            let result = check_command(cmd);
+            assert_ne!(
+                get_decision(&result),
+                "deny",
+                "Quoted heredoc body must not trigger head/tail deny:\n{}",
+                get_reason(&result)
+            );
+        }
+
+        #[test]
+        fn test_quoted_heredoc_body_does_not_trigger_eval_or_redirect() {
+            // Other raw-string patterns (eval, output redirection) inside a
+            // quoted heredoc body are also literal text, not executed shell.
+            for cmd in [
+                "cat <<'EOF'\nnote: eval \"$x\" is risky\nEOF",
+                "cat <<'EOF'\nexample: echo hi > /etc/passwd\nEOF",
+            ] {
+                let result = check_command(cmd);
+                assert_eq!(
+                    get_decision(&result),
+                    "allow",
+                    "Quoted heredoc body must stay allow:\n{cmd}\ngot: {}",
+                    get_reason(&result)
+                );
+            }
+        }
+
+        #[test]
+        fn test_unquoted_heredoc_body_substitution_still_caught() {
+            // Unquoted delimiter: the shell expands `$(...)` / backticks in the
+            // body, so a destructive substitution is a real execution path and
+            // must still be flagged. Regression guard for the strip-only-quoted
+            // decision.
+            for cmd in [
+                "cat > /tmp/doc.md <<EOF\nbefore $(rm -rf x) after\nEOF",
+                "cat <<EOF\noops `rm -rf x` here\nEOF",
+            ] {
+                let result = check_command(cmd);
+                assert_eq!(
+                    get_decision(&result),
+                    "ask",
+                    "Unquoted heredoc substitution must still be flagged:\n{cmd}"
+                );
+            }
+        }
+
+        #[test]
+        fn test_normal_command_unchanged_by_heredoc_neutralization() {
+            // No heredoc: decisions must be identical to the no-op path. A real
+            // `| head` pipe still denies; a plain read still passes.
+            let denied = check_command("cat file.txt | head -5");
+            assert_eq!(get_decision(&denied), "deny");
+
+            let allowed = check_command("git status");
+            assert_eq!(get_decision(&allowed), "allow");
+        }
+
+        #[test]
+        fn test_neutralize_blanks_only_quoted_heredoc_bodies() {
+            // Unit-level: quoted bodies are blanked (offsets preserved), and a
+            // string with no heredoc returns None (no allocation).
+            let quoted = "cat <<'EOF'\n| head data\nEOF";
+            let out = neutralize_heredoc_bodies(quoted).expect("quoted heredoc blanked");
+            assert_eq!(out.len(), quoted.len(), "byte length must be preserved");
+            assert!(!out.contains("head"), "quoted body text must be blanked");
+            assert!(out.starts_with("cat <<'EOF'"), "command prefix untouched");
+
+            // Unquoted body left intact so substitutions still scan.
+            let unquoted = "cat <<EOF\n$(rm -rf x)\nEOF";
+            assert!(
+                neutralize_heredoc_bodies(unquoted).is_none(),
+                "unquoted heredoc must be left untouched"
+            );
+
+            assert!(
+                neutralize_heredoc_bodies("git status").is_none(),
+                "no heredoc must return None"
+            );
         }
     }
 
