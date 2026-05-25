@@ -49,6 +49,31 @@ mod tests {
     }
 
     #[test]
+    fn test_hooks_json_allows() {
+        let result = check_tool_gates(&cmd("tool-gates", &["hooks", "json"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_doctor_allows() {
+        let result = check_tool_gates(&cmd("tool-gates", &["doctor"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_rules_ask_audit_allows() {
+        let result = check_tool_gates(&cmd("tool-gates", &["rules", "ask-audit"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_rules_remove_still_asks() {
+        // Mutating rules subcommand must not be caught by the ask-audit allow.
+        let result = check_tool_gates(&cmd("tool-gates", &["rules", "remove", "Bash(rm:*)"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    #[test]
     fn test_help_flag_allows() {
         let result = check_tool_gates(&cmd("tool-gates", &["--help"]));
         assert_eq!(result.decision, Decision::Allow);

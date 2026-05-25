@@ -3446,6 +3446,9 @@ pub static TOOL_GATES_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "pending count",
         "rules list",
         "hooks status",
+        "hooks json",
+        "doctor",
+        "rules ask-audit",
     ]
     .into_iter()
     .collect()

@@ -49,6 +49,19 @@ subcommand = "rules list"
 [[programs.allow]]
 subcommand = "hooks status"
 
+[[programs.allow]]
+subcommand = "hooks json"
+
+# -----------------------------------------------------------------------------
+# Diagnostics / Audits (read-only)
+# -----------------------------------------------------------------------------
+
+[[programs.allow]]
+subcommand = "doctor"
+
+[[programs.allow]]
+subcommand = "rules ask-audit"
+
 # -----------------------------------------------------------------------------
 # Info / Help / Version
 # -----------------------------------------------------------------------------
