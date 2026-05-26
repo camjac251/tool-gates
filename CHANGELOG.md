@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.22.0](https://github.com/camjac251/tool-gates/compare/v1.21.2...v1.22.0) - 2026-05-26
+
+### Added
+
+- allow ffprobe/d2, gate ffmpeg info flags
+- allow read-only tool-gates CLI subcommands
+
+### Fixed
+
+- skip quoted-heredoc bodies in raw-string security scans
+- stop false asks from mise usage-arg and bun file-exec expansion
+
 ## [1.21.2](https://github.com/camjac251/tool-gates/compare/v1.21.1...v1.21.2) - 2026-05-21
 
 ### Other
