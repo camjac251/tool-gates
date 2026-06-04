@@ -12,7 +12,8 @@ Intelligent tool permission gate using tree-sitter AST parsing. Handles Bash/Mon
 cargo test                              # Full test suite
 cargo test gates::git -- --nocapture    # Single gate with output
 cargo test test_git_status_allows       # Single test
-cargo build --release                   # Static musl binary by default
+cargo build --release                   # Release binary in target/release
+cargo build --release --target x86_64-unknown-linux-musl  # Static Linux musl binary
 cargo clippy -- -D warnings             # Lint
 
 # Manual test
@@ -37,20 +38,20 @@ tool-gates supports Claude Code, Gemini CLI, and Codex CLI hook systems:
 | Hook | Purpose | When it runs |
 |------|---------|--------------|
 | **BeforeTool** | Route all tool types (shell, file ops, glob/grep, MCP, skills), block dangerous operations, allow safe ones, provide hints, file guards, security reminders | Before tool execution |
-| **AfterTool** | Post-execution security scanning for write tools (tracking is Claude-only) | After command completes |
+| **AfterTool** | Installed for post-execution context; write-tool security scanning currently skips Gemini until Gemini-shaped post output is implemented | After command completes |
 
 **Codex CLI** (tool_name: `Bash`, `apply_patch`, `mcp__*`):
 
 | Hook | Purpose | When it runs |
 |------|---------|--------------|
-| **PreToolUse** | Route Bash/apply_patch/MCP, block dangerous operations, pass through unknown commands so Codex prompts the user | Before any permission check |
+| **PreToolUse** | Route Bash/apply_patch/MCP, block dangerous operations, pass through unknown commands to Codex's approval flow | Before any permission check |
 | **PermissionRequest** | Allow/deny Bash/apply_patch only (Codex rejects `addDirectories`, `updatedInput`, `updatedPermissions`, `interrupt`) | When Codex would prompt for approval |
-| **PostToolUse** | Tracking + Tier-2 security reminders; modern-CLI hints + Tier-3 warnings ride here for Codex (Codex rejects `additionalContext` on PreToolUse) | After command completes |
+| **PostToolUse** | Tracking + Tier-2 security reminders; modern-CLI hints + Tier-3 warnings ride here for Codex (a tool-gates routing choice; Codex accepts `additionalContext` on PreToolUse) | After command completes |
 
 The client is auto-detected from `hook_event_name` for Claude/Gemini. **Codex must be selected via the explicit `--client codex` CLI flag** because it emits the same `hook_event_name` strings as Claude. The installer bakes that flag into the hook command. Output is serialized in the appropriate wire format:
 - Claude: nested `hookSpecificOutput` with `permissionDecision` (`allow`/`ask`/`deny`)
-- Gemini: flat `decision` + `reason` (uses `"block"` instead of `"deny"`, exit code 2 for hard blocks)
-- Codex: empty stdout for Allow/Ask (Codex's UI prompts the user), nested `hookSpecificOutput.permissionDecision: "deny"` for hard blocks. `additionalContext`, `updatedInput`, `addDirectories`, `interrupt`, `continue: false`, `stopReason`, `suppressOutput`, and PreToolUse `allow`/`ask` are all rejected by Codex's parser, so tool-gates only emits the fields Codex honors.
+- Gemini: flat `decision` + `reason` (tool-gates emits `"block"` for hard blocks; Gemini also accepts `"deny"`, and exit code 2 blocks)
+- Codex: empty stdout for Allow/Ask (pass-through to Codex; prompting depends on `approval_policy` and execpolicy), nested `hookSpecificOutput.permissionDecision: "deny"` for hard blocks. `updatedInput`, `addDirectories`, `interrupt`, `continue: false`, `stopReason`, `suppressOutput`, and PreToolUse `allow`/`ask` are all rejected by Codex's parser, so tool-gates only emits the fields Codex honors.
 
 **Tool name mapping** (canonical names per client):
 
@@ -74,9 +75,10 @@ Codex `apply_patch` payloads put the unified-diff body in `tool_input.command`. 
 - PostToolUse detects when "ask" commands complete successfully and queues them for permanent approval
 
 **Codex limitations** (parser rejects the listed fields, so we drop them silently):
-- PreToolUse `additionalContext` is rejected -> hints + Tier-3 warnings move to PostToolUse for Codex
-- PreToolUse `permissionDecision: "allow"` and `"ask"` are marked invalid -> tool-gates emits empty stdout for those decisions and lets Codex's own UI prompt the user
+- Modern-CLI hints + Tier-3 warnings ride PostToolUse for Codex, not PreToolUse. This is a tool-gates routing choice, not a parser limitation: Codex accepts `additionalContext` on PreToolUse (upstream #20692). The Pre handler returns empty stdout on a non-deny decision (since `allow`/`ask` are rejected), so a hint riding an allow has no Pre output to attach to today
+- PreToolUse `permissionDecision: "allow"` and `"ask"` are marked invalid -> tool-gates emits empty stdout for those decisions and hands them back to Codex's approval flow; prompting depends on `approval_policy` and execpolicy
 - PermissionRequest `addDirectories` / `updatedInput` / `updatedPermissions` / `interrupt` are rejected -> worktree approval reduces to a flat `behavior: allow` without path expansion
+- PostToolUse `updatedMCPToolOutput` is rejected -> hook output is stripped to prevent validation failure
 - Codex currently emits `permission_mode` as `default` or `bypassPermissions`, not `acceptEdits`, so `[[accept_edits_mcp]]` rules are inactive for Codex MCP calls
 - No PermissionDenied event in Codex (no auto-mode classifier)
 
@@ -147,10 +149,10 @@ src/
     ├── git.rs           # Git commands
     ├── shortcut.rs      # Shortcut.com CLI (short)
     ├── cloud.rs         # AWS, gcloud, terraform, kubectl, docker, helm, pulumi, az
-    ├── network.rs       # curl, wget, ssh, scp, rsync, netcat, nmap, socat, telnet
-    ├── filesystem.rs    # rm, rmdir, mv, cp, chmod, tar, zip
-    ├── devtools.rs      # sd, ast-grep, semgrep, biome, prettier, pytest, mypy, playwright, cypress, tsx, webpack
-    ├── package_managers.rs  # npm, pnpm, yarn, pip, uv, cargo, rustc, rustup, go, bun
+    ├── network.rs       # curl, wget, ssh, scp, sftp, rsync, netcat, httpie, nmap, socat, telnet
+    ├── filesystem.rs    # rm, rmdir, mv, cp, mkdir, chmod, chown, ln, tar, zip
+    ├── devtools.rs      # sd, ast-grep, semgrep, biome, prettier, eslint, ruff, pytest, mypy, playwright, cypress, tsx, webpack
+    ├── package_managers.rs  # npm, pnpm, yarn, pip, uv, cargo, rustc, rustup, go, bun, conda, poetry, pipx, mise
     ├── runtimes.rs      # python3, node, ruby, deno, php, lua, java, dotnet, swift, elixir
     └── system.rs        # psql, mysql, make, sudo, systemctl, kill, crontab, openssl, gpg, ssh-keygen
 ```
@@ -160,13 +162,15 @@ src/
 `build.rs` reads `rules/*.toml` and generates:
 - `src/generated/rules.rs`, Rust functions implementing declarative gate logic
 
+`tool-gates rules export --format md --out docs/src` regenerates `docs/src/gates/*.md`, `docs/src/security-floor.md`, and `docs/src/hints.md` from the same `rules/*.toml` plus the hint catalog, separate from `build.rs`'s `src/generated/` Rust output.
+
 Most gate behavior is defined in TOML; custom handlers in Rust cover cases TOML can't express.
 
 ## How It Works
 
 ### PreToolUse Flow
 
-1. **Input**: JSON from PreToolUse (Claude) or BeforeTool (Gemini) hook (includes `tool_name`, `cwd`, `permission_mode`, `tool_use_id`)
+1. **Input**: JSON from PreToolUse (Claude) or BeforeTool (Gemini) hook (includes `tool_name`, `cwd`, `permission_mode`, `tool_use_id`, and `effort` in newer versions)
 2. **Load config**: Read user configuration from `~/.config/tool-gates/config.toml`
 3. **Configurable block rules**: Check `[[block_tools]]` rules against all tool types. Blocks matching tools with a deny message
 4. **Route by tool_name**:
@@ -216,7 +220,7 @@ Runs after a command completes. Detects successful execution and queues for perm
 
 1. Check if `tool_use_id` was tracked as an "ask" decision from PreToolUse
 2. If tracked and exit code is 0 -> append to `~/.cache/tool-gates/pending.jsonl`
-3. Output is silent (empty) to avoid cluttering Claude's context
+3. Tracking-only successes are silent. File-write security reminders and Codex modern-CLI hints/Tier-3 warnings can emit `additionalContext`.
 
 ## Decision Priority
 
@@ -292,9 +296,9 @@ When `permission_mode` is `acceptEdits`, file-editing commands are auto-allowed 
 
 Non-file-editing commands (package managers, git, network) still require approval even in acceptEdits mode.
 
-### Auto Mode (Claude Code 2.1.89+)
+### Auto Mode (Claude Code 2.1.88+)
 
-_The `PermissionDenied` hook shipped in 2.1.89. Earlier auto-mode-capable builds still benefit from hard-ask -> deny promotion, pattern narrowing, and the pending queue guard; only the classifier retry hint needs 2.1.89+._
+_The `PermissionDenied` hook shipped in 2.1.88. Earlier auto-mode-capable builds still benefit from hard-ask -> deny promotion, pattern narrowing, and the pending queue guard; only the classifier retry hint needs 2.1.88+._
 
 When `permission_mode == "auto"`, Claude Code runs a server-side classifier on tool calls the hook returns `ask` for. tool-gates acts as a fast deterministic pre-filter for the classifier:
 
@@ -321,18 +325,19 @@ Claude Code also strips broad "allow" rules from `settings.json` on auto mode en
   "autoMode": {
     "environment": ["trusted domains, buckets, git remotes"],
     "allow": ["Bash(cargo check:*)"],
-    "soft_deny": ["Bash(rm:*)"]
+    "soft_deny": ["Bash(rm:*)"],
+    "hard_deny": ["Bash(curl * | sh:*)"]
   }
 }
 ```
 
-`allow` defines classifier exceptions, `soft_deny` adds block rules. Inspect the merged config with `claude auto-mode {defaults,config,critique}`.
+`allow` defines classifier exceptions, `soft_deny` and `hard_deny` add block rules. Inspect the merged config with `claude auto-mode {defaults,config,critique}`.
 
 ## Security Checks
 
 Before AST parsing, `router.rs` runs raw string checks on the command (after stripping comments). These catch patterns like pipe-to-shell (`| bash`), `eval`, `source`, `xargs rm`, destructive `find`/`fd`, dangerous command substitution, semicolon injection, and output redirection. See `check_raw_string_patterns()` in `router.rs` for the full list.
 
-A separate pre-parse pass (`check_hard_deny_patterns()` in `router.rs`) handles feature-toggleable hard-deny patterns. Today that's `| head` / `| tail` pipes (including the `|&` stderr-combining form), gated on `features.head_tail_pipe_block`. Runs before `check_raw_string_patterns` in all three entry points (`check_command_for_session`, `check_command_with_settings_and_session`, `check_command_expanded`).
+A separate pre-parse pass (`check_hard_deny_patterns()` in `router.rs`) handles feature-toggleable hard-deny patterns. Today that's `| head` / `| tail` truncation pipes (plus `sed -n '1,Np'` / `awk 'NR<=N'` first-N slices and `| rg .` catch-all filters), gated on `features.head_tail_pipe_block` and hard-denied only when the upstream producer is a build/test runner or `gh`. Runs before `check_raw_string_patterns` in all three entry points (`check_command_for_session`, `check_command_with_settings_and_session`, `check_command_expanded`).
 
 ## Gate Rules
 
@@ -377,7 +382,10 @@ Configuration via `~/.config/tool-gates/config.toml`:
 security_reminders = true  # default
 
 [security_reminders]
-disable_rules = ["eval_injection"]  # skip specific rules
+secrets = true          # Tier 1: hardcoded secrets deny source writes by default
+anti_patterns = true    # Tier 2: eval, exec, innerHTML, etc. PostToolUse nudge (default: true)
+warnings = true         # Tier 3: SSL verify=False, chmod 777, etc. informational (default: true)
+disable_rules = ["eval_injection"]  # skip specific rules (any tier, including Tier 1)
 ```
 
 ### Task Expansion
@@ -575,7 +583,7 @@ cargo test -- --ignored                 # Slow tests only
 
 **CI** (`.github/workflows/ci.yml`): push/PR to main runs `cargo build`, `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test`, release build with binary size check (max 7MB). A separate MSRV job runs `cargo check` on Rust 1.86.
 
-**Release**: Fully automated via release-plz. Push to main triggers `release-plz release-pr` which creates a version bump PR. Merging it publishes to GitHub Releases with cross-compiled binaries (linux x86_64/arm64, macos x86_64/arm64) and updates the Homebrew tap.
+**Release**: Fully automated via release-plz. Push to main triggers `release-plz release-pr` which creates a version bump PR. Merging it publishes to GitHub Releases with cross-compiled binaries (linux x86_64/arm64, macos x86_64/arm64, windows x86_64/arm64) and updates the Homebrew tap.
 
 **MSRV**: 1.86. Do not use language features or dependencies requiring a newer Rust version.
 
@@ -619,6 +627,7 @@ Cache files under `~/.cache/tool-gates/`:
 | `tool-gates hooks add -s <scope>` | Install Claude Code hooks into settings file |
 | `tool-gates hooks add --gemini` | Install Gemini CLI hooks |
 | `tool-gates hooks add --codex` | Install Codex CLI hooks (~/.codex/hooks.json) |
+| `tool-gates hooks add ... --dry-run` | Preview hook changes without writing (any `hooks add` variant) |
 | `tool-gates hooks status` | Show hook installation status (all three clients) |
 | `tool-gates hooks json` | Output Claude hooks JSON only |
 | `tool-gates hooks json --gemini` | Output Gemini hooks JSON only |
@@ -627,9 +636,11 @@ Cache files under `~/.cache/tool-gates/`:
 | `tool-gates rules list` | List all permission rules |
 | `tool-gates rules remove <pattern> -s <scope>` | Remove a permission rule |
 | `tool-gates rules ask-audit` | List `permissions.ask` Bash rules that suppress the third prompt button |
-| `tool-gates pending list` | List pending approvals |
-| `tool-gates pending clear` | Clear pending approval queue |
-| `tool-gates review` | Interactive TUI for pending approvals |
+| `tool-gates rules ask-audit --apply` | Multi-select TUI to remove redundant ask rules |
+| `tool-gates rules export --format md [--out PATH] [--rules-dir PATH]` | Regenerate gate, security-floor, and hints docs (default `docs/src`) |
+| `tool-gates pending list [--project] [--json]` | List pending approvals |
+| `tool-gates pending clear [--project | --all] --force` | Clear pending approval queue |
+| `tool-gates review [--all]` | Interactive TUI for pending approvals (`--all` spans every project; default is the current project) |
 | `tool-gates doctor` | Check config, hooks, and cache health |
 | `tool-gates --refresh-tools` | Refresh modern CLI tool detection |
 | `tool-gates --tools-status` | Show detected modern tools |
@@ -646,7 +657,7 @@ bash_gates = true            # Enable Bash command gate engine (default: true)
 file_guards = true           # Enable symlink guards for Read/Write/Edit (default: true)
 hints = true                 # Enable modern CLI hints, e.g. cat->bat, grep->rg, etc. (default: true)
 security_reminders = true    # Scan Write/Edit for security anti-patterns (default: true)
-head_tail_pipe_block = true  # Deny `| head -N` / `| tail -N` pipes (default: true)
+head_tail_pipe_block = true  # Deny head/tail truncation pipes on build/test/gh output (default: true)
 git_aliases = true           # Resolve user-defined git aliases against ~/.gitconfig (default: true)
 ```
 
@@ -654,12 +665,15 @@ Set any to `false` to disable that subsystem entirely.
 
 ### Head/Tail Pipe Block
 
-`head_tail_pipe_block` denies `| head` and `| tail` pipes so the agent caps output at the source with native limits like `rg -m N`, `fd --max-results N`, and `bat -r START:END` instead of truncating stdout after the fact.
+`head_tail_pipe_block` hard-denies output-truncation pipes so the agent caps output at the source with native limits like `rg -m N`, `fd --max-results N`, and `bat -r START:END` instead. It covers `| head` / `| tail`, `sed -n '1,Np'` / `awk 'NR<=N'` first-N slices, and `| rg .` / `| rg -m N .` catch-all fake-filters.
 
-Carve-outs that do not trigger:
+The hard deny fires only when the upstream producer is a build/test runner (`cargo`, `npm`, `pnpm`, `yarn`, `go`, `make`, `pytest`, `jest`, `uv`, ...) or `gh`: their diagnostics and rows live at the end of the stream, so a volume cap drops exactly what you need (and `gh api | head` cuts JSON mid-array). For every other producer the call passes through to normal gating and rides a "cap at the source" hint on its allow, so a recoverable cap is not a hard block. Producer detection sees through launcher wrappers (`timeout`, `nice`, `sudo`, `env`, ...).
+
+Carve-outs that always pass through:
 
 - Streaming `| tail -f` / `| tail -F` (the Monitor tool's log-watching idiom)
-- Stderr-combining `|& tail -f` / `|& tail -F`
+- Top-N rankings `... | sort ... | head -N` / `tail -N` (sort consumes all input, so the slice is the selection, not a cap)
+- `head`/`tail` inside `$(...)` / backticks (a programmatic pick feeding a variable)
 - Quoted literals like `rg '| head' file.txt` where `| head` is a search pattern, not a shell pipe
 - No upstream pipe, e.g. `head file.txt` or `tail -n 20 README.md`
 
@@ -744,6 +758,16 @@ if_project_under = ["~/projects/staging"]   # Only approve if project is under t
 
 Auto-approve Skill tool calls based on configurable rules with directory conditions. Replaces external Python/bash hooks for skill approval. Supports `~` expansion in paths. If no rules are configured, Skill calls pass through to Claude Code's normal permission flow.
 
+### Codex Project Edits
+
+```toml
+[codex]
+accept_project_edits = true    # default false
+allow_edits_anywhere = false   # default false
+```
+
+Auto-approve Codex `apply_patch` edits on the PermissionRequest hook when every touched path is inside the project (session cwd + `additionalDirectories` from `settings.json`) and no path is denied, asked, or guarded. Codex shell commands are also evaluated as `acceptEdits`, so in-project file-editing commands (`sd`, `prettier --write`, `mkdir -p`, `sed -i`) auto-allow while dangerous bases (`rm`, `mv`, `cp`) and out-of-project targets still prompt. `allow_edits_anywhere` widens the `apply_patch` auto-allow to anywhere on disk (settings.json `deny`/`ask` file rules and the AI-config guards still apply). Both default `false`; inert on Claude and Gemini.
+
 ### MCP Accept-Edits Approval
 
 ```toml
@@ -769,7 +793,7 @@ Block rules run before these allow rules, so `[[accept_edits_mcp]]` cannot unloc
 
 | Condition | Description |
 |-----------|-------------|
-| `tool` | MCP tool name pattern. Exact, prefix (`mcp__serena*`), suffix (`*_scrape`), or contains (`*serena*` — pure substring match, see sharp-edge note above) |
+| `tool` | MCP tool name pattern. Exact, prefix (`mcp__serena*`), suffix (`*_scrape`), or contains (`*serena*`: pure substring match, see sharp-edge note above) |
 | `reason` | Optional approval message shown to the AI assistant (main-thread only; silently dropped for subagents) |
 | `if_project_has` | Project directory must contain one of these files/directories |
 | `if_project_under` | Project directory must be at or under one of these paths |

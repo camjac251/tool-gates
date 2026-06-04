@@ -1,0 +1,172 @@
+/* tool-gates theme tokens. */
+/* The :root + [data-theme] blocks plus the design-token :root; mdBook additional-css loads this first. */
+/*
+ * D2 theme mapping: mdBook 0.5 applies a theme class to <html> (its switcher
+ * manages the `mdbook-theme` localStorage key and html.classList directly). A
+ * separate [data-theme] toggle would fight that, so the design's two themes
+ * are surfaced as mdBook custom themes tg-dark / tg-light (registered in the
+ * index.hbs theme list). Each token block below matches both the native theme
+ * classes (so mdBook's own switcher works) and the design's [data-theme]
+ * selectors (so any design-derived markup keeps exact fidelity).
+ *   dark  <- tg-dark, coal, navy, ayu
+ *   light <- tg-light, light, rust
+ */
+
+/* ===== Tokens. Maps to mdBook theme/css/variables.css ===== */
+:root,
+[data-theme="dark"],
+html.tg-dark,
+html.coal,
+html.navy,
+html.ayu {
+  color-scheme: dark;
+  --bg: oklch(17% 0.014 248);
+  --surface-1: oklch(20.5% 0.016 248);
+  --surface-2: oklch(24.5% 0.018 248);
+  --surface-3: oklch(29% 0.02 248);
+  --text-1: oklch(94% 0.006 90);
+  --text-2: oklch(78% 0.012 248);
+  --text-3: oklch(62% 0.014 248);
+  --border: oklch(30% 0.018 248);
+  --border-2: oklch(39% 0.022 248);
+  --accent: oklch(78% 0.085 222);
+  --accent-2: oklch(86% 0.1 222);
+  --allow: oklch(78% 0.15 152);
+  --ask: oklch(82% 0.13 80);
+  --block: oklch(72% 0.16 26);
+  --defer: oklch(70% 0.04 248);
+  --grid-dot: oklch(60% 0.03 248 / 0.16);
+  --shadow: 0 1px 0 oklch(8% 0 0 / 0.4), 0 12px 32px oklch(8% 0 0 / 0.18);
+}
+[data-theme="light"],
+html.tg-light,
+html.light,
+html.rust {
+  color-scheme: light;
+  --bg: oklch(97.6% 0.006 90);
+  --surface-1: oklch(95.2% 0.008 88);
+  --surface-2: oklch(92.4% 0.01 85);
+  --surface-3: oklch(89% 0.012 85);
+  --text-1: oklch(22% 0.014 248);
+  --text-2: oklch(36% 0.014 248);
+  --text-3: oklch(46% 0.012 248);
+  --border: oklch(86% 0.01 85);
+  --border-2: oklch(76% 0.012 85);
+  --accent: oklch(46% 0.125 222);
+  --accent-2: oklch(40% 0.135 222);
+  --allow: oklch(47% 0.15 152);
+  --ask: oklch(52% 0.13 68);
+  --block: oklch(50% 0.19 26);
+  --defer: oklch(48% 0.02 248);
+  --grid-dot: oklch(40% 0.03 248 / 0.12);
+  --shadow: 0 1px 0 oklch(80% 0.01 85 / 0.6), 0 12px 28px oklch(40% 0.01 85 / 0.1);
+}
+
+:root {
+  --font-display: "Bricolage Grotesque", Georgia, serif;
+  --font-body: "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+  --s-8: 64px;
+  --s-9: 96px;
+  --r-1: 4px;
+  --r-2: 6px;
+  --r-3: 10px;
+  --sidebar-w: 18rem;
+  --bar-h: 56px;
+  --content-max: 58rem;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  /* Magnifier glyph for the inline search box, masked so it picks up --text-3.
+   * Mirrors the design's stroke icon (circle + handle). */
+  --tg-search-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
+}
+
+/*
+ * mdBook chrome bridge. mdBook's general.css / chrome.css read their own theme
+ * variables (--bg, --fg, --sidebar-bg, --links, --table-*, etc.) keyed on the
+ * native theme classes. Our custom themes tg-dark / tg-light are not in that
+ * set, so alias mdBook's variables to the design tokens here. This makes the
+ * mdBook sidebar, menu bar, search, tables, and theme popup adopt the design
+ * palette so chrome and the generated gate pages share one look.
+ */
+html.tg-dark,
+html.tg-light {
+  /* --bg is intentionally NOT aliased to --surface-1. The design's page
+   * background IS --bg (the darker/lighter base from the token block above),
+   * with surfaces raised one step on top of it. Aliasing --bg to --surface-1
+   * lightened the entire shell (body, sidebar, menu-bar) by one surface step,
+   * so the background read wrong vs the design. Leaving --bg at its token
+   * value makes mdBook chrome that reads --bg (--sidebar-bg, menu-bar) match
+   * the design's flat-bg shell. */
+  --fg: var(--text-1);
+
+  /*
+   * mdBook layout variables. general.css / chrome.css drive the fixed sidebar,
+   * the page-wrapper margin that clears it, the menu-bar offset, and the content
+   * column width entirely through these. Our variables.css overrides mdBook's
+   * stock variables.css, so they are undefined under tg-dark / tg-light unless we
+   * define them here. Absolute px (not rem) on purpose: mdBook sets :root
+   * font-size to 62.5% (1rem = 10px), so a rem value authored against the
+   * design's 16px base would resolve too small. Values match the design:
+   * sidebar 18rem@16px = 288px, content-max 58rem@16px = 928px.
+   */
+  --sidebar-width: 288px;
+  --page-padding: 0px;
+  --content-max-width: 928px;
+  --menu-bar-height: var(--bar-h);
+  --sidebar-resize-indicator-width: 8px;
+  --sidebar-resize-indicator-space: 2px;
+
+  --sidebar-bg: var(--bg);
+  --sidebar-fg: var(--text-2);
+  --sidebar-non-existant: var(--text-3);
+  --sidebar-active: var(--accent);
+  --sidebar-spacer: var(--border);
+  --sidebar-header-border-color: var(--border);
+
+  --scrollbar: var(--border-2);
+
+  --icons: var(--text-3);
+  --icons-hover: var(--text-1);
+
+  --links: var(--accent);
+
+  --inline-code-color: var(--text-1);
+
+  --theme-popup-bg: var(--surface-1);
+  --theme-popup-border: var(--border);
+  --theme-hover: var(--surface-2);
+
+  --quote-bg: var(--surface-2);
+  --quote-border: var(--border-2);
+
+  --warning-border: var(--ask);
+
+  --table-border-color: var(--border);
+  --table-header-bg: var(--surface-2);
+  --table-alternate-bg: var(--surface-1);
+
+  --searchbar-border-color: var(--border-2);
+  --searchbar-bg: var(--surface-1);
+  --searchbar-fg: var(--text-1);
+  --searchbar-shadow-color: var(--accent);
+  --searchresults-header-fg: var(--text-3);
+  --searchresults-border-color: var(--border-2);
+  --searchresults-li-bg: var(--surface-2);
+  --search-mark-bg: color-mix(in oklab, var(--ask) 45%, transparent);
+
+  --overlay-bg: color-mix(in oklab, var(--bg) 40%, transparent);
+  --footnote-highlight: var(--accent);
+
+  --blockquote-note-color: var(--accent);
+  --blockquote-tip-color: var(--allow);
+  --blockquote-important-color: var(--defer);
+  --blockquote-warning-color: var(--ask);
+  --blockquote-caution-color: var(--block);
+}

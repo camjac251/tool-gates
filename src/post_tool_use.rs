@@ -14,7 +14,7 @@ pub fn handle_post_tool_use(input: &PostToolUseInput) -> Option<PostToolUseOutpu
 
     // Only add to pending if the command succeeded
     if !input.is_success() {
-        // Already removed from tracking above — nothing more to do
+        // Already removed from tracking above, so nothing more to do.
         return None;
     }
 
@@ -38,13 +38,13 @@ pub fn handle_post_tool_use(input: &PostToolUseInput) -> Option<PostToolUseOutpu
     );
 
     // Append to global pending queue.
-    // If this fails, the entry is already removed from tracking — acceptable
+    // If this fails, the entry is already removed from tracking. This is acceptable
     // since it would have expired via TTL anyway.
     if let Err(e) = append_pending(approval) {
         eprintln!("Warning: Failed to save pending approval: {e}");
     }
 
-    // Silent — Claude already saw the permission prompt and user's approval
+    // Silent: Claude already saw the permission prompt and the user's approval
     // in the conversation flow. The pending queue accumulates data for the
     // /tool-gates:review skill to use when the user asks for it.
     None

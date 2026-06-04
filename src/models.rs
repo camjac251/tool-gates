@@ -213,6 +213,12 @@ impl Client {
     }
 }
 
+/// Reasoning effort level (introduced in newer Claude Code versions)
+#[derive(Debug, Deserialize, Serialize, Clone, Default, PartialEq, Eq)]
+pub struct Effort {
+    pub level: String,
+}
+
 // === Hook Input/Output Types ===
 
 /// Tool input from Claude Code / Gemini CLI
@@ -260,6 +266,8 @@ pub struct HookInput {
     pub tool_input: ToolInputVariant,
     #[serde(default)]
     pub tool_use_id: String,
+    #[serde(default)]
+    pub effort: Option<Effort>,
 }
 
 /// Tool input can be either structured or a raw map
@@ -606,7 +614,8 @@ impl HookOutput {
 
         let mut out = serde_json::Map::new();
 
-        // Map permission decision (Gemini uses "block" instead of "deny").
+        // Map permission decision. tool-gates emits "block" for Gemini hard
+        // blocks; Gemini also accepts "deny".
         // Defer is a Claude-only concept (Claude's resolver runs the
         // tool's checkPermissions when the hook omits permissionDecision);
         // Gemini's flow has no equivalent prefix-suggestion path, so a
@@ -648,15 +657,17 @@ impl HookOutput {
     /// Serialize to Codex CLI wire format.
     ///
     /// Codex's PreToolUse parser only honors `permissionDecision: "deny"`.
-    /// `"allow"` and `"ask"` are marked invalid; `additionalContext` is rejected
-    /// on PreToolUse (only PostToolUse and SessionStart accept it);
-    /// `updatedInput`/`continue`/`stopReason`/`suppressOutput` are also rejected.
-    /// So Codex pass-through means literally empty stdout + exit 0.
+    /// `"allow"` and `"ask"` are marked invalid;
+    /// `updatedInput`/`continue`/`stopReason`/`suppressOutput` are rejected.
+    /// So Codex pass-through means literally empty stdout + exit 0. (Codex does
+    /// accept `additionalContext` on PreToolUse, but tool-gates carries
+    /// hints/Tier-3 on the Codex PostToolUse path, so a non-deny Pre decision
+    /// emits nothing today.)
     ///
     /// Mapping:
     /// - `Approve` (no opinion)  -> `Value::Null` (caller emits nothing)
-    /// - `Allow`                 -> `Value::Null` (Codex's UI handles it)
-    /// - `Ask`                   -> `Value::Null` (Codex prompts the user)
+    /// - `Allow`                 -> `Value::Null` (pass-through; Codex approval policy decides)
+    /// - `Ask`                   -> `Value::Null` (pass-through; Codex approval policy decides)
     /// - `Defer`                 -> `Value::Null` (no Codex equivalent)
     /// - `Deny`                  -> `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"..."}}`
     ///
@@ -679,8 +690,8 @@ impl HookOutput {
         hso.insert("permissionDecision".to_string(), serde_json::json!("deny"));
 
         // Concatenate optional context (Tier-3 remediation, hints) into the
-        // reason since Codex's parser rejects `additionalContext` on Pre.
-        // The reason is the only operator-visible field on a Codex deny.
+        // reason: a blocked patch fires no PostToolUse turn to carry it, and
+        // the reason is the only operator-visible field on a Codex deny.
         let mut reason = self
             .reason
             .as_deref()
@@ -750,6 +761,8 @@ pub struct PermissionRequestInput {
     pub cwd: String,
     #[serde(default)]
     pub permission_mode: String,
+    #[serde(default)]
+    pub effort: Option<Effort>,
 }
 
 impl PermissionRequestInput {
@@ -904,6 +917,8 @@ pub struct PostToolUseInput {
     /// Response from the tool execution
     #[serde(default)]
     pub tool_response: Option<serde_json::Value>,
+    #[serde(default)]
+    pub effort: Option<Effort>,
 }
 
 impl PostToolUseInput {
@@ -922,7 +937,7 @@ impl PostToolUseInput {
 
     /// Check if the tool response indicates success.
     ///
-    /// PostToolUse only fires for successful tool calls — failures trigger
+    /// PostToolUse only fires for successful tool calls, as failures trigger
     /// the separate PostToolUseFailure event. So we default to `true` unless
     /// an explicit non-zero exit code is present.
     pub fn is_success(&self) -> bool {
@@ -965,6 +980,8 @@ pub struct PermissionDeniedInput {
     /// Classifier denial reason string
     #[serde(default)]
     pub reason: String,
+    #[serde(default)]
+    pub effort: Option<Effort>,
 }
 
 impl PermissionDeniedInput {
@@ -1284,7 +1301,7 @@ mod tests {
         let gemini = output.serialize(Client::Gemini);
         assert_eq!(
             gemini["decision"], "block",
-            "Gemini uses 'block' not 'deny': {gemini}"
+            "tool-gates should emit 'block' for Gemini hard blocks: {gemini}"
         );
         assert_eq!(gemini["reason"], "Dangerous command");
     }
@@ -1522,7 +1539,7 @@ mod tests {
         let value = output.serialize(Client::Codex);
         assert!(
             value.is_null(),
-            "Codex Ask must serialize to Null (Codex's UI prompts), got: {value}"
+            "Codex Ask must serialize to Null (pass-through to Codex), got: {value}"
         );
     }
 
@@ -1566,7 +1583,7 @@ mod tests {
     #[test]
     fn codex_deny_concatenates_context_into_reason() {
         // When deny carries Tier-1 + Tier-3 context (e.g. AWS key with weak
-        // crypto), Codex's parser would reject additionalContext on Pre. The
+        // crypto), a blocked patch fires no PostToolUse turn to carry it. The
         // serializer concatenates it into the reason so the remediation text
         // still reaches the operator.
         let output = HookOutput {

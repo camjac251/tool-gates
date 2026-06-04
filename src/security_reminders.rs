@@ -6,7 +6,7 @@
 //!
 //! Patterns are organized into tiers:
 //! - **Tier 1 (deny):** High confidence, near-zero false positives (secrets, keys)
-//! - **Tier 2 (ask-once):** User prompted first time per session, then silent (eval, exec, XSS)
+//! - **Tier 2 (post-write nudge):** Additional context after write, deduped per session
 //! - **Tier 3 (warn):** Informational context injected, no block (weak crypto, chmod 777)
 
 use crate::config::SecurityRemindersConfig;
@@ -101,7 +101,7 @@ fn extract_content(
 pub enum Tier {
     /// Hard deny. Always blocked (secrets, keys).
     Deny,
-    /// Ask once per (file, rule) per session, then silent.
+    /// Post-write nudge once per (file, rule) per session, then silent.
     AskOnce,
     /// Allow but inject warning into additionalContext.
     Warn,
@@ -240,7 +240,7 @@ fn rules() -> &'static [SecurityRule] {
                 always_check: false, // Content check happens separately via GHA-specific regex
             },
 
-            // === Tier 2: Ask once per session ===
+            // === Tier 2: Post-write nudge once per session ===
             SecurityRule {
                 name: "child_process_exec",
                 tier: Tier::AskOnce,
@@ -510,7 +510,7 @@ pub fn scan_content(file_path: &str, content: &str) -> Vec<PatternMatch> {
 /// PreToolUse: Check content for Tier 1 (deny) and Tier 3 (warn) patterns.
 ///
 /// Tier 2 (anti-patterns) is handled by PostToolUse instead, so the write lands
-/// and Claude gets a nudge to fix it. No wasted edits from re-prompting.
+/// and the assistant gets a nudge to fix it. No wasted edits from re-prompting.
 ///
 /// - Tier 1 (secrets) in source code: Always deny, never deduped
 /// - Tier 1 (secrets) in doc files: skipped, handled by PostToolUse warn instead
@@ -589,13 +589,14 @@ pub fn check_security_reminders(
 /// matches after the write succeeds.
 ///
 /// For Codex specifically, also emits Tier 3 (warn) findings here. Codex's
-/// PreToolUse parser rejects `additionalContext`, so the warnings can't ride
-/// on Pre. Without including them on Post, Codex users get strictly less
-/// security feedback than Claude users on the same anti-patterns. Pass the
-/// active client so the dominator knows to include Tier-3 for Codex only.
+/// non-deny PreToolUse decisions serialize to empty stdout, so warnings have no
+/// Pre output to attach to. Without including them on Post, Codex users get
+/// strictly less security feedback than Claude users on the same anti-patterns.
+/// Pass the active client so the dominator knows to include Tier-3 for Codex
+/// only.
 ///
 /// Returns `Some(PostToolUseOutput)` with additionalContext containing the security
-/// warning. Claude sees this as a `<system-reminder>` and can self-correct.
+/// warning. The assistant sees this as a `<system-reminder>` and can self-correct.
 /// Deduped per (file, rule) per session via hint_tracker.
 pub fn check_security_reminders_post(
     tool_name: &str,
@@ -640,7 +641,7 @@ pub fn check_security_reminders_post(
                 }
                 Tier::Warn => {
                     // Tier 3: Claude/Gemini handle on Pre. For Codex, emit
-                    // here because additionalContext is rejected on Pre.
+                    // here because non-deny Pre output is empty.
                     !(tier3_active)
                 }
             };

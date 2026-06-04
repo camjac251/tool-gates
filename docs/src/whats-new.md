@@ -1,0 +1,776 @@
+  <p class="breadcrumb"><a href="index.html">Reference</a> / Recent releases</p>
+  <h1 id="whatsnew-h1">Recent releases</h1>
+  <p class="page-lede">Release cadence is fast. Below is a curated set of recent versions and what shipped. Full history at <a href="https://github.com/camjac251/tool-gates/blob/main/CHANGELOG.md" target="_blank" rel="noopener">CHANGELOG.md</a>.</p>
+  <div class="config-block">
+    <header>
+      <h3>v1.23.0 · June 2026</h3>
+      <span class="src-tag">latest · unreleased</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  mdBook documentation site with interactive WASM simulator
+  rules export generator for markdown references
+  Codex project-edit auto-approval config
+  pre-commit rules-export hook in Lefthook
+<span class="sec fixed">Fixed</span>
+  head/tail pipe block scoped to build/test/gh producers
+  documentation accuracy corrections for Codex and MSRV</pre>
+      </div>
+      <div class="config-prose">
+        <p>Introduces an interactive documentation site with a WebAssembly command simulator. It adds a declarative rules exporter (tool-gates rules export) and auto approval configurations for Codex in project edits ([codex] accept_project_edits). The output truncation pipe blocker was refined to focus only on build, test, and GitHub producers (such as cargo, npm, go, make, and gh), allowing soft producers (like cat and ls) to pass through with modern CLI hints. This release also adds a Lefthook pre-commit hook to automatically regenerate the Markdown documentation on rule changes.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.22.0 · May 26, 2026</h3>
+      <span class="src-tag">media &amp; CLI · 6657772</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  ffprobe / d2 allow
+  ffmpeg info flags gated
+  read-only tool-gates CLI subcommands
+<span class="sec fixed">Fixed</span>
+  skip quoted-heredoc bodies in raw-string scans
+  stop false asks from mise usage-args + bun file-exec</pre>
+      </div>
+      <div class="config-prose">
+        <p>Adds gating for media tools (allowing ffprobe and d2, while gating ffmpeg info flags). It introduces read-only subcommands (including pending list, rules list, hooks status, and doctor) to the tool-gates command line interface. It also updates the raw string scanner to skip quoted heredocs. It resolves false positive asks caused by mise usage argument (stripping the usage_args eval prefix) and bun file execution expansion (by checking for code extensions or path separators).</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.21.2 · May 21, 2026</h3>
+      <span class="src-tag">maintenance · 57cac7e</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec other">Other</span>
+  drop vendor-specific output_tail reference from head/tail deny</pre>
+      </div>
+      <div class="config-prose">
+        <p>Cleans up the output truncation blocker by dropping a vendor specific output tail reference from the head and tail deny rule.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.21.1 · May 21, 2026</h3>
+      <span class="src-tag">polish · 0e0a0d4</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec fixed">Fixed</span>
+  improve head/tail and github block deny messages
+<span class="sec other">Other</span>
+  replace generic "syntax highlighting" hint suffix with agent-actionable benefits
+  polish modern hint messages for consistency
+  rewrite hook deny messages with risk and remediation</pre>
+      </div>
+      <div class="config-prose">
+        <p>Improves the clarity and usefulness of hook feedback. The denial messages for the output truncation and GitHub blockers now state the security risk and clear remediation steps. The modern hint suffix was replaced with agent actionable benefits. All other hints were polished for consistency.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.21.0 · May 13, 2026</h3>
+      <span class="src-tag">polish · 9b2a6de</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  enforce no-rg-on-code rule, route to probe/chunkhound/serena/sg
+<span class="sec other">Other</span>
+  hints catalog, systemMessage tiering, length guard</pre>
+      </div>
+      <div class="config-prose">
+        <p>Enforces a rule against running rg on code files. It routes searches to specialized tools such as probe, chunkhound, serena, and sg. It introduces a hints catalog, system message tiering, and a length guard.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.20.0 · May 13, 2026</h3>
+      <span class="src-tag">reasons · de952ff</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  help-menu reason prompts, new hints, tiered systemMessage
+<span class="sec fixed">Fixed</span>
+  pass --edition 2024 to rustfmt in build.rs</pre>
+      </div>
+      <div class="config-prose">
+        <p>Introduces detailed reason prompts to the help menu for rejected hooks. It also adds tiered system messages and updates the build script to pass the 2024 edition to rustfmt.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.19.2 · May 8, 2026</h3>
+      <span class="src-tag">maintenance · 0480925</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec fixed">Fixed</span>
+  harden accept-edits fallback</pre>
+      </div>
+      <div class="config-prose">
+        <p>Hardens the fallback behavior in accept edits mode. It ensures that the permission policy is correctly applied when resolving command wrappers.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.19.1 · May 3, 2026</h3>
+      <span class="src-tag">maintenance · ebb6e6d</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec fixed">Fixed</span>
+  align client hook contracts</pre>
+      </div>
+      <div class="config-prose">
+        <p>Aligns the hook interface contracts across the Claude, Gemini, and Codex clients. This ensures consistent decision behavior across all tools.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.19.0 · May 3, 2026</h3>
+      <span class="src-tag">Codex · 024465c</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  add Codex CLI client support
+<span class="sec fixed">Fixed</span>
+  gate worktree auto-approve on subagent agent_id
+  fire Claude PermissionRequest for MCP tools</pre>
+      </div>
+      <div class="config-prose">
+        <p>Adds support for the Codex command line interface client. It gates worktree auto approvals on the subagent agent ID. It also fires Claude PermissionRequest events for Model Context Protocol tools to streamline subagent flows.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.18.0 · April 30, 2026</h3>
+      <span class="src-tag">git aliases · 69175dc</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  resolve user-defined aliases against ~/.gitconfig
+<span class="sec fixed">Fixed</span>
+  split nested if-let to satisfy MSRV 1.86
+  drop redundant plan-mode hard-deny on Write/Edit
+<span class="sec other">Other</span>
+  restore HOME after with_temp_cache to stop sequential leak</pre>
+      </div>
+      <div class="config-prose">
+        <p>Resolves user defined git aliases against the user git configuration file so that custom git shortcuts are evaluated correctly. It also splits nested if let blocks to support Rust 1.86. It drops redundant plan mode checks and prevents home directory leaks during tracking tests.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.17.0 · April 30, 2026</h3>
+      <span class="src-tag">audit TUI · 8b48d7a</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  polish round, install patterns, doctor nudge, audit TUI
+  close ask-audit gaps with broader find guard and --apply
+  categorize ask-audit rules by gate-engine outcome
+  add ask-audit to surface third-button-suppressing rules
+  defer benign gate-ask to CC for prefix-suggestion prompt
+  surface usage stats in the doctor report
+  self-heal cache with single-tool re-probe
+  collapse near-duplicate entries by pattern key
+  hard-deny mutating tools in plan mode
+<span class="sec fixed">Fixed</span>
+  post-review fixes on the 1.6.0 series
+  skip pending append when settings already allow
+<span class="sec other">Other</span>
+  cover defer wire format, ask-audit, and 24h tracking TTL
+  reframe ask-audit around slip-click safety, drop bulk apply
+  cover wire-format defer path for mise/pnpm wrappers
+  bump to 1.6.0
+  reframe skills around defer behavior
+  replace 15min TTL with session-bounded GC
+  tighten review/test-gate skill descriptions, bump to 1.5.9</pre>
+      </div>
+      <div class="config-prose">
+        <p>Introduces the ask audit command to identify rules that shadow accept edits or suppress the third button in Claude Code. It adds an interactive review terminal user interface. It collapses duplicate pending entries and integrates plan mode checks to block mutations. It also defers benign asks to Claude Code to preserve the prefix suggestion prompt. It adds self healing capabilities to the tool detection cache.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.16.1 · April 24, 2026</h3>
+      <span class="src-tag">maintenance · 7ace761</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec fixed">Fixed</span>
+  drop vendor-specific refs from head/tail deny message</pre>
+      </div>
+      <div class="config-prose">
+        <p>Polishes the deny message for the head and tail truncation blocker. It removes vendor-specific references that did not apply to the general toolchain.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.16.0 · April 23, 2026</h3>
+      <span class="src-tag">head/tail block · 6dad625</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  deny | head / | tail pipes with config toggle
+<span class="sec other">Other</span>
+  warn about permissions.ask shadowing accept_edits_mcp</pre>
+      </div>
+      <div class="config-prose">
+        <p>Adds a configuration toggle to block piping command outputs to head or tail. It also adds a configuration warning when user settings shadow the Model Context Protocol accept edits rule.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.15.0 · April 23, 2026</h3>
+      <span class="src-tag">MCP approvals · 4c5aa93</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  auto-approve MCP tools in acceptEdits mode</pre>
+      </div>
+      <div class="config-prose">
+        <p>Enables auto approvals for Model Context Protocol tools in acceptEdits mode. This streamlines editing workflows for subagents.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.14.0 · April 22, 2026</h3>
+      <span class="src-tag">API hints · a53313b</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  nudge network tools to gh api for GitHub URLs</pre>
+      </div>
+      <div class="config-prose">
+        <p>Nudges network tools to use gh api when requesting GitHub URLs. This reduces unnecessary web scraping or API token usage.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.13.0 · April 21, 2026</h3>
+      <span class="src-tag">auto mode · 1078f0f</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  integrate with Claude Code classifier</pre>
+      </div>
+      <div class="config-prose">
+        <p>Integrates with the Claude Code auto mode classifier. This enables hard ask promotion to deny, pending queue filtering, and PermissionDenied retry signals.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.12.1 · April 15, 2026</h3>
+      <span class="src-tag">maintenance · 04889ff</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec fixed">Fixed</span>
+  unify home-directory path handling across gates
+  enforce cargo fmt --check and restage crate-wide fmt
+<span class="sec other">Other</span>
+  use generic user in fixtures</pre>
+      </div>
+      <div class="config-prose">
+        <p>Unifies home directory path handling across all gates. It enforces strict cargo formatting checks in the continuous integration pipeline. It also uses generic users in test fixtures.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.12.0 · April 10, 2026</h3>
+      <span class="src-tag">Monitor tool · e65011b</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  add Monitor tool support</pre>
+      </div>
+      <div class="config-prose">
+        <p>Adds support for the Claude Code Monitor tool. This enables permission gating for background monitoring commands.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.11.0 · April 3, 2026</h3>
+      <span class="src-tag">wrapper resolution · 35b587e</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  acceptEdits wrapper resolution for package manager invocations</pre>
+      </div>
+      <div class="config-prose">
+        <p>Resolves package manager wrappers during acceptEdits mode. This ensures that linters and formatters can run without triggering prompts.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.10.0 · April 3, 2026</h3>
+      <span class="src-tag">runtimes · fbdccdf</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  add runtimes gate, expand coverage across all gates</pre>
+      </div>
+      <div class="config-prose">
+        <p>Consolidates Python, Node, Ruby, Deno, PHP, and other language runtimes into a single runtime gate. This provides unified security analysis across language execution commands.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.9.2 · March 31, 2026</h3>
+      <span class="src-tag">maintenance · 6c6e252</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec fixed">Fixed</span>
+  remove redundant workflow_dispatch that races with push</pre>
+      </div>
+      <div class="config-prose">
+        <p>Fixes a continuous integration race condition. It removes a redundant workflow dispatch trigger that raced with pushes.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.9.1 · March 31, 2026</h3>
+      <span class="src-tag">maintenance · 4b7676e</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec fixed">Fixed</span>
+  remove approval context from additionalContext</pre>
+      </div>
+      <div class="config-prose">
+        <p>Removes redundant approval context from the hook additionalContext response. This minimizes context token usage.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.9.0 · March 31, 2026</h3>
+      <span class="src-tag">matchers · 8df9031</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  detect and update stale matchers on hooks add</pre>
+      </div>
+      <div class="config-prose">
+        <p>Automatically detects and updates out of date matchers in the Claude configuration when registering hooks.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.8.0 · March 30, 2026</h3>
+      <span class="src-tag">worktrees · 29fa637</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  auto-approve Edit/Write in agent worktrees
+<span class="sec fixed">Fixed</span>
+  let gate-allowed commands participate in compound settings approval
+<span class="sec other">Other</span>
+  clarify branch allow rule covers create too</pre>
+      </div>
+      <div class="config-prose">
+        <p>Enables auto approvals for file edits inside agent worktrees during PermissionRequest events. It also allows gate allowed commands to participate in compound settings approvals. It clarifies that the branch allow rule covers creation too.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.7.3 · March 28, 2026</h3>
+      <span class="src-tag">maintenance · 07d939c</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec other">Other</span>
+  remove MultiEdit tool and mcp-cli gate
+  replace em-dash patterns with periods and commas
+  bump to 1.5.8, add when_to_use to skills</pre>
+      </div>
+      <div class="config-prose">
+        <p>Bumps the plugin to version 1.5.8. It removes the MultiEdit tool and the mcp cli gate. It replaces all em dash patterns in the source code and configuration with periods and commas.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.7.2 · March 25, 2026</h3>
+      <span class="src-tag">maintenance · 763b556</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec fixed">Fixed</span>
+  resolve binary path via argv[0] and PATH lookup</pre>
+      </div>
+      <div class="config-prose">
+        <p>Improves binary path resolution in hook scripts. It searches the environment PATH variable when argv[0] is not an absolute path.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.7.1 · March 25, 2026</h3>
+      <span class="src-tag">maintenance · cf24984</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec fixed">Fixed</span>
+  use symlink path instead of canonicalized Cellar path</pre>
+      </div>
+      <div class="config-prose">
+        <p>Resolves Homebrew installation path issues. It references the symlinked binary path rather than the canonicalized Cellar path.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.7.0 · March 25, 2026</h3>
+      <span class="src-tag">Gemini · b31c96d</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  native BeforeTool/AfterTool hook support</pre>
+      </div>
+      <div class="config-prose">
+        <p>Introduces native support for Gemini CLI BeforeTool and AfterTool hooks. It automatically translates payloads and responses to match the Gemini format.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.6.0 · March 22, 2026</h3>
+      <span class="src-tag">coverage · e7f5c40</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  add gates for missing programs</pre>
+      </div>
+      <div class="config-prose">
+        <p>Adds dedicated rules and gates for missing system programs. This expands command coverage and improves security check safety.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.5.10 · March 22, 2026</h3>
+      <span class="src-tag">maintenance · 6422d4a</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec fixed">Fixed</span>
+  format generated code with rustfmt, prettyplease fallback
+  run rustfmt on generated files to prevent dirty worktree
+  use recursive globs so hooks trigger for all source files
+  include expansion nodes in command argument extraction
+  detect github_pat_ fine-grained personal access tokens
+  detect Stripe sk_live_ and sk_test_ secret keys
+  use atomic write-then-rename for hint tracker and tool cache
+  split compound commands in fallback parser
+  recover from poisoned mutex instead of panicking
+  log serialization errors instead of silently swallowing
+  strip transparent command wrappers before gate evaluation
+  block entire .git/ directory in acceptEdits mode
+<span class="sec other">Other</span>
+  remove unused tools from detection cache
+  remove unused lsd from tool detection
+  compile security regexes once via LazyLock</pre>
+      </div>
+      <div class="config-prose">
+        <p>Provides a large reliability release. It adds fine-grained token detection for GitHub and Stripe. It uses atomic cache updates, strips transparent command wrappers, and blocks direct modifications to the git directory in accept edits mode. It also ensures generated code is formatted to prevent dirty worktrees.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.5.9 · March 21, 2026</h3>
+      <span class="src-tag">maintenance · b401b57</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec fixed">Fixed</span>
+  remove ALWAYS, fix pipe false positives, add new detections
+<span class="sec other">Other</span>
+  bump plugin versions to 1.5.7
+  update skills and convert hook-reference to path-scoped rule</pre>
+      </div>
+      <div class="config-prose">
+        <p>Polishes modern command hints and removes the redundant ALWAYS indicator. It updates plugin skills to match path-scoped rules.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.5.8 · March 21, 2026</h3>
+      <span class="src-tag">maintenance · bd6973d</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec fixed">Fixed</span>
+  sync simulate_append test helper with new dedup logic
+  per-subcommand gate evaluation for compound commands
+<span class="sec other">Other</span>
+  add Windows x64 and arm64 build targets</pre>
+      </div>
+      <div class="config-prose">
+        <p>Enables per subcommand gate evaluation for compound commands. It adds Windows target platform support to the automated build pipeline.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.5.7 · March 21, 2026</h3>
+      <span class="src-tag">maintenance · a714abb</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec fixed">Fixed</span>
+  specify musl target for binary size check
+  specificity-based ask/allow resolution and $HOME expansion
+<span class="sec other">Other</span>
+  use dedicated app token for release automation
+  auto-merge release-plz PRs and trigger release</pre>
+      </div>
+      <div class="config-prose">
+        <p>Improves settings resolution by adding specificity based allow/ask matching. It expands the HOME variable in pattern matching. It also integrates release plz with custom bot authentication.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.5.6 · March 21, 2026</h3>
+      <span class="src-tag">maintenance · 1b29246</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec fixed">Fixed</span>
+  stage build-generated files in pre-commit
+<span class="sec other">Other</span>
+  add Homebrew as recommended install method</pre>
+      </div>
+      <div class="config-prose">
+        <p>Stages build generated rules during pre-commit hooks. It documents Homebrew as the recommended installation method.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.5.5 · March 20, 2026</h3>
+      <span class="src-tag">maintenance · 6b759cf</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec fixed">Fixed</span>
+  use actions/checkout for homebrew-tap push auth
+<span class="sec other">Other</span>
+  bump build provenance attestation action</pre>
+      </div>
+      <div class="config-prose">
+        <p>Corrects Homebrew tap repository push authentication in GitHub Actions. It integrates build provenance attestation to secure release binary publishing.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.5.4 · March 20, 2026</h3>
+      <span class="src-tag">maintenance · f3c372a</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec fixed">Fixed</span>
+  Use CARGO_MANIFEST_DIR to detect package verify context
+  Remove publish=false from Cargo.toml
+  Remove name field from skills so prefix shows in autocomplete
+<span class="sec other">Other</span>
+  Move plugin to subdirectory to prevent skill leakage</pre>
+      </div>
+      <div class="config-prose">
+        <p>Fixes Cargo package verification issues in the release pipeline. It moves the plugin into a subdirectory to prevent skill leakage. It also removes the name field from skills to improve editor autocompletion.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.5.3 · March 20, 2026</h3>
+      <span class="src-tag">maintenance · d3af03d</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  Switch to release-plz with homebrew tap automation
+<span class="sec fixed">Fixed</span>
+  Skip codegen during cargo package verify
+  Match import order to cargo fmt for idempotent codegen
+  Sort custom handler lists for deterministic codegen
+  Commit generated files so cargo package verify succeeds
+  Remove musl default target so cargo package works in CI
+  Ignore cross-session hint dedup test in shared process
+  Remove name field from skills so prefix shows in autocomplete
+<span class="sec other">Other</span>
+  Move plugin to subdirectory to prevent skill leakage</pre>
+      </div>
+      <div class="config-prose">
+        <p>Switches the release workflow to release-plz with automated homebrew tap publishing. It moves the plugin to a subdirectory to prevent skill leakage. It fixes cargo package verification and cargo build issues under continuous integration by committing generated files, matching import order to cargo fmt, sorting custom handler lists, and skipping codegen during verification. It also ignores cross-session hint deduplication tests in shared processes.</p>
+      </div>
+    </div>
+  </div>
+<div class="config-block">
+    <header>
+      <h3>v1.5.2 · March 18, 2026</h3>
+      <span class="src-tag">maintenance · 55af0b2</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec fixed">Fixed</span>
+  Require all sub-commands to match settings for compound allow</pre>
+      </div>
+      <div class="config-prose">
+        <p>Hardens security for compound commands. It requires all subcommands to match allowed patterns in user settings before granting auto approval.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.5.1 · March 14, 2026</h3>
+      <span class="src-tag">maintenance · 044e763</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec fixed">Fixed</span>
+  Remove patch from acceptEdits auto-allow, add 20 security tests</pre>
+      </div>
+      <div class="config-prose">
+        <p>Removes the patch command from the acceptEdits auto allow list to prevent arbitrary write bypasses. It backs this check with 20 new security tests.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.5.0 · March 13, 2026</h3>
+      <span class="src-tag">safeties · b5e3a1d</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  Smarter secret handling for .env and doc files</pre>
+      </div>
+      <div class="config-prose">
+        <p>Improves secret checking heuristics. This prevents false positive leakage reports in documentation and environment files.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.4.0 · March 10, 2026</h3>
+      <span class="src-tag">skills &amp; doctor · e13491d</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  Add skill auto-approval and doctor command</pre>
+      </div>
+      <div class="config-prose">
+        <p>Introduces the doctor command to diagnose hook health. It adds auto approval configurations for trusted project skills.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.3.0 · March 10, 2026</h3>
+      <span class="src-tag">config · 662cb64</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  Add per-tier config toggles and Configuration docs</pre>
+      </div>
+      <div class="config-prose">
+        <p>Adds granular configuration toggles in the config file. This enables or disables specific gate tiers.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.2.0 · March 10, 2026</h3>
+      <span class="src-tag">MCP &amp; reminders · 225407a</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  Add MCP tool matcher for PreToolUse hooks
+  Add security reminders for Write/Edit/MultiEdit content scanning
+<span class="sec fixed">Fixed</span>
+  Replace deprecated approve decision with proper allow/no-opinion</pre>
+      </div>
+      <div class="config-prose">
+        <p>Implements PreToolUse hook support for Model Context Protocol tools. It adds content scanning security reminders for file write operations. It also replaces deprecated approval responses.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.1.0 · March 10, 2026</h3>
+      <span class="src-tag">initial release · 0cf5508</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  Initial commit: Rust bash permission gate for Claude Code
+  Integrate settings.json to respect user permissions
+  Add declarative rules system with build-time codegen
+  Add PermissionRequest hook support for subagent approval
+  Add hooks subcommand for managing Claude Code hooks
+  Add modern CLI hints via additionalContext
+  Redesign review TUI with project-first dashboard layout</pre>
+      </div>
+      <div class="config-prose">
+        <p>The initial public release of tool-gates (formerly bash-gates). It features an AST based bash parser for precise command identification. It integrates with settings files. It checks against shell execution patterns. It provides a terminal user interface for review and hooks subcommand management.</p>
+      </div>
+    </div>
+  </div>
+  <p class="note">
+    <svg class="alert" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+    <span><b>Release automation via release-plz.</b> Push to main triggers a version-bump PR; merging it cuts the GitHub release with cross-compiled binaries (linux x86_64/arm64, macos x86_64/arm64, windows x86_64/arm64) and updates the Homebrew tap. MSRV is Rust 1.86. Note: Releases prior to v1.5.4 have been purged on GitHub and do not have downloadable pre-built assets; Homebrew tap installation requires v1.5.6 or newer.</span>
+  </p>

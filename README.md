@@ -21,28 +21,29 @@ A hook for [Claude Code](https://code.claude.com/docs/en/hooks), [Gemini CLI](ht
 
 ## Features
 
-| Feature                       | Description                                                                                                                                               |
-| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Approval Learning**         | Tracks approved commands and saves patterns to settings.json via TUI or CLI                                                                               |
-| **Settings Integration**      | Respects your `settings.json` allow/deny/ask rules - won't bypass your explicit permissions                                                               |
-| **Accept Edits Mode**         | Auto-allows file-editing commands (`sd`, `prettier --write`, etc.) when in acceptEdits mode                                                               |
-| **Auto Mode Support**         | Integrates with Claude Code auto mode: deterministic deny floor for dangerous patterns, classifier retry hints                                            |
-| **Modern CLI Hints**          | Suggests modern alternatives (`bat`, `rg`, `fd`, etc.) via `additionalContext` for Claude to learn                                                        |
-| **AST Parsing**               | Uses [tree-sitter-bash](https://github.com/tree-sitter/tree-sitter-bash) for accurate command analysis                                                    |
-| **Compound Commands**         | Handles `&&`, `\|\|`, `\|`, `;` chains correctly                                                                                                          |
-| **Security First**            | Catches pipe-to-shell, eval, command injection patterns                                                                                                   |
-| **Unknown Protection**        | Unrecognized commands require approval                                                                                                                    |
-| **Claude Code Plugin**        | Install as a plugin with the `/tool-gates:review` skill for interactive approval management                                                               |
-| **400+ Commands**             | 13 specialized gates with comprehensive coverage                                                                                                          |
-| **File Guards**               | Blocks symlinked AI config files (CLAUDE.md, .cursorrules, etc.) to prevent confused reads/edits                                                          |
-| **Security Reminders**        | Scans Write/Edit content for 26 anti-patterns (secrets, XSS, injection, etc.) across 3 tiers                                                              |
-| **Head/Tail Pipe Block**      | Denies `\| head` / `\| tail` pipes so stdout is capped at the source via `rg -m N` / `fd --max-results N` / `bat -r START:END` instead                    |
-| **Tool Blocking**             | Configurable rules to block tools (Glob, Grep, and firecrawl/ref/exa MCP calls to GitHub) with domain filtering                                           |
-| **Skill Auto-Approval**       | Auto-approve Skill tool calls based on project directory conditions. No external hook scripts needed                                                      |
-| **MCP Accept-Edits Approval** | Auto-approve named MCP tools when the session is in `acceptEdits` mode. Fills the gap Claude Code leaves open (MCP tools ignore permission mode natively) |
-| **Configuration**             | `~/.config/tool-gates/config.toml` for feature toggles, custom block rules, and file guard extensions                                                     |
-| **Health Check**              | `tool-gates doctor` verifies config, hooks, cache files, and flags legacy remnants                                                                        |
-| **Fast**                      | Static native binary, no interpreter overhead                                                                                                             |
+| Feature                       | Description                                                                                                                                                                                 |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Approval Learning**         | Tracks approved commands and saves patterns to settings.json via TUI or CLI                                                                                                                 |
+| **Settings Integration**      | Respects your `settings.json` allow/deny/ask rules - won't bypass your explicit permissions                                                                                                 |
+| **Accept Edits Mode**         | Auto-allows file-editing commands (`sd`, `prettier --write`, etc.) when in acceptEdits mode                                                                                                 |
+| **Auto Mode Support**         | Integrates with Claude Code auto mode: deterministic deny floor for dangerous patterns, classifier retry hints                                                                              |
+| **Modern CLI Hints**          | Suggests modern alternatives (`bat`, `rg`, `fd`, etc.) via `additionalContext` for the assistant to learn                                                                                   |
+| **AST Parsing**               | Uses [tree-sitter-bash](https://github.com/tree-sitter/tree-sitter-bash) for accurate command analysis                                                                                      |
+| **Compound Commands**         | Handles `&&`, `\|\|`, `\|`, `;` chains correctly                                                                                                                                            |
+| **Security First**            | Catches pipe-to-shell, eval, command injection patterns                                                                                                                                     |
+| **Unknown Protection**        | Unrecognized commands are never auto-approved; outside plan mode they require approval                                                                                                      |
+| **Claude Code Plugin**        | Install as a plugin with the `/tool-gates:review` skill for interactive approval management                                                                                                 |
+| **400+ Commands**             | 13 specialized gates with comprehensive coverage                                                                                                                                            |
+| **File Guards**               | Blocks symlinked AI config files (CLAUDE.md, .cursorrules, etc.) to prevent confused reads/edits                                                                                            |
+| **Security Reminders**        | Scans Write/Edit content for 28 anti-patterns (secrets, XSS, injection, etc.) across 3 tiers                                                                                                |
+| **Head/Tail Pipe Block**      | Denies `\| head` / `\| tail` pipes so stdout is capped at the source via `rg -m N` / `fd --max-results N` / `bat -r START:END` instead                                                      |
+| **Tool Blocking**             | Configurable rules to block tools (Glob, Grep, and firecrawl/ref/exa MCP calls to GitHub) with domain filtering                                                                             |
+| **Skill Auto-Approval**       | Auto-approve Skill tool calls based on project directory conditions. No external hook scripts needed                                                                                        |
+| **MCP Accept-Edits Approval** | Auto-approve named MCP tools when the session is in `acceptEdits` mode. Fills the gap Claude Code leaves open (MCP tools ignore permission mode natively)                                   |
+| **Codex Project Edits**       | Auto-approve Codex `apply_patch` edits inside the project (cwd + `additionalDirectories`) on PermissionRequest, honoring settings.json deny/ask rules and file guards. Opt-in via `[codex]` |
+| **Configuration**             | `~/.config/tool-gates/config.toml` for feature toggles, custom block rules, and file guard extensions                                                                                       |
+| **Health Check**              | `tool-gates doctor` verifies config, hooks, cache files, and flags legacy remnants                                                                                                          |
+| **Fast**                      | Single native binary, no interpreter overhead                                                                                                                                               |
 
 ---
 
@@ -118,18 +119,27 @@ flowchart TD
 
 - No `PermissionRequest` (Gemini doesn't have subagent permission hooks)
 - No approval tracking (Gemini doesn't provide `tool_use_id`)
-- `"block"` instead of `"deny"` in output, exit code 2 for blocks
+- tool-gates emits `"block"` for hard blocks; Gemini also accepts `"deny"`, and exit code 2 blocks
 - Security anti-pattern scanning in AfterTool is not yet supported
 
 **Codex CLI** uses three hooks (`PreToolUse`/`PermissionRequest`/`PostToolUse`) with the same gate engine. Codex emits the same `hook_event_name` strings as Claude, so the client is selected via the explicit `--client codex` CLI flag (the installer bakes that flag into the hook command). Key differences from Claude:
 
 - `apply_patch` is the canonical file-edit tool name (matcher aliases `Write` and `Edit` also fire). The patch body lives in `tool_input.command` as a unified diff; tool-gates parses out `*** Add/Update/Delete File:` headers so file_guards and security_reminders run against every affected path
-- Codex's parser only honors `permissionDecision: "deny"` on PreToolUse. tool-gates emits empty stdout for Allow/Ask so Codex's UI prompts the user (same end-user experience as Claude's prompt)
-- PreToolUse `additionalContext` is rejected; modern-CLI hints + Tier-3 warnings ride on PostToolUse instead
+- Codex's parser only honors `permissionDecision: "deny"` on PreToolUse. tool-gates emits empty stdout for Allow/Ask and hands the decision back to Codex, whose `approval_policy` decides whether the user is prompted (see the approval-model bullets below)
+- Modern-CLI hints + Tier-3 warnings ride on PostToolUse for Codex today. Codex accepts `additionalContext` on PreToolUse, but tool-gates emits empty stdout for non-deny Pre decisions, so there is no Pre output to attach hints to.
 - PermissionRequest accepts only `hookSpecificOutput.decision.behavior` (`allow`/`deny`) plus an optional deny `message`. `addDirectories`, `updatedInput`, `updatedPermissions`, `interrupt` are dropped (worktree approval reduces to a flat allow without path expansion)
 - Codex currently reports `permission_mode` as `default` or `bypassPermissions`, not `acceptEdits`, so `[[accept_edits_mcp]]` is inactive for Codex MCP calls
+- `apply_patch` file edits can be auto-approved on PermissionRequest via `[codex] accept_project_edits` in `config.toml`, separate from `[[accept_edits_mcp]]`: an in-project patch (cwd + settings.json `additionalDirectories`) auto-allows, while your `Write`/`Edit` deny and ask rules and the file guards still apply. `allow_edits_anywhere` widens it to anywhere on disk
 - No PermissionDenied event (no auto-mode classifier in Codex)
 - Hook config lives in `~/.codex/hooks.json` (user) or `<repo>/.codex/hooks.json` (project)
+
+**Codex approval model** (whether a tool-gates `ask` actually prompts):
+
+- Prompting is governed by Codex's `approval_policy`, not tool-gates. Only under `approval_policy = "untrusted"` does a non-safe command reach the prompt by default; under `on-request`/`on-failure`, normal sandboxed execution does not prompt, but explicit escalation or sandbox failure can still prompt
+- Codex auto-approves its built-in `is_safe_command` read list (`cat`, `ls`, `grep`, `rg`, `sed -n`, `git status/log/diff`, ...) before any hook runs, so tool-gates never sees those on PermissionRequest and can only `deny` them via PreToolUse, never turn them into a prompt
+- To route safe-reads through tool-gates, add execpolicy `prefix_rule(pattern=["cat"], decision="prompt")` rules to `~/.codex/rules/default.rules`; they match before the safe-list fallback. No wildcard, so enumerate each program
+- Sandbox and approval are orthogonal: disabling the sandbox (`sandbox_mode = "danger-full-access"`) does not reduce prompts (those come from `approval_policy`), it only drops containment
+- The `/permissions` "Default" popup flips `approval_policy` to `on-request` for the session only; enabling Guardian ("Approve for me") persists `on-request` to `config.toml`. Both silently disable the prompt layer
 
 > `PermissionRequest` metadata like `blocked_path` and `decision_reason` is optional in Claude Code payloads. tool-gates treats those fields as best-effort context, not required inputs.
 
@@ -142,19 +152,21 @@ flowchart TD
 | **defer** | `permissionDecision` omitted  | Claude Code's resolver runs the tool's own permission check, populating the prefix-suggestion that lights up the third "Yes, and don't ask again for X" button. Used for benign gate-engine asks except Claude Code's acceptEdits Bash auto-allow commands that tool-gates did not already approve |
 | **allow** | `permissionDecision: "allow"` | Auto-approved                                                                                                                                                                                                                                                                                      |
 
-> Unknown commands always require approval. Whether they get the two-button or three-button prompt depends on whether your `permissions.ask` rules in settings.json match -- run `tool-gates rules ask-audit` to surface ask rules that suppress the third button.
+> Unknown commands are never auto-approved. In default and acceptEdits mode they require approval, in auto mode the classifier decides, and in plan mode mutating unknowns deny.
+
+See the [Permission modes](docs/src/modes.md) docs for how `default`, `plan`, `acceptEdits`, `auto`, and Codex `approval_policy` change these decisions.
 
 ### Settings.json Integration
 
 tool-gates reads your Claude Code settings from `~/.claude/settings.json` and `.claude/settings.json` (project) to respect your explicit permission rules:
 
-| settings.json | tool-gates | Result                                                                                                                                                                             |
-| ------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `deny` rule   | (any)      | **deny** (respects your explicit deny)                                                                                                                                             |
-| `ask` rule    | (any)      | **ask** (respects your explicit ask; two-button prompt)                                                                                                                            |
-| `allow` rule  | dangerous  | **deny** (tool-gates still blocks dangerous)                                                                                                                                       |
-| `allow`/none  | safe       | **allow**                                                                                                                                                                          |
-| none          | unknown    | default/acceptEdits: **defer**; auto: **ask**. In acceptEdits, Claude Code Bash auto-allow commands stay explicit **ask** unless tool-gates' own accept-edits policy approves them |
+| settings.json | tool-gates | Result                                                                                                                                                                                                                                             |
+| ------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `deny` rule   | (any)      | **deny** (respects your explicit deny)                                                                                                                                                                                                             |
+| `ask` rule    | (any)      | **ask** (respects your explicit ask; two-button prompt)                                                                                                                                                                                            |
+| `allow` rule  | dangerous  | **deny** (tool-gates still blocks dangerous)                                                                                                                                                                                                       |
+| `allow`/none  | safe       | **allow**                                                                                                                                                                                                                                          |
+| none          | unknown    | default/acceptEdits: **defer**; auto: **ask**; plan: **deny** unless the gate proves the command is read-only. In acceptEdits, Claude Code Bash auto-allow commands stay explicit **ask** unless tool-gates' own accept-edits policy approves them |
 
 This ensures tool-gates won't accidentally bypass your explicit deny rules while still providing security against dangerous commands.
 
@@ -189,11 +201,11 @@ eslint --fix src/                 # Linting with fix
 - Filesystem structure changes: `rm`, `rmdir`, `mv`, `cp`, `touch`
 - Blocked commands: `rm -rf /` still denied
 
-**Extending acceptEdits to MCP tools.** Claude Code's `acceptEdits` mode does not extend to MCP tools natively -- every MCP tool's internal permission check returns passthrough regardless of mode. tool-gates fills the gap: declare `[[accept_edits_mcp]]` rules in `config.toml` and the named MCP tools auto-allow only when the session is in `acceptEdits`. See the [MCP Accept-Edits Approval](#mcp-accept-edits-approval) configuration section below.
+**Extending acceptEdits to MCP tools.** Claude Code's `acceptEdits` mode does not extend to MCP tools natively: every MCP tool's internal permission check returns passthrough regardless of mode. tool-gates fills the gap: declare `[[accept_edits_mcp]]` rules in `config.toml` and the named MCP tools auto-allow only when the session is in `acceptEdits`. See the [MCP Accept-Edits Approval](#mcp-accept-edits-approval) configuration section below.
 
 ### Auto Mode
 
-_Requires Claude Code 2.1.89+ for the `PermissionDenied` retry hook. Earlier auto-mode-capable builds still get the deny-promotion, pattern narrowing, and pending queue guard._
+_Requires Claude Code 2.1.88+ for the `PermissionDenied` retry hook. Earlier auto-mode-capable builds still get the deny-promotion, pattern narrowing, and pending queue guard._
 
 When Claude Code runs in `auto` permission mode, a server-side classifier decides `ask` calls instead of prompting. tool-gates layers in as a deterministic pre-filter and safety floor:
 
@@ -207,17 +219,17 @@ When Claude Code runs in `auto` permission mode, a server-side classifier decide
 
 - **Pipe-to-shell and `eval` escalate from ask to deny.** These patterns have no legitimate use case, so they stay in the deterministic floor rather than routing to the classifier.
 - **Claude's acceptEdits Bash fast path is not trusted.** Auto mode checks whether a command would be allowed in `acceptEdits` before it asks the classifier. tool-gates now owns that decision: commands like `mkdir -p src/components` and `sed -i ... file` can still allow when they pass tool-gates' path-aware accept-edits policy, while unapproved Claude hardcoded bases such as `rm`, `rmdir`, `mv`, `cp`, and `touch` deny instead of reaching Claude's fast path.
-- **Pending queue only tracks human approvals.** Under auto mode the classifier decides silently, so nothing goes into `pending.jsonl` -- the review queue stays focused on patterns you explicitly approved.
+- **Pending queue only tracks human approvals.** Under auto mode the classifier decides silently, so nothing goes into `pending.jsonl`. The review queue stays focused on patterns you explicitly approved.
 - **Classifier denials get retry hints.** If the classifier denies a command tool-gates would allow (e.g. `cargo check`), the `PermissionDenied` hook tells the model it may retry.
 - **Skill auto-approval still fires.** `[[auto_approve_skills]]` rules are explicit trust declarations and aren't revoked by opting into auto mode.
 
-Configure the Claude Code classifier via `autoMode.{environment,allow,soft_deny}` in settings.json. Inspect the merged config with `claude auto-mode config`.
+Configure the Claude Code classifier via `autoMode.{allow,soft_deny,hard_deny,environment}` in settings.json. Inspect the merged config with `claude auto-mode config` (also `defaults`, `critique`).
 
 ### Modern CLI Hints
 
 _Requires Claude Code 1.0.20+_
 
-When Claude uses legacy commands, tool-gates suggests modern alternatives via `additionalContext`. This helps Claude learn better patterns over time without modifying the command.
+When a supported client uses legacy commands, tool-gates suggests modern alternatives via `additionalContext`. This helps the assistant learn better patterns over time without modifying the command.
 
 ```bash
 # Claude runs: cat README.md
@@ -271,26 +283,26 @@ tool-gates --tools-status
 
 ### Security Reminders
 
-When Claude writes code via Write/Edit, tool-gates scans the content for 26 security anti-patterns organized into three tiers:
+When a supported client writes code through a write/edit tool, tool-gates scans the content for 28 security anti-patterns organized into three tiers. That includes Claude `Write`/`Edit`, Gemini `write_file`/`replace` on the before-tool path, and Codex `apply_patch` added lines.
 
-| Tier       | Hook        | Decision                 | Behavior                                                                                                                                                                                                                                          |
-| ---------- | ----------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Tier 1** | PreToolUse  | `deny` + `systemMessage` | Hardcoded secrets blocked before write. Tier-1 denies surface to the operator via top-level `systemMessage` so the block isn't silent. Routine denies (head/tail pipe, settings.json matches, procedural gate denies) stay silent at the UI level |
-| **Tier 2** | PostToolUse | `additionalContext`      | Anti-patterns flagged after write. Claude gets a nudge to fix                                                                                                                                                                                     |
-| **Tier 3** | PreToolUse  | `allow` + context        | Informational warnings injected without blocking                                                                                                                                                                                                  |
+| Tier       | Hook                   | Decision                 | Behavior                                                                                                                                                                                                                                          |
+| ---------- | ---------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Tier 1** | PreToolUse             | `deny` + `systemMessage` | Hardcoded secrets blocked before write. Tier-1 denies surface to the operator via top-level `systemMessage` so the block isn't silent. Routine denies (head/tail pipe, settings.json matches, procedural gate denies) stay silent at the UI level |
+| **Tier 2** | PostToolUse            | `additionalContext`      | Anti-patterns flagged after write. Claude and Codex get a nudge to fix; Gemini AfterTool output is not plumbed for Tier 2 yet                                                                                                                     |
+| **Tier 3** | PreToolUse/PostToolUse | `allow` + context        | Informational warnings injected without blocking. Claude/Gemini carry these on PreToolUse/BeforeTool; Codex carries them on PostToolUse because non-deny PreToolUse output is empty stdout                                                        |
 
-**Tier 1: Secrets (always denied):**
+**Tier 1: Secrets (denied before source writes):**
 AWS access keys (`AKIA...`), private keys (`-----BEGIN * PRIVATE KEY`), GitHub tokens (`ghp_/ghs_/ghu_/gho_/ghr_`), Stripe/Slack/Google API keys, GitHub Actions workflow injection.
 
 **Tier 2: Anti-patterns (post-write nudge, once per file+rule per session):**
 `eval()`, `child_process.exec`, `new Function()`, `os.system()`, `pickle.load`, `dangerouslySetInnerHTML`, `document.write()`, `.innerHTML =`, `yaml.load()` without SafeLoader, SQL f-string interpolation, `subprocess` with `shell=True`, `render_template_string()` (Flask SSTI), `marshal.load`/`shelve.open`, `__import__()`, PHP `unserialize()`.
 
 **Tier 3: Informational (allow with warning, once per session):**
-SSL `verify=False`, `chmod 777`, MD5/SHA1 for security, CORS wildcard `*`, Vue `v-html=`, template `autoescape=False`.
+SSL `verify=False`, `chmod 777`, MD5/SHA1 for security, CORS wildcard `*`, Vue `v-html=`, template `autoescape=False`, `Math.random()` for security tokens, JS `createHash` md5/sha1.
 
-**Why Tier 2 uses PostToolUse:** The write lands without blocking. Claude sees a `<system-reminder>` with the security warning and can self-correct in its next action. No wasted edits from re-prompting. Deduped per (file, rule) per session so you only see each warning once.
+**Why Tier 2 uses PostToolUse:** The write lands without blocking. The assistant sees a `<system-reminder>` with the security warning and can self-correct in its next action. No wasted edits from re-prompting. Deduped per (file, rule) per session so you only see each warning once.
 
-Skips documentation files (.md, .txt, .rst, etc.) for content checks. Tier 1 secret scans always fire.
+Documentation files (.md, .txt, .rst, etc.) skip Tier 2/3 content checks. Tier 1 secrets in source files deny before write; Tier 1 secrets in docs get a PostToolUse warning; dedicated secret files (`.env`, `.envrc`, `.env.*`) skip secret detection because they exist to hold secrets.
 
 ```toml
 # ~/.config/tool-gates/config.toml
@@ -308,6 +320,7 @@ When you approve commands (via Claude Code's permission prompt), tool-gates trac
 ```bash
 # After approving some commands, review pending approvals
 tool-gates pending list
+tool-gates pending list --project
 
 # Interactive TUI dashboard
 tool-gates review          # current project only
@@ -379,7 +392,7 @@ Bottles are built for macOS (arm64, x86_64) and Linux (arm64, x86_64). Formulas 
 ```bash
 # Linux x64
 curl -Lo ~/.local/bin/tool-gates \
-  https://github.com/camjac251/tool-gates/releases/latest/download/tool-gates-linux-amd64
+  https://github.com/camjac251/tool-gates/releases/latest/download/tool-gates-linux-x86_64
 chmod +x ~/.local/bin/tool-gates
 
 # Linux ARM64
@@ -389,20 +402,26 @@ chmod +x ~/.local/bin/tool-gates
 
 # macOS Apple Silicon
 curl -Lo ~/.local/bin/tool-gates \
-  https://github.com/camjac251/tool-gates/releases/latest/download/tool-gates-darwin-arm64
+  https://github.com/camjac251/tool-gates/releases/latest/download/tool-gates-macos-arm64
 chmod +x ~/.local/bin/tool-gates
 
 # macOS Intel
 curl -Lo ~/.local/bin/tool-gates \
-  https://github.com/camjac251/tool-gates/releases/latest/download/tool-gates-darwin-amd64
+  https://github.com/camjac251/tool-gates/releases/latest/download/tool-gates-macos-x86_64
 chmod +x ~/.local/bin/tool-gates
 ```
+
+Windows binaries are available for Bash-like environments such as Git Bash or MSYS2. PowerShell/cmd.exe command classification is not first-class yet; WSL users should use the Linux binary.
 
 ### Build from Source
 
 ```bash
-# Requires Rust 1.85+
+# Requires Rust 1.86+
 cargo build --release
+# Binary: ./target/release/tool-gates
+
+# Static Linux musl build
+cargo build --release --target x86_64-unknown-linux-musl
 # Binary: ./target/x86_64-unknown-linux-musl/release/tool-gates
 ```
 
@@ -519,7 +538,7 @@ Add to `~/.claude/settings.json`:
 
 ### Claude Code Plugin (Optional)
 
-tool-gates ships as a [Claude Code plugin](https://code.claude.com/docs/en/plugins) with the `/tool-gates:review` skill for interactive approval management. The plugin provides the skill only. Hook installation is handled by the binary (see [Configure Claude Code](#configure-claude-code) above).
+tool-gates ships as a [Claude Code plugin](https://code.claude.com/docs/en/plugins) with the `/tool-gates:review` skill for interactive approval management. The plugin provides the skill only. Hook installation is handled by the binary (see [Configure](#configure) above).
 
 **Prerequisites:** The `tool-gates` binary must be installed and hooks configured before using the plugin.
 
@@ -696,9 +715,9 @@ Add to `~/.codex/hooks.json`:
 
 tool-gates recognizes its own CLI commands:
 
-| Allow                                                                                                                     | Ask                                                                                                             |
-| ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `pending list`, `pending count`, `rules list`, `rules ask-audit`, `hooks status`, `--help`, `--version`, `--tools-status` | `approve`, `rules remove`, `rules ask-audit --apply`, `pending clear`, `hooks add`, `review`, `--refresh-tools` |
+| Allow                                                                                                                            | Ask                                                                                                                                          |
+| -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pending list`, `rules list`, `rules ask-audit`, `hooks status`, `hooks json`, `doctor`, `--help`, `--version`, `--tools-status` | `approve`, `rules remove`, `rules ask-audit --apply`, `pending clear [--project \| --all] --force`, `hooks add`, `review`, `--refresh-tools` |
 
 ### Basics
 
@@ -770,7 +789,7 @@ deno: `check`, `lint`, `test`, `fmt --check` allow. `run`, `fmt`, `install`, `pu
 
 ### Developer Tools
 
-~77 tools with write-flag detection.
+77+ tools with write-flag detection.
 
 **Linters/type checkers (read-only, always allow):** `eslint`, `biome`, `ruff`, `pylint`, `flake8`, `mypy`, `pyright`, `bandit`, `shellcheck`, `hadolint`, `golangci-lint`, `oxlint`, `stylelint`
 
@@ -858,13 +877,14 @@ cargo test -- --nocapture         # With output
 ```bash
 # Claude Code format
 echo '{"tool_name":"Bash","tool_input":{"command":"git status"}}' | tool-gates
-# -> {"hookSpecificOutput":{"permissionDecision":"allow"}}
+# -> {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","permissionDecisionReason":"Read-only operation"}}
 
 echo '{"tool_name":"Bash","tool_input":{"command":"npm install"}}' | tool-gates
-# -> {"hookSpecificOutput":{"permissionDecision":"ask","permissionDecisionReason":"npm: Installing packages"}}
+# -> {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecisionReason":"npm: Installing packages"}}
+# permissionDecision is omitted so Claude Code can show the three-button prompt.
 
 echo '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}' | tool-gates
-# -> {"hookSpecificOutput":{"permissionDecision":"deny"}}
+# -> {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"rm: `rm -rf /` blocked: would recursively delete the entire root filesystem."}}
 
 # Gemini CLI format (auto-detected from hook_event_name)
 echo '{"hook_event_name":"BeforeTool","tool_name":"run_shell_command","tool_input":{"command":"git status"}}' | tool-gates
@@ -875,7 +895,7 @@ echo '{"hook_event_name":"BeforeTool","tool_name":"run_shell_command","tool_inpu
 
 # Codex CLI format (selected via --client codex flag, since event names match Claude)
 echo '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git status"},"cwd":"/tmp","session_id":"s","tool_use_id":"u","permission_mode":"default","transcript_path":null}' | tool-gates --client codex
-# -> (empty stdout, exit 0 -- pass through, Codex's UI prompts the user)
+# -> (empty stdout, exit 0: pass through to Codex; prompting depends on approval_policy/execpolicy)
 
 echo '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"rm -rf /"},"cwd":"/tmp","session_id":"s","tool_use_id":"u","permission_mode":"default","transcript_path":null}' | tool-gates --client codex
 # -> {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"rm: rm -rf / blocked"}}
@@ -937,14 +957,14 @@ Set the toggle to `false` to disable.
 
 ```toml
 [security_reminders]
-secrets = true         # Tier 1: hardcoded secrets, always deny (default: true)
+secrets = true         # Tier 1: hardcoded secrets deny by default
 anti_patterns = true   # Tier 2: eval, exec, innerHTML, etc. PostToolUse nudge (default: true)
 warnings = true        # Tier 3: SSL verify=False, chmod 777, etc. Informational (default: true)
 disable_rules = ["eval_injection", "pickle_deserialization"]  # skip individual rules
 ```
 
 <details>
-<summary>All 26 rule names (click to expand)</summary>
+<summary>All 28 rule names (click to expand)</summary>
 
 | Tier | Rule Name                      | Detects                                               |
 | :--: | ------------------------------ | ----------------------------------------------------- |
@@ -974,6 +994,8 @@ disable_rules = ["eval_injection", "pickle_deserialization"]  # skip individual 
 |  3   | `cors_wildcard`                | `Access-Control-Allow-Origin: *`                      |
 |  3   | `vue_v_html`                   | Vue `v-html=` XSS                                     |
 |  3   | `template_autoescape_disabled` | Jinja2/Django `autoescape=False`                      |
+|  3   | `math_random_security`         | `Math.random()` for security tokens/IDs               |
+|  3   | `js_weak_crypto_hash`          | JS `createHash('md5')` / `createHash('sha1')`         |
 
 </details>
 
@@ -1031,6 +1053,32 @@ Auto-approve Skill tool calls based on configurable rules. Supports `~` expansio
 | `if_project_under` | Project directory must be at or under one of these paths      |
 | _(no conditions)_  | Skill is auto-approved unconditionally                        |
 
+### Codex Project Edits
+
+```toml
+[codex]
+accept_project_edits = true    # default false
+allow_edits_anywhere = false   # default false
+```
+
+Auto-approve Codex `apply_patch` edits on the PermissionRequest hook when every
+touched path is inside the project (session cwd + `additionalDirectories` from
+`settings.json`) and no path is denied, asked, or guarded. Codex shell commands
+are also evaluated as `acceptEdits`, so in-project file-editing commands (`sd`,
+`prettier --write`, `mkdir -p`, `sed -i`, ...) auto-allow while dangerous bases
+(`rm`, `mv`, `cp`) and out-of-project targets still prompt. Mirrors Claude Code's
+`acceptEdits` for Codex.
+
+The auto-allow honors your `~/.claude/settings.json` `Write(...)` / `Edit(...)` /
+`MultiEdit(...)` rules: a `deny` pattern denies the patch, an `ask` pattern
+(`Write(**/.env*)`, `Write(**/secrets/**)`, `Edit(**/package-lock.json)`) still
+prompts, and the AI-config file guards still prompt. Patterns match
+gitignore-style, so `**/package-lock.json` matches at any depth. For a multi-file
+patch the strictest path decision wins.
+
+`allow_edits_anywhere = true` widens the auto-allow to edits anywhere on disk,
+still subject to every deny/ask pattern and file guard.
+
 ### MCP Accept-Edits Approval
 
 ```toml
@@ -1050,9 +1098,9 @@ tool = "*firecrawl*"                          # matches Claude (mcp__) and Gemin
 if_project_has = [".firecrawl-ok"]
 ```
 
-Auto-approve MCP tool calls **only when the session is in `acceptEdits` mode**. In any other mode the rules are inert and the MCP tool falls through to whatever `permissions.allow` in `settings.json` decides. Directory conditions and glob matching are identical to `auto_approve_skills`. Codex currently reports only `default` or `bypassPermissions`, so this feature is inactive for Codex MCP calls until Codex exposes an `acceptEdits` hook mode.
+Auto-approve MCP tool calls **only when the session is in `acceptEdits` mode**. In any other mode the rules are inert and the MCP tool falls through to whatever `permissions.allow` in `settings.json` decides. Directory conditions and glob matching are identical to `auto_approve_skills`. Codex currently reports only `default` or `bypassPermissions`, so this MCP feature is inactive for Codex MCP calls until Codex exposes an `acceptEdits` hook mode. Codex `apply_patch` file edits have their own opt-in (`[codex] accept_project_edits`); see [Codex Project Edits](#codex-project-edits).
 
-**Why this exists.** Claude Code's acceptEdits only natively auto-approves Edit/Write/NotebookEdit, Read (in allowed dirs), and a small fixed Bash set (`mkdir, touch, rm, rmdir, mv, cp, sed`). MCP tools ignore permission mode entirely -- their internal `checkPermissions` always returns passthrough, so acceptEdits gains them nothing. This config surface is the tool-gates extension: "prompt me normally, batch me through in acceptEdits" for named MCP tools.
+**Why this exists.** Claude Code's acceptEdits only natively auto-approves Edit/Write/NotebookEdit, Read (in allowed dirs), and a small fixed Bash set (`mkdir, touch, rm, rmdir, mv, cp, sed`). MCP tools ignore permission mode entirely: their internal `checkPermissions` always returns passthrough, so acceptEdits gains them nothing. This config surface is the tool-gates extension: "prompt me normally, batch me through in acceptEdits" for named MCP tools.
 
 **Safety.** Block rules (e.g. the default firecrawl/ref/exa GitHub-URL blocks) run before these allow rules, so `[[accept_edits_mcp]]` cannot unlock a blocked tool.
 
@@ -1062,12 +1110,12 @@ Auto-approve MCP tool calls **only when the session is in `acceptEdits` mode**. 
 
 **Reason field asymmetry.** `reason` only surfaces on the main-thread PreToolUse path. On the subagent PermissionRequest path, the `allow` wire format has no reason slot (`PermissionRequestDecision::Allow` carries only `updatedInput` and `updatedPermissions`), so a custom reason is silently dropped there.
 
-| Condition          | Description                                                                                                                                                                 |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tool`             | MCP tool name. Exact (`mcp__serena__find_symbol`), prefix (`mcp__serena*`), suffix (`*_scrape`), or contains (`*serena*` — pure substring match, see sharp-edge note above) |
-| `reason`           | Optional approval message shown to the AI assistant (main-thread only; silently dropped for subagents)                                                                      |
-| `if_project_has`   | Project directory must contain one of these files/directories                                                                                                               |
-| `if_project_under` | Project directory must be at or under one of these paths                                                                                                                    |
+| Condition          | Description                                                                                                                                                                |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tool`             | MCP tool name. Exact (`mcp__serena__find_symbol`), prefix (`mcp__serena*`), suffix (`*_scrape`), or contains (`*serena*`: pure substring match, see sharp-edge note above) |
+| `reason`           | Optional approval message shown to the AI assistant (main-thread only; silently dropped for subagents)                                                                     |
+| `if_project_has`   | Project directory must contain one of these files/directories                                                                                                              |
+| `if_project_under` | Project directory must be at or under one of these paths                                                                                                                   |
 
 ### Cache
 
@@ -1123,10 +1171,10 @@ src/
     ├── git.rs           # Git
     ├── shortcut.rs      # Shortcut CLI (short) - github.com/shortcut-cli/shortcut-cli
     ├── cloud.rs         # AWS, gcloud, terraform, kubectl, docker, podman, az, helm, pulumi
-    ├── network.rs       # curl, wget, ssh, rsync, netcat, HTTPie, nmap, socat, telnet
-    ├── filesystem.rs    # rm, mv, cp, chmod, tar, zip
+    ├── network.rs       # curl, wget, ssh, scp, sftp, rsync, netcat, httpie, nmap, socat, telnet
+    ├── filesystem.rs    # rm, rmdir, mv, cp, mkdir, chmod, chown, ln, tar, zip
     ├── devtools.rs      # sd, ast-grep, semgrep, biome, prettier, eslint, ruff, pytest, mypy, playwright, cypress, tsx, webpack
-    ├── package_managers.rs  # npm, pnpm, yarn, pip, uv, cargo, go, bun, conda, poetry, pipx, mise
+    ├── package_managers.rs  # npm, pnpm, yarn, pip, uv, cargo, rustc, rustup, go, bun, conda, poetry, pipx, mise
     ├── runtimes.rs      # python3, node, ruby, deno, php, lua, java, dotnet, swift, elixir
     └── system.rs        # psql, mysql, make, sudo, systemctl, OS pkg managers, build tools, openssl, gpg
 ```
@@ -1137,7 +1185,7 @@ src/
 
 Security reminder patterns were built on and informed by:
 
-- [Anthropic's security-guidance plugin](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/security-guidance), the official Claude Code security hook (9 base patterns we expanded to 26)
+- [Anthropic's security-guidance plugin](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/security-guidance), the official Claude Code security hook (9 base patterns we expanded to 28)
 - [Arcanum-Sec/sec-context](https://github.com/Arcanum-Sec/sec-context), curated security anti-pattern database synthesized from 150+ sources
 - [SecureCodeWarrior/ai-security-rules](https://github.com/SecureCodeWarrior/ai-security-rules), security rule files for AI coding tools
 - [OWASP Top 10](https://owasp.org/www-project-top-ten/), standard web application security risks
@@ -1148,6 +1196,7 @@ Security reminder patterns were built on and informed by:
 
 ## Links
 
+- [Interactive Documentation and Simulator](docs/src/index.md), local mdBook site
 - [Claude Code Hooks Documentation](https://code.claude.com/docs/en/hooks)
 - [Gemini CLI](https://github.com/google-gemini/gemini-cli)
 - [Claude Code MCP-CLI (experimental)](https://github.com/anthropics/claude-code/issues/12836#issuecomment-3629052941)

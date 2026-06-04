@@ -136,7 +136,7 @@ mod tests {
     fn test_bd_sync_asks() {
         let result = check_beads(&cmd("bd", &["sync"]));
         assert_eq!(result.decision, Decision::Ask);
-        assert!(result.reason.as_ref().unwrap().contains("Syncing"));
+        assert!(result.reason.as_ref().unwrap().contains("Syncs"));
     }
 
     #[test]
@@ -166,14 +166,14 @@ mod tests {
     fn test_bd_cleanup_asks() {
         let result = check_beads(&cmd("bd", &["cleanup", "--force"]));
         assert_eq!(result.decision, Decision::Ask);
-        assert!(result.reason.as_ref().unwrap().contains("Cleaning"));
+        assert!(result.reason.as_ref().unwrap().contains("Cleans"));
     }
 
     #[test]
     fn test_bd_compact_asks() {
         let result = check_beads(&cmd("bd", &["compact"]));
         assert_eq!(result.decision, Decision::Ask);
-        assert!(result.reason.as_ref().unwrap().contains("Compacting"));
+        assert!(result.reason.as_ref().unwrap().contains("Compacts"));
     }
 
     #[test]

@@ -1,0 +1,258 @@
+/* tool-gates shadow of mdBook's default theme/highlight.css.
+ *
+ * mdBook's stock highlight.css (a light "Atelier Dune" palette) is loaded on
+ * EVERY theme via <link id="mdbook-highlight-css"> in theme/index.hbs. Its
+ * top-of-stack rule `.hljs { background: #f6f7f6; color: #000 }` lights up
+ * every <code> element (mdBook pre-wraps each inline code span with
+ * <code class="hljs">), which paints light-on-light chips on tg-dark unless
+ * we keep re-asserting overrides in tool-gates.css. mdBook loads this shadow
+ * BEFORE additional-css, so we own the chip + block treatment from one file
+ * and avoid the specificity arms race documented in the prior overrides.
+ *
+ * Block (pre code) palette: Tomorrow Night on dark themes, Tomorrow on light
+ * themes. Inline chip: dark surface chip on dark themes, light surface chip
+ * on light themes, driven by theme tokens in variables.css. Selectors mirror
+ * the design's theme class set:
+ *   dark  <- tg-dark, coal, navy, ayu
+ *   light <- tg-light, light, rust
+ *
+ * Per-section design overrides (.hero .lede code, .client .pathline code,
+ * etc.) remain MORE specific than the chip rule here and continue to win
+ * inside their sections.
+ */
+
+/* ===== Inline code chips: theme-tokened baseline ===== */
+/* :not(pre) > excludes block-level code (pre code), which we style below.
+ * Limiting to #mdbook-content scopes the rule to the rendered chapter and
+ * leaves sidebar / chrome <code> elements untouched.
+ *
+ * mdBook's chrome.css repaints text via --inline-code-color but leaves the
+ * background flat, so this rule sets BOTH color and background from theme
+ * tokens. Verified on tg-dark (chips render dark on dark) and tg-light
+ * (chips render light on light). */
+#mdbook-content :not(pre) > code,
+#mdbook-content :not(pre) > code.hljs {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  color: var(--text-1);
+  background: var(--surface-2);
+  padding: 1px 6px;
+  border-radius: var(--r-1);
+}
+
+/* ===== Pre code blocks: theme-keyed palette ===== */
+/* Same surface tokens used elsewhere; mdBook chrome's .hljs base rule no
+ * longer applies (we're shadowing it) so this block fully owns block
+ * backgrounds + foregrounds on both themes. */
+pre > code.hljs {
+  display: block;
+  overflow-x: auto;
+  padding: 0.75rem 1rem;
+  border-radius: var(--r-2);
+}
+
+html.tg-dark pre > code.hljs,
+html.coal pre > code.hljs,
+html.navy pre > code.hljs,
+html.ayu pre > code.hljs {
+  background: oklch(20% 0.014 248);
+  color: oklch(86% 0.01 90);
+}
+
+html.tg-light pre > code.hljs,
+html.light pre > code.hljs,
+html.rust pre > code.hljs {
+  background: oklch(95.2% 0.008 88);
+  color: oklch(22% 0.014 248);
+}
+
+/* ===== Syntax tokens: Tomorrow Night on dark themes ===== */
+/* Direct port of the Tomorrow Night palette mdBook itself bundles under
+ * theme/tomorrow-night.css. Kept here so dark themes get the same hues
+ * without pulling in tomorrow-night.css (which also forces its own .hljs
+ * background and would re-introduce the override fight). */
+html.tg-dark .hljs-comment,
+html.coal .hljs-comment,
+html.navy .hljs-comment,
+html.ayu .hljs-comment {
+  color: #969896;
+}
+
+html.tg-dark .hljs-variable,
+html.tg-dark .hljs-attribute,
+html.tg-dark .hljs-attr,
+html.tg-dark .hljs-tag,
+html.tg-dark .hljs-regexp,
+html.coal .hljs-variable,
+html.coal .hljs-attribute,
+html.coal .hljs-attr,
+html.coal .hljs-tag,
+html.coal .hljs-regexp,
+html.navy .hljs-variable,
+html.navy .hljs-attribute,
+html.navy .hljs-attr,
+html.navy .hljs-tag,
+html.navy .hljs-regexp,
+html.ayu .hljs-variable,
+html.ayu .hljs-attribute,
+html.ayu .hljs-attr,
+html.ayu .hljs-tag,
+html.ayu .hljs-regexp {
+  color: #cc6666;
+}
+
+html.tg-dark .hljs-number,
+html.tg-dark .hljs-built_in,
+html.tg-dark .hljs-literal,
+html.tg-dark .hljs-params,
+html.coal .hljs-number,
+html.coal .hljs-built_in,
+html.coal .hljs-literal,
+html.coal .hljs-params,
+html.navy .hljs-number,
+html.navy .hljs-built_in,
+html.navy .hljs-literal,
+html.navy .hljs-params,
+html.ayu .hljs-number,
+html.ayu .hljs-built_in,
+html.ayu .hljs-literal,
+html.ayu .hljs-params {
+  color: #de935f;
+}
+
+html.tg-dark .hljs-string,
+html.tg-dark .hljs-name,
+html.coal .hljs-string,
+html.coal .hljs-name,
+html.navy .hljs-string,
+html.navy .hljs-name,
+html.ayu .hljs-string,
+html.ayu .hljs-name {
+  color: #b5bd68;
+}
+
+html.tg-dark .hljs-title,
+html.tg-dark .hljs-section,
+html.coal .hljs-title,
+html.coal .hljs-section,
+html.navy .hljs-title,
+html.navy .hljs-section,
+html.ayu .hljs-title,
+html.ayu .hljs-section {
+  color: #8abeb7;
+}
+
+html.tg-dark .hljs-function,
+html.coal .hljs-function,
+html.navy .hljs-function,
+html.ayu .hljs-function {
+  color: #81a2be;
+}
+
+html.tg-dark .hljs-keyword,
+html.tg-dark .hljs-selector-tag,
+html.coal .hljs-keyword,
+html.coal .hljs-selector-tag,
+html.navy .hljs-keyword,
+html.navy .hljs-selector-tag,
+html.ayu .hljs-keyword,
+html.ayu .hljs-selector-tag {
+  color: #b294bb;
+}
+
+/* ===== Syntax tokens: light-mode palette ===== */
+/* Hand-mapped equivalents of Tomorrow Night with darker, higher-contrast
+ * values for the light surface. Picked from the Tomorrow (light) palette
+ * (https://github.com/chriskempson/tomorrow-theme/blob/master/vim/colors/Tomorrow.vim)
+ * so the two themes share a recognizable hue family.
+ *
+ * Tomorrow values: red #c82829, orange #f5871f, yellow #eab700,
+ *                  green #718c00, aqua #3e999f, blue #4271ae, purple #8959a8. */
+html.tg-light .hljs-comment,
+html.light .hljs-comment,
+html.rust .hljs-comment {
+  color: #8e908c;
+}
+
+html.tg-light .hljs-variable,
+html.tg-light .hljs-attribute,
+html.tg-light .hljs-attr,
+html.tg-light .hljs-tag,
+html.tg-light .hljs-regexp,
+html.light .hljs-variable,
+html.light .hljs-attribute,
+html.light .hljs-attr,
+html.light .hljs-tag,
+html.light .hljs-regexp,
+html.rust .hljs-variable,
+html.rust .hljs-attribute,
+html.rust .hljs-attr,
+html.rust .hljs-tag,
+html.rust .hljs-regexp {
+  color: #c82829;
+}
+
+html.tg-light .hljs-number,
+html.tg-light .hljs-built_in,
+html.tg-light .hljs-literal,
+html.tg-light .hljs-params,
+html.light .hljs-number,
+html.light .hljs-built_in,
+html.light .hljs-literal,
+html.light .hljs-params,
+html.rust .hljs-number,
+html.rust .hljs-built_in,
+html.rust .hljs-literal,
+html.rust .hljs-params {
+  color: #f5871f;
+}
+
+html.tg-light .hljs-string,
+html.tg-light .hljs-name,
+html.light .hljs-string,
+html.light .hljs-name,
+html.rust .hljs-string,
+html.rust .hljs-name {
+  color: #718c00;
+}
+
+html.tg-light .hljs-title,
+html.tg-light .hljs-section,
+html.light .hljs-title,
+html.light .hljs-section,
+html.rust .hljs-title,
+html.rust .hljs-section {
+  color: #3e999f;
+}
+
+html.tg-light .hljs-function,
+html.light .hljs-function,
+html.rust .hljs-function {
+  color: #4271ae;
+}
+
+html.tg-light .hljs-keyword,
+html.tg-light .hljs-selector-tag,
+html.light .hljs-keyword,
+html.light .hljs-selector-tag,
+html.rust .hljs-keyword,
+html.rust .hljs-selector-tag {
+  color: #8959a8;
+}
+
+/* ===== Shared inline-format treatments ===== */
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: bold;
+}
+
+.hljs-addition {
+  color: var(--allow);
+  background-color: color-mix(in oklab, var(--allow) 12%, transparent);
+}
+.hljs-deletion {
+  color: var(--block);
+  background-color: color-mix(in oklab, var(--block) 12%, transparent);
+}

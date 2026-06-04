@@ -115,7 +115,7 @@ mod tests {
     fn test_search_save_asks() {
         let result = check_shortcut(&cmd("short", &["search", "-o", "me", "-S", "mywork"]));
         assert_eq!(result.decision, Decision::Ask);
-        assert!(result.reason.as_ref().unwrap().contains("Saving"));
+        assert!(result.reason.as_ref().unwrap().contains("Saves"));
     }
 
     // ========================================================================
@@ -172,7 +172,7 @@ mod tests {
     fn test_story_move_asks() {
         let result = check_shortcut(&cmd("short", &["story", "12345", "--move-up", "2"]));
         assert_eq!(result.decision, Decision::Ask);
-        assert!(result.reason.as_ref().unwrap().contains("position"));
+        assert!(result.reason.as_ref().unwrap().contains("Reorders"));
     }
 
     #[test]
@@ -214,7 +214,7 @@ mod tests {
             &["create", "-t", "New Story", "-p", "myproject"],
         ));
         assert_eq!(result.decision, Decision::Ask);
-        assert!(result.reason.as_ref().unwrap().contains("Creating"));
+        assert!(result.reason.as_ref().unwrap().contains("Creates"));
     }
 
     // ========================================================================

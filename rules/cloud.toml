@@ -18,6 +18,16 @@
 name = "cloud"
 description = "Cloud provider and container CLI permission gates"
 priority = 15
+lede = "The largest gate. Cloud-provider CLIs and container orchestration. AWS uses an <code>action_prefix</code> pattern (every <code>describe-*</code> / <code>list-*</code> / <code>get-*</code> is allow; <code>create-*</code> / <code>delete-*</code> / <code>put-*</code> ask). kubectl, terraform, docker, podman, helm, and pulumi each have their own subcommand maps."
+note = """<b>Custom handlers do the heavy lifting.</b> <code>check_gcloud</code> handles 3-word patterns (<code>gcloud compute instances create</code>). <code>check_docker</code> handles <code>docker compose</code> with flags between the subcommand. The action-prefix machinery for AWS is declarative in TOML but enforced in Rust at parse time."""
+behavior_tags = [
+  "covers <b>aws · gcloud · az · terraform · kubectl · docker · podman · helm · pulumi</b>",
+  "<b>action_prefix</b> matching for AWS",
+]
+
+[meta.card_titles]
+allow = "inspection"
+ask = "mutations"
 
 # =============================================================================
 # AWS CLI
@@ -33,44 +43,57 @@ unknown_action = "ask"
 # Simple read commands
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the AWS CLI version. Read-only."
 
 [[programs.allow]]
 subcommand = "help"
+reason = "Shows AWS CLI help text. Read-only."
 
 [[programs.allow]]
 subcommand = "s3 ls"
+reason = "Lists S3 buckets or objects under a prefix. Read-only."
 
 [[programs.allow]]
 subcommand = "sts get-caller-identity"
+reason = "Reports the IAM identity of the current credentials (account, ARN, user ID). Read-only."
 
 [[programs.allow]]
 subcommand = "sts get-session-token"
+reason = "Returns temporary session credentials for the current identity. Read-only call; the returned token grants the same access until it expires."
 
 [[programs.allow]]
 subcommand = "configure list"
+reason = "Shows the resolved CLI configuration (profile, region, credential source). Read-only; values are masked."
 
 # Read-only action prefixes (args[1] starts with these)
 # These match patterns like: aws ec2 describe-instances, aws iam list-users
 [[programs.allow]]
 action_prefix = "describe"
+reason = "AWS describe-* operation: reads the configuration or state of a resource. Read-only."
 
 [[programs.allow]]
 action_prefix = "list"
+reason = "AWS list-* operation: enumerates resources in the account/region. Read-only."
 
 [[programs.allow]]
 action_prefix = "get"
+reason = "AWS get-* operation: fetches an attribute, object, or value. Read-only."
 
 [[programs.allow]]
 action_prefix = "head"
+reason = "AWS head-* operation: fetches metadata only (e.g. S3 object headers) without the body. Read-only."
 
 [[programs.allow]]
 action_prefix = "query"
+reason = "AWS query operation: reads items from a table or index (e.g. DynamoDB query). Read-only."
 
 [[programs.allow]]
 action_prefix = "scan"
+reason = "AWS scan operation: reads across a whole table or index (e.g. DynamoDB scan). Read-only; can consume significant read capacity on large tables."
 
 [[programs.allow]]
 action_prefix = "filter"
+reason = "AWS filter-* operation: reads a filtered view of events or records (e.g. CloudWatch Logs filter). Read-only."
 
 # Write action prefixes - require approval
 [[programs.ask]]
@@ -189,100 +212,131 @@ unknown_action = "ask"
 # Read-only commands
 [[programs.allow]]
 subcommand = "config list"
+reason = "Shows the active gcloud configuration (account, project, region/zone). Read-only."
 
 [[programs.allow]]
 subcommand = "config get-value"
+reason = "Prints a single gcloud config value (e.g. `project`, `account`). Read-only."
 
 [[programs.allow]]
 subcommand = "auth list"
+reason = "Lists credentialed accounts and marks the active one. Read-only."
 
 [[programs.allow]]
 subcommand = "auth describe"
+reason = "Shows details of a credentialed account (token status, scopes). Read-only."
 
 [[programs.allow]]
 subcommand = "projects list"
+reason = "Lists GCP projects the active account can see. Read-only."
 
 [[programs.allow]]
 subcommand = "projects describe"
+reason = "Shows metadata for a project (number, state, labels). Read-only."
 
 [[programs.allow]]
 subcommand = "compute instances list"
+reason = "Lists Compute Engine VMs in the project. Read-only."
 
 [[programs.allow]]
 subcommand = "compute instances describe"
+reason = "Shows the configuration and status of a VM. Read-only."
 
 [[programs.allow]]
 subcommand = "compute zones list"
+reason = "Lists available Compute Engine zones. Read-only."
 
 [[programs.allow]]
 subcommand = "compute regions list"
+reason = "Lists available Compute Engine regions and quotas. Read-only."
 
 [[programs.allow]]
 subcommand = "compute machine-types list"
+reason = "Lists available machine types per zone. Read-only."
 
 [[programs.allow]]
 subcommand = "container clusters list"
+reason = "Lists GKE clusters in the project. Read-only."
 
 [[programs.allow]]
 subcommand = "container clusters describe"
+reason = "Shows the configuration and status of a GKE cluster. Read-only."
 
 [[programs.ask]]
 subcommand = "container clusters get-credentials"
-reason = "Updating kubeconfig (writes to `~/.kube/config`)"
+reason = "Fetches GKE cluster credentials and writes a context entry to `~/.kube/config`. Subsequent kubectl commands target that cluster."
 
 [[programs.allow]]
 subcommand = "storage ls"
+reason = "Lists Cloud Storage buckets or objects under a prefix. Read-only."
 
 [[programs.allow]]
 subcommand = "storage cat"
+reason = "Streams the contents of a Cloud Storage object to stdout. Read-only."
 
 [[programs.allow]]
 subcommand = "functions list"
+reason = "Lists Cloud Functions in the project. Read-only."
 
 [[programs.allow]]
 subcommand = "functions describe"
+reason = "Shows the configuration and status of a Cloud Function. Read-only."
 
 [[programs.allow]]
 subcommand = "functions logs"
+reason = "Reads execution logs for a Cloud Function. Read-only."
 
 [[programs.allow]]
 subcommand = "run services list"
+reason = "Lists Cloud Run services in the project. Read-only."
 
 [[programs.allow]]
 subcommand = "run services describe"
+reason = "Shows the configuration, revisions, and traffic split of a Cloud Run service. Read-only."
 
 [[programs.allow]]
 subcommand = "sql instances list"
+reason = "Lists Cloud SQL instances in the project. Read-only."
 
 [[programs.allow]]
 subcommand = "sql instances describe"
+reason = "Shows the configuration and status of a Cloud SQL instance. Read-only."
 
 [[programs.allow]]
 subcommand = "logging read"
+reason = "Reads log entries from Cloud Logging. Read-only."
 
 [[programs.allow]]
 subcommand = "iam list"
+reason = "Lists IAM resources (roles, service accounts, etc.) in the project. Read-only."
 
 [[programs.allow]]
 subcommand = "iam describe"
+reason = "Shows details of an IAM resource (role, service account). Read-only."
 
 [[programs.allow]]
 subcommand = "secrets list"
+reason = "Lists secrets in Secret Manager (names only, not payloads). Read-only."
 
 [[programs.allow]]
 subcommand = "secrets describe"
+reason = "Shows metadata for a secret (replication, labels). Does not reveal the payload. Read-only."
 
 [[programs.allow]]
 subcommand = "secrets versions"
+reason = "Lists or describes versions of a secret (state, create time). Read-only; does not print payloads."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the gcloud CLI version. Read-only."
 
 [[programs.allow]]
 subcommand = "help"
+reason = "Shows gcloud help text. Read-only."
 
 [[programs.allow]]
 subcommand = "info"
+reason = "Shows gcloud environment diagnostics (SDK paths, active config, account). Read-only."
 
 # Write commands
 [[programs.ask]]
@@ -394,12 +448,15 @@ unknown_action = "ask"
 # Simple patterns for Azure
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the Azure CLI version and component versions. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Shows Azure CLI help text. Read-only."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Shows Azure CLI help text. Read-only."
 
 # Note: az uses declarative rules only (no custom handler needed)
 # The Rust code just wraps declarative with a default ask message
@@ -416,50 +473,65 @@ unknown_action = "ask"
 # Read-only commands
 [[programs.allow]]
 subcommand = "plan"
+reason = "Terraform plan: computes and prints the diff between config and state without changing infrastructure. Read-only."
 
 [[programs.allow]]
 subcommand = "show"
+reason = "Terraform show: prints the current state or a saved plan in human-readable form. Read-only."
 
 [[programs.allow]]
 subcommand = "output"
+reason = "Terraform output: prints the values of root module outputs from state. Read-only; may expose sensitive output values."
 
 [[programs.allow]]
 subcommand = "validate"
+reason = "Terraform validate: checks config for syntax and internal consistency. Read-only; does not touch state or providers' APIs."
 
 [[programs.allow]]
 subcommand = "version"
+reason = "Prints the Terraform and provider versions. Read-only."
 
 [[programs.allow]]
 subcommand = "providers"
+reason = "Terraform providers: lists the providers required by the configuration. Read-only."
 
 [[programs.allow]]
 subcommand = "graph"
+reason = "Terraform graph: emits the dependency graph in DOT format. Read-only."
 
 [[programs.allow]]
 subcommand = "-version"
+reason = "Prints the Terraform version. Read-only."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the Terraform version. Read-only."
 
 [[programs.allow]]
 subcommand = "-help"
+reason = "Shows Terraform help text. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Shows Terraform help text. Read-only."
 
 # state subcommands
 [[programs.allow]]
 subcommand = "state list"
+reason = "Terraform state list: lists the resource addresses tracked in state. Read-only."
 
 [[programs.allow]]
 subcommand = "state show"
+reason = "Terraform state show: prints the attributes of one resource from state. Read-only; may expose sensitive values."
 
 # workspace subcommands
 [[programs.allow]]
 subcommand = "workspace list"
+reason = "Terraform workspace list: lists workspaces and marks the active one. Read-only."
 
 [[programs.allow]]
 subcommand = "workspace show"
+reason = "Terraform workspace show: prints the name of the active workspace. Read-only."
 
 # test with command=apply (default) creates real infrastructure
 [[programs.ask]]
@@ -470,6 +542,7 @@ reason = "Terraform test: runs `.tftest.hcl` cases. With `command = apply` (defa
 [[programs.allow]]
 subcommand = "fmt"
 if_flags_any = ["-check"]
+reason = "Terraform fmt -check: reports whether `.tf` files match canonical style without rewriting them. Read-only."
 
 # Write commands
 [[programs.ask]]
@@ -560,66 +633,86 @@ reason = "Refusing to delete the `kube-system` namespace. It hosts core cluster 
 # Read-only commands
 [[programs.allow]]
 subcommand = "get"
+reason = "kubectl get: lists or prints resources in the current context/namespace. Read-only."
 
 [[programs.allow]]
 subcommand = "describe"
+reason = "kubectl describe: prints detailed state and recent events for a resource. Read-only."
 
 [[programs.allow]]
 subcommand = "logs"
+reason = "kubectl logs: streams or prints container logs from a pod. Read-only."
 
 [[programs.allow]]
 subcommand = "top"
+reason = "kubectl top: shows CPU/memory usage for nodes or pods via the metrics API. Read-only."
 
 [[programs.allow]]
 subcommand = "explain"
+reason = "kubectl explain: prints the schema/field docs for a resource kind. Read-only."
 
 [[programs.allow]]
 subcommand = "api-resources"
+reason = "kubectl api-resources: lists the resource types the cluster serves. Read-only."
 
 [[programs.allow]]
 subcommand = "api-versions"
+reason = "kubectl api-versions: lists the API group/versions the cluster serves. Read-only."
 
 [[programs.allow]]
 subcommand = "cluster-info"
+reason = "kubectl cluster-info: prints the control plane and core service endpoints. Read-only."
 
 [[programs.allow]]
 subcommand = "version"
+reason = "kubectl version: prints client and server versions. Read-only."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Shows kubectl help text. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Shows kubectl help text. Read-only."
 
 # config subcommands
 [[programs.allow]]
 subcommand = "config view"
+reason = "kubectl config view: prints the merged kubeconfig. Read-only; secret values are redacted unless `--raw` is passed."
 
 [[programs.allow]]
 subcommand = "config get-contexts"
+reason = "kubectl config get-contexts: lists contexts and marks the current one. Read-only."
 
 [[programs.allow]]
 subcommand = "config current-context"
+reason = "kubectl config current-context: prints the name of the active context. Read-only."
 
 [[programs.allow]]
 subcommand = "config get-clusters"
+reason = "kubectl config get-clusters: lists cluster entries in the kubeconfig. Read-only."
 
 # auth subcommands
 [[programs.allow]]
 subcommand = "auth can-i"
+reason = "kubectl auth can-i: checks whether the current user may perform an action. Read-only."
 
 [[programs.allow]]
 subcommand = "auth whoami"
+reason = "kubectl auth whoami: prints the identity attributes the API server sees for the current user. Read-only."
 
 # Read-only dry-run/utility commands
 [[programs.allow]]
 subcommand = "diff"
+reason = "kubectl diff: shows what `apply` would change by comparing the manifest against live state. Read-only."
 
 [[programs.allow]]
 subcommand = "kustomize"
+reason = "kubectl kustomize: renders a kustomization to stdout. Read-only; does not contact the cluster."
 
 [[programs.allow]]
 subcommand = "wait"
+reason = "kubectl wait: blocks until a resource reaches a condition. Polls state; does not modify resources."
 
 # Write commands
 [[programs.ask]]
@@ -738,80 +831,105 @@ unknown_action = "ask"
 # Read-only commands
 [[programs.allow]]
 subcommand = "ps"
+reason = "Docker ps: lists running (or with `-a`, all) containers. Read-only."
 
 [[programs.allow]]
 subcommand = "images"
+reason = "Docker images: lists local images. Read-only."
 
 [[programs.allow]]
 subcommand = "inspect"
+reason = "Docker inspect: prints the low-level config of a container, image, or other object. Read-only."
 
 [[programs.allow]]
 subcommand = "logs"
+reason = "Docker logs: prints or streams a container's stdout/stderr. Read-only."
 
 [[programs.allow]]
 subcommand = "stats"
+reason = "Docker stats: shows live CPU/memory/IO usage per container. Read-only."
 
 [[programs.allow]]
 subcommand = "top"
+reason = "Docker top: lists the processes running inside a container. Read-only."
 
 [[programs.allow]]
 subcommand = "port"
+reason = "Docker port: shows the published port mappings for a container. Read-only."
 
 [[programs.allow]]
 subcommand = "version"
+reason = "Docker version: prints client and daemon versions. Read-only."
 
 [[programs.allow]]
 subcommand = "info"
+reason = "Docker info: prints daemon-wide configuration and resource counts. Read-only."
 
 [[programs.allow]]
 subcommand = "history"
+reason = "Docker history: shows the layer history of an image. Read-only."
 
 [[programs.allow]]
 subcommand = "-v"
+reason = "Prints the Docker version. Read-only."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the Docker version. Read-only."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Shows Docker help text. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Shows Docker help text. Read-only."
 
 # network/volume/system read-only
 [[programs.allow]]
 subcommand = "network ls"
+reason = "Docker network ls: lists Docker networks. Read-only."
 
 [[programs.allow]]
 subcommand = "network list"
+reason = "Docker network list: lists Docker networks. Read-only."
 
 [[programs.allow]]
 subcommand = "network inspect"
+reason = "Docker network inspect: prints a network's config and attached containers. Read-only."
 
 [[programs.allow]]
 subcommand = "volume ls"
+reason = "Docker volume ls: lists Docker volumes. Read-only."
 
 [[programs.allow]]
 subcommand = "volume list"
+reason = "Docker volume list: lists Docker volumes. Read-only."
 
 [[programs.allow]]
 subcommand = "volume inspect"
+reason = "Docker volume inspect: prints a volume's config and mountpoint. Read-only."
 
 [[programs.allow]]
 subcommand = "system df"
+reason = "Docker system df: reports disk usage by images, containers, volumes, and cache. Read-only."
 
 [[programs.allow]]
 subcommand = "system info"
+reason = "Docker system info: prints daemon-wide configuration and resource counts. Read-only."
 
 # buildx subcommands
 [[programs.allow]]
 subcommand = "buildx ls"
+reason = "Docker buildx ls: lists builder instances and their nodes. Read-only."
 
 [[programs.allow]]
 subcommand = "buildx inspect"
+reason = "Docker buildx inspect: prints a builder's config and status. Read-only."
 
 [[programs.allow]]
 subcommand = "buildx version"
+reason = "Prints the buildx plugin version. Read-only."
 
 [[programs.ask]]
 subcommand = "buildx build"
@@ -840,15 +958,19 @@ reason = "Docker buildx prune: deletes unused build cache. Frees disk; next buil
 # scout subcommands (vulnerability scanning)
 [[programs.allow]]
 subcommand = "scout quickview"
+reason = "Docker Scout quickview: prints a vulnerability summary for an image. Read-only."
 
 [[programs.allow]]
 subcommand = "scout cves"
+reason = "Docker Scout cves: lists known CVEs in an image. Read-only."
 
 [[programs.allow]]
 subcommand = "scout recommendations"
+reason = "Docker Scout recommendations: suggests base-image and dependency updates for an image. Read-only."
 
 [[programs.allow]]
 subcommand = "scout compare"
+reason = "Docker Scout compare: diffs the vulnerability profile of two images. Read-only."
 
 [[programs.ask]]
 subcommand = "scout enroll"
@@ -857,15 +979,19 @@ reason = "Docker Scout enroll: opts the organization into Docker Scout vulnerabi
 # context subcommands
 [[programs.allow]]
 subcommand = "context ls"
+reason = "Docker context ls: lists Docker contexts and marks the active one. Read-only."
 
 [[programs.allow]]
 subcommand = "context list"
+reason = "Docker context list: lists Docker contexts and marks the active one. Read-only."
 
 [[programs.allow]]
 subcommand = "context show"
+reason = "Docker context show: prints the name of the active context. Read-only."
 
 [[programs.allow]]
 subcommand = "context inspect"
+reason = "Docker context inspect: prints a context's endpoint config. Read-only."
 
 [[programs.ask]]
 subcommand = "context create"
@@ -882,6 +1008,7 @@ reason = "Docker context use: switches the active daemon endpoint. Subsequent do
 # manifest subcommands
 [[programs.allow]]
 subcommand = "manifest inspect"
+reason = "Docker manifest inspect: prints a manifest list or image manifest from a registry. Read-only."
 
 [[programs.ask]]
 subcommand = "manifest create"
@@ -898,15 +1025,19 @@ reason = "Docker manifest annotate: edits a local manifest list (os/arch/variant
 # image subcommands (aliases for top-level commands)
 [[programs.allow]]
 subcommand = "image ls"
+reason = "Docker image ls: lists local images. Read-only."
 
 [[programs.allow]]
 subcommand = "image list"
+reason = "Docker image list: lists local images. Read-only."
 
 [[programs.allow]]
 subcommand = "image inspect"
+reason = "Docker image inspect: prints an image's low-level config. Read-only."
 
 [[programs.allow]]
 subcommand = "image history"
+reason = "Docker image history: shows the layer history of an image. Read-only."
 
 [[programs.ask]]
 subcommand = "image rm"
@@ -931,21 +1062,27 @@ reason = "Docker image pull: downloads an image from a registry. Network/disk us
 # container subcommands (aliases for top-level commands)
 [[programs.allow]]
 subcommand = "container ls"
+reason = "Docker container ls: lists running (or with `-a`, all) containers. Read-only."
 
 [[programs.allow]]
 subcommand = "container list"
+reason = "Docker container list: lists running (or with `-a`, all) containers. Read-only."
 
 [[programs.allow]]
 subcommand = "container inspect"
+reason = "Docker container inspect: prints a container's low-level config. Read-only."
 
 [[programs.allow]]
 subcommand = "container logs"
+reason = "Docker container logs: prints or streams a container's stdout/stderr. Read-only."
 
 [[programs.allow]]
 subcommand = "container top"
+reason = "Docker container top: lists the processes running inside a container. Read-only."
 
 [[programs.allow]]
 subcommand = "container stats"
+reason = "Docker container stats: shows live CPU/memory/IO usage per container. Read-only."
 
 [[programs.ask]]
 subcommand = "container rm"
@@ -970,24 +1107,31 @@ reason = "Docker container prune: deletes all stopped containers. Their writable
 # docker compose (new docker CLI plugin, equivalent to docker-compose)
 [[programs.allow]]
 subcommand = "compose ps"
+reason = "Compose ps: lists the containers for the current compose project. Read-only."
 
 [[programs.allow]]
 subcommand = "compose logs"
+reason = "Compose logs: prints or streams logs from the project's service containers. Read-only."
 
 [[programs.allow]]
 subcommand = "compose config"
+reason = "Compose config: renders the fully-resolved compose file to stdout. Read-only."
 
 [[programs.allow]]
 subcommand = "compose images"
+reason = "Compose images: lists the images used by the project's services. Read-only."
 
 [[programs.allow]]
 subcommand = "compose ls"
+reason = "Compose ls: lists running compose projects. Read-only."
 
 [[programs.allow]]
 subcommand = "compose version"
+reason = "Prints the Compose plugin version. Read-only."
 
 [[programs.allow]]
 subcommand = "compose top"
+reason = "Compose top: lists the processes running in the project's service containers. Read-only."
 
 [[programs.ask]]
 subcommand = "compose up"
@@ -1168,114 +1312,150 @@ unknown_action = "ask"
 # Read-only commands (same as Docker plus Podman-specific)
 [[programs.allow]]
 subcommand = "ps"
+reason = "Podman ps: lists running (or with `-a`, all) containers. Read-only."
 
 [[programs.allow]]
 subcommand = "images"
+reason = "Podman images: lists local images. Read-only."
 
 [[programs.allow]]
 subcommand = "inspect"
+reason = "Podman inspect: prints the low-level config of a container or image. Read-only."
 
 [[programs.allow]]
 subcommand = "logs"
+reason = "Podman logs: prints or streams a container's stdout/stderr. Read-only."
 
 [[programs.allow]]
 subcommand = "stats"
+reason = "Podman stats: shows live CPU/memory/IO usage per container. Read-only."
 
 [[programs.allow]]
 subcommand = "top"
+reason = "Podman top: lists the processes running inside a container. Read-only."
 
 [[programs.allow]]
 subcommand = "port"
+reason = "Podman port: shows the published port mappings for a container. Read-only."
 
 [[programs.allow]]
 subcommand = "version"
+reason = "Podman version: prints client and (where applicable) service versions. Read-only."
 
 [[programs.allow]]
 subcommand = "info"
+reason = "Podman info: prints host and storage configuration. Read-only."
 
 [[programs.allow]]
 subcommand = "history"
+reason = "Podman history: shows the layer history of an image. Read-only."
 
 [[programs.allow]]
 subcommand = "search"
+reason = "Podman search: queries configured registries for matching images. Read-only."
 
 [[programs.allow]]
 subcommand = "healthcheck"
+reason = "Podman healthcheck: runs or reports a container's configured health check. Reports status; does not modify the container."
 
 [[programs.allow]]
 subcommand = "-v"
+reason = "Prints the Podman version. Read-only."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the Podman version. Read-only."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Shows Podman help text. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Shows Podman help text. Read-only."
 
 # network/volume/system/machine read-only
 [[programs.allow]]
 subcommand = "network ls"
+reason = "Podman network ls: lists Podman networks. Read-only."
 
 [[programs.allow]]
 subcommand = "network list"
+reason = "Podman network list: lists Podman networks. Read-only."
 
 [[programs.allow]]
 subcommand = "network inspect"
+reason = "Podman network inspect: prints a network's config and attached containers. Read-only."
 
 [[programs.allow]]
 subcommand = "volume ls"
+reason = "Podman volume ls: lists Podman volumes. Read-only."
 
 [[programs.allow]]
 subcommand = "volume list"
+reason = "Podman volume list: lists Podman volumes. Read-only."
 
 [[programs.allow]]
 subcommand = "volume inspect"
+reason = "Podman volume inspect: prints a volume's config and mountpoint. Read-only."
 
 [[programs.allow]]
 subcommand = "system df"
+reason = "Podman system df: reports disk usage by images, containers, and volumes. Read-only."
 
 [[programs.allow]]
 subcommand = "system info"
+reason = "Podman system info: prints host and storage configuration. Read-only."
 
 [[programs.allow]]
 subcommand = "machine info"
+reason = "Podman machine info: prints info about the Podman machine VM environment. Read-only."
 
 [[programs.allow]]
 subcommand = "machine inspect"
+reason = "Podman machine inspect: prints a Podman machine VM's config. Read-only."
 
 [[programs.allow]]
 subcommand = "machine list"
+reason = "Podman machine list: lists Podman machine VMs and their state. Read-only."
 
 # pod read-only
 [[programs.allow]]
 subcommand = "pod ps"
+reason = "Podman pod ps: lists pods and their state. Read-only."
 
 [[programs.allow]]
 subcommand = "pod list"
+reason = "Podman pod list: lists pods and their state. Read-only."
 
 [[programs.allow]]
 subcommand = "pod inspect"
+reason = "Podman pod inspect: prints a pod's config and member containers. Read-only."
 
 [[programs.allow]]
 subcommand = "pod logs"
+reason = "Podman pod logs: prints or streams logs from a pod's containers. Read-only."
 
 [[programs.allow]]
 subcommand = "pod top"
+reason = "Podman pod top: lists the processes running across a pod's containers. Read-only."
 
 [[programs.allow]]
 subcommand = "pod stats"
+reason = "Podman pod stats: shows live resource usage for a pod's containers. Read-only."
 
 # secret read-only
 [[programs.allow]]
 subcommand = "secret ls"
+reason = "Podman secret ls: lists secret names and metadata (not values). Read-only."
 
 [[programs.allow]]
 subcommand = "secret list"
+reason = "Podman secret list: lists secret names and metadata (not values). Read-only."
 
 [[programs.allow]]
 subcommand = "secret inspect"
+reason = "Podman secret inspect: prints a secret's metadata. Does not reveal the value. Read-only."
 
 # Write commands
 [[programs.ask]]
@@ -1378,27 +1558,35 @@ unknown_action = "ask"
 # Read-only commands
 [[programs.allow]]
 subcommand = "ps"
+reason = "Compose ps: lists the containers for the current compose project. Read-only."
 
 [[programs.allow]]
 subcommand = "logs"
+reason = "Compose logs: prints or streams logs from the project's service containers. Read-only."
 
 [[programs.allow]]
 subcommand = "config"
+reason = "Compose config: renders the fully-resolved compose file to stdout. Read-only."
 
 [[programs.allow]]
 subcommand = "images"
+reason = "Compose images: lists the images used by the project's services. Read-only."
 
 [[programs.allow]]
 subcommand = "ls"
+reason = "Compose ls: lists running compose projects. Read-only."
 
 [[programs.allow]]
 subcommand = "version"
+reason = "Prints the Compose version. Read-only."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Shows Compose help text. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Shows Compose help text. Read-only."
 
 # Write commands
 [[programs.ask]]
@@ -1472,21 +1660,27 @@ unknown_action = "ask"
 # Read-only commands
 [[programs.allow]]
 subcommand = "list"
+reason = "Helm list: lists releases in the current namespace (or all with `-A`). Read-only."
 
 [[programs.allow]]
 subcommand = "ls"
+reason = "Helm ls: lists releases in the current namespace (or all with `-A`). Read-only."
 
 [[programs.allow]]
 subcommand = "get"
+reason = "Helm get: prints details of an installed release (values, manifest, notes, hooks). Read-only."
 
 [[programs.allow]]
 subcommand = "show"
+reason = "Helm show: prints chart metadata, values, or README from a chart. Read-only."
 
 [[programs.allow]]
 subcommand = "search"
+reason = "Helm search: searches repositories or the Artifact Hub for charts. Read-only."
 
 [[programs.allow]]
 subcommand = "repo list"
+reason = "Helm repo list: lists configured chart repositories. Read-only."
 
 [[programs.ask]]
 subcommand = "repo add"
@@ -1502,27 +1696,35 @@ reason = "Helm repo update: refreshes the local index for all repos. Read-only o
 
 [[programs.allow]]
 subcommand = "status"
+reason = "Helm status: prints the status of a named release. Read-only."
 
 [[programs.allow]]
 subcommand = "history"
+reason = "Helm history: lists the revision history of a release. Read-only."
 
 [[programs.allow]]
 subcommand = "version"
+reason = "Prints the Helm client version. Read-only."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Shows Helm help text. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Shows Helm help text. Read-only."
 
 [[programs.allow]]
 subcommand = "template"
+reason = "Helm template: renders chart templates to stdout locally. Read-only; does not contact the cluster."
 
 [[programs.allow]]
 subcommand = "lint"
+reason = "Helm lint: checks a chart for issues and best-practice violations. Read-only."
 
 [[programs.allow]]
 subcommand = "verify"
+reason = "Helm verify: checks that a packaged chart's provenance signature is valid. Read-only."
 
 # Write commands
 [[programs.ask]]
@@ -1564,38 +1766,49 @@ unknown_action = "ask"
 # Read-only commands
 [[programs.allow]]
 subcommand = "preview"
+reason = "Pulumi preview: computes and prints the planned changes for the selected stack without applying them. Read-only."
 
 [[programs.allow]]
 subcommand = "whoami"
+reason = "Pulumi whoami: prints the currently logged-in Pulumi identity and backend. Read-only."
 
 [[programs.allow]]
 subcommand = "version"
+reason = "Prints the Pulumi CLI version. Read-only."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Shows Pulumi help text. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Shows Pulumi help text. Read-only."
 
 # stack subcommands
 [[programs.allow]]
 subcommand = "stack ls"
+reason = "Pulumi stack ls: lists stacks for the current project and marks the active one. Read-only."
 
 [[programs.allow]]
 subcommand = "stack list"
+reason = "Pulumi stack list: lists stacks for the current project and marks the active one. Read-only."
 
 [[programs.allow]]
 subcommand = "stack output"
+reason = "Pulumi stack output: prints the selected stack's outputs. Read-only; may expose sensitive outputs with `--show-secrets`."
 
 [[programs.allow]]
 subcommand = "stack history"
+reason = "Pulumi stack history: lists past updates for the selected stack. Read-only."
 
 [[programs.allow]]
 subcommand = "stack export"
+reason = "Pulumi stack export: writes the selected stack's state deployment to stdout. Read-only; exposes full state including secrets."
 
 # config subcommands
 [[programs.allow]]
 subcommand = "config get"
+reason = "Pulumi config get: prints a single config value for the selected stack. Read-only; `--secret` values are decrypted to stdout."
 
 # Write commands
 [[programs.ask]]

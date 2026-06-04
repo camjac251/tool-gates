@@ -178,6 +178,33 @@ static HEAD_TAIL_PIPE_RE: LazyLock<Regex> = LazyLock::new(|| {
 static TAIL_STREAM_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^\|&?\s*tail\s+-[fF]\b").expect("TAIL_STREAM_RE must compile"));
 
+/// `| sed`/`| awk` first-N truncation pipe, the backstop sibling of head/tail.
+/// Captures the offending pipe segment up to the next boundary. Matches the
+/// FROM-THE-TOP forms only: `sed -n '1,Np'`, `sed -n 'Nq'`/`sed Nq`, bare
+/// `sed -n Np` (single early line), and `awk 'NR<=N'` / `awk 'NR==N'` /
+/// `awk 'FNR<=N'`. A mid-file range read like `sed -n '2000,2050p'` starts
+/// above line 1 and is NOT matched (it is a line-range view, not a cap).
+static SED_AWK_TRUNC_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r#"\|&?\s*(?:sed\s+(?:-n\s+)?'?(?:1\s*,\s*\d+\s*p|\d+\s*q)|awk\s+'?(?:F?NR\s*(?:<=|==)\s*\d+))[^|&;\n]*"#,
+    )
+    .expect("SED_AWK_TRUNC_RE must compile")
+});
+
+/// `| rg .` / `| rg -m N .` bare-catch-all "fake filter", the backstop sibling
+/// of head/tail. The agent pipes to rg with a match-anything pattern purely to
+/// cap volume, which silently drops everything past the cap. Matches ONLY the
+/// catch-all forms (`.`, `.*`, `''`, `""`, `'.'`, `'.*'`) after optional flags
+/// (incl. `-m N`), anchored to the end of the pipe segment. A real content
+/// filter like `rg 'FAILED'`, `rg error`, or `rg -m 5 '.rs'` is NOT matched, so
+/// legitimate filtering is untouched; only the no-op pattern is caught.
+static RG_COUNTER_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r#"\|&?\s*rg\s+(?:-{1,2}[A-Za-z-]+\s+(?:\d+\s+)?)*(?:\.|\.\*|''|""|'\.'|'\.\*'|"\."|"\.\*")\s*(?:$|[|;&])"#,
+    )
+    .expect("RG_COUNTER_RE must compile")
+});
+
 /// Check a bash command string and return the appropriate hook output.
 ///
 /// Handles compound commands (&&, ||, |, ;) by checking each command
@@ -240,7 +267,6 @@ fn check_command_for_session_with_commands(
 
     let mut block_reasons: Vec<String> = Vec::new();
     let mut ask_reasons: Vec<String> = Vec::new();
-    let mut allow_reasons: Vec<String> = Vec::new();
     let mut hints: Vec<crate::hints::ModernHint> = Vec::new();
 
     for cmd in commands {
@@ -263,11 +289,11 @@ fn check_command_for_session_with_commands(
                     ask_reasons.push(reason);
                 }
             }
-            Decision::Allow => {
-                if let Some(reason) = result.reason {
-                    allow_reasons.push(reason);
-                }
-            }
+            // Allow is auto-approved, so the per-rule reason is not surfaced to
+            // the agent. That reason documents the rule on the generated docs
+            // site; the runtime wire output stays lean. Modern-CLI hints still
+            // attach via additionalContext below.
+            Decision::Allow => {}
             Decision::Skip => {
                 ask_reasons.push(format!("Unknown command: {}", cmd.program));
             }
@@ -312,20 +338,14 @@ fn check_command_for_session_with_commands(
         return HookOutput::ask(&combined);
     }
 
-    let allow_reason = if allow_reasons.is_empty() {
-        "Read-only operation".to_string()
-    } else if allow_reasons.len() == 1 {
-        allow_reasons.remove(0)
-    } else {
-        allow_reasons.join(", ")
-    };
+    let allow_reason = "Read-only operation";
 
     let hints_str = format_hints(&hints);
     if !hints_str.is_empty() {
-        return HookOutput::allow_with_context(Some(&allow_reason), &hints_str);
+        return HookOutput::allow_with_context(Some(allow_reason), &hints_str);
     }
 
-    HookOutput::allow(Some(&allow_reason))
+    HookOutput::allow(Some(allow_reason))
 }
 
 /// Return the first deny pattern matched by any sub-command in a compound
@@ -432,6 +452,10 @@ fn gate_ask_output_for_mode(
     permission_mode: &str,
     hard_ask_in_accept_edits: bool,
 ) -> HookOutput {
+    if is_plan_mode(permission_mode) {
+        return plan_mode_deny_output();
+    }
+
     if is_auto_mode(permission_mode) {
         if hard_ask_in_accept_edits {
             return HookOutput::deny(&reason);
@@ -452,6 +476,12 @@ fn gate_ask_output_for_mode(
     }
 }
 
+fn plan_mode_deny_output() -> HookOutput {
+    HookOutput::deny(
+        "Plan mode: command requires approval. Exit plan mode to run mutating commands.",
+    )
+}
+
 /// Check a bash command with settings.json awareness and permission mode detection.
 ///
 /// Loads settings from user (~/.claude/settings.json) and project (.claude/settings.json),
@@ -460,10 +490,11 @@ fn gate_ask_output_for_mode(
 /// Priority order:
 /// 1. Gate blocks → deny directly (dangerous commands always blocked)
 /// 2. Settings.json deny → deny (user's explicit deny rules always respected)
-/// 3. acceptEdits mode + file-editing command → allow automatically
-/// 4. Settings.json ask → ask (defer to Claude Code)
-/// 5. Settings.json allow → allow
-/// 6. Gate result (allow/ask)
+/// 3. Settings.json ask → ask (defer to Claude Code)
+/// 4. Plan mode allows only gate-proven read-only commands
+/// 5. acceptEdits mode + file-editing command → allow automatically
+/// 6. Settings.json allow → allow
+/// 7. Gate result (allow/ask)
 pub fn check_command_with_settings(
     command_string: &str,
     cwd: &str,
@@ -566,7 +597,7 @@ fn check_command_with_settings_and_session_inner(
                 ));
             }
             match check_settings_with_subcommands(&settings, command_string) {
-                SettingsDecision::Allow => {
+                SettingsDecision::Allow if !is_plan_mode(permission_mode) => {
                     return HookOutput::allow(Some("Matched settings.json allow rule"));
                 }
                 SettingsDecision::Ask => {
@@ -586,7 +617,7 @@ fn check_command_with_settings_and_session_inner(
                 ));
             }
             match check_settings_with_subcommands(&settings, command_string) {
-                SettingsDecision::Allow => {
+                SettingsDecision::Allow if !is_plan_mode(permission_mode) => {
                     return HookOutput::allow(Some("Matched settings.json allow rule"));
                 }
                 SettingsDecision::Ask => {
@@ -623,6 +654,30 @@ fn check_command_with_settings_and_session_inner(
         ));
     }
 
+    // Settings ask rules still require approval, so in plan mode they become
+    // a deny through the public post-processing wrapper. Settings allow rules
+    // and acceptEdits shortcuts do not prove a command is read-only; only the
+    // deterministic gate Allow result can pass in plan mode.
+    match check_settings_with_subcommands(&settings, command_string) {
+        SettingsDecision::Ask => {
+            if let Some(context) = gate_context.as_deref() {
+                return HookOutput::ask_with_context("Matched settings.json ask rule", context);
+            }
+            return HookOutput::ask("Matched settings.json ask rule");
+        }
+        SettingsDecision::Allow | SettingsDecision::NoMatch => {}
+        SettingsDecision::Deny => {
+            unreachable!("settings deny rules are handled before plan-mode enforcement");
+        }
+    }
+
+    if is_plan_mode(permission_mode) {
+        if gate_result.decision == PermissionDecision::Allow && soft_ask.is_none() {
+            return gate_result;
+        }
+        return plan_mode_deny_output();
+    }
+
     // In acceptEdits mode, auto-allow file-editing commands that:
     // - Are file-editing commands
     // - Don't target sensitive paths (system files, credentials)
@@ -642,17 +697,11 @@ fn check_command_with_settings_and_session_inner(
         }
     }
 
-    // Check remaining settings.json rules (ask/allow) - deny already checked above.
+    // Check remaining settings.json allow rules - deny and ask already checked above.
     // For compound commands, also check each sub-command so that patterns like
     // Bash(npm install:*) match "cd /tmp && npm install".
     match check_settings_with_subcommands(&settings, command_string) {
-        SettingsDecision::Ask => {
-            // User wants to be asked - defer to Claude Code
-            if let Some(context) = gate_context.as_deref() {
-                return HookOutput::ask_with_context("Matched settings.json ask rule", context);
-            }
-            return HookOutput::ask("Matched settings.json ask rule");
-        }
+        SettingsDecision::Ask => unreachable!("settings ask rules are handled before plan mode"),
         SettingsDecision::Allow => {
             // User explicitly allows - return allow immediately
             if let Some(context) = gate_context.as_deref() {
@@ -1104,7 +1153,181 @@ fn check_hard_deny_patterns_with_features(
     None
 }
 
-/// Deny `| head` / `| tail` pipes. Streaming `tail -f` / `-F` is allowed.
+/// Build/test/package-manager producers whose piped output carries diagnostics
+/// that head/tail would truncate away. Used only to tailor the deny *message*;
+/// the deny decision is producer-agnostic (deny-by-default), so a build tool
+/// missing from this list still denies, just with the neutral message.
+const BUILD_PRODUCERS: &[&str] = &[
+    "mise", "cargo", "npm", "pnpm", "bun", "yarn", "go", "make", "ninja", "ctest", "gradle",
+    "gradlew", "mvn", "mvnw", "tsc", "deno", "uv", "pip", "pip3", "poetry", "pytest", "jest",
+    "vitest", "tox", "rake", "rspec",
+];
+
+/// Launcher wrappers that prefix the real command (`timeout 60 npm test`,
+/// `nice -n10 cargo build`, `sudo make`). Producer detection sees through them
+/// so a wrapped build/`gh` is still hard-denied, not mistaken for the wrapper.
+const PRODUCER_WRAPPERS: &[&str] = &[
+    "timeout", "nice", "nohup", "stdbuf", "time", "command", "setsid", "ionice", "chrt",
+    "unbuffer", "sudo", "doas", "env",
+];
+
+/// Normalize a token to a bare program name: strip a leading `(` and any path
+/// prefix, so `/usr/bin/sort` and `./gradlew` reduce to `sort` / `gradlew`.
+fn normalize_token(tok: &str) -> &str {
+    let t = tok.trim_start_matches('(');
+    t.rsplit('/').next().unwrap_or(t)
+}
+
+/// True for a token that is a leading `VAR=value` env assignment or a
+/// redirection operator, neither of which is the command program.
+fn is_assignment_or_redirect(tok: &str) -> bool {
+    if let Some((key, _)) = tok.split_once('=') {
+        if !key.is_empty() && key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
+            return true;
+        }
+    }
+    tok.starts_with('>') || tok.starts_with('<') || tok.starts_with("2>") || tok.starts_with("&>")
+}
+
+/// First real program word of a pipe stage (skips leading assignments and
+/// redirections). Does not see through wrappers; used for the `prior` stage
+/// (sort detection), where wrapping is irrelevant.
+fn stage_program(stage: &str) -> String {
+    for tok in stage.split_whitespace() {
+        if tok.trim_start_matches('(').is_empty() || is_assignment_or_redirect(tok) {
+            continue;
+        }
+        return normalize_token(tok).to_string();
+    }
+    String::new()
+}
+
+/// Effective producer of a pipe stage: like `stage_program` but skips leading
+/// launcher wrappers and their option / duration args, so `timeout 60 npm test`
+/// resolves to `npm` and `nice -n10 cargo build` to `cargo`.
+fn effective_producer(stage: &str) -> String {
+    let mut toks = stage.split_whitespace().peekable();
+    while let Some(tok) = toks.next() {
+        if tok.trim_start_matches('(').is_empty() || is_assignment_or_redirect(tok) {
+            continue;
+        }
+        let base = normalize_token(tok);
+        if PRODUCER_WRAPPERS.contains(&base) {
+            // Consume the wrapper's option flags and a single numeric/duration
+            // arg (e.g. `timeout 60`, `nice -n 10`), then fall through to the
+            // real producer on the next iteration.
+            while let Some(next) = toks.peek() {
+                let starts_digit = next.chars().next().is_some_and(|c| c.is_ascii_digit());
+                if next.starts_with('-') || starts_digit {
+                    toks.next();
+                } else {
+                    break;
+                }
+            }
+            continue;
+        }
+        return base.to_string();
+    }
+    String::new()
+}
+
+/// True when the byte at `offset` lies inside a `$(...)` or backtick command
+/// substitution. head/tail there feeds a variable (e.g.
+/// `newest=$(... | sort -V | tail -1)`), not the model's context window.
+fn inside_command_substitution(unquoted: &str, offset: usize) -> bool {
+    let bytes = unquoted.as_bytes();
+    let mut depth: i32 = 0;
+    let mut backtick = false;
+    let mut i = 0;
+    while i < offset && i < bytes.len() {
+        match bytes[i] {
+            b'`' => backtick = !backtick,
+            b'$' if i + 1 < bytes.len() && bytes[i + 1] == b'(' => {
+                depth += 1;
+                i += 2;
+                continue;
+            }
+            b')' if depth > 0 => depth -= 1,
+            _ => {}
+        }
+        i += 1;
+    }
+    depth > 0 || backtick
+}
+
+/// Producer (first stage) and the program of the stage immediately feeding the
+/// head/tail at `offset`, within the enclosing statement (bounded by `;`,
+/// `&&`, `||`, `(`, newline). Operates on the quote-stripped string, so every
+/// boundary char is ASCII and byte offsets are valid char boundaries.
+fn pipeline_context(unquoted: &str, offset: usize) -> (String, Option<String>) {
+    let bytes = unquoted.as_bytes();
+    let mut stmt_start = 0usize;
+    let mut i = offset;
+    while i > 0 {
+        i -= 1;
+        let c = bytes[i];
+        if c == b'\n' || c == b';' || c == b'(' {
+            stmt_start = i + 1;
+            break;
+        }
+        if c == b'&' && i > 0 && bytes[i - 1] == b'&' {
+            stmt_start = i + 1;
+            break;
+        }
+        if c == b'|' && i > 0 && bytes[i - 1] == b'|' {
+            stmt_start = i + 1;
+            break;
+        }
+    }
+    let head = &unquoted[stmt_start..offset];
+    let stages: Vec<&str> = head.split('|').filter(|s| !s.trim().is_empty()).collect();
+    let producer = stages
+        .first()
+        .map(|s| effective_producer(s))
+        .unwrap_or_default();
+    let prior = stages.last().map(|s| stage_program(s));
+    (producer, prior)
+}
+
+/// Producers whose piped output is hard-denied when capped by head/tail:
+/// build/test runners (diagnostics live at the end) and `gh` (rows/JSON the
+/// caller acts on; `gh api | head` breaks JSON mid-array). For these, a hard
+/// block + retry is worth it because truncation destroys context. Every other
+/// producer is low-harm: it passes through to normal gating and rides a
+/// self-correct hint on its allow, so the agent isn't hard-blocked (and forced
+/// into a token-costing retry) over a recoverable cap.
+fn is_hard_deny_producer(producer: &str) -> bool {
+    producer == "gh" || BUILD_PRODUCERS.contains(&producer)
+}
+
+/// Deny message for a hard-denied head/tail cap. Always producer-native: never
+/// references `max_output` / `output_tail`, which are not stock Bash tool
+/// params (a public tool-gates install may not be on a patched build). Only
+/// reached for `gh` and build/test producers (see `is_hard_deny_producer`).
+fn head_tail_message(producer: &str, segment: &str) -> String {
+    let trimmed = segment.trim();
+    if producer == "gh" {
+        return format!(
+            "`{trimmed}` blocked. Never truncate `gh` output: it drops rows and cuts \
+             `gh api` JSON mid-array. Re-run with `gh ... --limit N` for lists or \
+             `gh api ... --jq '.[0:N]'` for JSON."
+        );
+    }
+    // Build/test producer.
+    format!(
+        "`{trimmed}` blocked. Never truncate `{producer}` output: the errors you need are at \
+         the end and a volume cap drops them. Re-run uncapped, or filter at a real match with \
+         `rg 'pattern'`."
+    )
+}
+
+/// Decide head/tail-pipe handling. Three exemptions pass through silently:
+/// streaming `tail -f`/`-F`; top-N `... | sort ... | head/tail -N` (sort must
+/// consume all input, so the slice is the selection, not a cap); and head/tail
+/// inside `$(...)` / backticks (a programmatic pick feeding a variable). For a
+/// non-exempt cap, only build/test/`gh` producers are hard-denied; every other
+/// producer passes through (None) to normal gating, where a self-correct hint
+/// rides on the allow instead of a hard block.
 fn check_head_tail_pipe(command_string: &str) -> Option<HookOutput> {
     // Strip comments and quoted strings so `rg 'foo | head bar' file.txt` is safe.
     let stripped = strip_comments(command_string);
@@ -1116,17 +1339,79 @@ fn check_head_tail_pipe(command_string: &str) -> Option<HookOutput> {
 
     for cap in HEAD_TAIL_PIPE_RE.find_iter(&unquoted) {
         let segment = cap.as_str();
+        // Streaming tail -f/-F: log watching via the Monitor tool.
         if TAIL_STREAM_RE.is_match(segment) {
             continue;
         }
-        let trimmed = segment.trim();
-        return Some(HookOutput::deny(&format!(
-            "`{trimmed}` blocked. Use a producer-native cap: `rg -m N`, \
-             `fd --max-results N`, `bat -r START:END`, `git log -n N`, \
-             `gh api ... --jq '.[0:N]'`, `gh pr/issue/run list --limit N`, \
-             `docker compose logs --tail N`. Streaming `tail -f` / `tail -F` \
-             through the Monitor tool is fine."
-        )));
+        let offset = cap.start();
+        // Programmatic pick inside $() / backticks: feeds a variable, not output.
+        if inside_command_substitution(&unquoted, offset) {
+            continue;
+        }
+        // Top-N ranking: `... | sort ... | head/tail -N`.
+        let (producer, prior) = pipeline_context(&unquoted, offset);
+        if prior.as_deref() == Some("sort") {
+            continue;
+        }
+        // Only builds / gh are hard-denied; everything else passes through to
+        // normal gating + a self-correct hint (see hints::hint_head/hint_tail).
+        if is_hard_deny_producer(&producer) {
+            return Some(HookOutput::deny(&head_tail_message(&producer, segment)));
+        }
+    }
+
+    // Backstop: `| sed -n '1,Np'` / `| awk 'NR<=N'` first-N truncation, denied
+    // on build/gh producers only (mirrors head/tail). Mid-file range reads like
+    // `sed -n '2000,2050p'` don't match SED_AWK_TRUNC_RE, so file viewing is
+    // unaffected; soft producers pass through here too.
+    //
+    // The sed/awk SCRIPT is quoted (`'1,40p'`), so `unquoted` has blanked it to
+    // `_`. Scan `comment_stripped` (quotes intact) for the script content.
+    // `strip_quoted_strings` is length-preserving, so a match offset is valid in
+    // both strings; reuse it for the producer/substitution/sort checks against
+    // `unquoted`. Guard: the matched `sed`/`awk` keyword must be un-blanked in
+    // `unquoted` (a real pipe stage), else it's literal text inside a quote
+    // (e.g. `rg 'foo | sed -n 1,5p'`) and must not fire.
+    for cap in SED_AWK_TRUNC_RE.find_iter(&stripped) {
+        let offset = cap.start();
+        let end = cap.end().min(unquoted.len());
+        let unquoted_span = &unquoted[offset..end];
+        if !unquoted_span.contains("sed") && !unquoted_span.contains("awk") {
+            continue; // keyword was inside a quote: literal text, not a pipe
+            // stage
+        }
+        if inside_command_substitution(&unquoted, offset) {
+            continue;
+        }
+        let (producer, prior) = pipeline_context(&unquoted, offset);
+        if prior.as_deref() == Some("sort") {
+            continue;
+        }
+        if is_hard_deny_producer(&producer) {
+            return Some(HookOutput::deny(&head_tail_message(
+                &producer,
+                cap.as_str(),
+            )));
+        }
+    }
+
+    // Backstop: `| rg .` / `| rg -m N .` bare-catch-all fake filter, denied on
+    // build/gh producers only (mirrors head/tail). Scan `stripped` because the
+    // catch-all pattern may be quoted (`rg ''`); the offset is valid in
+    // `unquoted` too (length-preserving strip). A real `rg 'pattern'` content
+    // filter does not match RG_COUNTER_RE, so legitimate filtering passes.
+    for cap in RG_COUNTER_RE.find_iter(&stripped) {
+        let offset = cap.start();
+        if inside_command_substitution(&unquoted, offset) {
+            continue;
+        }
+        let (producer, _prior) = pipeline_context(&unquoted, offset);
+        if is_hard_deny_producer(&producer) {
+            return Some(HookOutput::deny(&head_tail_message(
+                &producer,
+                cap.as_str(),
+            )));
+        }
     }
     None
 }
@@ -1681,7 +1966,7 @@ fn resolve_path_manual(path: &str) -> String {
 }
 
 /// Check if a path is under any of the allowed directories.
-fn is_under_any_dir(path: &str, allowed_dirs: &[String]) -> bool {
+pub(crate) fn is_under_any_dir(path: &str, allowed_dirs: &[String]) -> bool {
     let path_normalized = path.trim_end_matches('/');
     for dir in allowed_dirs {
         // Must either equal the dir exactly OR start with dir/
@@ -1785,6 +2070,382 @@ fn resolve_wrapper_inner_command(cmd: &CommandInfo) -> Option<CommandInfo> {
     }
 }
 
+// === WASM simulator instrumentation ===
+//
+// Everything below is compiled only for the `wasm` feature. It is a parallel,
+// read-only COPY of the decision pipeline that records per-stage status/notes
+// for the docs-site command simulator. It deliberately does NOT thread a
+// `&mut StageEvents` writer through `GateCheckFn` (that would touch all 13
+// gates and the build.rs-generated rules.rs and break the byte-identical
+// guard). Instead it re-runs the same pure compute stages the native hot path
+// uses (`check_hard_deny_patterns_with_features`, `check_raw_string_patterns`,
+// `extract_commands`, `check_single_command`) and observes their results.
+//
+// It never calls `Settings::load`, `config::get`, mise/package.json expansion,
+// `hint_tracker`, `tool_cache`, or `security_reminders`, so it is free of the
+// disk and environment I/O that is unavailable under wasm32-unknown-unknown.
+
+/// Per-stage result for one simulated command. Lib.rs maps this into the
+/// `wasm_bindgen`-serialized `SimResponse` the frontend consumes.
+///
+/// Stage statuses are the `StageStatus` string vocabulary from the design spec:
+/// `"passed" | "allow" | "ask" | "block" | "skipped"`. The collapsed top-level
+/// `decision` is the 3-value `"allow" | "ask" | "block"`.
+#[cfg(feature = "wasm")]
+#[derive(Debug, Clone)]
+pub struct SimStages {
+    pub raw_status: &'static str,
+    pub raw_note: String,
+    pub parse_status: &'static str,
+    pub parse_note: String,
+    pub gate_status: &'static str,
+    pub gate_note: String,
+    pub settings_status: &'static str,
+    pub settings_note: String,
+    pub decision: &'static str,
+    pub reason: String,
+}
+
+/// Collapse an internal `Decision` to the simulator's stage-status string.
+#[cfg(feature = "wasm")]
+fn decision_to_stage_status(decision: Decision) -> &'static str {
+    match decision {
+        // A gate stage that didn't match any rule "passed" the command through
+        // to the unknown/ask handling; the frontend renders Allow and Passed
+        // identically (green check).
+        Decision::Skip => "passed",
+        Decision::Allow => "allow",
+        Decision::Ask => "ask",
+        Decision::Block => "block",
+    }
+}
+
+/// Instrumented copy of the decision pipeline for the WASM simulator.
+///
+/// Runs the raw-string + hard-deny scan, the tree-sitter parse, and the gate
+/// dispatch (strictest-wins across sub-commands), recording each stage. Returns
+/// the per-stage statuses/notes plus the collapsed final decision and reason.
+///
+/// `mode` accepts `default | acceptEdits | auto | bypassPermissions`; v1 treats
+/// every mode as `default` (no auto-mode hard-ask promotion, no settings) and
+/// records that in the settings-stage note. Settings are not loaded in the wasm
+/// build, so the settings stage is always `skipped`.
+#[cfg(feature = "wasm")]
+pub fn decide_instrumented(command: &str, mode: &str, settings_json: Option<&str>) -> SimStages {
+    use crate::config::Features;
+    use crate::settings::{Settings, SettingsDecision};
+
+    // Empty input: nothing to decide. Mirror the native no-opinion path as an
+    // allow with skipped stages so the frontend has something coherent to draw.
+    if command.trim().is_empty() {
+        return SimStages {
+            raw_status: "skipped",
+            raw_note: "empty command".to_string(),
+            parse_status: "skipped",
+            parse_note: "empty command".to_string(),
+            gate_status: "skipped",
+            gate_note: "empty command".to_string(),
+            settings_status: "skipped",
+            settings_note: "settings.json not evaluated in the simulator".to_string(),
+            decision: "allow",
+            reason: "No command to evaluate.".to_string(),
+        };
+    }
+
+    let mode_note = match mode.trim() {
+        "" | "default" => "settings.json not evaluated in the simulator".to_string(),
+        other => format!(
+            "settings.json not evaluated in the simulator (mode \"{other}\" treated as default)"
+        ),
+    };
+
+    // Blank quoted-heredoc body text before raw scanning, exactly like the
+    // native entry points: the body is stdin data, not executed shell.
+    let scan_owned = neutralize_heredoc_bodies(command);
+    let scan_string = scan_owned.as_deref().unwrap_or(command);
+
+    // Stage: raw (hard-deny and raw-string patterns).
+    // Use Features::default() (all-true) instead of config::get() so the wasm
+    // path never reads disk. This matches shipped defaults.
+    let features = Features::default();
+    if let Some(output) = check_hard_deny_patterns_with_features(scan_string, &features) {
+        let reason = output.reason.unwrap_or_else(|| "Blocked.".to_string());
+        return SimStages {
+            raw_status: "block",
+            raw_note: format!("\u{2717} hard-deny match: {reason}"),
+            parse_status: "skipped",
+            parse_note: "earlier stage was conclusive".to_string(),
+            gate_status: "skipped",
+            gate_note: "earlier stage was conclusive".to_string(),
+            settings_status: "skipped",
+            settings_note: mode_note,
+            decision: "block",
+            reason,
+        };
+    }
+
+    let (hard_ask, soft_ask) = check_raw_string_patterns(scan_string);
+    if let Some(output) = hard_ask {
+        // Raw-string hard asks (eval, pipe-to-shell) block immediately under auto mode.
+        let (raw_decision, reason) = if is_auto_mode(mode) {
+            (
+                "block",
+                output
+                    .reason
+                    .unwrap_or_else(|| "Dangerous pattern not allowed in auto mode".to_string()),
+            )
+        } else {
+            (
+                "ask",
+                output
+                    .reason
+                    .unwrap_or_else(|| "Requires approval.".to_string()),
+            )
+        };
+        return SimStages {
+            raw_status: raw_decision,
+            raw_note: format!("\u{26a0} raw-string match: {reason}"),
+            parse_status: "skipped",
+            parse_note: "earlier stage was conclusive".to_string(),
+            gate_status: "skipped",
+            gate_note: "earlier stage was conclusive".to_string(),
+            settings_status: "skipped",
+            settings_note: mode_note,
+            decision: raw_decision,
+            reason,
+        };
+    }
+
+    let raw_status = "passed";
+    let raw_note = "\u{2713} no raw-string security match".to_string();
+
+    // Stage: parse (tree-sitter-bash).
+    let commands = extract_commands(command);
+    if commands.is_empty() {
+        return SimStages {
+            raw_status,
+            raw_note,
+            parse_status: "passed",
+            parse_note: "\u{2713} parsed: no executable command found".to_string(),
+            gate_status: "skipped",
+            gate_note: "nothing to dispatch".to_string(),
+            settings_status: "skipped",
+            settings_note: mode_note,
+            decision: "allow",
+            reason: "No command to evaluate.".to_string(),
+        };
+    }
+
+    let parse_status = "passed";
+    let parse_note = {
+        let programs: Vec<&str> = commands.iter().map(|c| c.program.as_str()).collect();
+        format!("\u{2713} parsed as: {}", programs.join(", "))
+    };
+
+    // Stage: gate (GATES dispatch, strictest-wins across sub-commands).
+    let mut block_reasons: Vec<String> = Vec::new();
+    let mut ask_reasons: Vec<String> = Vec::new();
+    let mut allow_reasons: Vec<String> = Vec::new();
+    let mut strictest = Decision::Skip;
+    let mut hints: Vec<crate::hints::ModernHint> = Vec::new();
+
+    for cmd in &commands {
+        let result = check_single_command(cmd);
+        if result.decision > strictest {
+            strictest = result.decision;
+        }
+        if result.decision == Decision::Allow {
+            if let Some(hint) = crate::hints::get_modern_hint(cmd) {
+                hints.push(hint);
+            }
+        }
+        match result.decision {
+            Decision::Block => {
+                if let Some(reason) = result.reason {
+                    block_reasons.push(reason);
+                }
+            }
+            Decision::Ask => {
+                if let Some(reason) = result.reason {
+                    ask_reasons.push(reason);
+                }
+            }
+            Decision::Allow => {
+                if let Some(reason) = result.reason {
+                    allow_reasons.push(reason);
+                }
+            }
+            Decision::Skip => {
+                ask_reasons.push(format!("Unknown command: {}", cmd.program));
+            }
+        }
+    }
+
+    let gate_status = decision_to_stage_status(strictest);
+
+    // Collapse to the final decision and reason.
+    let (decision, reason) = if !block_reasons.is_empty() {
+        let combined = join_reasons(&block_reasons, "Multiple checks blocked:");
+        ("block", combined)
+    } else if !ask_reasons.is_empty() {
+        let combined = join_reasons(&ask_reasons, "Approval needed:");
+        ("ask", combined)
+    } else {
+        let combined = if allow_reasons.is_empty() {
+            "Read-only operation".to_string()
+        } else {
+            allow_reasons.join(", ")
+        };
+        ("allow", combined)
+    };
+
+    let gate_note = format!("{} \u{b7} {}", gate_status_glyph(gate_status), reason);
+
+    // Stage: settings (settings.json matching).
+    let mut settings_status = "skipped";
+    let mut settings_note = mode_note;
+    let mut final_decision = decision;
+    let mut final_reason = reason;
+
+    if let Some(json_str) = settings_json {
+        let trimmed = json_str.trim();
+        if !trimmed.is_empty() {
+            if let Ok(settings) = serde_json::from_str::<Settings>(trimmed) {
+                settings_status = "passed";
+                settings_note = "\u{2713} no matching settings.json rule".to_string();
+
+                // 1. Check for settings deny rules.
+                if let Some(pat) = settings.matched_deny_pattern(command) {
+                    settings_status = "block";
+                    settings_note = format!("\u{2717} settings.json deny match: {pat}");
+                    final_decision = "block";
+                    final_reason = format!(
+                        "Blocked by settings.json deny rule `{pat}`. Remove the rule or rewrite the command."
+                    );
+                } else if let Some(pat) = matched_subcommand_deny(&settings, command) {
+                    settings_status = "block";
+                    settings_note =
+                        format!("\u{2717} settings.json deny match (sub-command): {pat}");
+                    final_decision = "block";
+                    final_reason = format!(
+                        "Blocked by settings.json deny rule `{pat}` (matched on sub-command). Rewrite the chain to avoid that step."
+                    );
+                } else {
+                    // 2. Check for acceptEdits mode / auto mode auto-allows.
+                    let mut auto_allowed = false;
+                    if (mode == "acceptEdits" || is_auto_mode(mode)) && decision == "ask" {
+                        let allowed_dirs = settings.allowed_directories(""); // WASM has empty cwd.
+                        if should_auto_allow_in_accept_edits(&commands, &allowed_dirs) {
+                            settings_status = "allow";
+                            settings_note = "\u{2713} auto-allowed in acceptEdits mode".to_string();
+                            final_decision = "allow";
+                            final_reason = "Auto-allowed in acceptEdits mode.".to_string();
+                            auto_allowed = true;
+                        }
+                    }
+
+                    if !auto_allowed && decision != "block" {
+                        // 3. Check settings ask/allow rules.
+                        match check_settings_with_subcommands(&settings, command) {
+                            SettingsDecision::Ask => {
+                                settings_status = "ask";
+                                settings_note =
+                                    "\u{23f8} matched settings.json ask rule".to_string();
+                                final_decision = "ask";
+                                final_reason = "Matched settings.json ask rule.".to_string();
+                            }
+                            SettingsDecision::Allow => {
+                                settings_status = "allow";
+                                settings_note =
+                                    "\u{2713} matched settings.json allow rule".to_string();
+                                final_decision = "allow";
+                                final_reason = "Matched settings.json allow rule.".to_string();
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            } else {
+                settings_status = "block";
+                settings_note = "\u{2717} invalid settings.json syntax".to_string();
+                final_decision = "block";
+                final_reason =
+                    "Invalid settings.json syntax. Check your custom JSON rules.".to_string();
+            }
+        }
+    }
+
+    // Soft asks from raw checks (like redirection or interpreters) only block if not overridden by settings.
+    if final_decision != "block" && final_decision != "allow" && final_decision != "ask" {
+        if let Some(output) = soft_ask {
+            let soft_reason = output
+                .reason
+                .unwrap_or_else(|| "Requires approval.".to_string());
+            return SimStages {
+                raw_status: "ask",
+                raw_note: format!("\u{26a0} raw-string match: {soft_reason}"),
+                parse_status,
+                parse_note,
+                gate_status,
+                gate_note,
+                settings_status,
+                settings_note,
+                decision: "ask",
+                reason: soft_reason,
+            };
+        }
+    }
+
+    if final_decision == "allow" && !hints.is_empty() {
+        let formatted = crate::hints::format_hints(&hints);
+        if !formatted.is_empty() {
+            final_reason = format!("{final_reason}\n\nHint: {formatted}");
+        }
+    }
+
+    SimStages {
+        raw_status,
+        raw_note,
+        parse_status,
+        parse_note,
+        gate_status,
+        gate_note,
+        settings_status,
+        settings_note,
+        decision: final_decision,
+        reason: final_reason,
+    }
+}
+
+/// Join multiple gate reasons into one string, matching the native
+/// `HookOutput` bullet formatting when there is more than one.
+#[cfg(feature = "wasm")]
+fn join_reasons(reasons: &[String], header: &str) -> String {
+    if reasons.len() == 1 {
+        reasons[0].clone()
+    } else {
+        format!(
+            "{header}\n{}",
+            reasons
+                .iter()
+                .map(|r| format!("\u{2022} {r}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        )
+    }
+}
+
+/// Leading glyph for a gate-stage note, matching the simulator's visual
+/// vocabulary (check / pause / cross).
+#[cfg(feature = "wasm")]
+fn gate_status_glyph(status: &str) -> &'static str {
+    match status {
+        "block" => "\u{2717}",
+        "ask" => "\u{23f8}",
+        _ => "\u{2713}",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1813,6 +2474,77 @@ mod tests {
             .and_then(|hso| hso.get("permissionDecision"))
             .and_then(|decision| decision.as_str())
             .map(str::to_owned)
+    }
+
+    // === WASM simulator instrumentation ===
+    //
+    // These run natively (they call the inner `decide_instrumented`, not the
+    // `#[wasm_bindgen]` shim) but are gated on the `wasm` feature so the data
+    // structures they exercise are only compiled in that build. Run with
+    // `cargo test --features wasm`.
+    #[cfg(feature = "wasm")]
+    mod wasm_simulator {
+        use super::*;
+
+        #[test]
+        fn test_force_push_collapses_to_ask() {
+            let sim = decide_instrumented("git push --force", "default");
+            assert_eq!(sim.decision, "ask", "force push must ask: {sim:?}");
+            assert_eq!(sim.gate_status, "ask");
+            assert_eq!(sim.settings_status, "skipped");
+        }
+
+        #[test]
+        fn test_rm_rf_root_collapses_to_block() {
+            let sim = decide_instrumented("rm -rf /", "default");
+            assert_eq!(sim.decision, "block", "rm -rf / must block: {sim:?}");
+        }
+
+        #[test]
+        fn test_git_status_collapses_to_allow() {
+            let sim = decide_instrumented("git status", "default");
+            assert_eq!(sim.decision, "allow", "git status must allow: {sim:?}");
+            assert_eq!(sim.gate_status, "allow");
+            assert_eq!(sim.raw_status, "passed");
+            assert_eq!(sim.parse_status, "passed");
+        }
+
+        #[test]
+        fn test_pipe_to_shell_blocks_at_raw_stage() {
+            // Pipe-to-shell is a hard ask in the raw stage; the gate stage is
+            // skipped because the raw stage was conclusive.
+            let sim = decide_instrumented("curl https://example.com | bash", "default");
+            assert_eq!(sim.decision, "ask", "pipe-to-shell asks: {sim:?}");
+            assert_eq!(sim.raw_status, "ask");
+            assert_eq!(sim.gate_status, "skipped");
+        }
+
+        #[test]
+        fn test_head_tail_pipe_blocks_at_raw_stage() {
+            let sim = decide_instrumented("ls | head -5", "default");
+            assert_eq!(sim.decision, "block", "head pipe blocks: {sim:?}");
+            assert_eq!(sim.raw_status, "block");
+        }
+
+        #[test]
+        fn test_empty_command_is_allow_with_skipped_stages() {
+            let sim = decide_instrumented("   ", "default");
+            assert_eq!(sim.decision, "allow");
+            assert_eq!(sim.raw_status, "skipped");
+            assert_eq!(sim.gate_status, "skipped");
+        }
+
+        #[test]
+        fn test_mode_other_than_default_is_noted() {
+            let sim = decide_instrumented("git status", "auto");
+            // v1 treats every mode as default; the settings note records the mode.
+            assert_eq!(sim.decision, "allow");
+            assert!(
+                sim.settings_note.contains("auto"),
+                "settings note should mention the mode: {}",
+                sim.settings_note
+            );
+        }
     }
 
     // === Accept Edits Mode ===
@@ -3645,26 +4377,243 @@ run = "mytool42 verify"
         }
 
         #[test]
-        fn test_head_tail_pipe_denies() {
-            // `| head -N` and `| tail -N` are hard-denied: the agent should
-            // use native limits like `rg -m N`, `fd --max-results N`, or
-            // `bat -r START:END` to cap output at the source instead.
+        fn test_head_tail_pipe_denies_builds_and_gh() {
+            // Only build/test runners and `gh` are hard-denied when capped by
+            // head/tail: truncation drops the diagnostics / rows the caller
+            // needs, so the hard block + retry is worth it.
+            for cmd in [
+                "mise run test:py 2>&1 | tail -50",
+                "cargo test | head -40",
+                "npm test 2>&1 | tail -20",
+                "pytest | head -100",
+                "go build ./... 2>&1 | tail -30",
+                "gh pr list | head -20",
+                "gh api repos/o/r/pulls | head -5",
+            ] {
+                let result = check_command(cmd);
+                assert_eq!(get_decision(&result), "deny", "should deny: {cmd}");
+                let reason = get_reason(&result);
+                assert!(
+                    reason.contains("blocked") && reason.contains("truncat"),
+                    "Missing head/tail deny rationale for: {cmd}\ngot: {reason}"
+                );
+            }
+        }
+
+        #[test]
+        fn test_head_tail_wrapped_builds_deny() {
+            // Launcher wrappers must not hide a build/gh producer from the cap
+            // check: `timeout 60 npm test | tail` is still a truncated build.
+            for cmd in [
+                "timeout 60 npm test | tail -50",
+                "nice -n 10 cargo test | head -5",
+                "sudo make 2>&1 | tail -20",
+                "nohup pytest | head -100",
+                "time go build ./... | tail -10",
+                "env CI=1 gh pr list | head -3",
+            ] {
+                let result = check_command(cmd);
+                assert_eq!(
+                    get_decision(&result),
+                    "deny",
+                    "wrapped build/gh should deny: {cmd}"
+                );
+                assert!(
+                    get_reason(&result).contains("truncat"),
+                    "expected head/tail deny for: {cmd}"
+                );
+            }
+        }
+
+        #[test]
+        fn test_head_tail_soft_producers_pass_through() {
+            // Low-harm producers are NOT hard-denied for a head/tail cap: they
+            // pass through to normal gating (and ride a self-correct hint), so a
+            // recoverable cap isn't a hard block + token-costing retry. The only
+            // requirement here is that the head/tail deny path does not fire
+            // (signature: a deny whose reason mentions truncation).
             for cmd in [
                 "ls | head",
-                "ls | head -5",
                 "cat big.log | tail -20",
                 "find . -type f | head -100",
                 "rg pattern src/ | head -n 3",
                 "git log --oneline | tail -50",
-                "sort file.txt |head -10",
-                "echo a; ls | head -5",
+                "du -sh * | tail -5",
             ] {
                 let result = check_command(cmd);
-                assert_eq!(get_decision(&result), "deny", "Failed for: {cmd}");
                 let reason = get_reason(&result);
                 assert!(
-                    reason.contains("blocked") && reason.contains("rg -m"),
-                    "Missing deny rationale for: {cmd}\ngot: {reason}"
+                    !reason.contains("truncat"),
+                    "soft producer should not hard-deny head/tail: {cmd}\ngot: {reason}"
+                );
+            }
+        }
+
+        #[test]
+        fn test_head_tail_sort_topn_allowed() {
+            // `... | sort ... | head/tail -N` is a top-N ranking: sort must
+            // consume all input, so head/tail is the selection, not an output
+            // cap. The head/tail deny path must not fire (matches the managed
+            // rule's sanctioned `sort -rn | head -N` exception). Some flow
+            // through to gate-level ask/allow; the only requirement here is
+            // that the head/tail deny does not fire.
+            for cmd in [
+                "sort file.txt | head -10",
+                "sort file.txt |head -10",
+                "du -sh ~/.cache/* 2>/dev/null | sort -rh | head -20",
+                "fd -t f . | sort -rn | tail -3",
+                "ps aux | sort -rk3 | head -5",
+            ] {
+                let result = check_command(cmd);
+                let reason = get_reason(&result);
+                assert!(
+                    !(get_decision(&result) == "deny" && reason.contains("blocked")),
+                    "head/tail deny should not fire for top-N: {cmd}\ngot: {reason}"
+                );
+            }
+        }
+
+        #[test]
+        fn test_head_tail_substitution_allowed() {
+            // head/tail inside `$(...)` / backticks is a programmatic pick that
+            // feeds a variable, not the model's context window. The deny path
+            // must not fire.
+            for cmd in [
+                "newest=$(fd -t f 'report.csv' . | sort -t/ -k2 -V | tail -1); echo \"$newest\"",
+                "latest=$(ls -t | head -1)",
+                "x=`ls | head -1`",
+            ] {
+                let result = check_command(cmd);
+                let reason = get_reason(&result);
+                assert!(
+                    !(get_decision(&result) == "deny" && reason.contains("blocked")),
+                    "head/tail deny should not fire inside substitution: {cmd}\ngot: {reason}"
+                );
+            }
+        }
+
+        #[test]
+        fn test_head_tail_hard_deny_messages() {
+            // Hard-deny messages (gh + build/test only) name the right
+            // alternative and stay stock-safe: never `max_output` /
+            // `output_tail`, which are patched-build-only Bash params.
+            let cases = [
+                ("gh pr list | head -20", "--limit"),
+                ("gh api repos/o/r/pulls | head -5", "--jq"),
+                ("cargo test 2>&1 | tail -40", "at the end"),
+                ("pnpm test | head -30", "rg 'pattern'"),
+            ];
+            for (cmd, needle) in cases {
+                let result = check_command(cmd);
+                assert_eq!(get_decision(&result), "deny", "should deny: {cmd}");
+                let reason = get_reason(&result);
+                assert!(
+                    reason.contains(needle),
+                    "expected `{needle}` in message for `{cmd}`\ngot: {reason}"
+                );
+                assert!(
+                    !reason.contains("max_output") && !reason.contains("output_tail"),
+                    "message must stay stock-safe for `{cmd}`\ngot: {reason}"
+                );
+            }
+        }
+
+        #[test]
+        fn test_sed_awk_truncation_backstop() {
+            // Backstop: first-N sed/awk truncation on build/gh producers is
+            // denied (the head/tail rule's side door). Mirrors head/tail tiering.
+            for cmd in [
+                "cargo test 2>&1 | sed -n '1,40p'",
+                "npm test | sed -n 1,20p",
+                "pytest | sed -n 30q",
+                "go build ./... 2>&1 | awk 'NR<=50'",
+                "gh pr list | awk 'NR==10'",
+                "gh api repos/o/r | sed -n '1,5p'",
+            ] {
+                let result = check_command(cmd);
+                assert_eq!(
+                    get_decision(&result),
+                    "deny",
+                    "build/gh sed/awk trunc should deny: {cmd}"
+                );
+                assert!(
+                    get_reason(&result).contains("truncate"),
+                    "expected truncation deny for: {cmd}"
+                );
+            }
+        }
+
+        #[test]
+        fn test_sed_range_read_not_truncation() {
+            // Mid-file line-range reads are NOT truncation: they view a window,
+            // not a from-the-top cap. Must never hit the sed/awk backstop, even
+            // on a build producer (here the producer is `cat`/none anyway). A
+            // deep mid-file window like `sed -n '2000,2050p' report.csv` is the
+            // canonical case. Also soft producers with first-N sed pass through.
+            for cmd in [
+                "sed -n '2000,2050p' report.csv",
+                "cat big.log | sed -n '100,200p'",
+                "rg foo | sed -n '1,20p'",
+                "cargo test | sed -n '2000,2050p'",
+                "cargo build | sed 's/a/b/'",
+                "cargo test | awk '{print $2}'",
+            ] {
+                let result = check_command(cmd);
+                let reason = get_reason(&result);
+                assert!(
+                    !(get_decision(&result) == "deny" && reason.contains("truncate")),
+                    "range-read / soft-producer must not hit sed backstop: {cmd}\ngot: {reason}"
+                );
+            }
+        }
+
+        #[test]
+        fn test_rg_counter_truncation_backstop() {
+            // Backstop: bare-catch-all `rg .` / `rg -m N .` fake filter on
+            // build/gh producers is denied (caps volume with a no-op pattern).
+            for cmd in [
+                "cargo test | rg -m 20 .",
+                "mise test | rg .",
+                "bun test 2>&1 | rg -m 5 ''",
+                "gh pr list | rg \".*\"",
+                "uv run x | rg -m 5 .",
+                "pnpm test | rg -m 3 '.'",
+            ] {
+                let result = check_command(cmd);
+                assert_eq!(
+                    get_decision(&result),
+                    "deny",
+                    "build/gh rg-counter should deny: {cmd}"
+                );
+                assert!(
+                    get_reason(&result).contains("truncate"),
+                    "expected truncation deny for: {cmd}"
+                );
+            }
+        }
+
+        #[test]
+        fn test_rg_real_filter_not_truncation() {
+            // A real content filter is NOT a fake counter: `rg 'pattern'` keeps
+            // only matching lines, the sanctioned alternative. Must never hit the
+            // rg-counter backstop, even on a build producer. Soft producers with
+            // a bare `rg .` pass through too.
+            for cmd in [
+                "cargo test | rg 'FAILED'",
+                "cargo test | rg -m 5 error",
+                "cargo test | rg -i warning",
+                "cargo test | rg -m 5 '.rs'",
+                "cargo test | rg error.log",
+                "cargo build | rg -v warning",
+                "rg foo | rg -m 5 .",
+                "eza -la | rg -m 20 .",
+            ] {
+                let result = check_command(cmd);
+                let reason = get_reason(&result);
+                let denied_trunc = get_decision(&result) == "deny" && reason.contains("truncate");
+                assert!(
+                    !denied_trunc,
+                    "real rg filter / soft producer must not hit rg-counter backstop: {cmd}\ngot: {reason}"
                 );
             }
         }
@@ -3776,7 +4725,8 @@ run = "mytool42 verify"
             use crate::config::Features;
             let on = Features::default();
             assert!(on.head_tail_pipe_block);
-            let output = check_hard_deny_patterns_with_features("ls | head -5", &on)
+            // Use a hard-deny producer (gh): soft producers now pass through.
+            let output = check_hard_deny_patterns_with_features("gh pr list | head -5", &on)
                 .expect("toggle-on must produce a deny");
             assert!(
                 output.reason.as_deref().unwrap_or("").contains("blocked"),
@@ -4168,6 +5118,45 @@ run = "mytool42 verify"
             assert_eq!(result.decision, PermissionDecision::Allow);
         }
 
+        #[serial_test::serial]
+        #[test]
+        fn test_plan_mode_ignores_settings_allow_for_mutating_command() {
+            use std::env;
+            use std::fs;
+            let temp = tempfile::TempDir::new().unwrap();
+            let saved = env::var("HOME").ok();
+            unsafe { env::set_var("HOME", temp.path()) };
+
+            let claude_dir = temp.path().join(".claude");
+            fs::create_dir_all(&claude_dir).unwrap();
+            fs::write(
+                claude_dir.join("settings.json"),
+                r#"{"permissions": {"allow": ["Bash(npm install:*)"]}}"#,
+            )
+            .unwrap();
+
+            let result = check_command_with_settings("npm install foo", "/tmp", "plan");
+
+            unsafe {
+                match saved {
+                    Some(v) => env::set_var("HOME", v),
+                    None => env::remove_var("HOME"),
+                }
+            }
+
+            assert_eq!(result.decision, PermissionDecision::Deny);
+            assert!(
+                result
+                    .reason
+                    .as_deref()
+                    .unwrap_or("")
+                    .to_lowercase()
+                    .contains("plan mode"),
+                "deny reason should mention plan mode, got: {:?}",
+                result.reason
+            );
+        }
+
         #[test]
         fn test_soft_ask_patterns_not_denied_under_auto_mode() {
             // Output redirection is a soft-ask (overridable via settings). Auto mode
@@ -4524,9 +5513,9 @@ run = "mytool42 verify"
 
         #[test]
         fn test_normal_command_unchanged_by_heredoc_neutralization() {
-            // No heredoc: decisions must be identical to the no-op path. A real
-            // `| head` pipe still denies; a plain read still passes.
-            let denied = check_command("cat file.txt | head -5");
+            // No heredoc: decisions must be identical to the no-op path. A
+            // build/test `| head` pipe still denies; a plain read still passes.
+            let denied = check_command("cargo test | head -5");
             assert_eq!(get_decision(&denied), "deny");
 
             let allowed = check_command("git status");

@@ -45,16 +45,16 @@ pub type GateCheckFn = fn(&CommandInfo) -> GateResult;
 /// basics runs last as a catch-all for safe commands
 pub static GATES: &[(&str, GateCheckFn)] = &[
     ("gh", check_gh),
+    ("git", check_git),
+    ("cloud", check_cloud),
+    ("package_managers", check_package_managers),
     ("beads", check_beads),
     ("tool_gates", check_tool_gates),
-    ("shortcut", check_shortcut),
-    ("cloud", check_cloud),
-    ("network", check_network),
-    ("git", check_git),
-    ("filesystem", check_filesystem),
     ("devtools", check_devtools),
-    ("package_managers", check_package_managers),
     ("runtimes", check_runtimes),
+    ("filesystem", check_filesystem),
+    ("network", check_network),
     ("system", check_system),
+    ("shortcut", check_shortcut),
     ("basics", check_basics),
 ];

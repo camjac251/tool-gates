@@ -14,6 +14,16 @@
 name = "git"
 description = "Git version control permission gate"
 priority = 10
+lede = "Read-only history and inspection commands pass through. Anything that writes to the tree, the index, or a remote pauses for approval. <b>git</b> is never hard-blocked from this gate. The dangerous floor lives in the filesystem rules and the pre-AST raw-string pass."
+note = """<b>Hard blocks live in other gates.</b> The git gate never denies outright. A pattern like <code>curl … | bash</code> is caught by the pre-AST raw-string pass before any gate runs. Destructive filesystem patterns like <code>rm -rf /</code> are denied in <a href=\"filesystem.html\">filesystem.toml</a>."""
+behavior_tags = [
+  "<b>--dry-run</b> / <b>-n</b> always allows",
+  "aliases resolved from <b>~/.gitconfig</b>",
+]
+
+[meta.card_titles]
+allow = "read-only"
+ask = "writes"
 
 [[programs]]
 name = "git"
@@ -31,85 +41,125 @@ flags_any = ["--dry-run", "-n"]
 
 [[programs.allow]]
 subcommand = "status"
+reason = "Shows the working tree status: staged, unstaged, and untracked files. Read-only."
 
 [[programs.allow]]
 subcommand = "log"
+reason = "Shows commit history. Read-only."
 
 [[programs.allow]]
 subcommand = "diff"
+reason = "Shows changes between commits, the working tree, and the index. Read-only."
 
 [[programs.allow]]
 subcommand = "show"
+reason = "Shows a commit, tag, or other object and its contents. Read-only."
 
 [[programs.allow]]
 subcommand = "tag"
-unless_flags = ["-d", "--delete", "-f", "--force", "-a", "--annotate", "-s", "--sign", "-u", "--local-user", "-m", "--message"]
+unless_flags = [
+  "-d",
+  "--delete",
+  "-f",
+  "--force",
+  "-a",
+  "--annotate",
+  "-s",
+  "--sign",
+  "-u",
+  "--local-user",
+  "-m",
+  "--message",
+]
+reason = "Lists tags when no mutating flag is given. Read-only in this form; creation and deletion flags are gated separately."
 
 [[programs.allow]]
 subcommand = "describe"
+reason = "Names a commit using the nearest reachable tag. Read-only."
 
 [[programs.allow]]
 subcommand = "rev-parse"
+reason = "Resolves refs and arguments to object names. Read-only."
 
 [[programs.allow]]
 subcommand = "ls-files"
+reason = "Lists files tracked in the index. Read-only."
 
 [[programs.allow]]
 subcommand = "blame"
+reason = "Shows the commit and author that last touched each line of a file. Read-only."
 
 [[programs.allow]]
 subcommand = "reflog"
+reason = "Shows the history of ref updates such as HEAD movements. Read-only."
 
 [[programs.allow]]
 subcommand = "shortlog"
+reason = "Summarizes commit history grouped by author. Read-only."
 
 [[programs.allow]]
 subcommand = "whatchanged"
+reason = "Shows commit history along with the files each commit changed. Read-only."
 
 [[programs.allow]]
 subcommand = "ls-tree"
+reason = "Lists the contents of a tree object. Read-only."
 
 [[programs.allow]]
 subcommand = "cat-file"
+reason = "Prints the type, size, or contents of a repository object. Read-only."
 
 [[programs.allow]]
 subcommand = "rev-list"
+reason = "Lists commit objects in reverse chronological order. Read-only."
 
 [[programs.allow]]
 subcommand = "name-rev"
+reason = "Names commits by their position relative to refs. Read-only."
 
 [[programs.allow]]
 subcommand = "for-each-ref"
+reason = "Lists refs matching a pattern, with a customizable format. Read-only."
 
 [[programs.allow]]
 subcommand = "symbolic-ref"
+reason = "Reads a symbolic ref such as HEAD. Read-only when no value is given; writes are gated separately."
 
 [[programs.allow]]
 subcommand = "verify-commit"
+reason = "Checks the GPG signature on a commit. Read-only."
 
 [[programs.allow]]
 subcommand = "verify-tag"
+reason = "Checks the GPG signature on a tag. Read-only."
 
 [[programs.allow]]
 subcommand = "fsck"
+reason = "Checks repository objects for connectivity and integrity. Read-only."
 
 [[programs.allow]]
 subcommand = "count-objects"
+reason = "Reports the count and on-disk size of repository objects. Read-only."
 
 [[programs.allow]]
 subcommand = "check-ignore"
+reason = "Reports which paths are ignored and the matching gitignore rule. Read-only."
 
 [[programs.allow]]
 subcommand = "check-attr"
+reason = "Reports the gitattributes values applied to given paths. Read-only."
 
 [[programs.allow]]
 subcommand = "grep"
+reason = "Searches tracked file contents for a pattern. Read-only."
 
 [[programs.allow]]
 subcommand = "merge-base"
+reason = "Finds the common ancestor of two or more commits. Read-only."
 
 [[programs.allow]]
 subcommand = "show-ref"
+reason = "Lists refs and the object names they point to. Read-only."
 
 [[programs.ask]]
 subcommand = "gc"
@@ -121,39 +171,59 @@ reason = "Deletes unreachable objects from `.git`. Cannot be recovered without a
 
 [[programs.allow]]
 subcommand = "help"
+reason = "Shows Git help text for a subcommand. Read-only."
 
 [[programs.allow]]
 subcommand = "version"
+reason = "Prints the installed Git version. Read-only."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the installed Git version. Read-only."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Shows short usage help. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Shows full help text. Read-only."
 
 # === Branch Command (mixed read/write) ===
 # Listing and creating branches are safe. Only delete/move/copy require approval.
 
 [[programs.allow]]
 subcommand = "branch"
-unless_flags = ["-d", "-D", "--delete", "-m", "-M", "--move", "-c", "-C", "--copy"]
+unless_flags = [
+  "-d",
+  "-D",
+  "--delete",
+  "-m",
+  "-M",
+  "--move",
+  "-c",
+  "-C",
+  "--copy",
+]
+reason = "Lists or creates branches. Read-only when listing; delete, move, and copy flags are gated separately."
 
 # === Config Subcommands ===
 
 [[programs.allow]]
 subcommand = "config get"
+reason = "Reads a Git configuration value. Read-only."
 
 [[programs.allow]]
 subcommand = "config list"
+reason = "Lists Git configuration values. Read-only."
 
 [[programs.allow]]
 subcommand = "config --get"
+reason = "Reads a Git configuration value. Read-only."
 
 [[programs.allow]]
 subcommand = "config --list"
+reason = "Lists Git configuration values. Read-only."
 
 [[programs.ask]]
 subcommand = "config set"
@@ -171,9 +241,11 @@ reason = "Removes a git config entry. Permanent for the chosen scope."
 
 [[programs.allow]]
 subcommand = "stash list"
+reason = "Lists stash entries. Read-only."
 
 [[programs.allow]]
 subcommand = "stash show"
+reason = "Shows the diff recorded in a stash entry. Read-only."
 
 [[programs.ask]]
 subcommand = "stash drop"
@@ -199,6 +271,7 @@ reason = "Applies a stash entry without removing it from the stash list."
 
 [[programs.allow]]
 subcommand = "worktree list"
+reason = "Lists the linked worktrees of this repository. Read-only."
 
 [[programs.ask]]
 subcommand = "worktree add"
@@ -216,6 +289,7 @@ reason = "Prunes stale worktree references that no longer point to a real direct
 
 [[programs.allow]]
 subcommand = "submodule status"
+reason = "Reports the status and checked-out commit of each submodule. Read-only."
 
 # Note: submodule foreach runs arbitrary commands, so it must ask
 [[programs.ask]]
@@ -243,15 +317,19 @@ reason = "Unregisters submodules and clears their working tree. Use `--force` to
 [[programs.allow]]
 subcommand = "remote"
 unless_flags = ["add", "remove", "rename", "set-url"]
+reason = "Lists configured remotes. Read-only when listing; add, remove, rename, and set-url are gated separately."
 
 [[programs.allow]]
 subcommand = "remote show"
+reason = "Shows details about a remote, including its tracked branches. Read-only network query."
 
 [[programs.allow]]
 subcommand = "remote -v"
+reason = "Lists remotes with their fetch and push URLs. Read-only."
 
 [[programs.allow]]
 subcommand = "remote get-url"
+reason = "Prints the URL of a remote. Read-only."
 
 [[programs.ask]]
 subcommand = "remote add"
@@ -310,7 +388,7 @@ reason = "Merges another branch into the current one. Can produce conflicts; abo
 
 [[programs.ask]]
 subcommand = "rebase"
-reason = "Rebasing. Non-interactive only; interactive (`-i`) hangs the agent. Use `git revise --autosquash` for fixups."
+reason = "Replays commits from the current branch onto another base, rewriting their SHAs. Interactive (`-i`) hangs the agent; abort a stuck rebase with `git rebase --abort`."
 
 # checkout with specific flag conditions (checked before general checkout)
 [[programs.ask]]
@@ -387,7 +465,16 @@ reason = "Removes a tracked file from the working tree and stages the deletion. 
 [[programs.ask]]
 subcommand = "tag"
 reason = "Creates a tag pointing at the named commit (HEAD by default). Local only until `git push --tags`."
-if_flags_any = ["-a", "--annotate", "-s", "--sign", "-u", "--local-user", "-m", "--message"]
+if_flags_any = [
+  "-a",
+  "--annotate",
+  "-s",
+  "--sign",
+  "-u",
+  "--local-user",
+  "-m",
+  "--message",
+]
 
 [[programs.ask]]
 subcommand = "tag"
@@ -402,7 +489,7 @@ if_flags_any = ["-f", "--force"]
 # Branch mutations
 [[programs.ask]]
 subcommand = "branch"
-reason = "Deleting a branch. Prefer `-d` (refuses if unmerged) over `-D` (force) when possible."
+reason = "Deletes a branch ref. `-d` refuses if the branch has unmerged commits; `-D` forces the delete regardless. Recover via `git reflog` if done by mistake."
 if_flags_any = ["-d", "-D", "--delete"]
 
 [[programs.ask]]

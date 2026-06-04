@@ -69,8 +69,10 @@ Fires when Claude Code would normally show a permission prompt to the user.
 | `tool_name` | `string` | Tool being requested |
 | `tool_input` | `object` | Tool-specific input |
 | `permission_suggestions` | `array` (optional) | Suggested permission updates (addRules, addDirectories, etc.) |
+| `decision_reason` | `string` (optional) | Best-effort reason from the client's permission resolver; may be absent depending on runtime path |
+| `blocked_path` | `string` (optional) | Best-effort path that triggered a permission boundary; may be absent depending on runtime path |
 
-Note: `decision_reason` and `blocked_path` are NOT in PermissionRequest hook input. Those only appear in the remote control protocol.
+`decision_reason` and `blocked_path` are optional and runtime-dependent. Treat them as hints, not required schema fields.
 
 **Output (approve):**
 ```json
@@ -140,7 +142,7 @@ Fires after a tool completes.
 
 `updatedMCPToolOutput` (optional, legacy) replaces the output for MCP tools only.
 
-PostToolUse output from tool-gates is currently empty (silent) to avoid cluttering Claude's context.
+PostToolUse is silent for tracking-only successes. It can emit `additionalContext` for post-write security reminders, Codex modern-CLI hints, and warning tiers.
 
 ## PostToolUseFailure
 
@@ -204,7 +206,7 @@ Key differences from Claude:
 
 ## Codex CLI Hooks
 
-Codex emits `PreToolUse` / `PermissionRequest` / `PostToolUse` events with snake_case input fields and camelCase output -- the same surface shape as Claude. The wire format is similar enough that the same `HookInput` / `PostToolUseInput` deserializers parse it. Detection is via the explicit `--client codex` argv flag (`Client::from_cli_name`); `from_hook_event()` cannot distinguish Codex from Claude because the event names are identical.
+Codex emits `PreToolUse` / `PermissionRequest` / `PostToolUse` events with snake_case input fields and camelCase output: the same surface shape as Claude. The wire format is similar enough that the same `HookInput` / `PostToolUseInput` deserializers parse it. Detection is via the explicit `--client codex` argv flag (`Client::from_cli_name`); `from_hook_event()` cannot distinguish Codex from Claude because the event names are identical.
 
 **Hook config file**: `~/.codex/hooks.json` (user) or `<repo>/.codex/hooks.json` (project). Top-level `{ "hooks": { ... } }` object, same shape as Claude/Gemini settings.json.
 
@@ -221,7 +223,8 @@ Codex hooks installed by tool-gates cover PreToolUse for Bash/apply_patch and MC
 
 **Output format**:
 ```json
-// Allow / Ask / no opinion: empty stdout, exit 0 (Codex's UI prompts the user)
+// Allow / Ask / no opinion: empty stdout, exit 0 (pass-through to Codex;
+// prompting depends on approval_policy and execpolicy)
 // Deny: nested hookSpecificOutput on stdout, exit 0
 {
   "hookSpecificOutput": {
@@ -234,7 +237,7 @@ Codex hooks installed by tool-gates cover PreToolUse for Bash/apply_patch and MC
 
 Key differences from Claude (rejected by Codex's parser, dropped silently by tool-gates):
 - PreToolUse `permissionDecision: "allow"` and `"ask"` are marked invalid -> tool-gates emits empty stdout (`Value::Null` from `to_codex_json`) so Codex's prompt fires instead.
-- PreToolUse `additionalContext` is rejected -> hints + Tier-3 warnings move to PostToolUse for Codex (Codex accepts `additionalContext` on Post).
+- Modern-CLI hints + Tier-3 warnings ride PostToolUse for Codex, not PreToolUse. Not a parser limitation: Codex accepts `additionalContext` on both PreToolUse and PostToolUse (upstream #20692). tool-gates' Pre handler returns empty stdout on a non-deny decision (`allow`/`ask` are rejected), so today a hint riding an allow has no Pre output to attach to.
 - PreToolUse `updatedInput` is rejected -> command rewriting won't take effect on Codex.
 - PreToolUse `continue: false` / `stopReason` / `suppressOutput` are rejected -> tool-gates doesn't emit them for Codex.
 - PermissionRequest uses `hookSpecificOutput.decision.behavior` (`"allow"` / `"deny"`) plus optional deny `message`.

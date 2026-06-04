@@ -31,9 +31,9 @@ mod tests {
     }
 
     #[test]
-    fn test_pending_count_allows() {
+    fn test_pending_count_asks() {
         let result = check_tool_gates(&cmd("tool-gates", &["pending", "count"]));
-        assert_eq!(result.decision, Decision::Allow);
+        assert_eq!(result.decision, Decision::Ask);
     }
 
     #[test]

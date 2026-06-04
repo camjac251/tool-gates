@@ -19,9 +19,9 @@ conventional_commits = true
 filter_unconventional = true
 tag_pattern = "v[0-9].*"
 commit_parsers = [
-    { message = "^feat", group = "Features" },
-    { message = "^fix", group = "Bug Fixes" },
-    { message = "^perf", group = "Performance" },
-    { message = "^refactor", group = "Refactoring" },
-    { message = "^chore|^ci|^build|^style|^test|^doc", skip = true },
+  { message = "^feat", group = "Features" },
+  { message = "^fix", group = "Bug Fixes" },
+  { message = "^perf", group = "Performance" },
+  { message = "^refactor", group = "Refactoring" },
+  { message = "^chore|^ci|^build|^style|^test|^doc", skip = true },
 ]

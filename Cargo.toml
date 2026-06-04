@@ -9,6 +9,10 @@ license = "MIT"
 [lib]
 name = "tool_gates"
 path = "src/lib.rs"
+# `rlib` keeps the binary, tests, and native library builds working; `cdylib`
+# is the WebAssembly artifact emitted by the `wasm` feature build. The extra
+# crate type has no effect on native compilation output.
+crate-type = ["cdylib", "rlib"]
 
 [[bin]]
 name = "tool-gates"
@@ -35,20 +39,48 @@ toml = "1.0"
 # Time handling for tracking TTL
 chrono = { version = "0.4", features = ["serde"] }
 
+# JSON Schema generation for rule files (off by default; used by docs tooling)
+schemars = { version = "1", optional = true }
+
+# WASM bridge for the docs-site command simulator (off by default). Only the
+# `wasm` feature build pulls these in; the native binary, tests, and the msrv
+# `cargo check` (run without --features) never compile them.
+wasm-bindgen = { version = "0.2", optional = true }
+serde-wasm-bindgen = { version = "0.6", optional = true }
+
+# Host-only dependencies. `fs2` (file locking) has no `wasm32-unknown-unknown`
+# target arm, and `uuid` v4 / `ratatui` / `crossterm` are host-only too. Scoping
+# them to non-wasm targets keeps them out of the WASM artifact's dependency
+# graph entirely while leaving the native binary, tests, and msrv check
+# byte-for-byte unchanged. The modules that use them (tracking, pending,
+# settings_writer, tui, post_tool_use) are `#[cfg(not(feature = "wasm"))]` in
+# lib.rs.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # File locking for concurrent access
 fs2 = "0.4"
-
 # UUID for pending entry IDs
 uuid = { version = "1", features = ["v4"] }
-
 # TUI for interactive review
 ratatui = "0.30"
 crossterm = "0.29"
 
+[features]
+schemars = ["dep:schemars"]
+wasm = ["dep:wasm-bindgen", "dep:serde-wasm-bindgen"]
+
+# `lib_only` is a custom cfg emitted by build.rs (cargo:rustc-cfg) to mark the
+# library/binary compile. rules_schema.rs gates its schemars derives on it so
+# the build script's #[path] copy of the module never references schemars
+# (schemars is a [dependencies]-only crate, unlinkable from the build script).
+# A build script cannot register a check-cfg for its own compile, so this
+# package-wide registration is what keeps the build-script compile warning-clean.
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(lib_only)'] }
+
 [dev-dependencies]
-proptest = "1"  # Property-based/fuzz testing
-tempfile = "3"  # Temporary directories for settings.json tests
-serial_test = "3"  # Serialize tests that mutate process-global env vars
+proptest = "1"    # Property-based/fuzz testing
+tempfile = "3"    # Temporary directories for settings.json tests
+serial_test = "3" # Serialize tests that mutate process-global env vars
 
 [build-dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -57,6 +89,17 @@ syn = "2"
 prettyplease = "0.2"
 
 [profile.release]
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
+
+# Size-optimized profile for the WebAssembly artifact. `opt-level = "z"` trades
+# speed for bytes, which matters for the < 250KB compressed bundle budget on the
+# docs-site simulator. Inherits the native release profile otherwise.
+[profile.release-wasm]
+inherits = "release"
+opt-level = "z"
 lto = true
 codegen-units = 1
 strip = true

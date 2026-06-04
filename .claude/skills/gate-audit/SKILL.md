@@ -72,13 +72,17 @@ rg -c "." /tmp/gate-audit-commands.txt
 
 The `tool-gates` binary should be on PATH. If not, build with `cargo build --release` and use `./target/release/tool-gates`.
 
-Run all commands through the hook interface:
+Run all commands through the hook interface. A missing `permissionDecision` with a reason is `defer`, not `allow`.
 ```bash
 while IFS= read -r cmd; do
-  result=$(printf '{"tool_name":"Bash","tool_input":{"command":%s}}' \
+  output=$(printf '{"tool_name":"Bash","tool_input":{"command":%s}}' \
     "$(printf '%s' "$cmd" | jq -Rs .)" | \
-    tool-gates 2>/dev/null | \
-    jq -r '.hookSpecificOutput | "\(.permissionDecision // "allow")\t\(.permissionDecisionReason // "-")"')
+    tool-gates 2>/dev/null)
+  if [ -z "$output" ]; then
+    result=$'allow\t-'
+  else
+    result=$(printf '%s' "$output" | jq -r '.hookSpecificOutput | "\((if .permissionDecision then .permissionDecision elif .permissionDecisionReason then "defer" else "allow" end))\t\(.permissionDecisionReason // "-")"')
+  fi
   printf "%s\t%s\n" "$result" "$cmd"
 done < /tmp/gate-audit-commands.txt > /tmp/gate-audit-decisions.txt
 ```
@@ -150,4 +154,5 @@ Input (pipe to stdin):
 Output fields:
 - `.hookSpecificOutput.permissionDecision`: `allow`, `ask`, or `deny`
 - `.hookSpecificOutput.permissionDecisionReason`: human-readable reason
-- Empty output means `allow` (hook returns nothing for allowed commands in some paths)
+- Missing `.permissionDecision` with a reason means `defer` (the client resolver should continue and may prompt)
+- Empty output means `allow` or no opinion, depending on hook path

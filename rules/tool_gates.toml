@@ -11,6 +11,12 @@
 name = "tool_gates"
 description = "Tool Gates CLI permission gate"
 priority = 23
+lede = "tool-gates protects itself. Read-only queries (inspecting the pending queue, listing rules, hook status, doctor) skip prompting. Writes to settings files or the cache ask. See the <a href=\"../cli.html\">CLI reference</a> for the full subcommand set."
+behavior_tags = ["aliases <b>bash-gates</b> → <b>tool-gates</b>"]
+
+[meta.card_titles]
+allow = "inspection"
+ask = "mutations"
 
 # =============================================================================
 # TOOL-GATES (main CLI)
@@ -19,7 +25,7 @@ priority = 23
 [[programs]]
 name = "tool-gates"
 aliases = ["bash-gates"]
-unknown_action = "ask"  # Unknown subcommands need approval
+unknown_action = "ask"   # Unknown subcommands need approval
 
 # =============================================================================
 # READ-ONLY COMMANDS (always safe)
@@ -31,9 +37,7 @@ unknown_action = "ask"  # Unknown subcommands need approval
 
 [[programs.allow]]
 subcommand = "pending list"
-
-[[programs.allow]]
-subcommand = "pending count"
+reason = "Inspect the pending-approvals queue."
 
 # -----------------------------------------------------------------------------
 # Rules Queries
@@ -41,6 +45,7 @@ subcommand = "pending count"
 
 [[programs.allow]]
 subcommand = "rules list"
+reason = "List active permission rules."
 
 # -----------------------------------------------------------------------------
 # Hook Status
@@ -48,9 +53,11 @@ subcommand = "rules list"
 
 [[programs.allow]]
 subcommand = "hooks status"
+reason = "Report hook wiring per client / scope."
 
 [[programs.allow]]
 subcommand = "hooks json"
+reason = "Report hook wiring per client / scope."
 
 # -----------------------------------------------------------------------------
 # Diagnostics / Audits (read-only)
@@ -58,9 +65,11 @@ subcommand = "hooks json"
 
 [[programs.allow]]
 subcommand = "doctor"
+reason = "Health check. Read-only; safe to run anytime."
 
 [[programs.allow]]
 subcommand = "rules ask-audit"
+reason = "Categorise `permissions.ask` rules. Read-only listing without `--apply`."
 
 # -----------------------------------------------------------------------------
 # Info / Help / Version
@@ -68,12 +77,15 @@ subcommand = "rules ask-audit"
 
 [[programs.allow]]
 if_flags_any = ["--help", "-h"]
+reason = "Info flags."
 
 [[programs.allow]]
 if_flags_any = ["--version", "-V"]
+reason = "Info flags."
 
 [[programs.allow]]
 if_flags_any = ["--tools-status"]
+reason = "Info flags."
 
 # =============================================================================
 # WRITE OPERATIONS (need approval)

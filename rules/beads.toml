@@ -12,6 +12,12 @@
 name = "beads"
 description = "Beads issue tracker CLI permission gate"
 priority = 22
+lede = "Beads git-native issue tracker. Reads are safe; writes ask. Nothing is hard-blocked because every beads state mutation is recoverable through git or remote sync. Two <code>warn = true</code> rules: <code>bd admin reset</code> and <code>bd reset</code> drop the local database."
+behavior_tags = ["aliases <b>beads</b> → <b>bd</b>"]
+
+[meta.card_titles]
+allow = "queries"
+ask = "mutations"
 
 # =============================================================================
 # BD (main beads CLI)
@@ -20,7 +26,7 @@ priority = 22
 [[programs]]
 name = "bd"
 aliases = ["beads"]
-unknown_action = "ask"  # Unknown subcommands need approval
+unknown_action = "ask" # Unknown subcommands need approval
 
 # =============================================================================
 # READ-ONLY COMMANDS (always safe)
@@ -32,24 +38,31 @@ unknown_action = "ask"  # Unknown subcommands need approval
 
 [[programs.allow]]
 subcommand = "list"
+reason = "Lists issues, optionally filtered by status, priority, type, or assignee. Read-only."
 
 [[programs.allow]]
 subcommand = "show"
+reason = "Shows full details of one issue: description, status, dependencies, and history. Read-only."
 
 [[programs.allow]]
 subcommand = "ready"
+reason = "Lists issues ready to work on (all dependencies satisfied). Read-only."
 
 [[programs.allow]]
 subcommand = "blocked"
+reason = "Lists issues blocked by unmet dependencies. Read-only."
 
 [[programs.allow]]
 subcommand = "count"
+reason = "Prints the number of issues matching a filter. Read-only."
 
 [[programs.allow]]
 subcommand = "search"
+reason = "Full-text search across issue titles and descriptions. Read-only."
 
 [[programs.allow]]
 subcommand = "where"
+reason = "Prints the path to the active beads database and workspace. Read-only."
 
 # -----------------------------------------------------------------------------
 # System Info
@@ -57,36 +70,47 @@ subcommand = "where"
 
 [[programs.allow]]
 subcommand = "info"
+reason = "Shows workspace metadata: database location, issue prefix, and counts. Read-only."
 
 [[programs.allow]]
 subcommand = "version"
+reason = "Prints the bd version string. Read-only."
 
 [[programs.allow]]
 subcommand = "help"
+reason = "Prints command help text. Read-only."
 
 [[programs.allow]]
 subcommand = "status"
+reason = "Shows workspace status: pending sync, daemon state, and issue counts. Read-only."
 
 [[programs.allow]]
 subcommand = "doctor"
+reason = "Runs diagnostic checks on the workspace and reports problems. Read-only."
 
 [[programs.allow]]
 subcommand = "lint"
+reason = "Checks issues for consistency problems and reports findings. Read-only."
 
 [[programs.allow]]
 subcommand = "human"
+reason = "Prints issues in a human-readable summary format. Read-only."
 
 [[programs.allow]]
 subcommand = "onboard"
+reason = "Prints onboarding guidance for getting started with beads. Read-only."
 
 [[programs.allow]]
 subcommand = "completion"
+reason = "Prints a shell completion script to stdout. Read-only."
 
 [[programs.allow]]
 subcommand = "thanks"
+reason = "Prints project credits. Read-only."
 
 [[programs.allow]]
 subcommand = "detect-pollution"
+reason = "Scans for cross-workspace data pollution and reports findings. Read-only."
 
 # -----------------------------------------------------------------------------
 # Dependency Queries
@@ -95,15 +119,19 @@ subcommand = "detect-pollution"
 [[programs.allow]]
 subcommand = "dep"
 unless_flags = ["add", "remove"]
+reason = "Inspects issue dependencies. Read-only unless `add` or `remove` is given, which edit edges and ask separately."
 
 [[programs.allow]]
 subcommand = "dep tree"
+reason = "Displays the dependency tree for an issue. Read-only."
 
 [[programs.allow]]
 subcommand = "dep cycles"
+reason = "Detects and reports dependency cycles in the issue graph. Read-only."
 
 [[programs.allow]]
 subcommand = "graph"
+reason = "Renders the issue dependency graph. Read-only."
 
 # -----------------------------------------------------------------------------
 # Label Queries
@@ -112,12 +140,15 @@ subcommand = "graph"
 [[programs.allow]]
 subcommand = "label"
 unless_flags = ["add", "remove"]
+reason = "Inspects issue labels. Read-only unless `add` or `remove` is given, which mutate labels and ask separately."
 
 [[programs.allow]]
 subcommand = "label list"
+reason = "Lists labels in use. Read-only."
 
 [[programs.allow]]
 subcommand = "label list-all"
+reason = "Lists all defined labels, including unused ones. Read-only."
 
 # -----------------------------------------------------------------------------
 # Comment Queries
@@ -126,10 +157,12 @@ subcommand = "label list-all"
 [[programs.allow]]
 subcommand = "comments"
 unless_flags = ["add"]
+reason = "Shows comments on an issue. Read-only unless `add` is given, which posts a comment and asks separately."
 
 [[programs.allow]]
 subcommand = "comment"
 unless_flags = ["add"]
+reason = "Shows comments on an issue. Read-only unless `add` is given, which posts a comment and asks separately."
 
 # -----------------------------------------------------------------------------
 # Daemon Status (not control)
@@ -138,25 +171,32 @@ unless_flags = ["add"]
 [[programs.allow]]
 subcommand = "daemons"
 unless_flags = ["start", "stop", "restart", "killall"]
+reason = "Reports daemon status. Read-only unless a control verb (`start`, `stop`, `restart`, `killall`) is given, which asks separately."
 
 [[programs.allow]]
 subcommand = "daemons list"
+reason = "Lists running beads daemons. Read-only."
 
 [[programs.allow]]
 subcommand = "daemons health"
+reason = "Reports health of running daemons. Read-only."
 
 [[programs.allow]]
 subcommand = "daemons logs"
+reason = "Prints daemon log output. Read-only."
 
 [[programs.allow]]
 subcommand = "daemon"
 unless_flags = ["start", "stop", "restart", "kill", "run"]
+reason = "Reports daemon status. Read-only unless a control verb (`start`, `stop`, `restart`, `kill`, `run`) is given, which asks separately."
 
 [[programs.allow]]
 subcommand = "daemon health"
+reason = "Reports health of the daemon. Read-only."
 
 [[programs.allow]]
 subcommand = "daemon logs"
+reason = "Prints daemon log output. Read-only."
 
 # -----------------------------------------------------------------------------
 # Config Queries
@@ -165,12 +205,15 @@ subcommand = "daemon logs"
 [[programs.allow]]
 subcommand = "config"
 unless_flags = ["set", "unset"]
+reason = "Reads configuration. Read-only unless `set` or `unset` is given, which write config and ask separately."
 
 [[programs.allow]]
 subcommand = "config get"
+reason = "Prints a single configuration value. Read-only."
 
 [[programs.allow]]
 subcommand = "config list"
+reason = "Prints all configuration values. Read-only."
 
 # -----------------------------------------------------------------------------
 # Stats and Analytics
@@ -178,18 +221,23 @@ subcommand = "config list"
 
 [[programs.allow]]
 subcommand = "stats"
+reason = "Shows aggregate issue counts by status, priority, and type. Read-only."
 
 [[programs.allow]]
 subcommand = "activity"
+reason = "Shows recent issue activity. Read-only."
 
 [[programs.allow]]
 subcommand = "stale"
+reason = "Lists issues with no recent activity. Read-only."
 
 [[programs.allow]]
 subcommand = "orphans"
+reason = "Lists orphaned issues with no parent or links. Read-only."
 
 [[programs.allow]]
 subcommand = "preflight"
+reason = "Runs preflight checks and reports readiness. Read-only."
 
 # -----------------------------------------------------------------------------
 # Audit Queries
@@ -198,6 +246,7 @@ subcommand = "preflight"
 [[programs.allow]]
 subcommand = "audit"
 unless_flags = ["record", "label"]
+reason = "Shows the audit log. Read-only unless `record` or `label` is given, which write audit entries and ask separately."
 
 # -----------------------------------------------------------------------------
 # Epic Queries
@@ -206,12 +255,15 @@ unless_flags = ["record", "label"]
 [[programs.allow]]
 subcommand = "epic"
 unless_flags = ["create", "close", "update"]
+reason = "Inspects epics. Read-only unless `create`, `close`, or `update` is given, which mutate epics and ask separately."
 
 [[programs.allow]]
 subcommand = "epic status"
+reason = "Shows epic progress and child-issue rollup. Read-only."
 
 [[programs.allow]]
 subcommand = "close-eligible"
+reason = "Lists issues eligible to be closed. Read-only."
 
 # -----------------------------------------------------------------------------
 # Swarm Queries
@@ -220,9 +272,11 @@ subcommand = "close-eligible"
 [[programs.allow]]
 subcommand = "swarm"
 unless_flags = ["create", "close", "update", "add", "remove"]
+reason = "Inspects swarms. Read-only unless a mutating verb (`create`, `close`, `update`, `add`, `remove`) is given, which asks separately."
 
 [[programs.allow]]
 subcommand = "swarm list"
+reason = "Lists swarms. Read-only."
 
 # -----------------------------------------------------------------------------
 # Gate Queries
@@ -231,18 +285,23 @@ subcommand = "swarm list"
 [[programs.allow]]
 subcommand = "gate"
 unless_flags = ["resolve", "add-waiter"]
+reason = "Inspects gates. Read-only unless `resolve` or `add-waiter` is given, which mutate gate state and ask separately."
 
 [[programs.allow]]
 subcommand = "gate list"
+reason = "Lists gates. Read-only."
 
 [[programs.allow]]
 subcommand = "gate show"
+reason = "Shows details of one gate. Read-only."
 
 [[programs.allow]]
 subcommand = "gate check"
+reason = "Checks whether a gate's conditions are met. Read-only."
 
 [[programs.allow]]
 subcommand = "gate discover"
+reason = "Discovers gates from the workspace and reports them. Read-only."
 
 # -----------------------------------------------------------------------------
 # Template Queries
@@ -251,12 +310,15 @@ subcommand = "gate discover"
 [[programs.allow]]
 subcommand = "template"
 unless_flags = ["instantiate"]
+reason = "Inspects templates. Read-only unless `instantiate` is given, which creates issues and asks separately."
 
 [[programs.allow]]
 subcommand = "template list"
+reason = "Lists available templates. Read-only."
 
 [[programs.allow]]
 subcommand = "template show"
+reason = "Shows the contents of one template. Read-only."
 
 # -----------------------------------------------------------------------------
 # Formula Queries
@@ -265,12 +327,15 @@ subcommand = "template show"
 [[programs.allow]]
 subcommand = "formula"
 unless_flags = ["create", "delete", "update", "edit", "convert"]
+reason = "Inspects formulas. Read-only unless a mutating verb (`create`, `delete`, `update`, `edit`, `convert`) is given, which asks separately."
 
 [[programs.allow]]
 subcommand = "formula list"
+reason = "Lists available formulas. Read-only."
 
 [[programs.allow]]
 subcommand = "formula show"
+reason = "Shows the contents of one formula. Read-only."
 
 # -----------------------------------------------------------------------------
 # Molecule Queries
@@ -279,21 +344,27 @@ subcommand = "formula show"
 [[programs.allow]]
 subcommand = "mol"
 unless_flags = ["burn", "squash", "bond", "distill", "create"]
+reason = "Inspects molecules. Read-only unless a mutating verb (`burn`, `squash`, `bond`, `distill`, `create`) is given, which asks separately."
 
 [[programs.allow]]
 subcommand = "mol show"
+reason = "Shows details of one molecule. Read-only."
 
 [[programs.allow]]
 subcommand = "mol current"
+reason = "Shows the currently active molecule. Read-only."
 
 [[programs.allow]]
 subcommand = "mol stale"
+reason = "Lists molecules with no recent activity. Read-only."
 
 [[programs.allow]]
 subcommand = "mol progress"
+reason = "Shows progress of a molecule's issues. Read-only."
 
 [[programs.allow]]
 subcommand = "mol list"
+reason = "Lists molecules. Read-only."
 
 # -----------------------------------------------------------------------------
 # Slot Queries
@@ -302,12 +373,15 @@ subcommand = "mol list"
 [[programs.allow]]
 subcommand = "slot"
 unless_flags = ["set", "clear", "claim", "release"]
+reason = "Inspects slots. Read-only unless a mutating verb (`set`, `clear`, `claim`, `release`) is given, which asks separately."
 
 [[programs.allow]]
 subcommand = "slot show"
+reason = "Shows details of one slot. Read-only."
 
 [[programs.allow]]
 subcommand = "slot list"
+reason = "Lists slots. Read-only."
 
 # -----------------------------------------------------------------------------
 # Agent Queries
@@ -316,12 +390,15 @@ subcommand = "slot list"
 [[programs.allow]]
 subcommand = "agent"
 unless_flags = ["set", "clear", "update", "create"]
+reason = "Inspects agents. Read-only unless a mutating verb (`set`, `clear`, `update`, `create`) is given, which asks separately."
 
 [[programs.allow]]
 subcommand = "agent show"
+reason = "Shows details of one agent. Read-only."
 
 [[programs.allow]]
 subcommand = "agent list"
+reason = "Lists agents. Read-only."
 
 # -----------------------------------------------------------------------------
 # State Queries
@@ -329,9 +406,11 @@ subcommand = "agent list"
 
 [[programs.allow]]
 subcommand = "state"
+reason = "Inspects workflow states. Read-only."
 
 [[programs.allow]]
 subcommand = "state list"
+reason = "Lists configured workflow states. Read-only."
 
 # -----------------------------------------------------------------------------
 # Worktree Queries
@@ -340,9 +419,11 @@ subcommand = "state list"
 [[programs.allow]]
 subcommand = "worktree"
 unless_flags = ["add", "remove", "prune"]
+reason = "Inspects worktrees. Read-only unless `add`, `remove`, or `prune` is given, which mutate worktrees and ask separately."
 
 [[programs.allow]]
 subcommand = "worktree list"
+reason = "Lists worktrees. Read-only."
 
 # -----------------------------------------------------------------------------
 # Repo Queries
@@ -351,12 +432,15 @@ subcommand = "worktree list"
 [[programs.allow]]
 subcommand = "repo"
 unless_flags = ["add", "remove", "set", "sync"]
+reason = "Inspects linked repositories. Read-only unless a mutating verb (`add`, `remove`, `set`, `sync`) is given, which asks separately."
 
 [[programs.allow]]
 subcommand = "repo list"
+reason = "Lists linked repositories. Read-only."
 
 [[programs.allow]]
 subcommand = "repo show"
+reason = "Shows details of one linked repository. Read-only."
 
 # -----------------------------------------------------------------------------
 # Integration Queries (Jira)
@@ -365,15 +449,19 @@ subcommand = "repo show"
 [[programs.allow]]
 subcommand = "jira"
 unless_flags = ["sync", "push", "import", "create"]
+reason = "Inspects the Jira integration. Read-only unless a data-flow verb (`sync`, `push`, `import`, `create`) is given, which asks separately."
 
 [[programs.allow]]
 subcommand = "jira status"
+reason = "Shows Jira integration status. Read-only."
 
 [[programs.allow]]
 subcommand = "jira list"
+reason = "Lists Jira issues visible to the integration. Read-only."
 
 [[programs.allow]]
 subcommand = "jira show"
+reason = "Shows one Jira issue. Read-only."
 
 # -----------------------------------------------------------------------------
 # Integration Queries (Linear)
@@ -382,15 +470,19 @@ subcommand = "jira show"
 [[programs.allow]]
 subcommand = "linear"
 unless_flags = ["sync", "push", "import", "create"]
+reason = "Inspects the Linear integration. Read-only unless a data-flow verb (`sync`, `push`, `import`, `create`) is given, which asks separately."
 
 [[programs.allow]]
 subcommand = "linear status"
+reason = "Shows Linear integration status. Read-only."
 
 [[programs.allow]]
 subcommand = "linear list"
+reason = "Lists Linear issues visible to the integration. Read-only."
 
 [[programs.allow]]
 subcommand = "linear show"
+reason = "Shows one Linear issue. Read-only."
 
 # -----------------------------------------------------------------------------
 # Ship Queries
@@ -399,12 +491,15 @@ subcommand = "linear show"
 [[programs.allow]]
 subcommand = "ship"
 unless_flags = ["publish", "create", "delete"]
+reason = "Inspects ships. Read-only unless `publish`, `create`, or `delete` is given, which mutate ships and ask separately."
 
 [[programs.allow]]
 subcommand = "ship list"
+reason = "Lists ships. Read-only."
 
 [[programs.allow]]
 subcommand = "ship show"
+reason = "Shows details of one ship. Read-only."
 
 # -----------------------------------------------------------------------------
 # Upgrade Queries
@@ -413,12 +508,15 @@ subcommand = "ship show"
 [[programs.allow]]
 subcommand = "upgrade"
 unless_flags = ["--apply", "--install", "ack"]
+reason = "Reports available upgrades. Read-only unless `--apply`, `--install`, or `ack` is given, which change state and ask separately."
 
 [[programs.allow]]
 subcommand = "upgrade status"
+reason = "Shows current upgrade status. Read-only."
 
 [[programs.allow]]
 subcommand = "upgrade review"
+reason = "Shows what an upgrade would change before applying it. Read-only."
 
 # -----------------------------------------------------------------------------
 # Migrate Queries
@@ -427,6 +525,7 @@ subcommand = "upgrade review"
 [[programs.allow]]
 subcommand = "migrate"
 unless_flags = ["--apply", "--force"]
+reason = "Previews a database migration. Read-only unless `--apply` or `--force` is given, which writes the migration and asks separately."
 
 # -----------------------------------------------------------------------------
 # Duplicate Detection
@@ -435,6 +534,7 @@ unless_flags = ["--apply", "--force"]
 [[programs.allow]]
 subcommand = "duplicates"
 unless_flags = ["--auto-merge"]
+reason = "Lists suspected duplicate issues. Read-only unless `--auto-merge` is given, which merges them and asks separately."
 
 # -----------------------------------------------------------------------------
 # Dry-run Operations
@@ -443,22 +543,27 @@ unless_flags = ["--auto-merge"]
 [[programs.allow]]
 subcommand = "cleanup"
 if_flags_any = ["--dry-run"]
+reason = "Previews cleanup of stale or orphaned issues. Read-only because `--dry-run` reports what would be removed without writing."
 
 [[programs.allow]]
 subcommand = "compact"
 if_flags_any = ["--dry-run"]
+reason = "Previews database compaction. Read-only because `--dry-run` reports what would change without writing."
 
 [[programs.allow]]
 subcommand = "delete"
 if_flags_any = ["--dry-run"]
+reason = "Previews an issue deletion. Read-only because `--dry-run` reports what would be deleted without writing."
 
 [[programs.allow]]
 subcommand = "admin cleanup"
 if_flags_any = ["--dry-run"]
+reason = "Previews admin-level cleanup. Read-only because `--dry-run` reports what would be removed without writing."
 
 [[programs.allow]]
 subcommand = "admin compact"
 if_flags_any = ["--dry-run"]
+reason = "Previews admin-level compaction. Read-only because `--dry-run` reports what would change without writing."
 
 # -----------------------------------------------------------------------------
 # AI Context Recovery
@@ -466,15 +571,19 @@ if_flags_any = ["--dry-run"]
 
 [[programs.allow]]
 subcommand = "prime"
+reason = "Prints a context summary to prime an AI assistant. Read-only."
 
 [[programs.allow]]
 subcommand = "quickstart"
+reason = "Prints quickstart guidance. Read-only."
 
 [[programs.allow]]
 subcommand = "workflow"
+reason = "Prints the configured workflow description. Read-only."
 
 [[programs.allow]]
 subcommand = "tips"
+reason = "Prints usage tips. Read-only."
 
 # -----------------------------------------------------------------------------
 # Deleted Issues List
@@ -482,6 +591,7 @@ subcommand = "tips"
 
 [[programs.allow]]
 subcommand = "deleted"
+reason = "Lists soft-deleted (tombstoned) issues. Read-only."
 
 # -----------------------------------------------------------------------------
 # Hook/Pin Queries
@@ -489,10 +599,12 @@ subcommand = "deleted"
 
 [[programs.allow]]
 subcommand = "hook"
+reason = "Inspects configured hooks. Read-only."
 
 [[programs.allow]]
 subcommand = "pin"
 unless_flags = ["--set", "--clear"]
+reason = "Shows the pinned issue for an agent. Read-only unless `--set` or `--clear` is given, which change the pin and ask separately."
 
 # =============================================================================
 # WRITE OPERATIONS (need approval)
@@ -540,7 +652,7 @@ reason = "Deleting issue"
 
 [[programs.ask]]
 subcommand = "move"
-reason = "Moving issue to different rig"
+reason = "Moves an issue to a different rig (workspace). Changes the issue's owning database; sync source and target to keep both consistent."
 
 [[programs.ask]]
 subcommand = "refile"
@@ -620,7 +732,7 @@ reason = "Adding comment"
 
 [[programs.ask]]
 subcommand = "sync"
-reason = "Syncing issues with git"
+reason = "Syncs local issues with the git-backed remote. Pulls and pushes issue changes; may merge or overwrite local edits if the remote diverged."
 
 [[programs.ask]]
 subcommand = "export"
@@ -733,15 +845,15 @@ reason = "Migrating tombstones"
 
 [[programs.ask]]
 subcommand = "admin"
-reason = "Admin operation"
+reason = "Runs a beads admin operation (cleanup, compact, or reset depending on the subcommand). Scope varies; `admin reset` is destructive."
 
 [[programs.ask]]
 subcommand = "admin cleanup"
-reason = "Cleaning up issues"
+reason = "Admin-level cleanup of stale or orphaned issues. Removes records matching cleanup rules; preview first with `--dry-run`. Recoverable via git."
 
 [[programs.ask]]
 subcommand = "admin compact"
-reason = "Compacting issues"
+reason = "Admin-level compaction to shrink the database. Condenses resolved issue history; preview first with `--dry-run`. Recoverable via git."
 
 [[programs.ask]]
 subcommand = "admin reset"
@@ -754,11 +866,11 @@ warn = true
 
 [[programs.ask]]
 subcommand = "compact"
-reason = "Compacting old issues"
+reason = "Compacts old issues to shrink the database. Condenses or removes resolved history; preview first with `--dry-run`. Recoverable via git."
 
 [[programs.ask]]
 subcommand = "cleanup"
-reason = "Cleaning up issues"
+reason = "Cleans up stale or orphaned issues. Removes records that match cleanup rules; preview first with `--dry-run`. Recoverable via git."
 
 # -----------------------------------------------------------------------------
 # Merge/Duplicates
@@ -766,7 +878,7 @@ reason = "Cleaning up issues"
 
 [[programs.ask]]
 subcommand = "merge"
-reason = "Merging issues"
+reason = "Merges two issues into one. Combines their fields and history and tombstones the merged-away issue. Recoverable via git history."
 
 [[programs.ask]]
 subcommand = "duplicates"
@@ -783,7 +895,7 @@ reason = "Repairs the beads database from local logs and remote state. Can modif
 
 [[programs.ask]]
 subcommand = "restore"
-reason = "Restoring issue"
+reason = "Restores a soft-deleted (tombstoned) issue back to active state."
 
 # -----------------------------------------------------------------------------
 # Upgrade Operations
@@ -1001,7 +1113,7 @@ reason = "Deleting ship"
 
 [[programs.ask]]
 subcommand = "rename-prefix"
-reason = "Renaming issue prefix"
+reason = "Renames the workspace issue-ID prefix. Rewrites the ID of every issue; update any external references that pin the old prefix."
 
 # -----------------------------------------------------------------------------
 # Worktree Operations

@@ -11,10 +11,17 @@
 name = "gh"
 description = "GitHub CLI permission gate"
 priority = 10
+lede = "GitHub CLI. Listing, viewing, searching, and read API are safe. Mutations ask. Two patterns are hard-blocked: deleting a repository (irreversible) and logging out (no way to re-authenticate without user interaction)."
+note = """<b>Two-pattern block floor.</b> <code>gh repo delete</code> and <code>gh auth logout</code> are the only hard blocks: the first destroys repo history and metadata irreversibly; the second leaves the agent with no way to re-authenticate. Every other mutation asks."""
+behavior_tags = ["<b>api</b> method-aware via custom handler"]
+
+[meta.card_titles]
+allow = "read-only"
+ask = "mutations"
 
 [[programs]]
 name = "gh"
-unknown_action = "ask"  # Unknown gh commands require approval
+unknown_action = "ask" # Unknown gh commands require approval
 
 # API commands have special method-based handling
 [programs.api_rules]
@@ -44,169 +51,213 @@ reason = "Logs out the gh CLI from GitHub. The agent has no way to re-authentica
 # Issue viewing
 [[programs.allow]]
 subcommand = "issue view"
+reason = "Issue inspection commands."
 
 [[programs.allow]]
 subcommand = "issue list"
+reason = "Issue inspection commands."
 
 [[programs.allow]]
 subcommand = "issue status"
+reason = "Issue inspection commands."
 
 # PR viewing
 [[programs.allow]]
 subcommand = "pr view"
+reason = "PR inspection commands. Read-only."
 
 [[programs.allow]]
 subcommand = "pr list"
+reason = "PR inspection commands. Read-only."
 
 [[programs.allow]]
 subcommand = "pr status"
+reason = "PR inspection commands. Read-only."
 
 [[programs.allow]]
 subcommand = "pr diff"
+reason = "PR inspection commands. Read-only."
 
 [[programs.allow]]
 subcommand = "pr checks"
+reason = "Shows CI check status for a pull request. Read-only."
 
 [[programs.allow]]
 subcommand = "pr develop"
+reason = "Lists linked branches for a pull request when run without flags. Read-only in this form; passing a branch name creates one (gated separately)."
 
 # Repo viewing
 [[programs.allow]]
 subcommand = "repo view"
+reason = "Repo metadata."
 
 [[programs.allow]]
 subcommand = "repo list"
+reason = "Repo metadata."
 
 [[programs.ask]]
 subcommand = "repo clone"
-reason = "Cloning repo (writes to local filesystem)"
+reason = "Clones a repository into a new directory under the current path. Writes files locally; does not modify the remote."
 
 # Search (read-only)
 [[programs.allow]]
 subcommand = "search issues"
+reason = "Search endpoints across GitHub. Always GET via the API."
 
 [[programs.allow]]
 subcommand = "search prs"
+reason = "Search endpoints across GitHub. Always GET via the API."
 
 [[programs.allow]]
 subcommand = "search repos"
+reason = "Search endpoints across GitHub. Always GET via the API."
 
 [[programs.allow]]
 subcommand = "search commits"
+reason = "Search endpoints across GitHub. Always GET via the API."
 
 [[programs.allow]]
 subcommand = "search code"
+reason = "Search endpoints across GitHub. Always GET via the API."
 
 # Status/auth info
 [[programs.allow]]
 subcommand = "status"
+reason = "Shows a summary of your relevant issues, PRs, and review requests across repos. Read-only."
 
 [[programs.allow]]
 subcommand = "auth status"
+reason = "Shows the current authentication state, active account, and token scopes. Read-only."
 
 [[programs.allow]]
 subcommand = "auth token"
+reason = "Prints the stored OAuth token to stdout. Read-only but exposes a credential."
 
 # Config reading
 [[programs.allow]]
 subcommand = "config get"
+reason = "Reads a single gh CLI configuration value. Read-only."
 
 [[programs.allow]]
 subcommand = "config list"
+reason = "Lists the gh CLI configuration values. Read-only."
 
 # Run/workflow viewing
 [[programs.allow]]
 subcommand = "run list"
+reason = "Lists recent Actions workflow runs. Read-only."
 
 [[programs.allow]]
 subcommand = "run view"
+reason = "Shows details, jobs, and logs for an Actions workflow run. Read-only."
 
 [[programs.ask]]
 subcommand = "run download"
-reason = "Downloading artifacts (writes to local filesystem)"
+reason = "Downloads workflow run artifacts into the current directory. Writes files locally; does not change anything on GitHub."
 
 [[programs.allow]]
 subcommand = "workflow list"
+reason = "Lists the Actions workflows defined in the repository. Read-only."
 
 [[programs.allow]]
 subcommand = "workflow view"
+reason = "Shows an Actions workflow definition and its recent runs. Read-only."
 
 # Release viewing
 [[programs.allow]]
 subcommand = "release list"
+reason = "Lists releases for the repository. Read-only."
 
 [[programs.allow]]
 subcommand = "release view"
+reason = "Shows release notes and asset list for a release. Read-only."
 
 [[programs.ask]]
 subcommand = "release download"
-reason = "Downloading release assets (writes to local filesystem)"
+reason = "Downloads release asset files into the current directory. Writes files locally; does not change the release."
 
 # Gist viewing
 [[programs.allow]]
 subcommand = "gist list"
+reason = "Lists your gists. Read-only."
 
 [[programs.allow]]
 subcommand = "gist view"
+reason = "Shows the contents of a gist. Read-only."
 
 [[programs.ask]]
 subcommand = "gist clone"
-reason = "Cloning gist (writes to local filesystem)"
+reason = "Clones a gist into a new local directory. Writes files locally; does not modify the gist."
 
 # Labels
 [[programs.allow]]
 subcommand = "label list"
+reason = "Lists labels defined in the repository. Read-only."
 
 # Codespace viewing
 [[programs.allow]]
 subcommand = "codespace list"
+reason = "Lists your codespaces and their state. Read-only."
 
 [[programs.allow]]
 subcommand = "cs list"
+reason = "Lists your codespaces and their state (`cs` alias). Read-only."
 
 # Keys
 [[programs.allow]]
 subcommand = "ssh-key list"
+reason = "Lists the SSH keys registered on the GitHub account. Read-only."
 
 [[programs.allow]]
 subcommand = "gpg-key list"
+reason = "Lists the GPG keys registered on the GitHub account. Read-only."
 
 # Extensions
 [[programs.allow]]
 subcommand = "extension list"
+reason = "Lists installed gh CLI extensions. Read-only."
 
 # Browse (opens browser)
 [[programs.allow]]
 subcommand = "browse"
+reason = "Opens the repository, issue, or PR in a browser, or prints the URL with `--no-browser`. Does not change anything on GitHub."
 
 # Alias viewing
 [[programs.allow]]
 subcommand = "alias list"
+reason = "Lists the gh CLI command aliases. Read-only."
 
 # Cache viewing
 [[programs.allow]]
 subcommand = "cache list"
+reason = "Lists Actions caches for the repository. Read-only."
 
 # Variables/secrets listing (doesn't show values)
 [[programs.allow]]
 subcommand = "variable list"
+reason = "Lists Actions variable names and values for the repo, environment, or org. Read-only."
 
 [[programs.allow]]
 subcommand = "secret list"
+reason = "Lists Actions secret names for the repo, environment, or org. Read-only and does not reveal secret values."
 
 # Ruleset viewing
 [[programs.allow]]
 subcommand = "ruleset list"
+reason = "Lists repository or organization rulesets. Read-only."
 
 [[programs.allow]]
 subcommand = "ruleset view"
+reason = "Shows the rules and configuration for a ruleset. Read-only."
 
 # Project viewing
 [[programs.allow]]
 subcommand = "project list"
+reason = "Lists Projects for a user or organization. Read-only."
 
 [[programs.allow]]
 subcommand = "project view"
+reason = "Shows a Project's fields and items. Read-only."
 
 # === Write Commands ===
 # These require user permission
@@ -230,7 +281,7 @@ reason = "Editing issue"
 
 [[programs.ask]]
 subcommand = "issue comment"
-reason = "Adding comment"
+reason = "Posts a comment to an issue on GitHub. Visible publicly and cannot be silently unsent."
 
 [[programs.ask]]
 subcommand = "issue delete"
@@ -275,7 +326,7 @@ reason = "Editing PR"
 
 [[programs.ask]]
 subcommand = "pr comment"
-reason = "Adding comment"
+reason = "Posts a comment to a pull request on GitHub. Visible publicly and cannot be silently unsent."
 
 [[programs.ask]]
 subcommand = "pr merge"
@@ -287,11 +338,11 @@ reason = "Marking PR ready"
 
 [[programs.ask]]
 subcommand = "pr review"
-reason = "Submitting review"
+reason = "Submits a pull request review (approve, request changes, or comment). Posted to GitHub and visible to the author and watchers."
 
 [[programs.ask]]
 subcommand = "pr checkout"
-reason = "Checking out PR"
+reason = "Fetches a pull request branch and checks it out locally. Switches the working tree to the PR's HEAD."
 
 # Repo mutations
 [[programs.ask]]
@@ -308,7 +359,7 @@ reason = "Editing repository"
 
 [[programs.ask]]
 subcommand = "repo fork"
-reason = "Forking repository"
+reason = "Creates a fork of the repository under your account and can add a local remote. Creates a new repo on GitHub."
 
 [[programs.ask]]
 subcommand = "repo archive"
@@ -341,7 +392,7 @@ reason = "Editing release"
 
 [[programs.ask]]
 subcommand = "release upload"
-reason = "Uploading asset"
+reason = "Uploads asset files to an existing release. Published assets become downloadable by anyone who can see the release."
 
 [[programs.ask]]
 subcommand = "release delete-asset"
@@ -384,7 +435,7 @@ reason = "Cloning labels"
 # Workflow mutations
 [[programs.ask]]
 subcommand = "workflow run"
-reason = "Running workflow"
+reason = "Triggers a GitHub Actions workflow run. Executes CI side effects such as deploys and consumes Actions minutes."
 
 [[programs.ask]]
 subcommand = "workflow enable"

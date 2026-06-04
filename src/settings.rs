@@ -36,6 +36,65 @@ fn normalize_path(path: &Path) -> String {
     normalized.to_string_lossy().to_string()
 }
 
+/// Match a file path against a gitignore-style glob from a Claude settings.json
+/// file rule (the `...` inside `Write(...)` / `Edit(...)`).
+///
+/// Semantics (a practical subset of Claude Code's matcher):
+/// - `**` matches any number of path segments (including `/`)
+/// - a leading `**/` also matches zero segments, so `**/.env*` matches `.env`
+/// - `*` matches within a single segment (never `/`)
+/// - `?` matches a single non-`/` char
+/// - a pattern with no `/` is treated as `**/<pattern>` (matches at any depth),
+///   mirroring gitignore's basename rule (`*.min.js` matches `a/b/c.min.js`)
+fn path_matches_glob(pattern: &str, path: &str) -> bool {
+    let effective: Cow<str> = if pattern.contains('/') {
+        Cow::Borrowed(pattern)
+    } else {
+        Cow::Owned(format!("**/{pattern}"))
+    };
+    match glob_to_regex(&effective) {
+        Some(re) => re.is_match(path),
+        // A pattern we can't compile simply never matches. The glob grammar is
+        // small and patterns are user-authored, so an uncompilable pattern is a
+        // typo, not a boundary we silently drop.
+        None => false,
+    }
+}
+
+/// Compile a path glob into an anchored regex. Returns `None` if the resulting
+/// regex cannot be compiled (treated as "no match" by the caller).
+fn glob_to_regex(pattern: &str) -> Option<regex::Regex> {
+    let mut re = String::with_capacity(pattern.len() * 2 + 2);
+    re.push('^');
+    let mut chars = pattern.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '*' => {
+                if chars.peek() == Some(&'*') {
+                    chars.next(); // consume the second '*'
+                    if chars.peek() == Some(&'/') {
+                        chars.next(); // consume the '/'
+                        // `**/` matches zero or more leading path segments
+                        re.push_str("(?:.*/)?");
+                    } else {
+                        re.push_str(".*");
+                    }
+                } else {
+                    re.push_str("[^/]*");
+                }
+            }
+            '?' => re.push_str("[^/]"),
+            '/' => re.push('/'),
+            other => {
+                let mut buf = [0u8; 4];
+                re.push_str(&regex::escape(other.encode_utf8(&mut buf)));
+            }
+        }
+    }
+    re.push('$');
+    regex::Regex::new(&re).ok()
+}
+
 #[derive(Debug, Deserialize, Default)]
 pub struct Permissions {
     #[serde(default)]
@@ -116,6 +175,13 @@ impl Settings {
         {
             let managed_path =
                 Path::new("/Library/Application Support/ClaudeCode/managed-settings.json");
+            if let Ok(s) = Self::load_file(managed_path) {
+                merged.merge(s);
+            }
+        }
+        #[cfg(target_os = "windows")]
+        {
+            let managed_path = Path::new("C:\\Program Files\\ClaudeCode\\managed-settings.json");
             if let Ok(s) = Self::load_file(managed_path) {
                 merged.merge(s);
             }
@@ -213,6 +279,47 @@ impl Settings {
     /// Most-specific pattern wins between ask and allow (ties go to ask).
     pub fn check_command_excluding_deny(&self, command: &str) -> SettingsDecision {
         self.resolve_ask_allow(command)
+    }
+
+    /// Check a file path against settings.json file-tool rules (`Write(...)`,
+    /// `Edit(...)`, `MultiEdit(...)`). Mirrors Claude's file permissions onto
+    /// Codex's `apply_patch`, which carries no tool name a settings rule keys on.
+    ///
+    /// Each path is matched against both its absolute form and an optional
+    /// cwd-relative form, so patterns written either way (`**/.env*`,
+    /// `src/**`, `/abs/path/**`) match. Priority: deny, then ask, then allow.
+    pub fn check_file_path(&self, abs_path: &str, rel_path: Option<&str>) -> SettingsDecision {
+        if Self::matches_file_patterns(&self.permissions.deny, abs_path, rel_path) {
+            return SettingsDecision::Deny;
+        }
+        if Self::matches_file_patterns(&self.permissions.ask, abs_path, rel_path) {
+            return SettingsDecision::Ask;
+        }
+        if Self::matches_file_patterns(&self.permissions.allow, abs_path, rel_path) {
+            return SettingsDecision::Allow;
+        }
+        SettingsDecision::NoMatch
+    }
+
+    /// Match a path against the file-tool patterns in a rule list. Recognizes
+    /// `Write(...)`, `Edit(...)`, and `MultiEdit(...)`; `apply_patch` adds,
+    /// updates, and deletes files, so all three prefixes apply to its paths.
+    fn matches_file_patterns(patterns: &[String], abs_path: &str, rel_path: Option<&str>) -> bool {
+        const FILE_PREFIXES: &[&str] = &["Write(", "Edit(", "MultiEdit("];
+        for pattern in patterns {
+            for prefix in FILE_PREFIXES {
+                if let Some(rest) = pattern.strip_prefix(prefix) {
+                    if let Some(inner) = rest.strip_suffix(')') {
+                        if path_matches_glob(inner, abs_path)
+                            || rel_path.is_some_and(|r| path_matches_glob(inner, r))
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        false
     }
 
     /// Match command against Bash(...) patterns
@@ -883,6 +990,7 @@ mod tests {
         assert_eq!(settings.check_command(&cmd), SettingsDecision::Deny);
     }
 
+    #[serial_test::serial]
     #[test]
     fn test_dollar_user_expansion_in_deny_pattern() {
         let home = dirs::home_dir().expect("HOME must be set for this test");

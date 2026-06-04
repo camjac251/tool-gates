@@ -5,6 +5,12 @@
 name = "shortcut"
 description = "Shortcut.com project management CLI"
 priority = 45
+lede = "Community <code>short</code> CLI for Shortcut.com. Searches and listings are safe. Story mutations, comments, attachments, and workflow-state changes ask. The custom handler routes <code>short api</code> by HTTP method."
+behavior_tags = ["covers the <b>short</b> CLI"]
+
+[meta.card_titles]
+allow = "queries"
+ask = "mutations"
 
 [[programs]]
 name = "short"
@@ -16,7 +22,7 @@ unknown_action = "ask"
 
 [[programs.ask]]
 subcommand = "install"
-reason = "Configuring Shortcut API token"
+reason = "Writes the Shortcut API token to the local `short` config. One-time auth setup."
 
 # ============================================================================
 # SEARCH / FIND - Search stories (read-only)
@@ -25,7 +31,7 @@ reason = "Configuring Shortcut API token"
 # Search with --save writes to config
 [[programs.ask]]
 subcommand = "search"
-reason = "Saving workspace to config"
+reason = "Saves the current search as a named workspace in the local `short` config. Writes to disk; does not change anything on shortcut.com."
 if_flags_any = ["-S", "--save"]
 
 [[programs.allow]]
@@ -44,52 +50,52 @@ reason = "Searching stories"
 # Story with update flags → ask
 [[programs.ask]]
 subcommand = "story"
-reason = "Checking out git branch"
+reason = "Creates and checks out a local git branch named for the story. Switches your working tree; commit or stash first."
 if_flags_any = ["--git-branch", "--git-branch-short"]
 
 [[programs.ask]]
 subcommand = "story"
-reason = "Downloading attachments to disk"
+reason = "Downloads the story's attachments to the current directory. Writes files to disk."
 if_flags_any = ["-D", "--download"]
 
 [[programs.ask]]
 subcommand = "story"
-reason = "Adding comment to story"
+reason = "Posts a comment to the story on shortcut.com. Visible to all workspace members."
 if_flags_any = ["-c", "--comment"]
 
 [[programs.ask]]
 subcommand = "story"
-reason = "Updating story description"
+reason = "Overwrites the story's description field. Replaces existing text; back up the current body if it matters."
 if_flags_any = ["-d", "--description"]
 
 [[programs.ask]]
 subcommand = "story"
-reason = "Updating story estimate"
+reason = "Sets the story's point estimate."
 if_flags_any = ["-e", "--estimate"]
 
 [[programs.ask]]
 subcommand = "story"
-reason = "Setting story epic"
+reason = "Reassigns the story to a different epic."
 if_flags_any = ["--epic"]
 
 [[programs.ask]]
 subcommand = "story"
-reason = "Setting story iteration"
+reason = "Moves the story into a different iteration (sprint)."
 if_flags_any = ["-i", "--iteration"]
 
 [[programs.ask]]
 subcommand = "story"
-reason = "Updating story labels"
+reason = "Sets the story's labels."
 if_flags_any = ["-l", "--label"]
 
 [[programs.ask]]
 subcommand = "story"
-reason = "Moving story position"
+reason = "Reorders the story within its workflow column."
 if_flags_any = ["--move-after", "--move-before", "--move-down", "--move-up"]
 
 [[programs.ask]]
 subcommand = "story"
-reason = "Updating story owners"
+reason = "Sets the story's owners. Replaces the existing owner list."
 if_flags_any = ["-o", "--owners"]
 
 [[programs.ask]]
@@ -99,27 +105,27 @@ if_flags_any = ["-s", "--state"]
 
 [[programs.ask]]
 subcommand = "story"
-reason = "Updating story title"
+reason = "Renames the story's title."
 if_flags_any = ["-t", "--title"]
 
 [[programs.ask]]
 subcommand = "story"
-reason = "Updating story team"
+reason = "Reassigns the story to a different team."
 if_flags_any = ["-T", "--team"]
 
 [[programs.ask]]
 subcommand = "story"
-reason = "Creating task on story"
+reason = "Adds a subtask to the story."
 if_flags_any = ["--task"]
 
 [[programs.ask]]
 subcommand = "story"
-reason = "Toggling task completion"
+reason = "Toggles a subtask's done state on the story."
 if_flags_any = ["--task-complete"]
 
 [[programs.ask]]
 subcommand = "story"
-reason = "Updating story type"
+reason = "Sets the story type (feature, bug, or chore)."
 if_flags_any = ["-y", "--type"]
 
 [[programs.ask]]
@@ -140,7 +146,7 @@ reason = "Viewing story"
 # Note: --git-branch and --git-branch-short are also supported but create already asks
 [[programs.ask]]
 subcommand = "create"
-reason = "Creating new story"
+reason = "Creates a new story in the workspace."
 
 # ============================================================================
 # LIST COMMANDS - Read-only entity listing

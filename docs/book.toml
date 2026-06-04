@@ -1,0 +1,46 @@
+[book]
+title = "tool-gates"
+description = "Permission gate hook for AI coding assistants. Reference generated from rules/*.toml."
+authors = ["camjac251"]
+src = "src"
+language = "en"
+
+[output.html]
+# default-theme is the light branch of the Auto sentinel; preferred-dark-theme is
+# the dark branch. With both set to tg-dark, book.js's get_theme() always returned
+# tg-dark for "Auto" regardless of prefers-color-scheme. Splitting these wires the
+# OS-level color-scheme query back through to the rendered theme.
+default-theme = "tg-light"
+preferred-dark-theme = "tg-dark"
+# mdBook 0.5+ defaults sidebar-header-nav to true, which scans the active page for
+# <h2><a class="header">..</a></h2> anchors and injects them as an ol.section under
+# the active sidebar entry. The current pages don't generate header anchors (custom
+# templates / generated chrome strip them), so no injection happens today, but any
+# future mdBook upgrade or plain markdown chapter would surface 5-10 H2s under each
+# gate. Off by intent.
+sidebar-header-nav = false
+# The WASM simulator glue + binary are NOT listed here. additional-css/js
+# entries are copied AND get an injected <link>/<script> tag that the browser
+# eager-fetches on page load, which would auto-download the ~600KB binary and
+# defeat the opt-in design. Instead the artifacts live under src/wasm/, which
+# mdBook copies verbatim (no hash, no injected tag) to <book-root>/wasm/. book.js
+# resolves that path at runtime (anchored on its own copied URL so it is correct
+# under a Pages repo subpath) and only fetches the binary after the user clicks
+# "Load the real engine".
+additional-css = ["theme/css/variables.css", "theme/css/tool-gates.css"]
+additional-js = ["theme/tool-gates.js"]
+git-repository-url = "https://github.com/camjac251/tool-gates"
+edit-url-template = "https://github.com/camjac251/tool-gates/edit/main/docs/{path}"
+no-section-label = true
+
+[output.html.print]
+# The design has no print view, so drop mdBook's print icon and print.html.
+enable = false
+
+[output.html.search]
+enable = true
+limit-results = 30
+use-boolean-and = true
+
+[output.html.fold]
+enable = false

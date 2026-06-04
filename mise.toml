@@ -1,6 +1,32 @@
 [tools]
 rust = "stable"
 lefthook = "latest"
+# Non-Rust formatters/linters enforced in lefthook pre-commit and CI (format.yml).
+# Pinned so local and CI format identically (a version skew makes CI reject
+# locally-clean formatting). Keep in sync with .github/workflows/format.yml.
+prettier = "3.8.3"
+biome = "2.4.16"
+taplo = "0.10.0"
+# zig is used as the C cross-compiler for the docs-site WASM build (see build-wasm).
+zig = "latest"
+# wasm-opt, for shrinking the docs-site WASM gate-engine bundle (cargo ... --features wasm)
+"github:WebAssembly/binaryen" = { version = "latest", version_prefix = "version_", filter_bins = "wasm-opt" }
 
 [hooks]
 enter = "lefthook install"
+
+# tree-sitter-bash ships a C scanner, and wasm32-unknown-unknown links no libc.
+# `zig cc` supplies the C headers when pointed at the wasi target; the five libc
+# symbols the scanner calls (iswspace/iswalpha/iswalnum/iswdigit/strcmp) resolve
+# to the Rust shims in src/lib.rs at link time. CFLAGS is appended after cc's own
+# --target and clang honors the last -target, so wasm32-wasi wins for the C
+# compile with no wrapper script.
+[tasks.build-wasm]
+description = "Build the WebAssembly target for the docs simulator"
+env = { CC_wasm32_unknown_unknown = "zig cc", CFLAGS_wasm32_unknown_unknown = "-target wasm32-wasi" }
+run = """
+rustup target add wasm32-unknown-unknown
+cargo build --profile release-wasm --lib --target wasm32-unknown-unknown --features wasm
+wasm-bindgen --target web --no-typescript --out-dir docs/src/wasm/ target/wasm32-unknown-unknown/release-wasm/tool_gates.wasm
+wasm-opt -Oz --enable-bulk-memory -o docs/src/wasm/tool_gates_bg.wasm docs/src/wasm/tool_gates_bg.wasm
+"""

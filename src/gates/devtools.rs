@@ -34,7 +34,7 @@ fn check_sd(cmd: &CommandInfo) -> GateResult {
         positional += 1;
     }
 
-    // sd FIND REPLACE [FILES...] — 2 positional = pipe mode, 3+ = file mode
+    // sd FIND REPLACE [FILES...]: 2 positional = pipe mode, 3+ = file mode
     if positional <= 2 {
         GateResult::allow()
     } else {

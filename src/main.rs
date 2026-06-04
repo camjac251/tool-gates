@@ -8,7 +8,7 @@
 //! Supports Claude Code, Gemini CLI, and Codex CLI hook systems:
 //! - Claude Code: `PreToolUse`, `PermissionRequest`, `PermissionDenied`, `PostToolUse` (Bash, Monitor, Write, Edit)
 //! - Gemini CLI:  `BeforeTool`, `AfterTool` (tool_name: "run_shell_command")
-//! - Codex CLI:   `PreToolUse`, `PermissionRequest`, `PostToolUse` (Bash, apply_patch). Selected via `--client codex`.
+//! - Codex CLI:   `PreToolUse`, `PermissionRequest`, `PostToolUse` (Bash, apply_patch, mcp__*). Selected via `--client codex`.
 //!
 //! Configuration: `~/.config/tool-gates/config.toml`
 //!
@@ -383,6 +383,7 @@ fn handle_pre_tool_use_hook(input: &str, client: Client) {
         handle_bash_pre_tool_use(&hook_input, client);
     } else if Client::is_file_tool(tool_name) {
         // File tools: symlink guard + security reminders.
+
         //
         // For apply_patch (Codex), fail closed when the patch body is
         // non-empty but produced no parsed files. Codex's lenient parser at
@@ -643,16 +644,16 @@ fn handle_permission_request_hook(input: &str, client: Client) {
         Ok(pi) => pi,
         Err(e) => {
             eprintln!("Error: Invalid PermissionRequest JSON: {e}");
-            // Don't output anything - let the client's normal prompt show.
-            // For Codex this means its built-in UI asks the user, which is
-            // fail-closed by default for the PermissionRequest event.
+            // Don't output anything - let the client's normal approval path
+            // decide. For Codex, prompting depends on approval_policy and
+            // execpolicy.
             return;
         }
     };
 
     // Only process shell tools, file tools (Edit/Write/apply_patch worktree
     // approval), and MCP tools (for the accept_edits_mcp path). Other tool
-    // types let the normal permission prompt show.
+    // types fall through to the client's normal approval path.
     if !Client::is_shell_tool(&perm_input.tool_name)
         && !Client::is_write_tool(&perm_input.tool_name)
         && !Client::is_mcp_tool(&perm_input.tool_name)
@@ -689,7 +690,7 @@ fn handle_permission_request_hook(input: &str, client: Client) {
             }
         }
     }
-    // If None, we don't output anything - lets the normal permission prompt show
+    // If None, we don't output anything; the client's normal approval path decides.
 }
 
 /// Serialize a PermissionRequestOutput for the given client.
@@ -802,9 +803,10 @@ fn handle_post_tool_use_hook(input: &str, client: Client) {
         // be invalid.
         let tracking_output = handle_post_tool_use(&post_input);
 
-        // Codex: hints + Tier-3 warnings can't ride on PreToolUse (the parser
-        // rejects `additionalContext` there), so they ride here. Claude
-        // already received the hints in the Pre output; don't double-inject.
+        // Codex: hints + Tier-3 warnings ride here because non-deny PreToolUse
+        // decisions serialize to empty stdout, leaving no Pre output to attach
+        // context to. Claude already received the hints in the Pre output; don't
+        // double-inject.
         let mut codex_hints = String::new();
         if client == Client::Codex {
             let command = post_input.get_command();
@@ -1490,7 +1492,9 @@ fn install_codex_hooks(scope: &str, dry_run: bool) {
             eprintln!("\n✓ Installed to {}", settings_path.display());
             eprintln!("\nHooks added: {}", changes.join(", "));
             eprintln!("\nCodex CLI hooks:");
-            eprintln!("  - PreToolUse: Command safety (deny / pass-through to Codex UI)");
+            eprintln!(
+                "  - PreToolUse: Command safety (deny / pass-through to Codex approval flow)"
+            );
             eprintln!("  - PermissionRequest: Subagent allow/deny");
             eprintln!("  - PostToolUse: Tracking + Tier-2 security + modern-CLI hints");
         }
@@ -1763,6 +1767,7 @@ fn print_main_help() {
     eprintln!(
         "  rules ask-audit              List ask-rules that suppress the third prompt button"
     );
+    eprintln!("  rules export                 Generate mdBook gate docs from rules/*.toml");
     eprintln!("  pending list                 List pending approvals");
     eprintln!("  pending clear                Clear pending approval queue");
     eprintln!("  review                       Interactive TUI for pending approvals");
@@ -1965,12 +1970,106 @@ fn handle_rules_subcommand(args: &[String]) {
         "list" => handle_rules_list(sub_args),
         "remove" => handle_rules_remove(sub_args),
         "ask-audit" => handle_rules_ask_audit(sub_args),
+        "export" => handle_rules_export(sub_args),
         _ => {
             eprintln!("Unknown rules subcommand: {}", subcommand);
             eprintln!("Run 'tool-gates rules --help' for usage.");
             std::process::exit(1);
         }
     }
+}
+
+/// Handle `tool-gates rules export --format md [--out PATH] [--rules-dir PATH]`.
+///
+/// Walks `rules/*.toml` (resolved relative to the current directory, where the
+/// gate TOMLs live in the repo) and emits one gate page per gate into
+/// `<out>/gates/` plus `<out>/security-floor.md` and `<out>/hints.md`. Only
+/// `--format md` is supported today; an explicit unsupported format is a usage
+/// error rather than a silent default.
+fn handle_rules_export(args: &[String]) {
+    if args.iter().any(|a| a == "--help" || a == "-h") {
+        print_rules_export_help();
+        return;
+    }
+
+    // --format is required and must be `md`. Defaulting silently would hide a
+    // typo and could surprise a future caller expecting another format.
+    let format = args
+        .iter()
+        .position(|a| a == "--format" || a == "-f")
+        .and_then(|i| args.get(i + 1))
+        .map(|s| s.as_str());
+    match format {
+        Some("md") => {}
+        Some(other) => {
+            eprintln!("Error: unsupported --format '{other}'. Only 'md' is supported.");
+            std::process::exit(1);
+        }
+        None => {
+            eprintln!("Error: --format md is required\n");
+            print_rules_export_help();
+            std::process::exit(1);
+        }
+    }
+
+    let out = args
+        .iter()
+        .position(|a| a == "--out" || a == "-o")
+        .and_then(|i| args.get(i + 1))
+        .map(|s| s.as_str())
+        .unwrap_or("docs/src");
+
+    let rules_dir = args
+        .iter()
+        .position(|a| a == "--rules-dir")
+        .and_then(|i| args.get(i + 1))
+        .map(|s| s.as_str())
+        .unwrap_or("rules");
+
+    let rules_path = std::path::Path::new(rules_dir);
+    if !rules_path.is_dir() {
+        eprintln!(
+            "Error: rules directory not found: {} (run from the repo root, or pass --rules-dir)",
+            rules_path.display()
+        );
+        std::process::exit(1);
+    }
+
+    let out_path = std::path::Path::new(out);
+    match tool_gates::rules_export::export_markdown(rules_path, out_path) {
+        Ok(()) => {
+            eprintln!(
+                "\u{2713} Exported gate docs from {} to {}",
+                rules_path.display(),
+                out_path.display()
+            );
+            eprintln!(
+                "  {}/gates/*.md + {}/security-floor.md + {}/hints.md",
+                out, out, out
+            );
+        }
+        Err(e) => {
+            eprintln!("Error: failed to export gate docs: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn print_rules_export_help() {
+    eprintln!("tool-gates rules export - Generate mdBook gate docs from rules/*.toml");
+    eprintln!();
+    eprintln!("USAGE:");
+    eprintln!("  tool-gates rules export --format md [--out PATH] [--rules-dir PATH]");
+    eprintln!();
+    eprintln!("OPTIONS:");
+    eprintln!("  -f, --format <fmt>    Output format (only 'md' is supported)");
+    eprintln!("  -o, --out <path>      Output directory (default: docs/src)");
+    eprintln!("      --rules-dir <path>  Source rules directory (default: rules)");
+    eprintln!();
+    eprintln!(
+        "Writes one <out>/gates/<gate>.md per gate plus <out>/security-floor.md and <out>/hints.md."
+    );
+    eprintln!("Output is deterministic: re-running with the same TOML is byte-identical.");
 }
 
 fn handle_rules_list(args: &[String]) {
@@ -2080,12 +2179,14 @@ fn print_rules_help() {
     eprintln!("  tool-gates rules list [--scope <scope>]");
     eprintln!("  tool-gates rules remove <pattern> -s <scope>");
     eprintln!("  tool-gates rules ask-audit [--apply]");
+    eprintln!("  tool-gates rules export --format md [--out PATH] [--rules-dir PATH]");
     eprintln!();
     eprintln!("COMMANDS:");
     eprintln!("  list        List all permission rules");
     eprintln!("  remove      Remove a permission rule");
     eprintln!("  ask-audit   List `permissions.ask` Bash rules that suppress the");
     eprintln!("              \"Yes, and don't ask again for X\" prompt button");
+    eprintln!("  export      Generate mdBook gate docs from rules/*.toml");
     eprintln!();
     eprintln!("OPTIONS:");
     eprintln!("  -s, --scope <scope>   Filter by scope: user, project, or local");
@@ -2527,7 +2628,7 @@ fn print_pending_help() {
     eprintln!("tool-gates pending - Manage pending approval queue");
     eprintln!();
     eprintln!("USAGE:");
-    eprintln!("  tool-gates pending list [--project]");
+    eprintln!("  tool-gates pending list [--project] [--json]");
     eprintln!("  tool-gates pending clear [--project | --all] --force");
     eprintln!();
     eprintln!("COMMANDS:");
@@ -2538,6 +2639,7 @@ fn print_pending_help() {
     eprintln!("  -p, --project   Filter to current project only");
     eprintln!("  -a, --all       Clear all pending approvals");
     eprintln!("  -f, --force     Confirm destructive clear operation");
+    eprintln!("      --json      Emit pending approvals as JSON for list");
 }
 
 // === Review subcommand ===
@@ -2635,14 +2737,15 @@ fn handle_doctor_subcommand() {
 
     // 3. Hook installation status across all scopes
     eprintln!();
-    let scopes = [
+    let mut any_installed = false;
+
+    // Check Claude
+    let claude_scopes = [
         ("user", get_settings_path("user")),
         ("project", get_settings_path("project")),
         ("local", get_settings_path("local")),
     ];
-
-    let mut any_installed = false;
-    for (scope, path) in &scopes {
+    for (scope, path) in &claude_scopes {
         if !path.exists() {
             continue;
         }
@@ -2653,8 +2756,8 @@ fn handle_doctor_subcommand() {
         let settings: serde_json::Value = match serde_json::from_str(&content) {
             Ok(v) => v,
             Err(_) => {
-                let msg = format!("Settings parse error: {}", path.display());
-                eprintln!("  ✗ Hooks ({}): parse error", scope);
+                let msg = format!("Claude settings parse error: {}", path.display());
+                eprintln!("  ✗ Hooks (claude {}): parse error", scope);
                 issues.push(msg);
                 continue;
             }
@@ -2691,7 +2794,7 @@ fn handle_doctor_subcommand() {
 
         any_installed = true;
         if count == 4 {
-            eprintln!("  ✓ Hooks ({}): all 4 installed", scope);
+            eprintln!("  ✓ Hooks (claude {}): all 4 installed", scope);
             ok_count += 1;
         } else {
             let mut missing = Vec::new();
@@ -2707,9 +2810,9 @@ fn handle_doctor_subcommand() {
             if !has_post {
                 missing.push("PostToolUse");
             }
-            let msg = format!("Missing hooks in {}: {}", scope, missing.join(", "));
+            let msg = format!("Missing Claude hooks in {}: {}", scope, missing.join(", "));
             eprintln!(
-                "  ⚠ Hooks ({}): {}/4 (missing {})",
+                "  ⚠ Hooks (claude {}): {}/4 (missing {})",
                 scope,
                 count,
                 missing.join(", ")
@@ -2727,7 +2830,192 @@ fn handle_doctor_subcommand() {
                                 if let Some(cmd) = hook.get("command").and_then(|c| c.as_str()) {
                                     if cmd.contains(".py") || cmd.contains("uvx") {
                                         let msg = format!(
-                                            "Legacy Python hook in {}: {}",
+                                            "Legacy Python hook in claude {}: {}",
+                                            scope,
+                                            cmd.chars().take(80).collect::<String>()
+                                        );
+                                        eprintln!("  ⚠ {}", msg);
+                                        issues.push(msg);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Check Gemini
+    let gemini_scopes = [
+        ("user", get_gemini_settings_path("user")),
+        ("project", get_gemini_settings_path("project")),
+    ];
+    for (scope, path) in &gemini_scopes {
+        if !path.exists() {
+            continue;
+        }
+        let content = match std::fs::read_to_string(path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        let settings: serde_json::Value = match serde_json::from_str(&content) {
+            Ok(v) => v,
+            Err(_) => {
+                let msg = format!("Gemini settings parse error: {}", path.display());
+                eprintln!("  ✗ Hooks (gemini {}): parse error", scope);
+                issues.push(msg);
+                continue;
+            }
+        };
+        let hooks = match settings.get("hooks") {
+            Some(h) => h,
+            None => continue,
+        };
+
+        let has_before = hooks
+            .get("BeforeTool")
+            .map(has_tool_gates_hook)
+            .unwrap_or(false);
+        let has_after = hooks
+            .get("AfterTool")
+            .map(has_tool_gates_hook)
+            .unwrap_or(false);
+
+        let count = [has_before, has_after].iter().filter(|&&x| x).count();
+        if count == 0 {
+            continue;
+        }
+
+        any_installed = true;
+        if count == 2 {
+            eprintln!("  ✓ Hooks (gemini {}): all 2 installed", scope);
+            ok_count += 1;
+        } else {
+            let mut missing = Vec::new();
+            if !has_before {
+                missing.push("BeforeTool");
+            }
+            if !has_after {
+                missing.push("AfterTool");
+            }
+            let msg = format!("Missing Gemini hooks in {}: {}", scope, missing.join(", "));
+            eprintln!(
+                "  ⚠ Hooks (gemini {}): {}/2 (missing {})",
+                scope,
+                count,
+                missing.join(", ")
+            );
+            issues.push(msg);
+        }
+
+        // Check for stale external hooks (old Python scripts)
+        if let Some(hook_entries) = hooks.as_object() {
+            for (_event, matchers) in hook_entries {
+                if let Some(arr) = matchers.as_array() {
+                    for entry in arr {
+                        if let Some(inner_hooks) = entry.get("hooks").and_then(|h| h.as_array()) {
+                            for hook in inner_hooks {
+                                if let Some(cmd) = hook.get("command").and_then(|c| c.as_str()) {
+                                    if cmd.contains(".py") || cmd.contains("uvx") {
+                                        let msg = format!(
+                                            "Legacy Python hook in gemini {}: {}",
+                                            scope,
+                                            cmd.chars().take(80).collect::<String>()
+                                        );
+                                        eprintln!("  ⚠ {}", msg);
+                                        issues.push(msg);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Check Codex
+    let codex_scopes = [
+        ("user", get_codex_hooks_path("user")),
+        ("project", get_codex_hooks_path("project")),
+    ];
+    for (scope, path) in &codex_scopes {
+        if !path.exists() {
+            continue;
+        }
+        let content = match std::fs::read_to_string(path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        let settings: serde_json::Value = match serde_json::from_str(&content) {
+            Ok(v) => v,
+            Err(_) => {
+                let msg = format!("Codex hooks parse error: {}", path.display());
+                eprintln!("  ✗ Hooks (codex {}): parse error", scope);
+                issues.push(msg);
+                continue;
+            }
+        };
+        let hooks = match settings.get("hooks") {
+            Some(h) => h,
+            None => continue,
+        };
+
+        let has_pre = hooks
+            .get("PreToolUse")
+            .map(has_tool_gates_hook)
+            .unwrap_or(false);
+        let has_perm = hooks
+            .get("PermissionRequest")
+            .map(has_tool_gates_hook)
+            .unwrap_or(false);
+        let has_post = hooks
+            .get("PostToolUse")
+            .map(has_tool_gates_hook)
+            .unwrap_or(false);
+
+        let count = [has_pre, has_perm, has_post].iter().filter(|&&x| x).count();
+        if count == 0 {
+            continue;
+        }
+
+        any_installed = true;
+        if count == 3 {
+            eprintln!("  ✓ Hooks (codex {}): all 3 installed", scope);
+            ok_count += 1;
+        } else {
+            let mut missing = Vec::new();
+            if !has_pre {
+                missing.push("PreToolUse");
+            }
+            if !has_perm {
+                missing.push("PermissionRequest");
+            }
+            if !has_post {
+                missing.push("PostToolUse");
+            }
+            let msg = format!("Missing Codex hooks in {}: {}", scope, missing.join(", "));
+            eprintln!(
+                "  ⚠ Hooks (codex {}): {}/3 (missing {})",
+                scope,
+                count,
+                missing.join(", ")
+            );
+            issues.push(msg);
+        }
+
+        // Check for stale external hooks (old Python scripts)
+        if let Some(hook_entries) = hooks.as_object() {
+            for (_event, matchers) in hook_entries {
+                if let Some(arr) = matchers.as_array() {
+                    for entry in arr {
+                        if let Some(inner_hooks) = entry.get("hooks").and_then(|h| h.as_array()) {
+                            for hook in inner_hooks {
+                                if let Some(cmd) = hook.get("command").and_then(|c| c.as_str()) {
+                                    if cmd.contains(".py") || cmd.contains("uvx") {
+                                        let msg = format!(
+                                            "Legacy Python hook in codex {}: {}",
                                             scope,
                                             cmd.chars().take(80).collect::<String>()
                                         );

@@ -13,228 +13,460 @@
 
 # Simple list of always-safe commands
 safe_commands = [
-    # Display/output (including compressed variants)
-    "echo",
-    "printf",
-    "cat",
-    "zcat",
-    "head",
-    "tail",
-    "less",
-    "more",
-    "bat",
-    "batcat",
+  # Display/output (including compressed variants)
+  "echo",
+  "printf",
+  "cat",
+  "zcat",
+  "head",
+  "tail",
+  "less",
+  "more",
+  "bat",
+  "batcat",
 
-    # Listing/finding
-    "ls",
-    "eza",
-    "lsd",
-    "tree",
-    "find",
-    "fd",
-    "locate",
-    "which",
-    "whereis",
-    "type",
+  # Listing/finding
+  "ls",
+  "eza",
+  "lsd",
+  "tree",
+  "find",
+  "fd",
+  "locate",
+  "which",
+  "whereis",
+  "type",
 
-    # Text processing (read-only, including compressed variants)
-    "grep",
-    "rg",
-    "ripgrep",
-    "zgrep",
-    "choose",
-    "cut",
-    "sort",
-    "uniq",
-    "wc",
-    "tr",
-    "column",
-    "paste",
-    "join",
-    "comm",
-    "diff",
-    "cmp",
-    "fold",
-    "fmt",
-    "nl",
-    "rev",
-    "tac",
-    "expand",
-    "unexpand",
-    "pr",
+  # Text processing (read-only, including compressed variants)
+  "grep",
+  "rg",
+  "ripgrep",
+  "zgrep",
+  "choose",
+  "cut",
+  "sort",
+  "uniq",
+  "wc",
+  "tr",
+  "column",
+  "paste",
+  "join",
+  "comm",
+  "diff",
+  "cmp",
+  "fold",
+  "fmt",
+  "nl",
+  "rev",
+  "tac",
+  "expand",
+  "unexpand",
+  "pr",
 
-    # File info
-    "file",
-    "stat",
-    "du",
-    "df",
-    "lsof",
-    "readlink",
-    "realpath",
-    "basename",
-    "dirname",
-    "lsattr",
-    "getfacl",
+  # File info
+  "file",
+  "stat",
+  "du",
+  "df",
+  "lsof",
+  "readlink",
+  "realpath",
+  "basename",
+  "dirname",
+  "lsattr",
+  "getfacl",
 
-    # Process/system info
-    "ps",
-    "top",
-    "htop",
-    "btop",
-    "procs",
-    "pgrep",
-    "pidof",
-    "uptime",
-    "w",
-    "who",
-    "whoami",
-    "id",
-    "groups",
-    "uname",
-    "hostname",
-    "hostnamectl",
-    "date",
-    "cal",
-    "free",
-    "vmstat",
-    "iostat",
-    "nproc",
-    "lscpu",
-    "lsmem",
-    "lsblk",
-    "lspci",
-    "lsusb",
-    "locale",
-    "getconf",
+  # Process/system info
+  "ps",
+  "top",
+  "htop",
+  "btop",
+  "procs",
+  "pgrep",
+  "pidof",
+  "uptime",
+  "w",
+  "who",
+  "whoami",
+  "id",
+  "groups",
+  "uname",
+  "hostname",
+  "hostnamectl",
+  "date",
+  "cal",
+  "free",
+  "vmstat",
+  "iostat",
+  "nproc",
+  "lscpu",
+  "lsmem",
+  "lsblk",
+  "lspci",
+  "lsusb",
+  "locale",
+  "getconf",
 
-    # GPU/graphics info (read-only only)
-    "vainfo",
-    "vdpauinfo",
-    "glxinfo",
-    "clinfo",
+  # GPU/graphics info (read-only only)
+  "vainfo",
+  "vdpauinfo",
+  "glxinfo",
+  "clinfo",
 
-    # Display info (read-only only)
-    "xdpyinfo",
-    "xwininfo",
+  # Display info (read-only only)
+  "xdpyinfo",
+  "xwininfo",
 
 
-    # Network info (read-only)
-    "ping",
-    "traceroute",
-    "tracepath",
-    "mtr",
-    "dig",
-    "nslookup",
-    "host",
-    "whois",
-    "ss",
-    "netstat",
-    "ip",
-    "ifconfig",
-    "route",
-    "arp",
+  # Network info (read-only)
+  "ping",
+  "traceroute",
+  "tracepath",
+  "mtr",
+  "dig",
+  "nslookup",
+  "host",
+  "whois",
+  "ss",
+  "netstat",
+  "ip",
+  "ifconfig",
+  "route",
+  "arp",
 
-    # Archive listing (not extraction)
-    "zipinfo",
-    "unrar",
+  # Archive listing (not extraction)
+  "zipinfo",
+  "unrar",
 
-    # PDF tools (read-only extraction/info)
-    "pdftotext",
-    "pdfinfo",
+  # PDF tools (read-only extraction/info)
+  "pdftotext",
+  "pdfinfo",
 
-    # Dev tools (read-only)
-    "tokei",
-    "cloc",
-    "scc",
-    "loc",
-    "token-counter",
-    "jq",
-    "yq",
-    "gron",
-    "fx",
-    "hexdump",
-    "xxd",
-    "base64",
-    "od",
-    "hexyl",
-    "strings",
-    "delta",
-    "difft",
-    "dust",
-    "fselect",
-    "pastel",
-    "numbat",
-    "fzf",
-    "tig",
-    "z",
-    "zi",
-    "zoxide",
-    "sha256sum",
-    "md5sum",
-    "sha1sum",
-    "sha512sum",
-    "b2sum",
-    "cksum",
-    "b3sum",
-    "xxhsum",
-    "xxh32sum",
-    "xxh64sum",
-    "xxh128sum",
+  # Dev tools (read-only)
+  "tokei",
+  "cloc",
+  "scc",
+  "loc",
+  "token-counter",
+  "jq",
+  "yq",
+  "gron",
+  "fx",
+  "hexdump",
+  "xxd",
+  "base64",
+  "od",
+  "hexyl",
+  "strings",
+  "delta",
+  "difft",
+  "dust",
+  "fselect",
+  "pastel",
+  "numbat",
+  "fzf",
+  "tig",
+  "z",
+  "zi",
+  "zoxide",
+  "sha256sum",
+  "md5sum",
+  "sha1sum",
+  "sha512sum",
+  "b2sum",
+  "cksum",
+  "b3sum",
+  "xxhsum",
+  "xxh32sum",
+  "xxh64sum",
+  "xxh128sum",
 
-    # Markdown/document renderers (read-only)
-    "glow",
+  # Markdown/document renderers (read-only)
+  "glow",
 
-    # CLI output converters (read-only, stdin->stdout)
-    "jc",
+  # CLI output converters (read-only, stdin->stdout)
+  "jc",
 
-    # Temp file creation (safe, creates in $TMPDIR)
-    "mktemp",
+  # Temp file creation (safe, creates in $TMPDIR)
+  "mktemp",
 
-    # Help/docs
-    "man",
-    "info",
-    "help",
-    "tldr",
-    "tealdeer",
-    "cheat",
+  # Help/docs
+  "man",
+  "info",
+  "help",
+  "tldr",
+  "tealdeer",
+  "cheat",
 
-    # Misc safe
-    "true",
-    "false",
-    "yes",
-    "seq",
-    "expr",
-    "bc",
-    "dc",
-    "factor",
-    "sleep",
-    "wait",
-    "printenv",
-    "env",
-    "export",
-    "set",
-    "pwd",
-    "cd",
-    "pushd",
-    "popd",
-    "dirs",
-    "unalias",
-    "hash",
-    "test",
-    "[",
-    "[[",
+  # Misc safe
+  "true",
+  "false",
+  "yes",
+  "seq",
+  "expr",
+  "bc",
+  "dc",
+  "factor",
+  "sleep",
+  "wait",
+  "printenv",
+  "env",
+  "export",
+  "set",
+  "pwd",
+  "cd",
+  "pushd",
+  "popd",
+  "dirs",
+  "unalias",
+  "hash",
+  "test",
+  "[",
+  "[[",
 
-    # Package query (read-only)
-    "dpkg-query",
+  # Package query (read-only)
+  "dpkg-query",
 
-    # Shell builtins (used in while read loops, etc.)
-    "read",
+  # Shell builtins (used in while read loops, etc.)
+  "read",
 ]
 
 [meta]
 name = "basics"
 description = "Safe read-only shell commands"
 priority = 100
+lede = "The default-safe list. Unlike other gates, basics doesn't define per-program rules: it's one big <code>safe_commands = […]</code> array of commands that are always allowed without prompting. Lowest priority (100) so other gates' specific rules win first."
+note = """<b>Three custom handlers extend the list.</b> <code>check_xargs</code> allows <code>xargs</code> only when the target command is itself in <code>safe_commands</code>; otherwise asks. <code>check_shell_c</code> parses <code>bash -c '…'</code> / <code>sh -c '…'</code> / <code>zsh -c '…'</code> and checks every command in the inner script. <code>check_command_builtin</code> handles <code>command -v</code> / <code>-V</code> and evaluates other invocations through the gate engine."""
+behavior_tags = ["structure <b>safe_commands</b> array", "~180 commands"]
+
+[meta.card_titles]
+allow = "default-safe commands"
+
+# Docs-only: groups the safe_commands above into titled categories for the
+# generated gate page (a command-chip grid, no decision rows). Every entry in
+# safe_commands must appear in exactly one group; a test enforces full coverage.
+# Ignored at runtime: the safe-command set is built from safe_commands alone.
+[[command_groups]]
+title = "Display & output"
+commands = [
+  "echo",
+  "printf",
+  "cat",
+  "zcat",
+  "head",
+  "tail",
+  "less",
+  "more",
+  "bat",
+  "batcat",
+]
+
+[[command_groups]]
+title = "Listing & finding"
+commands = [
+  "ls",
+  "eza",
+  "lsd",
+  "tree",
+  "find",
+  "fd",
+  "locate",
+  "which",
+  "whereis",
+  "type",
+]
+
+[[command_groups]]
+title = "Text processing"
+commands = [
+  "grep",
+  "rg",
+  "ripgrep",
+  "zgrep",
+  "choose",
+  "cut",
+  "sort",
+  "uniq",
+  "wc",
+  "tr",
+  "column",
+  "paste",
+  "join",
+  "comm",
+  "diff",
+  "cmp",
+  "fold",
+  "fmt",
+  "nl",
+  "rev",
+  "tac",
+  "expand",
+  "unexpand",
+  "pr",
+]
+
+[[command_groups]]
+title = "File info"
+commands = [
+  "file",
+  "stat",
+  "du",
+  "df",
+  "lsof",
+  "readlink",
+  "realpath",
+  "basename",
+  "dirname",
+  "lsattr",
+  "getfacl",
+]
+
+[[command_groups]]
+title = "Process & system info"
+commands = [
+  "ps",
+  "top",
+  "htop",
+  "btop",
+  "procs",
+  "pgrep",
+  "pidof",
+  "uptime",
+  "w",
+  "who",
+  "whoami",
+  "id",
+  "groups",
+  "uname",
+  "hostname",
+  "hostnamectl",
+  "date",
+  "cal",
+  "free",
+  "vmstat",
+  "iostat",
+  "nproc",
+  "lscpu",
+  "lsmem",
+  "lsblk",
+  "lspci",
+  "lsusb",
+  "locale",
+  "getconf",
+]
+
+[[command_groups]]
+title = "GPU & display info"
+commands = ["vainfo", "vdpauinfo", "glxinfo", "clinfo", "xdpyinfo", "xwininfo"]
+
+[[command_groups]]
+title = "Network info"
+commands = [
+  "ping",
+  "traceroute",
+  "tracepath",
+  "mtr",
+  "dig",
+  "nslookup",
+  "host",
+  "whois",
+  "ss",
+  "netstat",
+  "ip",
+  "ifconfig",
+  "route",
+  "arp",
+]
+
+[[command_groups]]
+title = "Archive & document inspection"
+commands = ["zipinfo", "unrar", "pdftotext", "pdfinfo"]
+
+[[command_groups]]
+title = "Dev tools (read-only)"
+commands = [
+  "tokei",
+  "cloc",
+  "scc",
+  "loc",
+  "token-counter",
+  "jq",
+  "yq",
+  "gron",
+  "fx",
+  "hexdump",
+  "xxd",
+  "base64",
+  "od",
+  "hexyl",
+  "strings",
+  "delta",
+  "difft",
+  "dust",
+  "fselect",
+  "pastel",
+  "numbat",
+  "fzf",
+  "tig",
+  "glow",
+  "jc",
+]
+
+[[command_groups]]
+title = "Navigation"
+commands = ["z", "zi", "zoxide"]
+
+[[command_groups]]
+title = "Checksums"
+commands = [
+  "sha256sum",
+  "md5sum",
+  "sha1sum",
+  "sha512sum",
+  "b2sum",
+  "cksum",
+  "b3sum",
+  "xxhsum",
+  "xxh32sum",
+  "xxh64sum",
+  "xxh128sum",
+]
+
+[[command_groups]]
+title = "Help & docs"
+commands = ["man", "info", "help", "tldr", "tealdeer", "cheat"]
+
+[[command_groups]]
+title = "Shell built-ins & misc"
+commands = [
+  "mktemp",
+  "true",
+  "false",
+  "yes",
+  "seq",
+  "expr",
+  "bc",
+  "dc",
+  "factor",
+  "sleep",
+  "wait",
+  "printenv",
+  "env",
+  "export",
+  "set",
+  "pwd",
+  "cd",
+  "pushd",
+  "popd",
+  "dirs",
+  "unalias",
+  "hash",
+  "test",
+  "[",
+  "[[",
+  "dpkg-query",
+  "read",
+]
 
 # xargs needs custom handling to check target command
 [[custom_handlers]]

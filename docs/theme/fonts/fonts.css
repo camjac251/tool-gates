@@ -1,0 +1,64 @@
+/*
+ * tool-gates self-hosted brand fonts.
+ *
+ * Loaded by mdBook's static resource pipeline. The mere existence of this
+ * file at theme/fonts/fonts.css shadows mdBook 0.5's bundled fonts.css and
+ * stops mdBook from copying its default Open Sans + Source Code Pro woff2s
+ * into <book>/fonts/. Per mdBook 0.5 docs:
+ *   "The default fonts are now always copied unless you override the
+ *    `theme/fonts/fonts.css` file."
+ *
+ * All three families are self-hosted as variable woff2s from @fontsource
+ * (SIL OFL-1.1, sourced from cdn.jsdelivr.net/fontsource):
+ *   - Bricolage Grotesque (display) -- variable opsz 12..96 + wght 200..800
+ *   - Hanken Grotesk      (body)    -- variable wght 100..900
+ *   - JetBrains Mono      (mono)    -- variable wght 100..800
+ *
+ * Family names match docs/theme/css/variables.css --font-display/body/mono
+ * exactly, so no consumer change is needed. font-display: swap so a stalled
+ * font fetch never blocks first paint; the variables.css family stacks fall
+ * through to system fonts if the woff2 fails entirely.
+ *
+ * unicode-range is Latin only (matches what the design actually renders).
+ * If the docs ever need latin-ext / vietnamese / cyrillic, add per-subset
+ * @font-face blocks here. fontsource ships those as separate woff2s.
+ *
+ * URLs use mdBook's {{ resource "..." }} Handlebars directive, which is
+ * required when hash-files = true (the default). mdBook content-hashes the
+ * woff2 files (bricolage-...-a79fdb52.woff2 etc.); without the directive a
+ * literal url('bricolage-...woff2') would 404 because the actual emitted
+ * filename carries the hash.
+ */
+
+@font-face {
+  font-family: "Bricolage Grotesque";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 800;
+  src: url('{{ resource "fonts/bricolage-grotesque-latin-opsz-normal.woff2" }}')
+    format("woff2-variations");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Hanken Grotesk";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('{{ resource "fonts/hanken-grotesk-latin-wght-normal.woff2" }}')
+    format("woff2-variations");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 800;
+  src: url('{{ resource "fonts/jetbrains-mono-latin-wght-normal.woff2" }}')
+    format("woff2-variations");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}

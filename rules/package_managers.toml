@@ -16,6 +16,15 @@
 name = "package_managers"
 description = "Language package manager permission gates"
 priority = 20
+lede = "Language package managers. Listing, inspecting, and auditing are safe. Installing, removing, publishing, and running arbitrary scripts ask. No hard blocks at this layer (the dangerous floor is filesystem-level)."
+note = """<b>Custom handlers per package manager.</b> Each program has a small Rust handler (<code>check_npm</code>, <code>check_pnpm</code>, <code>check_yarn</code>, <code>check_pip</code>, <code>check_uv</code>, <code>check_poetry</code>, <code>check_pipx</code>, <code>check_mise</code>) that recognises devtool delegation (e.g. <code>npm eslint</code> routes to the devtools gate), bare invocations (<code>yarn</code> = install), and per-package-manager idioms like <code>pip install --dry-run</code>."""
+behavior_tags = [
+  "covers <b>npm · pnpm · yarn · bun · pip · uv · cargo · go · poetry · pipx · conda · mise</b>",
+]
+
+[meta.card_titles]
+allow = "inspection"
+ask = "mutations"
 
 # =============================================================================
 # NPM
@@ -28,34 +37,44 @@ unknown_action = "ask"
 # Read-only commands
 [[programs.allow]]
 subcommand = "list"
+reason = "Lists installed packages in the dependency tree. Read-only."
 
 [[programs.allow]]
 subcommand = "ls"
+reason = "Lists installed packages in the dependency tree (`npm ls` aliases `npm list`). Read-only."
 
 [[programs.allow]]
 subcommand = "ll"
+reason = "Lists installed packages in long format with extra detail. Read-only."
 
 [[programs.allow]]
 subcommand = "la"
+reason = "Lists installed packages in long format including transitive deps. Read-only."
 
 [[programs.allow]]
 subcommand = "view"
+reason = "Shows registry metadata for a package (versions, dependencies, dist-tags). Read-only."
 
 [[programs.allow]]
 subcommand = "show"
+reason = "Shows registry metadata for a package (`npm show` aliases `npm view`). Read-only."
 
 [[programs.allow]]
 subcommand = "info"
+reason = "Shows registry metadata for a package (`npm info` aliases `npm view`). Read-only."
 
 [[programs.allow]]
 subcommand = "search"
+reason = "Searches the registry for packages matching the given terms. Read-only."
 
 [[programs.allow]]
 subcommand = "help"
+reason = "Prints help for npm or a specific subcommand. Read-only."
 
 [[programs.allow]]
 subcommand = "config"
 unless_flags = ["set", "delete", "edit"]
+reason = "Shows npm config values. Read-only unless `set`, `delete`, or `edit` is present, which is gated separately."
 
 [[programs.ask]]
 subcommand = "config"
@@ -64,43 +83,56 @@ if_flags_any = ["set", "delete", "edit"]
 
 [[programs.allow]]
 subcommand = "get"
+reason = "Reads a single npm config value. Read-only."
 
 [[programs.allow]]
 subcommand = "prefix"
+reason = "Prints the npm prefix (install root) path. Read-only."
 
 [[programs.allow]]
 subcommand = "root"
+reason = "Prints the effective `node_modules` path. Read-only."
 
 [[programs.allow]]
 subcommand = "bin"
+reason = "Prints the directory where npm installs executables. Read-only."
 
 [[programs.allow]]
 subcommand = "whoami"
+reason = "Prints the username of the logged-in registry account. Read-only."
 
 [[programs.allow]]
 subcommand = "token"
+reason = "Lists authentication tokens for the registry account. Read-only; does not create or revoke."
 
 [[programs.allow]]
 subcommand = "team"
+reason = "Lists or inspects organization teams on the registry. Read-only."
 
 [[programs.allow]]
 subcommand = "outdated"
+reason = "Reports which installed packages are out of date versus the registry. Read-only; no installs."
 
 [[programs.allow]]
 subcommand = "doctor"
+reason = "Runs environment and registry health checks and reports findings. Read-only."
 
 [[programs.allow]]
 subcommand = "explain"
+reason = "Explains why a package is present in the dependency tree. Read-only."
 
 [[programs.allow]]
 subcommand = "why"
+reason = "Explains why a package is installed and what depends on it. Read-only."
 
 [[programs.allow]]
 subcommand = "fund"
+reason = "Lists funding URLs declared by installed dependencies. Read-only."
 
 [[programs.allow]]
 subcommand = "audit"
 unless_flags = ["fix"]
+reason = "Reports known vulnerabilities in the dependency tree. Read-only unless `fix` is present, which is gated separately."
 
 [[programs.ask]]
 subcommand = "audit"
@@ -109,18 +141,23 @@ if_flags_any = ["fix"]
 
 [[programs.allow]]
 subcommand = "query"
+reason = "Runs a dependency-selector query against the installed tree. Read-only."
 
 [[programs.allow]]
 subcommand = "-v"
+reason = "Prints the npm version. Read-only."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the npm version. Read-only."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Prints npm help. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints npm help. Read-only."
 
 # Script execution (can run arbitrary code from package.json)
 [[programs.ask]]
@@ -138,33 +175,43 @@ reason = "Running start script"
 # Safe local commands
 [[programs.allow]]
 subcommand = "test"
+reason = "Runs the package `test` script from `package.json`. Compiles and executes test code locally."
 
 [[programs.allow]]
 subcommand = "build"
+reason = "Runs the package `build` script from `package.json`. Local build step."
 
 [[programs.allow]]
 subcommand = "dev"
+reason = "Runs the package `dev` script from `package.json`. Starts the local dev workflow."
 
 [[programs.allow]]
 subcommand = "lint"
+reason = "Runs the package `lint` script from `package.json`. Reports style and correctness issues."
 
 [[programs.allow]]
 subcommand = "check"
+reason = "Runs the package `check` script from `package.json`. Local validation step."
 
 [[programs.allow]]
 subcommand = "typecheck"
+reason = "Runs the package `typecheck` script from `package.json`. Reports type errors."
 
 [[programs.allow]]
 subcommand = "format"
+reason = "Runs the package `format` script from `package.json`. Rewrites local source to match style."
 
 [[programs.allow]]
 subcommand = "prettier"
+reason = "Delegates to the Prettier formatter via npm. Formatting is gated by the devtools handler."
 
 [[programs.allow]]
 subcommand = "eslint"
+reason = "Delegates to the ESLint linter via npm. Linting is read-only unless `--fix` is passed."
 
 [[programs.allow]]
 subcommand = "tsc"
+reason = "Delegates to the TypeScript compiler via npm. Reports type errors and emits declared output."
 
 # Risky commands
 [[programs.ask]]
@@ -288,22 +335,28 @@ unknown_action = "ask"
 # Read-only commands
 [[programs.allow]]
 subcommand = "list"
+reason = "Lists installed packages in the dependency tree. Read-only."
 
 [[programs.allow]]
 subcommand = "ls"
+reason = "Lists installed packages in the dependency tree (`pnpm ls` aliases `pnpm list`). Read-only."
 
 [[programs.allow]]
 subcommand = "ll"
+reason = "Lists installed packages in long format with extra detail. Read-only."
 
 [[programs.allow]]
 subcommand = "why"
+reason = "Explains why a package is installed and what depends on it. Read-only."
 
 [[programs.allow]]
 subcommand = "outdated"
+reason = "Reports which installed packages are out of date versus the registry. Read-only; no installs."
 
 [[programs.allow]]
 subcommand = "audit"
 unless_flags = ["--fix"]
+reason = "Reports known vulnerabilities in the dependency tree. Read-only unless `--fix` is present, which is gated separately."
 
 [[programs.ask]]
 subcommand = "audit"
@@ -312,15 +365,19 @@ if_flags_any = ["--fix"]
 
 [[programs.allow]]
 subcommand = "-v"
+reason = "Prints the pnpm version. Read-only."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the pnpm version. Read-only."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Prints pnpm help. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints pnpm help. Read-only."
 
 # Script execution
 [[programs.ask]]
@@ -334,27 +391,35 @@ reason = "Running start script"
 # Safe local commands
 [[programs.allow]]
 subcommand = "test"
+reason = "Runs the package `test` script from `package.json`. Compiles and executes test code locally."
 
 [[programs.allow]]
 subcommand = "build"
+reason = "Runs the package `build` script from `package.json`. Local build step."
 
 [[programs.allow]]
 subcommand = "dev"
+reason = "Runs the package `dev` script from `package.json`. Starts the local dev workflow."
 
 [[programs.allow]]
 subcommand = "lint"
+reason = "Runs the package `lint` script from `package.json`. Reports style and correctness issues."
 
 [[programs.allow]]
 subcommand = "check"
+reason = "Runs the package `check` script from `package.json`. Local validation step."
 
 [[programs.allow]]
 subcommand = "typecheck"
+reason = "Runs the package `typecheck` script from `package.json`. Reports type errors."
 
 [[programs.allow]]
 subcommand = "format"
+reason = "Runs the package `format` script from `package.json`. Rewrites local source to match style."
 
 [[programs.allow]]
 subcommand = "tsc"
+reason = "Delegates to the TypeScript compiler via pnpm. Reports type errors and emits declared output."
 
 # Risky commands
 [[programs.ask]]
@@ -448,22 +513,28 @@ unknown_action = "ask"
 # Read-only commands
 [[programs.allow]]
 subcommand = "list"
+reason = "Lists installed packages in the dependency tree. Read-only."
 
 [[programs.allow]]
 subcommand = "info"
+reason = "Shows registry metadata for a package (versions, dependencies). Read-only."
 
 [[programs.allow]]
 subcommand = "why"
+reason = "Explains why a package is installed and what depends on it. Read-only."
 
 [[programs.allow]]
 subcommand = "outdated"
+reason = "Reports which installed packages are out of date versus the registry. Read-only; no installs."
 
 [[programs.allow]]
 subcommand = "audit"
+reason = "Reports known vulnerabilities in the dependency tree. Read-only."
 
 [[programs.allow]]
 subcommand = "config"
 unless_flags = ["set", "delete"]
+reason = "Shows yarn config values. Read-only unless `set` or `delete` is present, which is gated separately."
 
 [[programs.ask]]
 subcommand = "config"
@@ -472,15 +543,19 @@ if_flags_any = ["set", "delete"]
 
 [[programs.allow]]
 subcommand = "-v"
+reason = "Prints the yarn version. Read-only."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the yarn version. Read-only."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Prints yarn help. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints yarn help. Read-only."
 
 # Script execution
 [[programs.ask]]
@@ -494,24 +569,31 @@ reason = "Running start script"
 # Safe local commands
 [[programs.allow]]
 subcommand = "test"
+reason = "Runs the package `test` script from `package.json`. Compiles and executes test code locally."
 
 [[programs.allow]]
 subcommand = "build"
+reason = "Runs the package `build` script from `package.json`. Local build step."
 
 [[programs.allow]]
 subcommand = "dev"
+reason = "Runs the package `dev` script from `package.json`. Starts the local dev workflow."
 
 [[programs.allow]]
 subcommand = "lint"
+reason = "Runs the package `lint` script from `package.json`. Reports style and correctness issues."
 
 [[programs.allow]]
 subcommand = "check"
+reason = "Runs the package `check` script from `package.json`. Local validation step."
 
 [[programs.allow]]
 subcommand = "typecheck"
+reason = "Runs the package `typecheck` script from `package.json`. Reports type errors."
 
 [[programs.allow]]
 subcommand = "format"
+reason = "Runs the package `format` script from `package.json`. Rewrites local source to match style."
 
 # Risky commands
 [[programs.ask]]
@@ -597,25 +679,32 @@ for_subcommands = ["install"]
 # Read-only commands
 [[programs.allow]]
 subcommand = "list"
+reason = "Lists installed Python packages and their versions. Read-only."
 
 [[programs.allow]]
 subcommand = "show"
+reason = "Shows metadata for an installed package (version, location, dependencies). Read-only."
 
 [[programs.allow]]
 subcommand = "freeze"
+reason = "Prints installed packages in `requirements.txt` format. Read-only."
 
 [[programs.allow]]
 subcommand = "check"
+reason = "Verifies that installed packages have compatible dependencies and reports conflicts. Read-only."
 
 [[programs.allow]]
 subcommand = "search"
+reason = "Searches the package index for matching packages. Read-only."
 
 [[programs.allow]]
 subcommand = "index"
+reason = "Queries package index information such as available versions. Read-only."
 
 [[programs.allow]]
 subcommand = "config"
 unless_flags = ["set", "edit", "unset"]
+reason = "Shows pip config values. Read-only unless `set`, `edit`, or `unset` is present, which is gated separately."
 
 [[programs.ask]]
 subcommand = "config"
@@ -625,6 +714,7 @@ if_flags_any = ["set", "edit", "unset"]
 [[programs.allow]]
 subcommand = "cache"
 unless_flags = ["purge", "remove"]
+reason = "Shows pip cache info and location. Read-only unless `purge` or `remove` is present, which is gated separately."
 
 [[programs.ask]]
 subcommand = "cache"
@@ -633,18 +723,23 @@ if_flags_any = ["purge", "remove"]
 
 [[programs.allow]]
 subcommand = "debug"
+reason = "Prints pip and environment debug information. Read-only."
 
 [[programs.allow]]
 subcommand = "-V"
+reason = "Prints the pip version. Read-only."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the pip version. Read-only."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Prints pip help. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints pip help. Read-only."
 
 # Risky commands
 [[programs.ask]]
@@ -680,24 +775,31 @@ unknown_action = "ask"
 # Read-only commands
 [[programs.allow]]
 subcommand = "version"
+reason = "Prints the uv version. Read-only."
 
 [[programs.allow]]
 subcommand = "help"
+reason = "Prints help for uv or a specific subcommand. Read-only."
 
 [[programs.allow]]
 subcommand = "tree"
+reason = "Displays the project dependency graph as a tree. Read-only."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the uv version. Read-only."
 
 [[programs.allow]]
 subcommand = "-V"
+reason = "Prints the uv version. Read-only."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Prints uv help. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints uv help. Read-only."
 # Script execution
 [[programs.ask]]
 subcommand = "run"
@@ -719,15 +821,19 @@ reason = "Creates a new virtual environment at `<path>` (default `.venv`). Overw
 # uv pip subcommands (safe)
 [[programs.allow]]
 subcommand = "pip list"
+reason = "Lists packages in the active venv via uv's pip-compatible frontend. Read-only."
 
 [[programs.allow]]
 subcommand = "pip show"
+reason = "Shows metadata for a package in the active venv via uv's pip-compatible frontend. Read-only."
 
 [[programs.allow]]
 subcommand = "pip freeze"
+reason = "Prints active-venv packages in `requirements.txt` format via uv's pip-compatible frontend. Read-only."
 
 [[programs.allow]]
 subcommand = "pip check"
+reason = "Verifies active-venv dependencies are compatible via uv's pip-compatible frontend. Read-only."
 
 # Risky commands
 [[programs.ask]]
@@ -788,10 +894,12 @@ unknown_action = "ask"
 # Read-only commands
 [[programs.allow]]
 subcommand = "check"
+reason = "Type-checks the crate without producing a final binary. Writes only build artifacts under `target`."
 
 [[programs.allow]]
 subcommand = "clippy"
 unless_flags = ["--fix"]
+reason = "Runs the Clippy linter over the crate and reports warnings. Read-only unless `--fix` is present, which is gated separately."
 
 [[programs.ask]]
 subcommand = "clippy"
@@ -801,113 +909,145 @@ accept_edits_auto_allow = true
 
 [[programs.allow]]
 subcommand = "doc"
+reason = "Builds the crate's API documentation into `target/doc`. Writes only documentation artifacts."
 
 [[programs.allow]]
 subcommand = "tree"
+reason = "Displays the crate dependency graph as a tree. Read-only."
 
 [[programs.allow]]
 subcommand = "metadata"
+reason = "Prints resolved package and dependency metadata as JSON. Read-only."
 
 [[programs.allow]]
 subcommand = "pkgid"
+reason = "Prints the fully qualified package ID for a dependency. Read-only."
 
 [[programs.allow]]
 subcommand = "verify-project"
+reason = "Checks that the `Cargo.toml` manifest is valid and reports the result. Read-only."
 
 [[programs.allow]]
 subcommand = "search"
+reason = "Searches crates.io for packages matching the given terms. Read-only."
 
 [[programs.allow]]
 subcommand = "info"
+reason = "Shows registry metadata for a crate (versions, features, dependencies). Read-only."
 
 [[programs.allow]]
 subcommand = "locate-project"
+reason = "Prints the path to the nearest `Cargo.toml`. Read-only."
 
 [[programs.allow]]
 subcommand = "read-manifest"
+reason = "Prints the resolved manifest of the current package as JSON. Read-only."
 
 [[programs.allow]]
 subcommand = "version"
+reason = "Prints the cargo version. Read-only."
 
 [[programs.allow]]
 subcommand = "-V"
+reason = "Prints the cargo version. Read-only."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the cargo version. Read-only."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Prints cargo help. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints cargo help. Read-only."
 
 [[programs.allow]]
 subcommand = "help"
+reason = "Prints help for cargo or a specific subcommand. Read-only."
 
 # Safe local commands
 [[programs.allow]]
 subcommand = "build"
+reason = "Compiles the local crate and its dependencies into the `target` directory. Local build; fetches declared dependencies as needed."
 
 [[programs.allow]]
 subcommand = "run"
+reason = "Builds and runs the crate's binary target locally. Executes the just-built local binary."
 
 [[programs.allow]]
 subcommand = "test"
+reason = "Builds and runs the crate's test suite. Compiles and executes test code locally."
 
 [[programs.allow]]
 subcommand = "bench"
+reason = "Builds and runs the crate's benchmarks. Compiles and executes benchmark code locally."
 
 [[programs.allow]]
 subcommand = "fmt"
+reason = "Formats Rust source files in place using `rustfmt`. Rewrites local source to match style."
 
 [[programs.allow]]
 subcommand = "clean"
+reason = "Removes the `target` build-output directory. Deletes only local build artifacts; next build recompiles."
 
 # Extended cargo subcommands (common plugins)
 # Read-only analysis tools
 [[programs.allow]]
 subcommand = "nextest"
+reason = "Builds and runs the test suite with the nextest runner. Compiles and executes test code locally."
 
 [[programs.allow]]
 subcommand = "audit"
+reason = "Scans `Cargo.lock` for dependencies with known security advisories. Read-only."
 
 [[programs.allow]]
 subcommand = "deny"
+reason = "Checks dependencies against license, advisory, and ban policies. Read-only."
 
 [[programs.allow]]
 subcommand = "expand"
+reason = "Prints the crate source after macro expansion. Read-only."
 
 [[programs.allow]]
 subcommand = "semver-checks"
+reason = "Compares the crate's public API against a baseline for semver violations. Read-only."
 
 [[programs.allow]]
 subcommand = "llvm-cov"
+reason = "Runs the test suite and reports code coverage. Compiles and executes test code locally."
 
 [[programs.allow]]
 subcommand = "outdated"
+reason = "Reports dependencies that have newer versions available. Read-only; no updates."
 
 [[programs.allow]]
 subcommand = "bloat"
+reason = "Analyzes the built binary and reports what takes up space. Read-only."
 
 [[programs.allow]]
 subcommand = "machete"
+reason = "Scans for declared but unused dependencies and reports them. Read-only."
 
 [[programs.allow]]
 subcommand = "depgraph"
+reason = "Generates a dependency-graph description for the crate. Read-only."
 
 # Tools that modify files
 [[programs.ask]]
 subcommand = "insta"
-reason = "Snapshot testing"
+reason = "Reviews or applies insta snapshot changes. `accept` overwrites `.snap` files with current output; `reject` discards pending snapshots."
 if_flags_any = ["review", "accept", "reject"]
 
 [[programs.allow]]
 subcommand = "insta"
 unless_flags = ["review", "accept", "reject"]
+reason = "Runs insta snapshot tests and reports mismatches. Read-only unless `review`, `accept`, or `reject` is present, which is gated separately."
 
 [[programs.ask]]
 subcommand = "watch"
-reason = "Running commands on file changes"
+reason = "Re-runs a given cargo command on every file change. Executes that command repeatedly; runs until interrupted."
 
 [[programs.ask]]
 subcommand = "mutants"
@@ -916,15 +1056,15 @@ reason = "Mutation testing rewrites source files to introduce synthetic bugs and
 # Risky commands
 [[programs.ask]]
 subcommand = "install"
-reason = "Installing"
+reason = "Installs a binary crate into `~/.cargo/bin`. Compiles from source and puts the binary on PATH for the current user."
 
 [[programs.ask]]
 subcommand = "uninstall"
-reason = "Uninstalling"
+reason = "Removes a previously `cargo install`ed binary from `~/.cargo/bin`."
 
 [[programs.ask]]
 subcommand = "new"
-reason = "Creating project"
+reason = "Scaffolds a new Cargo package in a new directory, writing `Cargo.toml` and `src/`."
 
 [[programs.ask]]
 subcommand = "init"
@@ -940,7 +1080,7 @@ reason = "Removing dependency"
 
 [[programs.ask]]
 subcommand = "update"
-reason = "Updating dependencies"
+reason = "Updates dependencies in `Cargo.lock` to newer compatible versions. Changes resolved versions; no manifest edits."
 
 [[programs.ask]]
 subcommand = "publish"
@@ -948,15 +1088,15 @@ reason = "Publishing crate"
 
 [[programs.ask]]
 subcommand = "yank"
-reason = "Yanking version"
+reason = "Yanks a published crate version on crates.io so new projects can't select it. Existing lockfiles keep resolving it; reversible with `--undo`."
 
 [[programs.ask]]
 subcommand = "fix"
-reason = "Auto-fixing code"
+reason = "Applies compiler-suggested fixes to source files in place. Rewrites code; run on a clean tree so changes stay reviewable."
 
 [[programs.ask]]
 subcommand = "generate-lockfile"
-reason = "Generating lockfile"
+reason = "Creates or regenerates `Cargo.lock` by resolving dependencies. May change pinned versions."
 
 # =============================================================================
 # RUSTC (read-only compiler queries; compilation requires approval)
@@ -967,10 +1107,19 @@ name = "rustc"
 unknown_action = "ask"
 
 [[programs.allow]]
-if_flags_any = ["--version", "-V", "--print", "--explain", "--help", "-h", "-vV"]
+if_flags_any = [
+  "--version",
+  "-V",
+  "--print",
+  "--explain",
+  "--help",
+  "-h",
+  "-vV",
+]
+reason = "Queries the Rust compiler for version, target, or diagnostic info without compiling. Read-only."
 
 [[programs.ask]]
-reason = "Compiling"
+reason = "Compiles Rust source directly with rustc. Writes an output binary or library to the cwd or `-o` path."
 
 # =============================================================================
 # RUSTUP (toolchain manager)
@@ -983,39 +1132,51 @@ unknown_action = "ask"
 # Read-only commands
 [[programs.allow]]
 subcommand = "show"
+reason = "Shows the active toolchain and installed targets and components. Read-only."
 
 [[programs.allow]]
 subcommand = "toolchain list"
+reason = "Lists installed Rust toolchains. Read-only."
 
 [[programs.allow]]
 subcommand = "target list"
+reason = "Lists available and installed compilation targets. Read-only."
 
 [[programs.allow]]
 subcommand = "component list"
+reason = "Lists available and installed toolchain components. Read-only."
 
 [[programs.allow]]
 subcommand = "run"
+reason = "Runs a command under a specific toolchain without changing the default. Executes the named command with that toolchain on PATH."
 
 [[programs.allow]]
 subcommand = "which"
+reason = "Prints the resolved path to a binary for the active toolchain. Read-only."
 
 [[programs.allow]]
 subcommand = "doc"
+reason = "Opens or locates the offline Rust documentation for the active toolchain. Read-only."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the rustup version. Read-only."
 
 [[programs.allow]]
 subcommand = "-V"
+reason = "Prints the rustup version. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints rustup help. Read-only."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Prints rustup help. Read-only."
 
 [[programs.allow]]
 subcommand = "help"
+reason = "Prints help for rustup or a specific subcommand. Read-only."
 
 # Write commands
 [[programs.ask]]
@@ -1073,13 +1234,16 @@ unknown_action = "ask"
 # Read-only commands
 [[programs.allow]]
 subcommand = "list"
+reason = "Lists the packages or modules matching the given import paths. Read-only."
 
 [[programs.allow]]
 subcommand = "doc"
+reason = "Prints documentation for a package, symbol, or method. Read-only."
 
 [[programs.allow]]
 subcommand = "env"
 unless_flags = ["-w", "-u"]
+reason = "Prints Go environment configuration. Read-only unless `-w` or `-u` is present, which is gated separately."
 
 [[programs.ask]]
 subcommand = "env"
@@ -1088,25 +1252,32 @@ if_flags_any = ["-w", "-u"]
 
 [[programs.allow]]
 subcommand = "version"
+reason = "Prints the Go version. Read-only."
 
 [[programs.allow]]
 subcommand = "vet"
+reason = "Runs Go static analysis and reports suspicious constructs. Read-only."
 
 [[programs.allow]]
 subcommand = "help"
+reason = "Prints help for the go command or a topic. Read-only."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Prints go command help. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints go command help. Read-only."
 
 # Safe local commands (no side effects)
 [[programs.allow]]
 subcommand = "build"
+reason = "Compiles the packages in the current module to verify they build. Local build; fetches declared dependencies as needed."
 
 [[programs.allow]]
 subcommand = "test"
+reason = "Builds and runs the module's test suite. Compiles and executes test code locally."
 
 # go fmt modifies files - needs approval
 [[programs.ask]]
@@ -1121,16 +1292,20 @@ reason = "Executing Go code"
 
 [[programs.allow]]
 subcommand = "clean"
+reason = "Removes object files and cached build artifacts for the current module. Deletes only generated artifacts."
 
 # go mod safe subcommands
 [[programs.allow]]
 subcommand = "mod graph"
+reason = "Prints the module requirement graph. Read-only."
 
 [[programs.allow]]
 subcommand = "mod verify"
+reason = "Checks that downloaded module dependencies match `go.sum` and reports the result. Read-only."
 
 [[programs.allow]]
 subcommand = "mod why"
+reason = "Explains why a package or module is needed by the build. Read-only."
 
 [[programs.ask]]
 subcommand = "mod tidy"
@@ -1147,28 +1322,28 @@ reason = "Installing"
 
 [[programs.ask]]
 subcommand = "get"
-reason = "Getting packages"
+reason = "Adds or updates module dependencies in `go.mod`/`go.sum` and downloads them. Changes the dependency set."
 
 [[programs.ask]]
 subcommand = "generate"
-reason = "Generating code"
+reason = "Runs `//go:generate` directives found in source. Executes arbitrary commands those directives specify."
 
 [[programs.ask]]
 subcommand = "fix"
-reason = "Fixing code"
+reason = "Rewrites packages to use newer Go APIs in place. Modifies source files."
 
 [[programs.ask]]
 subcommand = "work"
-reason = "Workspace operation"
+reason = "Manages the Go workspace file `go.work` (init, use, edit, sync). Changes which modules resolve locally."
 
 # go mod risky subcommands (catch-all for unknown go mod commands)
 [[programs.ask]]
 subcommand = "mod init"
-reason = "go mod: init"
+reason = "Initializes a new module by writing `go.mod` in the current directory."
 
 [[programs.ask]]
 subcommand = "mod edit"
-reason = "go mod: edit"
+reason = "Edits `go.mod` programmatically (require, replace, drop, go directive). Rewrites the manifest."
 
 # =============================================================================
 # BUN
@@ -1181,18 +1356,23 @@ unknown_action = "ask"
 # Read-only commands
 [[programs.allow]]
 subcommand = "pm"
+reason = "Inspects bun's package manager state (ls, cache dir, bin path, hash). Read-only."
 
 [[programs.allow]]
 subcommand = "-v"
+reason = "Prints the bun version. Read-only."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the bun version. Read-only."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Prints bun help. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints bun help. Read-only."
 
 # Script execution
 [[programs.ask]]
@@ -1206,24 +1386,31 @@ reason = "Running start script"
 # Safe local commands
 [[programs.allow]]
 subcommand = "test"
+reason = "Runs the project's test suite with Bun's test runner. Compiles and executes test code locally."
 
 [[programs.allow]]
 subcommand = "build"
+reason = "Bundles the project's entry points into output artifacts. Local build step."
 
 [[programs.allow]]
 subcommand = "dev"
+reason = "Runs the package `dev` script from `package.json`. Starts the local dev workflow."
 
 [[programs.allow]]
 subcommand = "lint"
+reason = "Runs the package `lint` script from `package.json`. Reports style and correctness issues."
 
 [[programs.allow]]
 subcommand = "check"
+reason = "Runs the package `check` script from `package.json`. Local validation step."
 
 [[programs.allow]]
 subcommand = "typecheck"
+reason = "Runs the package `typecheck` script from `package.json`. Reports type errors."
 
 [[programs.allow]]
 subcommand = "format"
+reason = "Runs the package `format` script from `package.json`. Rewrites local source to match style."
 
 # Risky commands
 [[programs.ask]]
@@ -1286,49 +1473,76 @@ unknown_action = "ask"
 # Read-only commands
 [[programs.allow]]
 subcommand = "info"
+reason = "Prints conda installation and environment configuration details. Read-only."
 
 [[programs.allow]]
 subcommand = "list"
+reason = "Lists packages installed in the active or named environment. Read-only."
 
 [[programs.allow]]
 subcommand = "search"
+reason = "Searches configured channels for packages matching the given terms. Read-only."
 
 [[programs.allow]]
 subcommand = "config"
-unless_flags = ["--add", "--remove", "--set", "--append", "--prepend", "--remove-key"]
+unless_flags = [
+  "--add",
+  "--remove",
+  "--set",
+  "--append",
+  "--prepend",
+  "--remove-key",
+]
+reason = "Shows conda config values. Read-only unless a write flag (`--add`, `--remove`, `--set`, `--append`, `--prepend`, `--remove-key`) is present, which is gated separately."
 
 [[programs.ask]]
 subcommand = "config"
 reason = "Modifying conda config"
-if_flags_any = ["--add", "--remove", "--set", "--append", "--prepend", "--remove-key"]
+if_flags_any = [
+  "--add",
+  "--remove",
+  "--set",
+  "--append",
+  "--prepend",
+  "--remove-key",
+]
 
 [[programs.allow]]
 subcommand = "package"
+reason = "Inspects or queries package metadata (low-level package operations in read mode). Read-only."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the conda version. Read-only."
 
 [[programs.allow]]
 subcommand = "-V"
+reason = "Prints the conda version. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints conda help. Read-only."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Prints conda help. Read-only."
 
 [[programs.allow]]
 subcommand = "doctor"
+reason = "Runs environment health checks and reports integrity findings. Read-only."
 
 [[programs.allow]]
 subcommand = "notices"
+reason = "Displays channel notices and announcements. Read-only."
 
 [[programs.allow]]
 subcommand = "compare"
+reason = "Compares the active environment against an environment spec file and reports differences. Read-only."
 
 # env list is read-only
 [[programs.allow]]
 subcommand = "env list"
+reason = "Lists all conda environments on the machine. Read-only."
 
 # Risky commands
 [[programs.ask]]
@@ -1399,28 +1613,36 @@ unknown_action = "ask"
 # Read-only commands
 [[programs.allow]]
 subcommand = "show"
+reason = "Lists installed packages or shows details for one package. Read-only."
 
 [[programs.allow]]
 subcommand = "search"
+reason = "Searches configured repositories for packages matching the given terms. Read-only."
 
 [[programs.allow]]
 subcommand = "check"
+reason = "Validates the `pyproject.toml` and lockfile consistency and reports problems. Read-only."
 
 [[programs.allow]]
 subcommand = "config"
 unless_flags = ["--unset"]
+reason = "Shows poetry config values. Read-only unless `--unset` is present, which removes a key."
 
 [[programs.allow]]
 subcommand = "config list"
+reason = "Lists all poetry config values. Read-only."
 
 [[programs.allow]]
 subcommand = "env info"
+reason = "Shows information about the active project virtualenv. Read-only."
 
 [[programs.allow]]
 subcommand = "env list"
+reason = "Lists the virtualenvs associated with the project. Read-only."
 
 [[programs.allow]]
 subcommand = "env activate"
+reason = "Prints the command to activate the project virtualenv. Read-only; does not modify the shell itself."
 
 [[programs.ask]]
 subcommand = "env use"
@@ -1432,28 +1654,36 @@ reason = "Removing Python environment"
 
 [[programs.allow]]
 subcommand = "version"
+reason = "Prints the project version or the poetry version. Read-only."
 
 [[programs.allow]]
 subcommand = "about"
+reason = "Prints information about poetry itself. Read-only."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the poetry version. Read-only."
 
 [[programs.allow]]
 subcommand = "-V"
+reason = "Prints the poetry version. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints poetry help. Read-only."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Prints poetry help. Read-only."
 
 # Safe local commands
 [[programs.allow]]
 subcommand = "build"
+reason = "Builds source and wheel distributions into `dist/`. Writes artifacts; does not publish."
 
 [[programs.allow]]
 subcommand = "lock"
+reason = "Resolves dependencies and writes `poetry.lock`. Network access; pinned versions may change."
 
 # Commands that execute arbitrary code
 [[programs.ask]]
@@ -1526,15 +1756,19 @@ unknown_action = "ask"
 # Read-only commands
 [[programs.allow]]
 subcommand = "list"
+reason = "Lists applications installed by pipx and their entrypoints. Read-only."
 
 [[programs.allow]]
 subcommand = "environment"
+reason = "Prints pipx environment paths and configuration. Read-only."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the pipx version. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints pipx help. Read-only."
 
 # Risky commands
 [[programs.ask]]
@@ -1594,76 +1828,100 @@ unknown_action = "ask"
 # Read-only commands
 [[programs.allow]]
 subcommand = "ls"
+reason = "Lists installed tool versions managed by mise. Read-only."
 
 [[programs.allow]]
 subcommand = "list"
+reason = "Lists installed tool versions managed by mise (`mise list` aliases `mise ls`). Read-only."
 
 [[programs.allow]]
 subcommand = "ls-remote"
+reason = "Lists versions available to install for a tool from upstream. Read-only."
 
 [[programs.allow]]
 subcommand = "current"
+reason = "Prints the tool versions active in the current directory. Read-only."
 
 [[programs.allow]]
 subcommand = "where"
+reason = "Prints the install path of a given tool version. Read-only."
 
 [[programs.allow]]
 subcommand = "which"
+reason = "Prints the resolved path to a tool binary. Read-only."
 
 [[programs.allow]]
 subcommand = "env"
+reason = "Prints the environment variables mise would export for the current directory. Read-only."
 
 [[programs.allow]]
 subcommand = "version"
+reason = "Prints the mise version. Read-only."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the mise version. Read-only."
 
 [[programs.allow]]
 subcommand = "-V"
+reason = "Prints the mise version. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints mise help. Read-only."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Prints mise help. Read-only."
 
 [[programs.allow]]
 subcommand = "help"
+reason = "Prints help for mise or a specific subcommand. Read-only."
 
 [[programs.allow]]
 subcommand = "doctor"
+reason = "Runs mise health checks and reports configuration problems. Read-only."
 
 [[programs.allow]]
 subcommand = "plugins"
+reason = "Lists installed mise plugins. Read-only unless an install/remove/update subcommand is given, which is gated separately."
 
 [[programs.allow]]
 subcommand = "settings"
+reason = "Shows mise settings values. Read-only in list form."
 
 [[programs.allow]]
 subcommand = "alias"
+reason = "Shows tool-version aliases configured in mise. Read-only in list form."
 
 [[programs.allow]]
 subcommand = "bin-paths"
+reason = "Prints the bin directories mise would add to PATH. Read-only."
 
 [[programs.allow]]
 subcommand = "completion"
+reason = "Prints shell completion scripts for mise. Read-only; output is not installed automatically."
 
 [[programs.allow]]
 subcommand = "direnv"
+reason = "Prints direnv integration helpers for mise. Read-only; output is not installed automatically."
 
 [[programs.allow]]
 subcommand = "outdated"
+reason = "Reports installed tool versions that have newer releases available. Read-only; no updates."
 
 # Safe local commands
 [[programs.allow]]
 subcommand = "reshim"
+reason = "Regenerates mise shim scripts for installed tools. Rewrites only mise-managed shim files."
 
 [[programs.allow]]
 subcommand = "trust"
+reason = "Marks a project's mise config file as trusted so its tool versions and env load. Records trust for the local config path."
 
 [[programs.allow]]
 subcommand = "exec"
+reason = "Runs a command with mise-managed tool versions on PATH. Devtool delegation is handled by the mise handler."
 
 # mise run/tasks handled separately in mise.rs for task expansion
 # but register them here for unknown tasks fallback
@@ -1758,6 +2016,7 @@ reason = "Symlinks an externally-installed tool version into mise's data dir so 
 
 [[programs.allow]]
 subcommand = "registry"
+reason = "Lists tools available in the mise registry. Read-only."
 
 # Note: Custom handler for exec subcommand
 [[custom_handlers]]

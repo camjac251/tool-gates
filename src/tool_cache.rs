@@ -75,7 +75,13 @@ pub struct ToolCache {
 
 impl ToolCache {
     /// Check if a specific tool is available
+    #[allow(unreachable_code, unused_variables)]
     pub fn is_available(&self, tool: &str) -> bool {
+        #[cfg(target_arch = "wasm32")]
+        {
+            return true;
+        }
+
         // Handle aliases (some tools have different names on different distros).
         // Each branch also consults the in-process re-probe map so that a tool
         // installed after the on-disk cache was written can flip to true
@@ -180,13 +186,47 @@ fn save_cache(cache: &ToolCache) -> Result<(), std::io::Error> {
     Ok(())
 }
 
-/// Check if a tool is available using `which`
+/// Check if a tool is available on PATH.
 fn check_tool_available(tool: &str) -> bool {
-    Command::new("which")
-        .arg(tool)
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+    #[cfg(target_os = "windows")]
+    {
+        if Command::new("where")
+            .arg(tool)
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+        {
+            return true;
+        }
+        if Command::new("which")
+            .arg(tool)
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+        {
+            return true;
+        }
+        if !tool.ends_with(".exe") {
+            let tool_exe = format!("{}.exe", tool);
+            if Command::new("where")
+                .arg(&tool_exe)
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false)
+            {
+                return true;
+            }
+        }
+        false
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Command::new("which")
+            .arg(tool)
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }
 }
 
 /// Detect all modern tools and create a new cache

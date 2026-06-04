@@ -16,21 +16,54 @@ pre-commit:
       run: cargo fmt && git add -u '*.rs'
       glob: "**/*.rs"
       priority: 2
+    # Regenerate gate markdown docs when rules are modified.
+    # Stage them immediately so they are captured in the commit.
+    rules-export:
+      run: cargo run -- rules export --format md && git add docs/src/gates/ docs/src/security-floor.md docs/src/hints.md
+      glob: "rules/**/*.toml"
+      stage_fixed: true
+      priority: 3
     # Then check with clippy
     clippy:
       run: cargo clippy --all-targets -- -D warnings
       glob: "{**/*.rs,rules/**/*.toml}"
-      priority: 3
+      priority: 4
+    # Non-Rust formatters/linters. stage_fixed re-stages files the tool rewrote.
+    # Scope/exclusions live in biome.jsonc and .prettierignore.
+    biome:
+      run: biome check --write --no-errors-on-unmatched {staged_files}
+      glob: "**/*.{js,css,json,jsonc}"
+      stage_fixed: true
+      priority: 5
+    prettier:
+      run: prettier --write --ignore-unknown {staged_files}
+      glob: "**/*.{md,yml,yaml}"
+      # prettier errors on explicitly-passed symlinks; CLAUDE.md/GEMINI.md point at
+      # AGENTS.md. Other exclusions (.claude, CHANGELOG, generated) live in .prettierignore.
+      exclude:
+        - "AGENTS.md"
+        - "CLAUDE.md"
+        - "GEMINI.md"
+      stage_fixed: true
+      priority: 6
+    taplo:
+      run: taplo fmt {staged_files}
+      glob: "**/*.toml"
+      stage_fixed: true
+      priority: 7
 
 pre-push:
   parallel: false
   commands:
     build:
       run: cargo build --release
+      glob: "{**/*.rs,rules/**/*.toml,Cargo.toml,Cargo.lock,build.rs}"
       priority: 1
     clippy:
       run: cargo clippy --all-targets -- -D warnings
+      glob: "{**/*.rs,rules/**/*.toml,Cargo.toml,Cargo.lock,build.rs}"
       priority: 2
     test:
       run: cargo test
+      glob: "{**/*.rs,rules/**/*.toml,Cargo.toml,Cargo.lock,build.rs}"
       priority: 3

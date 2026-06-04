@@ -25,6 +25,241 @@ pub struct ModernHint {
     pub hint: String,
 }
 
+/// One catalog entry describing a legacy -> modern tool pairing, for the docs
+/// generator and the "Modern CLI hints" reference page.
+///
+/// This is a documentation-facing summary of the runtime hint families in this
+/// module. It is intentionally decoupled from [`get_modern_hint`] (which parses
+/// args, checks config, and gates on tool availability): the catalog is a flat
+/// static list with no I/O, so consuming it cannot change runtime behavior.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HintCatalogEntry {
+    /// The legacy invocation as shown to a reader, e.g. `"cat"`, `"grep -r"`,
+    /// `"find . -name"`. May include a representative flag for context.
+    pub legacy: &'static str,
+    /// The modern replacement command, e.g. `"bat"`, `"rg"`, `"fd"`.
+    pub modern: &'static str,
+    /// One short clause explaining why the modern tool is preferred.
+    pub why: &'static str,
+    /// When `Some(program)`, this pairing is an unconditional substitute keyed
+    /// on the bare program name, so the docs generator can surface it on that
+    /// program's allow row. `None` marks flag- or subcommand-conditional
+    /// pairings (e.g. `grep` -> rg/sg by pattern shape) that the generator
+    /// leaves off allow rows.
+    pub program_level: Option<&'static str>,
+}
+
+/// The full modern-CLI hint catalog, in display order for the reference page.
+///
+/// Ordered by category (file viewing, search/find, text, listing/disk, process,
+/// network, archives, language tooling, DNS) to mirror how the families appear
+/// in this module. Stable order keeps the generated reference page and any
+/// allow-row surfacing byte-identical on re-run.
+///
+/// Anti-pattern self-hints (`bat` bad flags, `rg` on code, `git` interactive
+/// staging) are not legacy->modern pairings and are deliberately omitted.
+pub fn hint_catalog() -> &'static [HintCatalogEntry] {
+    const C: &[HintCatalogEntry] = &[
+        // File viewing
+        HintCatalogEntry {
+            legacy: "cat",
+            modern: "bat",
+            why: "Line-numbered, syntax-highlighted output; precise follow-up edits.",
+            program_level: Some("cat"),
+        },
+        HintCatalogEntry {
+            legacy: "less",
+            modern: "bat",
+            why: "Paged, line-numbered viewing without a separate pager.",
+            program_level: Some("less"),
+        },
+        HintCatalogEntry {
+            legacy: "more",
+            modern: "bat",
+            why: "Paged, line-numbered viewing without a separate pager.",
+            program_level: Some("more"),
+        },
+        HintCatalogEntry {
+            legacy: "head -n N <file>",
+            modern: "bat -r :N",
+            why: "Arbitrary line ranges, not just first-N, with line numbers.",
+            program_level: None,
+        },
+        HintCatalogEntry {
+            legacy: "tail -n N <file>",
+            modern: "bat -r -N:",
+            why: "Arbitrary line ranges, not just last-N, with line numbers.",
+            program_level: None,
+        },
+        // Search & find
+        HintCatalogEntry {
+            legacy: "grep",
+            modern: "rg",
+            why: "Recursive by default, respects .gitignore, faster on large trees.",
+            program_level: None,
+        },
+        HintCatalogEntry {
+            legacy: "ag / ack",
+            modern: "rg",
+            why: "Faster with a similar interface.",
+            program_level: Some("ag"),
+        },
+        HintCatalogEntry {
+            legacy: "find",
+            modern: "fd",
+            why: "Shorter syntax, .gitignore-aware, faster.",
+            program_level: Some("find"),
+        },
+        // Text processing
+        HintCatalogEntry {
+            legacy: "sed s/.../.../",
+            modern: "sd",
+            why: "Plain find/replace, no s/.../.../g escaping.",
+            program_level: None,
+        },
+        HintCatalogEntry {
+            legacy: "awk '{print $N}'",
+            modern: "choose",
+            why: "Field selection without awk syntax.",
+            program_level: None,
+        },
+        HintCatalogEntry {
+            legacy: "wc -l <file>",
+            modern: "rg -c '.'",
+            why: "Counts lines without a separate utility (piped wc -l is fine).",
+            program_level: None,
+        },
+        // File listing & disk
+        HintCatalogEntry {
+            legacy: "ls -la",
+            modern: "eza -la",
+            why: "Git status integration and clearer formatting.",
+            program_level: None,
+        },
+        HintCatalogEntry {
+            legacy: "du",
+            modern: "dust",
+            why: "Visual disk-usage tree (du -sh summaries are fine).",
+            program_level: None,
+        },
+        HintCatalogEntry {
+            legacy: "tree",
+            modern: "eza -T",
+            why: "Git status integration and clearer formatting.",
+            program_level: Some("tree"),
+        },
+        // Process inspection
+        HintCatalogEntry {
+            legacy: "ps aux",
+            modern: "procs",
+            why: "Readable columns and a tree view.",
+            program_level: None,
+        },
+        // Network
+        HintCatalogEntry {
+            legacy: "curl <github-url>",
+            modern: "gh api",
+            why: "Preserves auth, rate limits, and private-repo access.",
+            program_level: None,
+        },
+        HintCatalogEntry {
+            legacy: "wget <github-url>",
+            modern: "gh api",
+            why: "Preserves auth, rate limits, and private-repo access.",
+            program_level: None,
+        },
+        // Diff & hex
+        HintCatalogEntry {
+            legacy: "diff <a> <b>",
+            modern: "difft",
+            why: "Syntax-aware diffs (git diff for unified patches).",
+            program_level: None,
+        },
+        HintCatalogEntry {
+            legacy: "xxd / hexdump",
+            modern: "hexyl",
+            why: "Colored, readable hex output.",
+            program_level: Some("xxd"),
+        },
+        // Code stats
+        HintCatalogEntry {
+            legacy: "cloc",
+            modern: "tokei",
+            why: "Faster with clearer formatting.",
+            program_level: Some("cloc"),
+        },
+        // Documentation
+        HintCatalogEntry {
+            legacy: "man",
+            modern: "tldr",
+            why: "Practical examples, concise output.",
+            program_level: Some("man"),
+        },
+        // Python tooling
+        HintCatalogEntry {
+            legacy: "pip install",
+            modern: "uv pip",
+            why: "Faster, lockfile-aware, cache-shared.",
+            program_level: Some("pip"),
+        },
+        HintCatalogEntry {
+            legacy: "python -m venv",
+            modern: "uv venv",
+            why: "Faster; picks up the project's Python pin.",
+            program_level: None,
+        },
+        // DNS
+        HintCatalogEntry {
+            legacy: "dig / nslookup",
+            modern: "doggo",
+            why: "Colored output, JSON with --json, modern defaults.",
+            program_level: Some("dig"),
+        },
+        // Archives
+        HintCatalogEntry {
+            legacy: "unzip",
+            modern: "ouch decompress",
+            why: "Format-agnostic (zip/tar/gz/xz/7z), auto-detects.",
+            program_level: Some("unzip"),
+        },
+        HintCatalogEntry {
+            legacy: "zip",
+            modern: "ouch compress",
+            why: "Format inferred from the output extension.",
+            program_level: None,
+        },
+        HintCatalogEntry {
+            legacy: "tar -x",
+            modern: "ouch decompress",
+            why: "Format-agnostic, auto-detects compression (create with tar -c).",
+            program_level: None,
+        },
+    ];
+    C
+}
+
+/// Look up the unconditional program-level hint for a bare program name, if one
+/// exists. Returns `None` for programs whose modern alternative is flag- or
+/// subcommand-conditional (those are not surfaced on allow rows).
+///
+/// Aliases that share a single catalog entry (`pip3` -> the `pip` entry,
+/// `nslookup` -> the `dig` entry, `hexdump` -> the `xxd` entry, `ack` -> the
+/// `ag` entry) resolve to the same row via the alias map below.
+pub fn program_hint(program: &str) -> Option<&'static HintCatalogEntry> {
+    // Aliases collapse to the catalog's canonical program key so a single entry
+    // covers the family.
+    let canonical = match program {
+        "pip3" => "pip",
+        "nslookup" => "dig",
+        "hexdump" => "xxd",
+        "ack" => "ag",
+        other => other,
+    };
+    hint_catalog()
+        .iter()
+        .find(|e| e.program_level == Some(canonical))
+}
+
 pub fn get_modern_hint(cmd: &CommandInfo) -> Option<ModernHint> {
     let config = crate::config::get();
 
@@ -109,9 +344,7 @@ fn hint_cat(cmd: &CommandInfo) -> Option<ModernHint> {
     Some(ModernHint {
         legacy_command: "cat",
         modern_command: "bat",
-        hint: format!(
-            "Use `bat {file}` instead of `cat`. Line-numbered output makes follow-up `Edit` and `Read` calls target specific lines precisely."
-        ),
+        hint: format!("Use Read to view `{file}`. `bat {file}` only if piping/redirecting."),
     })
 }
 
@@ -132,9 +365,17 @@ fn hint_head(cmd: &CommandInfo) -> Option<ModernHint> {
         }
     }
 
-    // No file argument means pipe usage (command | head) - no hint needed
+    // Pipe usage (command | head): the head/tail deny path hard-blocks only
+    // build/gh producers; low-harm caps pass through. Ride a self-correct hint
+    // so the next call caps at the source instead of truncating the stream.
     if file.is_empty() {
-        return None;
+        return Some(ModernHint {
+            legacy_command: "head",
+            modern_command: "rg",
+            hint: "Cap at the source, don't truncate the pipe: `rg -m N`, `--limit N`, \
+                   `git log -n N`, or `sort -rn | head -N` for top-N. Use Read for files."
+                .to_string(),
+        });
     }
 
     let bat_range = format!(":{}", lines);
@@ -142,8 +383,7 @@ fn hint_head(cmd: &CommandInfo) -> Option<ModernHint> {
         legacy_command: "head",
         modern_command: "bat",
         hint: format!(
-            "Use `bat -r {} {}` instead of `head`. bat supports arbitrary ranges (`-r 30:50` for middle slices, not just first-N) and prints line numbers for precise follow-up edits.",
-            bat_range, file,
+            "Use Read to view `{file}`. `bat -r {bat_range} {file}` only if piping the slice."
         ),
     })
 }
@@ -169,14 +409,22 @@ fn hint_tail(cmd: &CommandInfo) -> Option<ModernHint> {
         }
     }
 
-    // tail -f is fine - no hint needed (bat doesn't support following)
+    // tail -f is fine - no hint needed (it's the streaming/Monitor case)
     if follow {
         return None;
     }
 
-    // No file argument means pipe usage (command | tail) - no hint needed
+    // Pipe usage (command | tail): mirror hint_head. Low-harm caps pass through
+    // the deny path; ride a self-correct hint toward a source-side cap.
     if file.is_empty() {
-        return None;
+        return Some(ModernHint {
+            legacy_command: "tail",
+            modern_command: "rg",
+            hint: "Cap at the source, don't truncate the pipe: `rg -m N`, `--limit N`, \
+                   `git log -n N`, or `sort -rn | tail -N` for bottom-N. Use Read for files; \
+                   live logs via `tail -f` through the Monitor tool."
+                .to_string(),
+        });
     }
 
     let bat_range = format!("-{}:", lines);
@@ -184,8 +432,7 @@ fn hint_tail(cmd: &CommandInfo) -> Option<ModernHint> {
         legacy_command: "tail",
         modern_command: "bat",
         hint: format!(
-            "Use `bat -r {} {}` instead of `tail`. bat supports arbitrary ranges (`-r 30:50` for middle slices, not just last-N) and prints line numbers for precise follow-up edits.",
-            bat_range, file,
+            "Use Read to view `{file}`. `bat -r {bat_range} {file}` only if piping the slice."
         ),
     })
 }
@@ -1145,10 +1392,10 @@ pub fn format_hints(hints: &[ModernHint]) -> String {
 
 /// Compute and format modern-CLI hints for a raw shell command.
 ///
-/// Used by the Codex PostToolUse path where hints are deferred (Codex's
-/// PreToolUse parser rejects `additionalContext`, so they ride on Post
-/// instead). Independent of gate-decision logic so it can run on any
-/// successful command without rerunning the full router.
+/// Used by the Codex PostToolUse path where hints are deferred because
+/// non-deny PreToolUse decisions serialize to empty stdout. Independent of
+/// gate-decision logic so it can run on any successful command without rerunning
+/// the full router.
 pub fn compute_hints_for_command(command: &str, session_id: &str) -> String {
     if command.is_empty() {
         return String::new();
@@ -1185,7 +1432,8 @@ mod tests {
         assert!(hint.is_some());
         let hint = hint.unwrap();
         assert_eq!(hint.modern_command, "bat");
-        assert!(hint.hint.contains("Line-numbered"));
+        // Read-first: the Read tool is preferred over a Bash `bat` slice.
+        assert!(hint.hint.contains("Read"));
     }
 
     #[test]
@@ -1205,17 +1453,19 @@ mod tests {
     }
 
     #[test]
-    fn test_head_no_file_no_hint() {
-        // head without a file is pipe usage - no hint
-        let hint = hint_head(&cmd("head", &["-n", "10"]));
-        assert!(hint.is_none());
+    fn test_head_pipe_self_correct_hint() {
+        // head on a pipe (no file) rides a self-correct hint toward a
+        // source-side cap instead of staying silent.
+        let hint = hint_head(&cmd("head", &["-n", "10"])).expect("pipe head should hint");
+        assert_eq!(hint.modern_command, "rg");
+        assert!(hint.hint.contains("rg -m N") && hint.hint.contains("Read"));
     }
 
     #[test]
-    fn test_tail_no_file_no_hint() {
-        // tail without a file is pipe usage - no hint
-        let hint = hint_tail(&cmd("tail", &["-n", "10"]));
-        assert!(hint.is_none());
+    fn test_tail_pipe_self_correct_hint() {
+        let hint = hint_tail(&cmd("tail", &["-n", "10"])).expect("pipe tail should hint");
+        assert_eq!(hint.modern_command, "rg");
+        assert!(hint.hint.contains("rg -m N") && hint.hint.contains("Read"));
     }
 
     #[test]

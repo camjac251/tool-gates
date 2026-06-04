@@ -18,6 +18,17 @@
 name = "network"
 description = "Network command permission gate"
 priority = 35
+lede = "Outbound network operations. GET requests and head checks pass through; everything mutating, downloading, or interactive pauses for approval. The reverse-shell variant of netcat (<code>nc -e</code>) is the one hard block this gate owns."
+note = """<b>Pipe-to-shell lives in the pre-AST pass, not here.</b> A pattern like <code>curl https://… | bash</code> is denied before any program-level gate runs. The network gate only sees the <code>curl</code> in isolation; the shell pipe is caught upstream by the raw-string scanner."""
+behavior_tags = [
+  "<b>--dry-run</b> / <b>--spider</b> allow as read-only",
+  "custom handlers <b>check_curl</b>, <b>check_netcat</b>",
+]
+
+[meta.card_titles]
+block = "reverse shell"
+allow = "read-only requests"
+ask = "mutations and inbound"
 
 # =============================================================================
 # CURL
@@ -25,21 +36,25 @@ priority = 35
 
 [[programs]]
 name = "curl"
-unknown_action = "allow"  # Default is GET which is safe
+unknown_action = "allow" # Default is GET which is safe
 
 # Version/help is safe
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the curl version and supported protocols. Read-only."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Shows curl usage help. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Shows curl usage help. Read-only."
 
 # HEAD request is safe (read-only)
 [[programs.allow]]
 if_flags_any = ["-I", "--head"]
+reason = "HEAD request. Returns response headers only, no body. Read-only."
 
 # Note: Custom handler needed for:
 # - Detecting HTTP method from -X/--request
@@ -56,21 +71,25 @@ description = "Check HTTP method and data/output flags"
 
 [[programs]]
 name = "wget"
-unknown_action = "ask"  # Default wget downloads
+unknown_action = "ask" # Default wget downloads
 
 # Version/help is safe
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the wget version and build info. Read-only."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Shows wget usage help. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Shows wget usage help. Read-only."
 
 # Spider mode is safe (just checks URLs, no download)
 [[programs.allow]]
 if_flags_any = ["--spider"]
+reason = "Spider mode. Checks that a URL resolves; does not download. Read-only."
 
 # Specific risky patterns
 [[programs.ask]]
@@ -192,13 +211,16 @@ unknown_action = "ask"
 # Version/help is safe
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the HTTPie client version. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Shows HTTPie usage help. Read-only."
 
 # GET method is safe
 [[programs.allow]]
 subcommand = "GET"
+reason = "HTTPie GET requests, including URL-only invocations that default to GET. `check_httpie` routes POST/PUT/DELETE/PATCH to ask."
 
 # URL-only (defaults to GET) is safe for http:// and https://
 # Note: Custom handler needed to check if first arg is a URL
@@ -234,15 +256,19 @@ unknown_action = "ask"
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the nmap version and build info. Read-only; sends no probes."
 
 [[programs.allow]]
 subcommand = "-V"
+reason = "Prints the nmap version and build info. Read-only; sends no probes."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Shows nmap usage help. Read-only; sends no probes."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Shows nmap usage help. Read-only; sends no probes."
 
 [[programs.ask]]
 reason = "Sends port-scan probes to remote hosts. Can be slow on large ranges and is logged by most network security tools."
@@ -257,15 +283,19 @@ unknown_action = "ask"
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the socat version and feature list. Read-only; opens no connection."
 
 [[programs.allow]]
 subcommand = "-V"
+reason = "Prints the socat version and feature list. Read-only; opens no connection."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Shows socat usage help. Read-only; opens no connection."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Shows socat usage help. Read-only; opens no connection."
 
 [[programs.ask]]
 reason = "socat sets up bidirectional I/O between two endpoints (network, file, process). Confirm both endpoints; can be used to tunnel out of restricted environments."

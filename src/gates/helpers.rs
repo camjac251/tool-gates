@@ -5,7 +5,7 @@
 /// Security-critical paths under the home directory. A recursive `rm` targeting
 /// any of these is treated as catastrophic (hard block) rather than just "ask".
 ///
-/// Kept in sync with `BLOCKED_SECURITY_DIRS` in `src/router.rs` — that list
+/// Kept in sync with `BLOCKED_SECURITY_DIRS` in `src/router.rs`. That list
 /// governs the broader sensitive-path detector across all commands; this one
 /// governs the hard-block decision specifically for `rm`.
 pub const BLOCKED_SECURITY_DIRS_UNDER_HOME: &[&str] = &[
@@ -34,7 +34,7 @@ pub const BLOCKED_SECURITY_DIRS_UNDER_HOME: &[&str] = &[
 /// original string.
 ///
 /// Note: on healthy Unix systems this `None` branch is essentially
-/// unreachable — `dirs::home_dir()` falls back to libc's `getpwuid_r`
+/// unreachable, since `dirs::home_dir()` falls back to libc's `getpwuid_r`
 /// when `HOME` is unset, and `resolve_user` falls back to the home dir's
 /// basename when `USER` is empty. The branch is genuine defense-in-depth
 /// for sandboxed / chroot / no-passwd-entry environments where neither

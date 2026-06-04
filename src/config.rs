@@ -73,6 +73,22 @@
 //! tool = "mcp__playwright__browser_click"
 //! if_project_under = ["~/projects/trusted"]  # scope to a directory tree
 //! ```
+//!
+//! ## Codex
+//!
+//! Mirror the Claude Code file-permission ruleset onto Codex. With
+//! `accept_project_edits`, an in-project `apply_patch` auto-approves on the
+//! PermissionRequest hook, and Codex shell commands evaluate as `acceptEdits`
+//! so in-project file-editing commands (`sd`, `prettier --write`, `mkdir -p`, ...)
+//! auto-allow too. The `settings.json` `Write`/`Edit` `ask`/`deny` rules, the
+//! file guards, and the dangerous-base / out-of-project asks still apply.
+//! `allow_edits_anywhere` widens the patch path to anywhere on disk. Both default off.
+//!
+//! ```toml
+//! [codex]
+//! accept_project_edits = true
+//! # allow_edits_anywhere = true
+//! ```
 
 use serde::Deserialize;
 use std::path::PathBuf;
@@ -108,6 +124,9 @@ pub struct Config {
     /// Git alias resolution settings.
     #[serde(default)]
     pub git_aliases: GitAliasesConfig,
+    /// Codex-specific permission behavior.
+    #[serde(default)]
+    pub codex: CodexConfig,
 }
 
 impl Config {
@@ -172,6 +191,42 @@ pub struct GitAliasesConfig {
     /// in a third-party repo should not silently inherit alias trust on
     /// first checkout. Local entries shadow global by name when enabled.
     pub include_local_repo: bool,
+}
+
+/// Codex-specific permission behavior.
+///
+/// On Codex under `approval_policy = "untrusted"`, every `apply_patch` edit
+/// prompts: Codex short-circuits patches to "ask" before any path check, so no
+/// Codex-side config can auto-approve a project edit. These options let
+/// tool-gates apply the Claude Code file-permission ruleset to `apply_patch`
+/// and in-project file-editing shell commands on the PermissionRequest hook,
+/// mirroring how `acceptEdits` behaves for
+/// Claude. Edits inside the project auto-approve, while `~/.claude/settings.json`
+/// `Write`/`Edit` `ask`/`deny` rules (`.env`, secrets, lockfiles, ...) and the
+/// AI-config file guards still apply.
+///
+/// ```toml
+/// [codex]
+/// accept_project_edits = true   # auto-allow edits in cwd + additionalDirectories
+/// # allow_edits_anywhere = true # widen to edits anywhere on disk
+/// ```
+#[derive(Debug, Default, Deserialize, Clone)]
+#[serde(default)]
+pub struct CodexConfig {
+    /// Auto-approve `apply_patch` edits whose every touched path is inside the
+    /// project (cwd + settings.json `additionalDirectories`) on Codex's
+    /// PermissionRequest hook. Paths matching a settings.json `Write`/`Edit`
+    /// `ask` rule still prompt, `deny` rules still deny, and guarded AI-config
+    /// files still prompt. Also evaluates Codex shell commands as `acceptEdits`,
+    /// so in-project file-editing commands (`sd`, `prettier --write`, `mkdir -p`,
+    /// `sed -i`, ...) auto-allow while dangerous bases (`rm`, `mv`, `cp`) and
+    /// out-of-project targets still prompt. Opt-in; default `false`.
+    pub accept_project_edits: bool,
+    /// Widen the `apply_patch` auto-allow to edits anywhere on disk, not just
+    /// inside the project. Settings.json `deny`/`ask` file rules and the file
+    /// guards still apply. Does not affect the shell-command path, which stays
+    /// scoped to the project. Default `false`.
+    pub allow_edits_anywhere: bool,
 }
 
 /// Cache settings.
@@ -475,7 +530,7 @@ static DEFAULT_BLOCK_RULES: std::sync::LazyLock<Vec<BlockRule>> = std::sync::Laz
         // domain policy (don't fetch GitHub content via scrapers). The
         // recommended remediation in `GITHUB_BLOCK_MESSAGE` points at
         // `gh api`, but the enforcement holds even on systems where `gh`
-        // isn't installed — the alternative there is to write a curl/xh
+        // isn't installed, as the alternative there is to write a curl/xh
         // call with a token or switch tools, not to suddenly allow
         // arbitrary firecrawl/ref/exa scraping of GitHub.
         BlockRule {
@@ -567,8 +622,8 @@ mod tests {
         assert_eq!(rules[3].requires_tool.as_deref(), Some("rg"));
         // Firecrawl + ref + exa URL-fetchers, same github domain list
         assert_eq!(rules[4].tool, "*firecrawl*");
-        // GitHub-domain block rules intentionally have no requires_tool —
-        // the enforcement is unconditional; the remediation hint points at
+        // GitHub-domain block rules intentionally have no requires_tool,
+        // as the enforcement is unconditional. The remediation hint points at
         // `gh api` but doesn't gate on `gh` being installed.
         assert!(rules[4].requires_tool.is_none());
         assert_eq!(rules[5].tool, "*ref_read_url*");
@@ -1137,7 +1192,7 @@ skill = "other-tool"
         );
 
         // No conditions + empty project_dir still returns true (the
-        // "unconditional rule" case — user didn't ask for any gating).
+        // "unconditional rule" case where the user did not ask for any gating).
         let rule_none = McpApprovalRule {
             tool: "mcp__any".to_string(),
             reason: None,
@@ -1195,8 +1250,8 @@ if_project_has = [".firecrawl-ok"]
     #[test]
     fn test_mcp_approval_partial_config_keeps_other_defaults() {
         // Confirm adding accept_edits_mcp doesn't break other defaults.
-        // Assert properties, not a brittle count — future default-block
-        // additions shouldn't break this unrelated test.
+        // Assert properties, not a brittle count. Future default-block
+        // additions should not break this unrelated test.
         let toml = r#"
 [[accept_edits_mcp]]
 tool = "mcp__serena__*"

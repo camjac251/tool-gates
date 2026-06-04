@@ -22,7 +22,7 @@ pub fn cmd(program: &str, args: &[&str]) -> CommandInfo {
 
 /// Resolve the test process's home directory as a string.
 ///
-/// Panics if `dirs::home_dir()` returns None — the test environment must have
+/// Panics if `dirs::home_dir()` returns None. The test environment must have
 /// HOME set. Use this helper instead of duplicating the resolution boilerplate.
 pub fn real_home() -> String {
     dirs::home_dir()

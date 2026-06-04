@@ -17,6 +17,16 @@
 name = "system"
 description = "System command permission gate"
 priority = 40
+lede = "OS-level operations: power, disk, kernel modules, firewall, users, plus database clients and crypto. This gate owns the largest block floor of any gate (30+ patterns). See the <a href=\"../security-floor.html\">Security floor</a> for the full block list."
+behavior_tags = [
+  "covers <b>databases · build tools · sudo · systemctl · OS package managers · crypto</b>",
+  "heavy block floor",
+]
+
+[meta.card_titles]
+block = "destructive OS operations"
+allow = "inspection"
+ask = "mutations"
 
 # =============================================================================
 # BLOCKED SYSTEM COMMANDS
@@ -239,6 +249,7 @@ unknown_action = "ask"
 # mount without args shows mounted filesystems (read-only)
 [[programs.allow]]
 if_flags_any = ["--version", "--help", "-h", "-V"]
+reason = "Prints the mount version or help text. Read-only; takes no action on filesystems."
 
 [[programs.ask]]
 reason = "Mounts a filesystem. Usually requires root in most setups; verify the source device and target mount point."
@@ -296,6 +307,7 @@ unknown_action = "ask"
 # List databases is safe (read-only)
 [[programs.allow]]
 if_flags_any = ["-l", "--list"]
+reason = "Lists the databases on the PostgreSQL server. Read-only; runs no queries against the data."
 
 # Note: Custom handler needed for -c/-f flag SQL parsing
 [[custom_handlers]]
@@ -324,7 +336,8 @@ reason = "Drops a PostgreSQL database. Permanent; all schemas and data in the da
 
 [[programs]]
 name = "pg_dump"
-unknown_action = "allow"  # Read-only backup
+unknown_action = "allow"
+reason = "Exports a PostgreSQL database to a SQL or archive dump. Read-only on the database; writes the dump to stdout or a file."
 
 [[programs]]
 name = "pg_restore"
@@ -372,18 +385,23 @@ unknown_action = "ask"
 # Read-only commands
 [[programs.allow]]
 subcommand = "history"
+reason = "Lists the Alembic migration history. Read-only; runs no migrations."
 
 [[programs.allow]]
 subcommand = "current"
+reason = "Shows the current Alembic revision recorded in the database. Read-only."
 
 [[programs.allow]]
 subcommand = "heads"
+reason = "Shows the head revision(s) of the Alembic migration tree. Read-only."
 
 [[programs.allow]]
 subcommand = "branches"
+reason = "Shows branch points in the Alembic migration tree. Read-only."
 
 [[programs.allow]]
 subcommand = "show"
+reason = "Displays details of a specific Alembic revision. Read-only; applies nothing."
 
 [[programs.ask]]
 subcommand = "upgrade"
@@ -426,6 +444,7 @@ unknown_action = "ask"
 # Read-only mode is safe
 [[programs.allow]]
 if_flags_any = ["-readonly"]
+reason = "Opens a SQLite database in read-only mode. Writes are rejected; queries only."
 
 [[programs.ask]]
 reason = "Opens a SQLite database file. Default mode allows writes; use `-readonly` to limit to queries."
@@ -468,6 +487,7 @@ unknown_action = "ask"
 # Signal 0 is just a check (no actual signal sent)
 [[programs.allow]]
 if_flags_any = ["-0"]
+reason = "Checks whether a PID exists without sending a signal. Read-only probe; the process is not affected."
 
 [[programs.ask]]
 reason = "Sends a signal to the listed PIDs (default SIGTERM). Verify the PID first; `-9` (SIGKILL) cannot be caught and can corrupt state."
@@ -524,42 +544,55 @@ flags_any = ["-p", "--print-data-base", "-q", "--question"]
 # Safe targets
 [[programs.allow]]
 subcommand = "test"
+reason = "Runs the project's `test` make target. Conventionally runs the test suite."
 
 [[programs.allow]]
 subcommand = "tests"
+reason = "Runs the project's `tests` make target. Conventionally runs the test suite."
 
 [[programs.allow]]
 subcommand = "check"
+reason = "Runs the project's `check` make target. Conventionally runs tests or lint checks."
 
 [[programs.allow]]
 subcommand = "lint"
+reason = "Runs the project's `lint` make target. Conventionally runs linters over the source."
 
 [[programs.allow]]
 subcommand = "build"
+reason = "Runs the project's `build` make target. Compiles or assembles build outputs."
 
 [[programs.allow]]
 subcommand = "all"
+reason = "Runs the project's default `all` make target. Builds the standard set of outputs."
 
 [[programs.allow]]
 subcommand = "clean"
+reason = "Runs the project's `clean` make target. Removes build artifacts in the working tree."
 
 [[programs.allow]]
 subcommand = "format"
+reason = "Runs the project's `format` make target. Reformats source files in place."
 
 [[programs.allow]]
 subcommand = "fmt"
+reason = "Runs the project's `fmt` make target. Reformats source files in place."
 
 [[programs.allow]]
 subcommand = "typecheck"
+reason = "Runs the project's `typecheck` make target. Conventionally runs a static type checker."
 
 [[programs.allow]]
 subcommand = "dev"
+reason = "Runs the project's `dev` make target. Conventionally starts a local development task."
 
 [[programs.allow]]
 subcommand = "run"
+reason = "Runs the project's `run` make target. Executes the project's configured run command."
 
 [[programs.allow]]
 subcommand = "help"
+reason = "Runs the project's `help` make target. Conventionally prints available targets."
 
 # Note: Custom handler for unknown targets
 [[custom_handlers]]
@@ -578,9 +611,11 @@ unknown_action = "ask"
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the CMake version. Read-only; configures or builds nothing."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints CMake help text. Read-only; configures or builds nothing."
 
 [[programs.allow_if_flags]]
 flags_any = ["-N", "--view-only"]
@@ -595,6 +630,7 @@ unknown_action = "ask"
 
 [[programs.allow]]
 subcommand = "-t"
+reason = "Runs a Ninja subtool (`-t query`, `-t graph`, etc.). Inspection only; does not build targets."
 
 [[programs.ask]]
 subcommand = "clean"
@@ -607,15 +643,19 @@ unknown_action = "ask"
 
 [[programs.allow]]
 subcommand = "--list"
+reason = "Lists the recipes defined in the `justfile`. Read-only; runs no recipe."
 
 [[programs.allow]]
 subcommand = "--summary"
+reason = "Prints a one-line summary of `justfile` recipe names. Read-only; runs no recipe."
 
 [[programs.allow]]
 subcommand = "--dump"
+reason = "Dumps the parsed `justfile` back out. Read-only; runs no recipe."
 
 [[programs.allow]]
 subcommand = "--evaluate"
+reason = "Evaluates and prints `justfile` variables. Read-only; runs no recipe."
 
 # Taskfile/Task - task runner
 [[programs]]
@@ -624,9 +664,11 @@ unknown_action = "ask"
 
 [[programs.allow]]
 subcommand = "--list"
+reason = "Lists the Taskfile tasks that have a description. Read-only; runs no task."
 
 [[programs.allow]]
 subcommand = "--list-all"
+reason = "Lists all Taskfile tasks, including undocumented ones. Read-only; runs no task."
 
 # Gradle
 [[programs]]
@@ -636,27 +678,35 @@ unknown_action = "ask"
 
 [[programs.allow]]
 subcommand = "tasks"
+reason = "Lists the available Gradle tasks for the project. Read-only; runs no task."
 
 [[programs.allow]]
 subcommand = "help"
+reason = "Prints Gradle help for the project or a task. Read-only; runs no task."
 
 [[programs.allow]]
 subcommand = "dependencies"
+reason = "Prints the project's resolved Gradle dependency tree. Read-only."
 
 [[programs.allow]]
 subcommand = "properties"
+reason = "Prints the project's Gradle properties. Read-only; changes nothing."
 
 [[programs.allow]]
 subcommand = "build"
+reason = "Runs the Gradle `build` task. Compiles, tests, and assembles project outputs."
 
 [[programs.allow]]
 subcommand = "test"
+reason = "Runs the Gradle `test` task. Executes the project's test suite."
 
 [[programs.allow]]
 subcommand = "check"
+reason = "Runs the Gradle `check` task. Runs verification tasks such as tests and linters."
 
 [[programs.allow]]
 subcommand = "clean"
+reason = "Runs the Gradle `clean` task. Deletes the project's build directory."
 
 [[programs.ask]]
 subcommand = "publish"
@@ -674,30 +724,39 @@ unknown_action = "ask"
 
 [[programs.allow]]
 subcommand = "help"
+reason = "Runs the Maven help plugin. Read-only; prints plugin or goal information."
 
 [[programs.allow]]
 subcommand = "validate"
+reason = "Runs the Maven `validate` phase. Checks the project is correct; produces no artifacts."
 
 [[programs.allow]]
 subcommand = "compile"
+reason = "Runs the Maven `compile` phase. Compiles the project's main sources."
 
 [[programs.allow]]
 subcommand = "test"
+reason = "Runs the Maven `test` phase. Compiles and executes the project's unit tests."
 
 [[programs.allow]]
 subcommand = "package"
+reason = "Runs the Maven `package` phase. Builds the project artifact into `target/`."
 
 [[programs.allow]]
 subcommand = "verify"
+reason = "Runs the Maven `verify` phase. Runs integration tests and verification checks."
 
 [[programs.allow]]
 subcommand = "clean"
+reason = "Runs the Maven `clean` phase. Deletes the `target/` build directory."
 
 [[programs.allow]]
 subcommand = "dependency:tree"
+reason = "Prints the project's resolved Maven dependency tree. Read-only."
 
 [[programs.allow]]
 subcommand = "dependency:analyze"
+reason = "Analyzes declared vs used Maven dependencies and reports findings. Read-only."
 
 [[programs.ask]]
 subcommand = "install"
@@ -715,30 +774,39 @@ unknown_action = "ask"
 
 [[programs.allow]]
 subcommand = "info"
+reason = "Prints Bazel workspace and configuration info. Read-only; builds nothing."
 
 [[programs.allow]]
 subcommand = "query"
+reason = "Queries the Bazel target graph. Read-only; builds nothing."
 
 [[programs.allow]]
 subcommand = "cquery"
+reason = "Queries the Bazel configured-target graph. Read-only; builds nothing."
 
 [[programs.allow]]
 subcommand = "aquery"
+reason = "Queries the Bazel action graph. Read-only; builds nothing."
 
 [[programs.allow]]
 subcommand = "build"
+reason = "Builds the requested Bazel targets. Produces build outputs; runs no target."
 
 [[programs.allow]]
 subcommand = "test"
+reason = "Builds and runs the requested Bazel test targets."
 
 [[programs.allow]]
 subcommand = "coverage"
+reason = "Builds and runs Bazel test targets while collecting coverage data."
 
 [[programs.allow]]
 subcommand = "version"
+reason = "Prints the Bazel version. Read-only; builds nothing."
 
 [[programs.allow]]
 subcommand = "help"
+reason = "Prints Bazel help text. Read-only; builds nothing."
 
 [[programs.ask]]
 subcommand = "clean"
@@ -755,15 +823,19 @@ unknown_action = "ask"
 
 [[programs.allow]]
 subcommand = "introspect"
+reason = "Prints build-system metadata for a Meson project. Read-only."
 
 [[programs.allow]]
 subcommand = "configure"
+reason = "Shows or changes Meson build options. Without options, reports the current configuration."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the Meson version. Read-only; configures or builds nothing."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints Meson help text. Read-only; configures or builds nothing."
 
 [[programs.ask]]
 subcommand = "setup"
@@ -785,18 +857,23 @@ unknown_action = "ask"
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the Ansible version and config paths. Read-only; runs no play."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints Ansible help text. Read-only; runs no play."
 
 [[programs.allow]]
 subcommand = "--list-hosts"
+reason = "Lists the hosts a playbook would target. Read-only; runs no task."
 
 [[programs.allow]]
 subcommand = "--list-tasks"
+reason = "Lists the tasks a playbook would run. Read-only; runs no task."
 
 [[programs.allow]]
 subcommand = "--syntax-check"
+reason = "Parses a playbook to check its syntax. Read-only; runs no task."
 
 [[programs.allow_if_flags]]
 flags_any = ["--check", "-C", "--diff"]
@@ -811,21 +888,27 @@ unknown_action = "ask"
 
 [[programs.allow]]
 subcommand = "status"
+reason = "Reports the state of the Vagrant machines for this project. Read-only."
 
 [[programs.allow]]
 subcommand = "global-status"
+reason = "Reports the state of all known Vagrant machines on the host. Read-only."
 
 [[programs.allow]]
 subcommand = "ssh-config"
+reason = "Prints the SSH config for connecting to the Vagrant VM. Read-only."
 
 [[programs.allow]]
 subcommand = "port"
+reason = "Lists the forwarded ports for the Vagrant VM. Read-only."
 
 [[programs.allow]]
 subcommand = "version"
+reason = "Prints the installed and latest Vagrant version. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints Vagrant help text. Read-only; changes no VM."
 
 [[programs.ask]]
 subcommand = "up"
@@ -858,9 +941,11 @@ unknown_action = "ask"
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the hyperfine version. Read-only; runs no benchmark."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints hyperfine help text. Read-only; runs no benchmark."
 
 [[programs.ask]]
 reason = "Runs the given command repeatedly to measure timing. Executes the wrapped command on each iteration."
@@ -877,12 +962,15 @@ unknown_action = "ask"
 # Safe flags (don't execute commands)
 [[programs.allow]]
 if_flags_any = ["-l", "--list"]
+reason = "Lists the commands the current user may run via sudo. Read-only; executes nothing."
 
 [[programs.allow]]
 if_flags_any = ["-v", "--validate"]
+reason = "Refreshes the sudo timestamp without running a command. Executes nothing."
 
 [[programs.allow]]
 if_flags_any = ["-k", "--reset-timestamp"]
+reason = "Invalidates the cached sudo timestamp. Executes no command."
 
 # Note: Custom handler extracts underlying command and provides description
 [[custom_handlers]]
@@ -901,54 +989,71 @@ unknown_action = "ask"
 # Read-only commands
 [[programs.allow]]
 subcommand = "status"
+reason = "Shows the runtime status and recent logs of a systemd unit. Read-only."
 
 [[programs.allow]]
 subcommand = "show"
+reason = "Prints a systemd unit's properties as key=value pairs. Read-only."
 
 [[programs.allow]]
 subcommand = "list-units"
+reason = "Lists systemd units currently loaded in memory. Read-only."
 
 [[programs.allow]]
 subcommand = "list-unit-files"
+reason = "Lists installed systemd unit files and their enablement state. Read-only."
 
 [[programs.allow]]
 subcommand = "list-sockets"
+reason = "Lists systemd socket units and what they activate. Read-only."
 
 [[programs.allow]]
 subcommand = "list-timers"
+reason = "Lists systemd timer units and their next elapse. Read-only."
 
 [[programs.allow]]
 subcommand = "list-jobs"
+reason = "Lists systemd jobs currently in progress. Read-only."
 
 [[programs.allow]]
 subcommand = "list-dependencies"
+reason = "Shows the dependency tree of a systemd unit. Read-only."
 
 [[programs.allow]]
 subcommand = "is-active"
+reason = "Reports whether a systemd unit is active. Read-only."
 
 [[programs.allow]]
 subcommand = "is-enabled"
+reason = "Reports whether a systemd unit is enabled at boot. Read-only."
 
 [[programs.allow]]
 subcommand = "is-failed"
+reason = "Reports whether a systemd unit is in the failed state. Read-only."
 
 [[programs.allow]]
 subcommand = "is-system-running"
+reason = "Reports the overall systemd system state. Read-only."
 
 [[programs.allow]]
 subcommand = "cat"
+reason = "Prints the on-disk contents of a systemd unit file. Read-only."
 
 [[programs.allow]]
 subcommand = "help"
+reason = "Opens help for a systemd unit. Read-only; changes no unit."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the systemd version. Read-only."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Prints systemctl help text. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints systemctl help text. Read-only."
 
 # Write commands
 [[programs.ask]]
@@ -1028,6 +1133,7 @@ unknown_action = "ask"
 # --status-all is read-only
 [[programs.allow]]
 if_flags_any = ["--status-all"]
+reason = "Reports the status of all init services. Read-only; starts or stops nothing."
 
 # Note: service always asks - no custom handler implemented yet
 # Future: Could allow 'service <name> status' (read-only)
@@ -1043,6 +1149,7 @@ unknown_action = "ask"
 # List is safe (read-only)
 [[programs.allow]]
 if_flags_any = ["-l"]
+reason = "Lists the current user's scheduled cron jobs. Read-only; does not change the crontab."
 
 [[programs.ask]]
 reason = "Modifies cron jobs. Scheduled jobs persist across logout/reboot and run as the user; verify the schedule and command body."
@@ -1065,51 +1172,67 @@ unknown_action = "ask"
 # Read-only commands
 [[programs.allow]]
 subcommand = "list"
+reason = "Lists packages known to apt. Read-only; installs or removes nothing."
 
 [[programs.allow]]
 subcommand = "search"
+reason = "Searches apt for packages matching a term. Read-only."
 
 [[programs.allow]]
 subcommand = "show"
+reason = "Prints apt package details. Read-only; installs or removes nothing."
 
 [[programs.allow]]
 subcommand = "showpkg"
+reason = "Prints low-level apt package records. Read-only."
 
 [[programs.allow]]
 subcommand = "depends"
+reason = "Prints an apt package's dependencies. Read-only."
 
 [[programs.allow]]
 subcommand = "rdepends"
+reason = "Prints packages that depend on an apt package. Read-only."
 
 [[programs.allow]]
 subcommand = "policy"
+reason = "Prints apt install candidates and version priorities. Read-only."
 
 [[programs.allow]]
 subcommand = "madison"
+reason = "Prints available apt package versions and their sources. Read-only."
 
 [[programs.allow]]
 subcommand = "pkgnames"
+reason = "Lists apt package names matching a prefix. Read-only."
 
 [[programs.allow]]
 subcommand = "dotty"
+reason = "Emits an apt package dependency graph in dot format. Read-only."
 
 [[programs.allow]]
 subcommand = "xvcg"
+reason = "Emits an apt package dependency graph in xvcg format. Read-only."
 
 [[programs.allow]]
 subcommand = "stats"
+reason = "Prints apt package cache statistics. Read-only."
 
 [[programs.allow]]
 subcommand = "dump"
+reason = "Dumps the full apt package cache. Read-only."
 
 [[programs.allow]]
 subcommand = "dumpavail"
+reason = "Dumps the apt available-packages list. Read-only."
 
 [[programs.allow]]
 subcommand = "showsrc"
+reason = "Prints apt source-package records. Read-only."
 
 [[programs.allow]]
 subcommand = "changelog"
+reason = "Prints an apt package's changelog. Read-only."
 
 [[programs.ask]]
 subcommand = "download"
@@ -1117,20 +1240,24 @@ reason = "Downloads `.deb` package files to the current directory without instal
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the apt version. Read-only."
 
 [[programs.allow]]
 subcommand = "-v"
+reason = "Prints the apt version. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints apt help text. Read-only."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Prints apt help text. Read-only."
 
 # Write commands
 [[programs.ask]]
 subcommand = "install"
-reason = "Installing packages"
+reason = "Installs packages and their dependencies system-wide. Network operation; pulls from the configured apt repositories."
 
 [[programs.ask]]
 subcommand = "remove"
@@ -1142,7 +1269,7 @@ reason = "Removes packages and their config files. Stronger than `remove`."
 
 [[programs.ask]]
 subcommand = "update"
-reason = "Updating package lists"
+reason = "Refreshes the apt package index from the configured repositories. Does not upgrade installed packages."
 
 [[programs.ask]]
 subcommand = "upgrade"
@@ -1186,7 +1313,8 @@ reason = "Installs/removes packages as needed to satisfy a given dependency expr
 
 [[programs]]
 name = "apt-cache"
-unknown_action = "allow"  # Read-only package info
+unknown_action = "allow"
+reason = "Queries the APT package cache (search, show, policy). Read-only."
 default_allow = true
 
 # apt-cache is always read-only
@@ -1209,59 +1337,76 @@ unknown_action = "ask"
 # Read-only commands
 [[programs.allow]]
 subcommand = "list"
+reason = "Lists packages known to dnf. Read-only; installs or removes nothing."
 
 [[programs.allow]]
 subcommand = "info"
+reason = "Prints dnf package details. Read-only; installs or removes nothing."
 
 [[programs.allow]]
 subcommand = "search"
+reason = "Searches dnf for packages matching a term. Read-only."
 
 [[programs.allow]]
 subcommand = "provides"
+reason = "Reports which dnf package provides a given capability or file. Read-only."
 
 [[programs.allow]]
 subcommand = "whatprovides"
+reason = "Reports which dnf package provides a given capability or file. Read-only."
 
 [[programs.allow]]
 subcommand = "repolist"
+reason = "Lists configured dnf repositories. Read-only."
 
 [[programs.allow]]
 subcommand = "repoinfo"
+reason = "Prints details of configured dnf repositories. Read-only."
 
 [[programs.allow]]
 subcommand = "repoquery"
+reason = "Queries dnf repository metadata for packages. Read-only."
 
 [[programs.allow]]
 subcommand = "deplist"
+reason = "Prints a dnf package's dependency list. Read-only."
 
 [[programs.allow]]
 subcommand = "check"
+reason = "Checks the dnf package database for problems. Read-only."
 
 [[programs.allow]]
 subcommand = "check-update"
+reason = "Checks for available dnf package updates without installing them. Read-only."
 
 [[programs.allow]]
 subcommand = "history"
+reason = "Prints the dnf transaction history. Read-only."
 
 [[programs.allow]]
 subcommand = "alias"
+reason = "Lists or prints configured dnf command aliases. Read-only."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the dnf version. Read-only."
 
 [[programs.allow]]
 subcommand = "-v"
+reason = "Prints the dnf version. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints dnf help text. Read-only."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Prints dnf help text. Read-only."
 
 # Write commands
 [[programs.ask]]
 subcommand = "install"
-reason = "Installing packages"
+reason = "Installs packages and their dependencies from the enabled repos. Network operation; changes system package state."
 
 [[programs.ask]]
 subcommand = "remove"
@@ -1333,53 +1478,69 @@ unknown_action = "ask"
 # Query operations are safe (-Q)
 [[programs.allow]]
 subcommand = "-Q"
+reason = "Queries installed pacman packages. Read-only."
 
 [[programs.allow]]
 subcommand = "--query"
+reason = "Queries installed pacman packages. Read-only."
 
 [[programs.allow]]
 subcommand = "-Qs"
+reason = "Searches installed pacman packages by pattern. Read-only."
 
 [[programs.allow]]
 subcommand = "-Qi"
+reason = "Prints details of an installed pacman package. Read-only."
 
 [[programs.allow]]
 subcommand = "-Ql"
+reason = "Lists the files owned by an installed pacman package. Read-only."
 
 [[programs.allow]]
 subcommand = "-Qo"
+reason = "Reports which pacman package owns a given file. Read-only."
 
 # Search/info only
 [[programs.allow]]
 subcommand = "-Ss"
+reason = "Searches sync repositories for pacman packages. Read-only."
 
 [[programs.allow]]
 subcommand = "-Si"
+reason = "Prints details of a pacman package in the sync repos. Read-only."
 
 [[programs.allow]]
 subcommand = "-Sl"
+reason = "Lists packages available in a sync repository. Read-only."
 
 [[programs.allow]]
 subcommand = "-Sg"
+reason = "Lists the members of a pacman package group. Read-only."
 
 # Files operations are safe (-F)
 [[programs.allow]]
 subcommand = "-F"
+reason = "Searches the pacman files database for a file. Read-only."
 
 [[programs.allow]]
 subcommand = "--files"
+reason = "Searches the pacman files database for a file. Read-only."
 
 [[programs.allow]]
 subcommand = "-V"
+reason = "Prints the pacman version. Read-only."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the pacman version. Read-only."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Prints pacman help text. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints pacman help text. Read-only."
 
 # Note: Custom handler needed for prefix matching -S, -R, -U, -D
 [[custom_handlers]]
@@ -1398,71 +1559,92 @@ unknown_action = "ask"
 # Read-only commands
 [[programs.allow]]
 subcommand = "list"
+reason = "Lists packages known to Homebrew. Read-only; installs or removes nothing."
 
 [[programs.allow]]
 subcommand = "ls"
+reason = "Lists packages or repositories known to Homebrew. Read-only."
 
 [[programs.allow]]
 subcommand = "search"
+reason = "Searches Homebrew for packages matching a term. Read-only."
 
 [[programs.allow]]
 subcommand = "info"
+reason = "Prints Homebrew package details. Read-only; installs or removes nothing."
 
 [[programs.allow]]
 subcommand = "home"
+reason = "Opens or prints a Homebrew package's homepage URL. Read-only."
 
 [[programs.allow]]
 subcommand = "homepage"
+reason = "Opens or prints a Homebrew package's homepage URL. Read-only."
 
 [[programs.allow]]
 subcommand = "deps"
+reason = "Lists a Homebrew package's dependencies. Read-only."
 
 [[programs.allow]]
 subcommand = "uses"
+reason = "Lists Homebrew packages that depend on a given formula. Read-only."
 
 [[programs.allow]]
 subcommand = "leaves"
+reason = "Lists Homebrew packages installed on their own, not as dependencies. Read-only."
 
 [[programs.allow]]
 subcommand = "outdated"
+reason = "Lists installed Homebrew packages with newer versions available. Read-only."
 
 [[programs.allow]]
 subcommand = "config"
+reason = "Prints the Homebrew configuration. Read-only."
 
 [[programs.allow]]
 subcommand = "doctor"
+reason = "Runs Homebrew self-diagnostic checks and reports issues. Read-only."
 
 [[programs.allow]]
 subcommand = "commands"
+reason = "Lists available Homebrew commands. Read-only."
 
 [[programs.allow]]
 subcommand = "desc"
+reason = "Prints a Homebrew package description. Read-only."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the Homebrew version. Read-only."
 
 [[programs.allow]]
 subcommand = "-v"
+reason = "Prints the Homebrew version. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints Homebrew help text. Read-only."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Prints Homebrew help text. Read-only."
 
 [[programs.allow]]
 subcommand = "cat"
+reason = "Prints the source of a Homebrew package definition. Read-only."
 
 [[programs.allow]]
 subcommand = "formula"
+reason = "Prints Homebrew formula information. Read-only."
 
 [[programs.allow]]
 subcommand = "cask"
+reason = "Prints Homebrew cask information. Read-only."
 
 # Write commands
 [[programs.ask]]
 subcommand = "install"
-reason = "Installing packages"
+reason = "Installs a Homebrew formula or cask plus its dependencies into the prefix. Network operation."
 
 [[programs.ask]]
 subcommand = "uninstall"
@@ -1537,68 +1719,88 @@ unknown_action = "ask"
 # Read-only
 [[programs.allow]]
 subcommand = "search"
+reason = "Searches zypper for packages matching a term. Read-only."
 
 [[programs.allow]]
 subcommand = "se"
+reason = "Searches zypper for packages matching a term. Read-only."
 
 [[programs.allow]]
 subcommand = "info"
+reason = "Prints zypper package details. Read-only; installs or removes nothing."
 
 [[programs.allow]]
 subcommand = "if"
+reason = "Prints zypper package details. Read-only; installs or removes nothing."
 
 [[programs.allow]]
 subcommand = "list-updates"
+reason = "Lists available zypper package updates without installing them. Read-only."
 
 [[programs.allow]]
 subcommand = "lu"
+reason = "Lists available zypper package updates without installing them. Read-only."
 
 [[programs.allow]]
 subcommand = "packages"
+reason = "Lists packages known to zypper. Read-only."
 
 [[programs.allow]]
 subcommand = "pa"
+reason = "Lists packages known to zypper. Read-only."
 
 [[programs.allow]]
 subcommand = "patterns"
+reason = "Lists zypper installation patterns. Read-only."
 
 [[programs.allow]]
 subcommand = "pt"
+reason = "Lists zypper installation patterns. Read-only."
 
 [[programs.allow]]
 subcommand = "products"
+reason = "Lists zypper products. Read-only."
 
 [[programs.allow]]
 subcommand = "pd"
+reason = "Lists zypper products. Read-only."
 
 [[programs.allow]]
 subcommand = "repos"
+reason = "Lists configured zypper repositories. Read-only."
 
 [[programs.allow]]
 subcommand = "lr"
+reason = "Lists configured zypper repositories. Read-only."
 
 [[programs.allow]]
 subcommand = "services"
+reason = "Lists configured zypper services. Read-only."
 
 [[programs.allow]]
 subcommand = "ls"
+reason = "Lists packages or repositories known to zypper. Read-only."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the zypper version. Read-only."
 
 [[programs.allow]]
 subcommand = "-V"
+reason = "Prints the zypper version. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints zypper help text. Read-only."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Prints zypper help text. Read-only."
 
 # Write
 [[programs.ask]]
 subcommand = "install"
-reason = "Installing packages"
+reason = "Installs packages and dependencies from the configured repositories. Network operation; changes system package state."
 
 [[programs.ask]]
 subcommand = "in"
@@ -1671,36 +1873,47 @@ unknown_action = "ask"
 # Read-only
 [[programs.allow]]
 subcommand = "info"
+reason = "Prints apk package details. Read-only; installs or removes nothing."
 
 [[programs.allow]]
 subcommand = "list"
+reason = "Lists packages known to apk. Read-only; installs or removes nothing."
 
 [[programs.allow]]
 subcommand = "search"
+reason = "Searches apk for packages matching a term. Read-only."
 
 [[programs.allow]]
 subcommand = "dot"
+reason = "Emits an apk package dependency graph in dot format. Read-only."
 
 [[programs.allow]]
 subcommand = "policy"
+reason = "Prints apk install candidates and version priorities. Read-only."
 
 [[programs.allow]]
 subcommand = "stats"
+reason = "Prints apk package cache statistics. Read-only."
 
 [[programs.allow]]
 subcommand = "audit"
+reason = "Reports apk packages with known security advisories. Read-only."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the apk version. Read-only."
 
 [[programs.allow]]
 subcommand = "-V"
+reason = "Prints the apk version. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints apk help text. Read-only."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Prints apk help text. Read-only."
 
 # Write
 [[programs.ask]]
@@ -1742,39 +1955,51 @@ unknown_action = "ask"
 # Read-only
 [[programs.allow]]
 subcommand = "search"
+reason = "Searches Nixpkgs (or a flake) for packages. Read-only; builds nothing."
 
 [[programs.allow]]
 subcommand = "show"
+reason = "Shows package or flake-output metadata. Read-only; builds nothing."
 
 [[programs.allow]]
 subcommand = "eval"
+reason = "Evaluates a Nix expression and prints the result. Read-only; builds nothing."
 
 [[programs.allow]]
 subcommand = "repl"
+reason = "Opens a read-only Nix evaluation REPL. Builds nothing."
 
 [[programs.allow]]
 subcommand = "flake"
+reason = "Inspects a Nix flake (`show`, `metadata`, etc.). Read-only."
 
 [[programs.allow]]
 subcommand = "path-info"
+reason = "Prints metadata about Nix store paths. Read-only."
 
 [[programs.allow]]
 subcommand = "derivation"
+reason = "Shows or manipulates a Nix derivation in read contexts. Inspection only."
 
 [[programs.allow]]
 subcommand = "store"
+reason = "Runs a read-oriented Nix store query subcommand. Inspection only."
 
 [[programs.allow]]
 subcommand = "log"
+reason = "Prints the build log for a Nix store path. Read-only."
 
 [[programs.allow]]
 subcommand = "why-depends"
+reason = "Explains why one Nix path depends on another. Read-only."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the Nix version. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints Nix help text. Read-only."
 
 # Write
 [[programs.ask]]
@@ -1816,9 +2041,11 @@ unknown_action = "ask"
 # Query is safe
 [[programs.allow]]
 subcommand = "-q"
+reason = "Queries installed or available Nix packages. Read-only; the profile is not modified."
 
 [[programs.allow]]
 subcommand = "--query"
+reason = "Queries installed or available Nix packages. Read-only; the profile is not modified."
 
 # Write
 [[programs.ask]]
@@ -1864,27 +2091,35 @@ unknown_action = "ask"
 # Read-only
 [[programs.allow]]
 subcommand = "list"
+reason = "Lists installed Flatpak applications and runtimes. Read-only."
 
 [[programs.allow]]
 subcommand = "info"
+reason = "Prints details of an installed Flatpak application. Read-only."
 
 [[programs.allow]]
 subcommand = "search"
+reason = "Searches configured Flatpak remotes for applications. Read-only."
 
 [[programs.allow]]
 subcommand = "remote-ls"
+reason = "Lists applications available from a Flatpak remote. Read-only."
 
 [[programs.allow]]
 subcommand = "remotes"
+reason = "Lists configured Flatpak remotes. Read-only."
 
 [[programs.allow]]
 subcommand = "history"
+reason = "Prints the Flatpak installation history. Read-only."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the Flatpak version. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints Flatpak help text. Read-only."
 
 # Write
 [[programs.ask]]
@@ -1933,16 +2168,42 @@ unknown_action = "ask"
 
 # Read-only query flags
 [[programs.allow]]
-if_flags_any = ["-l", "--list", "-L", "--listfiles", "-S", "--search", "-s", "--status", "-p", "--print-avail"]
+if_flags_any = [
+  "-l",
+  "--list",
+  "-L",
+  "--listfiles",
+  "-S",
+  "--search",
+  "-s",
+  "--status",
+  "-p",
+  "--print-avail",
+]
+reason = "Queries the dpkg database (list, list files, search, status, or print package info). Read-only."
 
 [[programs.allow]]
-if_flags_any = ["--get-selections", "--print-architecture", "--print-foreign-architectures"]
+if_flags_any = [
+  "--get-selections",
+  "--print-architecture",
+  "--print-foreign-architectures",
+]
+reason = "Prints dpkg selections or the configured architectures. Read-only."
 
 [[programs.allow]]
-if_flags_any = ["--audit", "-C", "--yet-to-unpack", "--compare-versions", "--verify", "-V"]
+if_flags_any = [
+  "--audit",
+  "-C",
+  "--yet-to-unpack",
+  "--compare-versions",
+  "--verify",
+  "-V",
+]
+reason = "Audits or verifies dpkg package state, or compares versions. Read-only; changes no package."
 
 [[programs.allow]]
 if_flags_any = ["--version", "--help", "-?"]
+reason = "Prints the dpkg version or help text. Read-only."
 
 # Mutating operations
 [[programs.ask]]
@@ -1959,7 +2220,12 @@ if_flags_any = ["--configure", "--unpack"]
 
 [[programs.ask]]
 reason = "Modifies dpkg package state (selections or supported architectures). Affects what apt/dpkg will install or upgrade."
-if_flags_any = ["--set-selections", "--clear-selections", "--add-architecture", "--remove-architecture"]
+if_flags_any = [
+  "--set-selections",
+  "--clear-selections",
+  "--add-architecture",
+  "--remove-architecture",
+]
 
 # =============================================================================
 # APT-MARK (package marking - show* are read-only)
@@ -1972,24 +2238,31 @@ unknown_action = "ask"
 # Read-only query subcommands
 [[programs.allow]]
 subcommand = "showmanual"
+reason = "Lists packages apt has marked as manually installed. Read-only."
 
 [[programs.allow]]
 subcommand = "showauto"
+reason = "Lists packages apt has marked as automatically installed. Read-only."
 
 [[programs.allow]]
 subcommand = "showhold"
+reason = "Lists packages apt is holding at their current version. Read-only."
 
 [[programs.allow]]
 subcommand = "showinstall"
+reason = "Lists packages marked for installation. Read-only."
 
 [[programs.allow]]
 subcommand = "showremove"
+reason = "Lists packages marked for removal. Read-only."
 
 [[programs.allow]]
 subcommand = "showpurge"
+reason = "Lists packages marked for purge. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints apt-mark help text. Read-only."
 
 # Mutating subcommands
 [[programs.ask]]
@@ -2023,39 +2296,51 @@ unknown_action = "ask"
 # Read-only subcommands
 [[programs.allow]]
 subcommand = "list"
+reason = "Lists PulseAudio objects (sinks, sources, modules, etc.). Read-only."
 
 [[programs.allow]]
 subcommand = "info"
+reason = "Prints PulseAudio server information. Read-only."
 
 [[programs.allow]]
 subcommand = "stat"
+reason = "Prints PulseAudio memory-block statistics. Read-only."
 
 [[programs.allow]]
 subcommand = "get-default-sink"
+reason = "Prints the default PulseAudio output sink. Read-only."
 
 [[programs.allow]]
 subcommand = "get-default-source"
+reason = "Prints the default PulseAudio input source. Read-only."
 
 [[programs.allow]]
 subcommand = "get-sink-volume"
+reason = "Prints the volume of a PulseAudio sink. Read-only."
 
 [[programs.allow]]
 subcommand = "get-source-volume"
+reason = "Prints the volume of a PulseAudio source. Read-only."
 
 [[programs.allow]]
 subcommand = "get-sink-mute"
+reason = "Prints the mute state of a PulseAudio sink. Read-only."
 
 [[programs.allow]]
 subcommand = "get-source-mute"
+reason = "Prints the mute state of a PulseAudio source. Read-only."
 
 [[programs.allow]]
 subcommand = "subscribe"
+reason = "Streams PulseAudio server events as they occur. Read-only; changes nothing."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the pactl version. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints pactl help text. Read-only."
 
 # Mutating subcommands
 [[programs.ask]]
@@ -2105,6 +2390,7 @@ unknown_action = "ask"
 # Read-only inspection commands
 [[programs.allow]]
 subcommand = "version"
+reason = "Prints the OpenSSL version. Read-only."
 
 # x509 with -req is a signing operation (writes files)
 [[programs.ask]]
@@ -2116,9 +2402,11 @@ if_flags_any = ["-req"]
 [[programs.allow]]
 subcommand = "x509"
 unless_flags = ["-req"]
+reason = "Inspects an X.509 certificate (without `-req`). Read-only; prints fields, signs nothing."
 
 [[programs.allow]]
 subcommand = "s_client"
+reason = "Opens a debug TLS client connection to inspect a server's certificate and handshake. Read-only locally."
 
 [[programs.ask]]
 subcommand = "s_server"
@@ -2126,36 +2414,47 @@ reason = "Starts a debug TLS server bound to a local port. Accepts inbound conne
 
 [[programs.allow]]
 subcommand = "dgst"
+reason = "Computes a message digest of the input. Read-only; writes no key material."
 
 [[programs.allow]]
 subcommand = "md5"
+reason = "Computes an MD5 digest of the input. Read-only."
 
 [[programs.allow]]
 subcommand = "sha1"
+reason = "Computes a SHA-1 digest of the input. Read-only."
 
 [[programs.allow]]
 subcommand = "sha256"
+reason = "Computes a SHA-256 digest of the input. Read-only."
 
 [[programs.allow]]
 subcommand = "sha512"
+reason = "Computes a SHA-512 digest of the input. Read-only."
 
 [[programs.allow]]
 subcommand = "verify"
+reason = "Verifies a certificate chain against trusted roots. Read-only."
 
 [[programs.allow]]
 subcommand = "ciphers"
+reason = "Lists the cipher suites matching a selection string. Read-only."
 
 [[programs.allow]]
 subcommand = "list"
+reason = "Lists OpenSSL algorithms, digests, or other capabilities. Read-only."
 
 [[programs.allow]]
 subcommand = "asn1parse"
+reason = "Parses and prints the ASN.1 structure of the input. Read-only."
 
 [[programs.allow]]
 subcommand = "speed"
+reason = "Benchmarks OpenSSL algorithm throughput. Read-only; writes no key material."
 
 [[programs.allow]]
 subcommand = "prime"
+reason = "Tests whether a number is prime or generates one to stdout. Read-only."
 
 # rand with -out writes to file
 [[programs.ask]]
@@ -2167,6 +2466,7 @@ if_flags_any = ["-out"]
 [[programs.allow]]
 subcommand = "rand"
 unless_flags = ["-out"]
+reason = "Generates random bytes to stdout (without `-out`). Writes no file."
 
 # Key/cert generation
 [[programs.ask]]
@@ -2225,21 +2525,27 @@ unknown_action = "ask"
 # Read-only operations
 [[programs.allow]]
 if_flags_any = ["--list-keys", "-k", "--list-secret-keys", "-K"]
+reason = "Lists keys in the local GPG keyring. Read-only; the keyring is not modified."
 
 [[programs.allow]]
 if_flags_any = ["--fingerprint"]
+reason = "Prints key fingerprints from the local GPG keyring. Read-only."
 
 [[programs.allow]]
 if_flags_any = ["--verify"]
+reason = "Verifies a GPG signature against a message. Read-only; imports nothing."
 
 [[programs.allow]]
 if_flags_any = ["--list-packets"]
+reason = "Dumps the low-level packet structure of GPG input. Read-only."
 
 [[programs.allow]]
 if_flags_any = ["--version"]
+reason = "Prints the GPG version and supported algorithms. Read-only."
 
 [[programs.allow]]
 if_flags_any = ["--help", "-h"]
+reason = "Prints GPG help text. Read-only."
 
 # Key operations (ask)
 [[programs.ask]]
@@ -2264,11 +2570,21 @@ if_flags_any = ["--export", "--export-secret-keys"]
 
 [[programs.ask]]
 reason = "Deletes a key from the local GPG keyring. `--delete-secret-key` removes private material; cannot be undone without a backup."
-if_flags_any = ["--delete-key", "--delete-secret-key", "--delete-secret-and-public-key"]
+if_flags_any = [
+  "--delete-key",
+  "--delete-secret-key",
+  "--delete-secret-and-public-key",
+]
 
 [[programs.ask]]
 reason = "Generates a new GPG keypair. Writes private material to the keyring; choose a passphrase strong enough for the use case."
-if_flags_any = ["--gen-key", "--generate-key", "--full-gen-key", "--full-generate-key", "--quick-gen-key"]
+if_flags_any = [
+  "--gen-key",
+  "--generate-key",
+  "--full-gen-key",
+  "--full-generate-key",
+  "--quick-gen-key",
+]
 
 [[programs.ask]]
 reason = "Opens an interactive GPG key editor. May block in agent contexts; modifies the local keyring."
@@ -2285,12 +2601,15 @@ unknown_action = "ask"
 # Read-only operations (fingerprint, display)
 [[programs.allow]]
 if_flags_any = ["-l", "-lf", "-lv"]
+reason = "Prints the fingerprint of a key file. Read-only; generates no key."
 
 [[programs.allow]]
 if_flags_any = ["-F"]
+reason = "Searches `known_hosts` for a host. Read-only; removes nothing."
 
 [[programs.allow]]
 if_flags_any = ["-B"]
+reason = "Prints the bubblebabble digest of a key file. Read-only."
 
 # Mutation operations
 [[programs.ask]]
@@ -2311,6 +2630,7 @@ unknown_action = "ask"
 
 [[programs.allow]]
 if_flags_any = ["--version"]
+reason = "Prints the age version string. Read-only; encrypts or decrypts nothing."
 
 [[programs.ask]]
 reason = "Encrypts or decrypts a file with age. Use `-i <key>` for identity files; output replaces or writes alongside the input."

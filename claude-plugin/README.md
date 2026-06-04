@@ -6,16 +6,16 @@ Companion plugin for [tool-gates](https://github.com/camjac251/tool-gates). Revi
 
 ## Overview
 
-tool-gates handles ALL Claude Code tool types, not just Bash. It AST-parses shell commands, guards file reads and writes (e.g., denying symlink reads of sensitive files), scans Write/Edit content for 26 security anti-patterns (hardcoded secrets, XSS, injection, unsafe deserialization), and can block entire tool invocations (e.g., Glob). The hooks use broad matchers so every tool invocation passes through the gate engine.
+tool-gates covers Claude Code shell, file, search, Skill, and MCP tool surfaces, not just Bash. It AST-parses shell commands, guards file reads and writes (e.g., denying symlink reads of sensitive files), scans Write/Edit content for 28 security anti-patterns (hardcoded secrets, XSS, injection, unsafe deserialization), and can block configured tool invocations (e.g., Glob).
 
 The gate has four wire decisions:
 
 - **allow**: read-only commands and known-safe operations (`git status`, `cargo check`). No prompt.
-- **deny**: dangerous patterns (`rm -rf /`, pipe-to-shell, `eval`). No prompt; deny is final.
-- **ask**: hard-ask patterns and explicit settings ask rules (pipe-to-python, output redirection, raw-string security flags). Prompt fires with Yes / No.
-- **defer**: benign-but-unfamiliar commands (`npm install`, `gh ...`, generic). tool-gates omits `permissionDecision` so CC's resolver runs the Bash tool's own checkPermissions, which produces the prefix suggestion. Prompt fires with **three** options: Yes / Yes-and-don't-ask-again-for-`npm install`-* / No. In acceptEdits, Claude Code's Bash auto-allow commands (`rm`, `mv`, `cp`, `touch`, `rmdir`, `mkdir`, `sed`) stay explicit **ask** only when tool-gates does not already approve them; `mkdir` inside allowed dirs and `sed -i` are still tool-gates-owned allows.
+- **deny**: dangerous patterns (`rm -rf /`, catastrophic filesystem targets). No prompt; deny is final.
+- **ask**: hard-ask patterns and explicit settings ask rules (pipe-to-shell, `eval`, pipe-to-python, output redirection, raw-string security flags). Prompt fires with Yes / No. Auto mode promotes the highest-risk hard-asks to deny.
+- **defer**: benign-but-unfamiliar commands (`npm install`, `gh ...`, generic). tool-gates omits `permissionDecision` so CC's resolver runs the Bash tool's own checkPermissions, which produces the prefix suggestion. Prompt fires with **three** options: Yes / Yes-and-don't-ask-again-for-`npm install`-\* / No. In acceptEdits, Claude Code's Bash auto-allow commands (`rm`, `mv`, `cp`, `touch`, `rmdir`, `mkdir`, `sed`) stay explicit **ask** only when tool-gates does not already approve them; `mkdir` inside allowed dirs and `sed -i` are still tool-gates-owned allows.
 
-The third "don't ask again for X" button covers the in-session "stop prompting" case organically by writing a `localSettings` rule. Pending entries still accumulate from one-time Yes clicks. The `/tool-gates:review` skill is for batch-promoting those across-session entries to `project` or `user` scope.
+The third "don't ask again for X" button covers the in-session "stop prompting" case organically by writing a `localSettings` rule. Pending entries still accumulate from one-time Yes clicks. The `/tool-gates:review` skill is for batch-promoting those across-session entries to `local`, `project`, or `user` scope.
 
 ## Prerequisites
 
@@ -27,7 +27,7 @@ cargo install --git https://github.com/camjac251/tool-gates
 
 # Or download from releases
 curl -Lo ~/.local/bin/tool-gates \
-  https://github.com/camjac251/tool-gates/releases/latest/download/tool-gates-linux-amd64
+  https://github.com/camjac251/tool-gates/releases/latest/download/tool-gates-linux-x86_64
 chmod +x ~/.local/bin/tool-gates
 
 # Configure hooks
@@ -74,7 +74,7 @@ For an interactive TUI alternative, run `tool-gates review` directly in your ter
 
 | Command                                     | Permission                |
 | ------------------------------------------- | ------------------------- |
-| `tool-gates pending list`                   | Auto-approved (read-only) |
+| `tool-gates pending list [--project]`       | Auto-approved (read-only) |
 | `tool-gates rules list`                     | Auto-approved (read-only) |
 | `tool-gates approve '<pattern>' -s <scope>` | Requires confirmation     |
 
@@ -97,7 +97,7 @@ Test how tool-gates handles a specific command. Useful for verifying rules, debu
 /tool-gates:test-gate npm install foo --mode=plan    # -> deny (plan mode promotes ask/defer to deny)
 ```
 
-Shows the decision, reason, and any hints or approval commands. A defer output looks like an empty `permissionDecision` field -- that's intentional and is what enables the third prompt button.
+Shows the decision, reason, and any hints or approval commands. A defer output looks like an empty `permissionDecision` field: that's intentional and is what enables the third prompt button.
 
 ## Installation
 
@@ -116,4 +116,4 @@ claude --plugin-dir /path/to/tool-gates/claude-plugin
 
 ## Note on hooks
 
-This plugin does not ship hooks. The `tool-gates` binary handles hook installation via `tool-gates hooks add`, which registers PreToolUse (Bash/Monitor gates + file guards + security scanning + MCP tool blocking), PermissionRequest (subagent approval), and PostToolUse (Bash/Monitor approval tracking + security anti-pattern reminders) hooks in your Claude Code settings. See the [main README](https://github.com/camjac251/tool-gates#configure-claude-code) for details.
+This plugin does not ship hooks. The `tool-gates` binary handles hook installation via `tool-gates hooks add`, which registers PreToolUse (Bash/Monitor gates + file guards + security scanning + MCP tool blocking), PermissionRequest (subagent approval), PermissionDenied (auto-mode classifier retry hint), and PostToolUse (Bash/Monitor approval tracking + security anti-pattern reminders) hooks in your Claude Code settings. See the [main README](https://github.com/camjac251/tool-gates#configure) for details.

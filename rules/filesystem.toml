@@ -22,6 +22,17 @@
 name = "filesystem"
 description = "Filesystem modification permission gate"
 priority = 30
+lede = "Everything that touches disk: <b>rm</b>, <b>mv</b>, <b>cp</b>, <b>mkdir</b>, <b>chmod</b>, <b>chown</b>, <b>ln</b>, <b>sed -i</b>, archives. This gate owns the destructive block floor. Patterns like <code>rm -rf /</code> are denied here so they can never reach the shell. Read-only archive listing is exempt."
+note = """<b>The block floor is path-aware, not pattern-matched.</b> The <code>check_rm</code> custom handler normalises paths (<code>//</code> → <code>/</code>, <code>/.</code> → <code>/</code>) before checking, and routes traversal patterns (<code>..</code>, <code>../</code>, bare <code>*</code>) to ask-with-warn instead of denying. Authoring this declaratively in TOML alone would miss cases."""
+behavior_tags = [
+  "custom handler <b>check_rm</b>",
+  "<b>tar -t</b> / <b>unzip -l</b> are read-only",
+]
+
+[meta.card_titles]
+block = "destructive paths"
+allow = "read-only"
+ask = "mutations"
 
 # =============================================================================
 # RM (complex - needs custom handler for path checking)
@@ -191,9 +202,11 @@ unknown_action = "ask"
 # List contents is safe (-t, --list, or combined like -tvf)
 [[programs.allow]]
 subcommand = "-t"
+reason = "Lists archive contents without extracting. Read-only."
 
 [[programs.allow]]
 subcommand = "--list"
+reason = "Lists archive contents without extracting. Read-only."
 
 # Note: Custom handler needed for combined flags like -tvf, -xf, -cf
 [[custom_handlers]]
@@ -212,6 +225,7 @@ unknown_action = "ask"
 # List contents is safe (read-only)
 [[programs.allow]]
 if_flags_any = ["-l"]
+reason = "Lists zip archive contents. Read-only. `zip -l` is not a listing flag (it converts line endings). Use `zipinfo` from the basics gate."
 
 [[programs.ask]]
 reason = "Extracts a zip archive. Verify trust; paths inside the archive can use `..` for directory traversal."

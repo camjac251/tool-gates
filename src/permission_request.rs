@@ -8,7 +8,7 @@
 //! - Approve commands that our gates already deem safe
 //! - Approve Edit/Write operations in agent worktrees (workaround for Claude Code bug)
 //! - Deny commands that should be blocked
-//! - Pass through to show the normal permission prompt
+//! - Pass through to the client's normal approval path
 //!
 //! Key insight: PermissionRequest's `allow` IS respected for subagents, unlike PreToolUse.
 //! Note: `blocked_path` and `decision_reason` may be missing in real hook payloads,
@@ -21,7 +21,8 @@ use crate::models::{
     Client, Decision, HookOutput, PermissionDecision, PermissionRequestInput,
     PermissionRequestOutput,
 };
-use crate::router::check_command_with_settings;
+use crate::router::{check_command_with_settings, is_under_any_dir};
+use crate::settings::{Settings, SettingsDecision};
 
 /// Reasons that indicate a path-based permission check (safe to override if command is safe)
 const PATH_BASED_REASONS: &[&str] = &[
@@ -71,6 +72,18 @@ pub fn handle_permission_request_for_client(
         return Some(PermissionRequestOutput::deny(&reason));
     }
 
+    // Codex `apply_patch`: mirror the Claude Code file-permission ruleset so
+    // edits inside the project auto-approve instead of prompting on every
+    // patch. Opt-in via `[codex] accept_project_edits`; runs after block_tools
+    // so a configured block still wins. Settings `Write`/`Edit` ask/deny rules
+    // and the AI-config file guards are honored in handle_codex_project_edit.
+    if client == Client::Codex
+        && input.tool_name == "apply_patch"
+        && config.codex.accept_project_edits
+    {
+        return handle_codex_project_edit(input);
+    }
+
     // Edit/Write/apply_patch tools: auto-approve in worktree contexts.
     // Runs after block_tools so a configured block on a write tool wins.
     // Claude/Gemini include agent_id, so only subagent calls auto-approve.
@@ -102,7 +115,13 @@ pub fn handle_permission_request_for_client(
     }
 
     // Re-check policy using the same evaluator as PreToolUse to keep behavior aligned.
-    let mode = if input.permission_mode.is_empty() {
+    // On Codex with `[codex] accept_project_edits`, evaluate shell commands as if in
+    // acceptEdits mode so in-project file-editing commands (sd, prettier --write,
+    // mkdir -p, sed -i, ...) auto-allow, matching the apply_patch behavior. Dangerous
+    // bases (rm, mv, cp) and out-of-project targets still ask, and deny/ask rules apply.
+    let mode = if client == Client::Codex && config.codex.accept_project_edits {
+        "acceptEdits"
+    } else if input.permission_mode.is_empty() {
         "default"
     } else {
         input.permission_mode.as_str()
@@ -181,7 +200,7 @@ pub fn handle_permission_request_for_client(
 /// `tool_input.command` rather than `file_path`. We parse the patch and apply
 /// the same worktree containment + guarded-file checks against every affected
 /// path; if any path falls outside the worktree or is a guarded AI config
-/// file, return `None` so the normal permission prompt fires.
+/// file, return `None` so the client's normal approval path decides.
 fn handle_file_permission_request(
     input: &PermissionRequestInput,
 ) -> Option<PermissionRequestOutput> {
@@ -214,6 +233,80 @@ fn handle_file_permission_request(
     Some(PermissionRequestOutput::allow_with_directories(vec![
         input.cwd.clone(),
     ]))
+}
+
+/// Apply the Claude Code file-permission ruleset to a Codex `apply_patch` call
+/// on the PermissionRequest hook (opt-in via `[codex] accept_project_edits`).
+///
+/// Mirrors Claude's `acceptEdits`: an edit auto-approves when every touched
+/// path sits inside the project (cwd + `additionalDirectories`, or anywhere
+/// when `allow_edits_anywhere`) and no path is guarded, asked, or denied by a
+/// settings.json `Write`/`Edit` rule. Returns `Some(allow)` to suppress the
+/// Codex prompt, `Some(deny)` when a settings deny rule matches, or `None` to
+/// let the normal prompt fire.
+fn handle_codex_project_edit(input: &PermissionRequestInput) -> Option<PermissionRequestOutput> {
+    let config = crate::config::load();
+    let paths = collect_paths_for_permission(input);
+    let settings = Settings::load(&input.cwd);
+    decide_codex_project_edit(
+        &paths,
+        &input.cwd,
+        &settings,
+        &config.file_guards,
+        config.codex.allow_edits_anywhere,
+    )
+}
+
+/// Pure decision core for `handle_codex_project_edit`: no I/O, so it is unit
+/// testable without a config file or filesystem. Strictest decision across all
+/// touched paths wins: any deny -> deny; any guarded / asked / out-of-project
+/// path -> prompt (`None`); otherwise allow.
+fn decide_codex_project_edit(
+    paths: &[String],
+    cwd: &str,
+    settings: &Settings,
+    file_guards: &crate::config::FileGuardsConfig,
+    allow_anywhere: bool,
+) -> Option<PermissionRequestOutput> {
+    if paths.is_empty() {
+        // Empty or unparseable patch: we can't reason about it, so prompt.
+        return None;
+    }
+    let allowed_dirs = settings.allowed_directories(cwd);
+    for raw in paths {
+        let joined = if Path::new(raw).is_absolute() {
+            std::path::PathBuf::from(raw)
+        } else {
+            Path::new(cwd).join(raw)
+        };
+        let resolved = clean_path(&joined);
+        let abs = resolved.to_string_lossy().into_owned();
+        let rel = resolved
+            .strip_prefix(cwd)
+            .ok()
+            .map(|p| p.to_string_lossy().into_owned());
+
+        // Guarded AI-config files never auto-approve, even inside the project.
+        if is_guarded(&resolved, file_guards) {
+            return None;
+        }
+
+        match settings.check_file_path(&abs, rel.as_deref()) {
+            SettingsDecision::Deny => {
+                return Some(PermissionRequestOutput::deny(&format!(
+                    "tool-gates: settings.json deny rule blocks editing {abs}"
+                )));
+            }
+            SettingsDecision::Ask => return None,
+            SettingsDecision::Allow => continue,
+            SettingsDecision::NoMatch => {
+                if !allow_anywhere && !is_under_any_dir(&abs, &allowed_dirs) {
+                    return None;
+                }
+            }
+        }
+    }
+    Some(PermissionRequestOutput::allow())
 }
 
 /// Collect every file path this PermissionRequest would write to. Read from
@@ -256,7 +349,7 @@ fn collect_paths_for_permission(input: &PermissionRequestInput) -> Vec<String> {
 ///
 /// Returns Some(allow) when a rule matches and all directory conditions are
 /// met. Returns None otherwise (pass through to whatever the next handler
-/// decides -- typically the shell-tool branch or normal permission prompt).
+/// decides -- typically the shell-tool branch or normal approval path).
 ///
 /// All three None branches (wrong mode / non-MCP tool / no matching rule)
 /// are indistinguishable from outside -- callers should not rely on which
@@ -291,7 +384,7 @@ fn handle_mcp_accept_edits(input: &PermissionRequestInput) -> Option<PermissionR
 /// Exact-match on `permission_mode` is intentional here. Unlike
 /// `is_auto_mode` in router.rs which normalizes whitespace/case because
 /// failing-closed on a safety-floor deny is unsafe, this allow-path
-/// fails-closed to "prompt" when the mode string drifts — which is the
+/// fails-closed to "prompt" when the mode string drifts, which is the
 /// correct default for an approval rule.
 pub(crate) fn match_mcp_rule<'a>(
     rules: &'a [crate::config::McpApprovalRule],
@@ -385,6 +478,183 @@ mod tests {
             blocked_path: Some("/outside/path".to_string()),
             ..Default::default()
         }
+    }
+
+    // --- Codex project-edit auto-allow (mirrors Claude acceptEdits) ---
+
+    fn default_guards() -> crate::config::FileGuardsConfig {
+        crate::config::FileGuardsConfig::default()
+    }
+
+    #[test]
+    fn codex_edit_allows_inside_project() {
+        let settings = Settings::default();
+        let out = decide_codex_project_edit(
+            &["src/main.rs".to_string()],
+            "/home/u/proj",
+            &settings,
+            &default_guards(),
+            false,
+        );
+        let json = serde_json::to_string(&out.expect("inside project should auto-allow")).unwrap();
+        assert!(json.contains("allow"), "got: {json}");
+    }
+
+    #[test]
+    fn codex_edit_prompts_outside_project() {
+        let settings = Settings::default();
+        let out = decide_codex_project_edit(
+            &["/etc/passwd".to_string()],
+            "/home/u/proj",
+            &settings,
+            &default_guards(),
+            false,
+        );
+        assert!(out.is_none(), "edit outside the project must prompt");
+    }
+
+    #[test]
+    fn codex_edit_anywhere_allows_outside_project() {
+        let settings = Settings::default();
+        let out = decide_codex_project_edit(
+            &["/tmp/scratch.txt".to_string()],
+            "/home/u/proj",
+            &settings,
+            &default_guards(),
+            true, // allow_edits_anywhere
+        );
+        assert!(
+            out.is_some(),
+            "allow_edits_anywhere should auto-allow outside"
+        );
+    }
+
+    #[test]
+    fn codex_edit_asks_on_settings_ask_pattern() {
+        let mut settings = Settings::default();
+        settings.permissions.ask = vec!["Write(**/.env*)".to_string()];
+        let out = decide_codex_project_edit(
+            &[".env".to_string()],
+            "/home/u/proj",
+            &settings,
+            &default_guards(),
+            false,
+        );
+        assert!(
+            out.is_none(),
+            ".env must still prompt despite being in-project"
+        );
+    }
+
+    #[test]
+    fn codex_edit_denies_on_settings_deny_pattern() {
+        let mut settings = Settings::default();
+        settings.permissions.deny = vec!["Write(**/secrets/**)".to_string()];
+        let out = decide_codex_project_edit(
+            &["secrets/key.pem".to_string()],
+            "/home/u/proj",
+            &settings,
+            &default_guards(),
+            false,
+        );
+        let json = serde_json::to_string(&out.expect("deny pattern should deny")).unwrap();
+        assert!(json.contains("deny"), "got: {json}");
+    }
+
+    #[test]
+    fn codex_edit_mixed_paths_strictest_wins() {
+        // one in-project file plus one outside -> prompt (strictest wins).
+        let settings = Settings::default();
+        let out = decide_codex_project_edit(
+            &["src/a.rs".to_string(), "/etc/hosts".to_string()],
+            "/home/u/proj",
+            &settings,
+            &default_guards(),
+            false,
+        );
+        assert!(out.is_none(), "any outside path forces a prompt");
+    }
+
+    #[test]
+    fn codex_edit_empty_paths_prompts() {
+        let settings = Settings::default();
+        let out =
+            decide_codex_project_edit(&[], "/home/u/proj", &settings, &default_guards(), false);
+        assert!(out.is_none(), "empty/unparseable patch should prompt");
+    }
+
+    #[test]
+    fn codex_edit_basename_ask_pattern_matches_any_depth() {
+        let mut settings = Settings::default();
+        settings.permissions.ask = vec!["Write(*.min.js)".to_string()];
+        // A minified file deep in the tree still prompts (gitignore basename rule).
+        let out = decide_codex_project_edit(
+            &["dist/app.min.js".to_string()],
+            "/home/u/proj",
+            &settings,
+            &default_guards(),
+            false,
+        );
+        assert!(
+            out.is_none(),
+            "*.min.js should match at any depth and prompt"
+        );
+        // A normal source file under the same rule is unaffected.
+        let allowed = decide_codex_project_edit(
+            &["src/app.js".to_string()],
+            "/home/u/proj",
+            &settings,
+            &default_guards(),
+            false,
+        );
+        let json = serde_json::to_string(&allowed.expect("normal file allows")).unwrap();
+        assert!(json.contains("allow"), "got: {json}");
+    }
+
+    #[test]
+    fn check_file_path_priority_and_globs() {
+        let mut s = Settings::default();
+        s.permissions.deny = vec!["Write(**/secrets/**)".to_string()];
+        s.permissions.ask = vec!["Edit(**/package-lock.json)".to_string()];
+        assert_eq!(
+            s.check_file_path("/p/secrets/k.pem", None),
+            SettingsDecision::Deny
+        );
+        assert_eq!(
+            s.check_file_path("/p/sub/package-lock.json", None),
+            SettingsDecision::Ask
+        );
+        assert_eq!(
+            s.check_file_path("/p/src/main.rs", None),
+            SettingsDecision::NoMatch
+        );
+    }
+
+    #[test]
+    fn codex_edit_path_traversal_prompts() {
+        // A `..` escape resolves outside the project, so it must prompt, never
+        // auto-allow. clean_path normalizes the patch path before containment.
+        let settings = Settings::default();
+        for escape in ["../../etc/passwd", "src/../../../tmp/x"] {
+            let out = decide_codex_project_edit(
+                &[escape.to_string()],
+                "/home/u/proj",
+                &settings,
+                &default_guards(),
+                false,
+            );
+            assert!(out.is_none(), "{escape} must resolve outside and prompt");
+        }
+        // A `..` that stays inside the project still auto-allows.
+        let inside = decide_codex_project_edit(
+            &["src/a/../b.rs".to_string()],
+            "/home/u/proj",
+            &settings,
+            &default_guards(),
+            false,
+        );
+        let json = serde_json::to_string(&inside.expect("in-project allows")).unwrap();
+        assert!(json.contains("allow"), "got: {json}");
     }
 
     #[test]
@@ -776,7 +1046,6 @@ mod tests {
 
     #[test]
     fn test_edit_in_worktree_default_mode_approves() {
-        // Should approve regardless of permission_mode
         let mut input = make_file_input(
             "Edit",
             "/project/.claude/worktrees/agent-abc123/src/lib.rs",
@@ -786,7 +1055,7 @@ mod tests {
         let result = handle_permission_request(&input, &serde_json::Map::new());
         assert!(
             result.is_some(),
-            "Should approve Edit in worktree regardless of permission mode"
+            "Should approve Edit in worktree under default permission mode"
         );
     }
 
@@ -933,7 +1202,7 @@ mod tests {
     fn test_mcp_accept_edits_gemini_namespace_detected() {
         // With no user rules configured, a Gemini MCP tool in acceptEdits mode
         // must reach the MCP branch and fall through to None (no match).
-        // Skip if the user has rules — we can't assert the outcome deterministically then.
+        // Skip if the user has rules, since we cannot assert the outcome deterministically then.
         if crate::config::load().accept_edits_mcp.is_empty() {
             let input = make_mcp_input("mcp_serena_find_symbol", "acceptEdits");
             assert!(

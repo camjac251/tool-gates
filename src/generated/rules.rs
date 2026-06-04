@@ -252,68 +252,17 @@ pub fn check_conditional_allow(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === GH (from gh.toml) ===
 
-pub static GH_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "issue view",
-        "issue list",
-        "issue status",
-        "pr view",
-        "pr list",
-        "pr status",
-        "pr diff",
-        "pr checks",
-        "pr develop",
-        "repo view",
-        "repo list",
-        "search issues",
-        "search prs",
-        "search repos",
-        "search commits",
-        "search code",
-        "status",
-        "auth status",
-        "auth token",
-        "config get",
-        "config list",
-        "run list",
-        "run view",
-        "workflow list",
-        "workflow view",
-        "release list",
-        "release view",
-        "gist list",
-        "gist view",
-        "label list",
-        "codespace list",
-        "cs list",
-        "ssh-key list",
-        "gpg-key list",
-        "extension list",
-        "browse",
-        "alias list",
-        "cache list",
-        "variable list",
-        "secret list",
-        "ruleset list",
-        "ruleset view",
-        "project list",
-        "project view",
-    ]
-    .into_iter()
-    .collect()
-});
-
 pub static GH_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("repo clone", "Cloning repo (writes to local filesystem)"),
-        ("run download", "Downloading artifacts (writes to local filesystem)"),
-        ("release download", "Downloading release assets (writes to local filesystem)"),
-        ("gist clone", "Cloning gist (writes to local filesystem)"),
+        ("repo clone", "Clones a repository into a new directory under the current path. Writes files locally; does not modify the remote."),
+        ("run download", "Downloads workflow run artifacts into the current directory. Writes files locally; does not change anything on GitHub."),
+        ("release download", "Downloads release asset files into the current directory. Writes files locally; does not change the release."),
+        ("gist clone", "Clones a gist into a new local directory. Writes files locally; does not modify the gist."),
         ("issue create", "Creating issue"),
         ("issue close", "Closing issue"),
         ("issue reopen", "Reopening issue"),
         ("issue edit", "Editing issue"),
-        ("issue comment", "Adding comment"),
+        ("issue comment", "Posts a comment to an issue on GitHub. Visible publicly and cannot be silently unsent."),
         ("issue delete", "Deletes issue `<issue>` permanently. Irreversible; comments and reactions go with it. Prefer `close` for normal workflow."),
         ("issue transfer", "Transferring issue"),
         ("issue pin", "Pinning issue"),
@@ -324,15 +273,15 @@ pub static GH_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("pr close", "Closing PR"),
         ("pr reopen", "Reopening PR"),
         ("pr edit", "Editing PR"),
-        ("pr comment", "Adding comment"),
+        ("pr comment", "Posts a comment to a pull request on GitHub. Visible publicly and cannot be silently unsent."),
         ("pr merge", "Merges PR `<pr>` into the base branch. `--squash`/`--rebase` rewrite history; `--delete-branch` also deletes the source branch."),
         ("pr ready", "Marking PR ready"),
-        ("pr review", "Submitting review"),
-        ("pr checkout", "Checking out PR"),
+        ("pr review", "Submits a pull request review (approve, request changes, or comment). Posted to GitHub and visible to the author and watchers."),
+        ("pr checkout", "Fetches a pull request branch and checks it out locally. Switches the working tree to the PR's HEAD."),
         ("repo create", "Creating repository"),
         ("repo rename", "Renaming repository"),
         ("repo edit", "Editing repository"),
-        ("repo fork", "Forking repository"),
+        ("repo fork", "Creates a fork of the repository under your account and can add a local remote. Creates a new repo on GitHub."),
         ("repo archive", "Archives the repository on GitHub. Becomes read-only: no new issues, PRs, comments, or pushes. Reversible via `repo unarchive`."),
         ("repo unarchive", "Unarchiving repository"),
         ("repo sync", "Syncing repository"),
@@ -340,7 +289,7 @@ pub static GH_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("release create", "Creating release"),
         ("release delete", "Deletes release `<release>` from GitHub. Removes release notes and uploaded assets; the underlying git tag stays unless `--cleanup-tag` is passed."),
         ("release edit", "Editing release"),
-        ("release upload", "Uploading asset"),
+        ("release upload", "Uploads asset files to an existing release. Published assets become downloadable by anyone who can see the release."),
         ("release delete-asset", "Deleting asset"),
         ("gist create", "Creating gist"),
         ("gist delete", "Deletes gist `<gist>` permanently. Irreversible; comments and revision history go with it."),
@@ -350,7 +299,7 @@ pub static GH_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("label delete", "Deleting label"),
         ("label edit", "Editing label"),
         ("label clone", "Cloning labels"),
-        ("workflow run", "Running workflow"),
+        ("workflow run", "Triggers a GitHub Actions workflow run. Executes CI side effects such as deploys and consumes Actions minutes."),
         ("workflow enable", "Enabling workflow"),
         ("workflow disable", "Disabling workflow"),
         ("run cancel", "Canceling run"),
@@ -424,8 +373,216 @@ pub fn check_gh_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::block(format!("gh: {}", reason)));
     }
 
-    if GH_ALLOW.contains(subcmd.as_str()) || GH_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if cmd.args.len() >= 2 && cmd.args[0] == "issue" && cmd.args[1] == "view" {
+        return Some(GateResult::allow_with_reason("Issue inspection commands."));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "issue" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason("Issue inspection commands."));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "issue" && cmd.args[1] == "status" {
+        return Some(GateResult::allow_with_reason("Issue inspection commands."));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "pr" && cmd.args[1] == "view" {
+        return Some(GateResult::allow_with_reason(
+            "PR inspection commands. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "pr" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "PR inspection commands. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "pr" && cmd.args[1] == "status" {
+        return Some(GateResult::allow_with_reason(
+            "PR inspection commands. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "pr" && cmd.args[1] == "diff" {
+        return Some(GateResult::allow_with_reason(
+            "PR inspection commands. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "pr" && cmd.args[1] == "checks" {
+        return Some(GateResult::allow_with_reason(
+            "Shows CI check status for a pull request. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "pr" && cmd.args[1] == "develop" {
+        return Some(GateResult::allow_with_reason(
+            "Lists linked branches for a pull request when run without flags. Read-only in this form; passing a branch name creates one (gated separately).",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "repo" && cmd.args[1] == "view" {
+        return Some(GateResult::allow_with_reason("Repo metadata."));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "repo" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason("Repo metadata."));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "search" && cmd.args[1] == "issues" {
+        return Some(GateResult::allow_with_reason(
+            "Search endpoints across GitHub. Always GET via the API.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "search" && cmd.args[1] == "prs" {
+        return Some(GateResult::allow_with_reason(
+            "Search endpoints across GitHub. Always GET via the API.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "search" && cmd.args[1] == "repos" {
+        return Some(GateResult::allow_with_reason(
+            "Search endpoints across GitHub. Always GET via the API.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "search" && cmd.args[1] == "commits" {
+        return Some(GateResult::allow_with_reason(
+            "Search endpoints across GitHub. Always GET via the API.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "search" && cmd.args[1] == "code" {
+        return Some(GateResult::allow_with_reason(
+            "Search endpoints across GitHub. Always GET via the API.",
+        ));
+    }
+    if subcmd_single == "status" {
+        return Some(GateResult::allow_with_reason(
+            "Shows a summary of your relevant issues, PRs, and review requests across repos. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "auth" && cmd.args[1] == "status" {
+        return Some(GateResult::allow_with_reason(
+            "Shows the current authentication state, active account, and token scopes. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "auth" && cmd.args[1] == "token" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the stored OAuth token to stdout. Read-only but exposes a credential.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "config" && cmd.args[1] == "get" {
+        return Some(GateResult::allow_with_reason(
+            "Reads a single gh CLI configuration value. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "config" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists the gh CLI configuration values. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "run" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists recent Actions workflow runs. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "run" && cmd.args[1] == "view" {
+        return Some(GateResult::allow_with_reason(
+            "Shows details, jobs, and logs for an Actions workflow run. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "workflow" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists the Actions workflows defined in the repository. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "workflow" && cmd.args[1] == "view" {
+        return Some(GateResult::allow_with_reason(
+            "Shows an Actions workflow definition and its recent runs. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "release" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists releases for the repository. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "release" && cmd.args[1] == "view" {
+        return Some(GateResult::allow_with_reason(
+            "Shows release notes and asset list for a release. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "gist" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists your gists. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "gist" && cmd.args[1] == "view" {
+        return Some(GateResult::allow_with_reason(
+            "Shows the contents of a gist. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "label" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists labels defined in the repository. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "codespace" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists your codespaces and their state. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "cs" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists your codespaces and their state (`cs` alias). Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "ssh-key" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists the SSH keys registered on the GitHub account. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "gpg-key" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists the GPG keys registered on the GitHub account. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "extension" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists installed gh CLI extensions. Read-only.",
+        ));
+    }
+    if subcmd_single == "browse" {
+        return Some(GateResult::allow_with_reason(
+            "Opens the repository, issue, or PR in a browser, or prints the URL with `--no-browser`. Does not change anything on GitHub.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "alias" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists the gh CLI command aliases. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "cache" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists Actions caches for the repository. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "variable" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists Actions variable names and values for the repo, environment, or org. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "secret" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists Actions secret names for the repo, environment, or org. Read-only and does not reveal secret values.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "ruleset" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists repository or organization rulesets. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "ruleset" && cmd.args[1] == "view" {
+        return Some(GateResult::allow_with_reason(
+            "Shows the rules and configuration for a ruleset. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "project" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists Projects for a user or organization. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "project" && cmd.args[1] == "view" {
+        return Some(GateResult::allow_with_reason(
+            "Shows a Project's fields and items. Read-only.",
+        ));
     }
 
     if let Some(reason) = GH_ASK
@@ -476,55 +633,6 @@ pub fn check_gh_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === GIT (from git.toml) ===
 
-pub static GIT_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "status",
-        "log",
-        "diff",
-        "show",
-        "describe",
-        "rev-parse",
-        "ls-files",
-        "blame",
-        "reflog",
-        "shortlog",
-        "whatchanged",
-        "ls-tree",
-        "cat-file",
-        "rev-list",
-        "name-rev",
-        "for-each-ref",
-        "symbolic-ref",
-        "verify-commit",
-        "verify-tag",
-        "fsck",
-        "count-objects",
-        "check-ignore",
-        "check-attr",
-        "grep",
-        "merge-base",
-        "show-ref",
-        "help",
-        "version",
-        "--version",
-        "-h",
-        "--help",
-        "config get",
-        "config list",
-        "config --get",
-        "config --list",
-        "stash list",
-        "stash show",
-        "worktree list",
-        "submodule status",
-        "remote show",
-        "remote -v",
-        "remote get-url",
-    ]
-    .into_iter()
-    .collect()
-});
-
 pub static GIT_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
         ("gc", "Runs garbage collection in `.git`. Repacks objects and may prune unreachable commits older than the gc grace window."),
@@ -553,7 +661,7 @@ pub static GIT_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("push", "Publishes local commits to a remote. Inspect `git log @{u}..` first to see what would be sent."),
         ("pull", "Fetches and integrates remote changes into the current branch. Use `--rebase` to avoid merge commits."),
         ("merge", "Merges another branch into the current one. Can produce conflicts; abort with `git merge --abort`."),
-        ("rebase", "Rebasing. Non-interactive only; interactive (`-i`) hangs the agent. Use `git revise --autosquash` for fixups."),
+        ("rebase", "Replays commits from the current branch onto another base, rewriting their SHAs. Interactive (`-i`) hangs the agent; abort a stuck rebase with `git rebase --abort`."),
         ("checkout", "Switches branches or restores files in the working tree. Uncommitted edits in affected files may be lost."),
         ("switch", "Switches the working tree to another branch. Refuses if local edits would conflict unless `--discard-changes` is set."),
         ("reset", "Moves HEAD and optionally the index/working tree. `--soft` keeps changes staged, `--mixed` (default) unstages, `--hard` discards."),
@@ -688,7 +796,7 @@ pub fn check_git_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .any(|a| ["-d", "-D", "--delete"].contains(&a.as_str()))
     {
         return Some(GateResult::ask(
-            "Deleting a branch. Prefer `-d` (refuses if unmerged) over `-D` (force) when possible.",
+            "Deletes a branch ref. `-d` refuses if the branch has unmerged commits; `-D` forces the delete regardless. Recover via `git reflog` if done by mistake.",
         ));
     }
     if subcmd_single == "branch"
@@ -702,11 +810,27 @@ pub fn check_git_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         ));
     }
 
-    if GIT_ALLOW.contains(subcmd.as_str()) || GIT_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
-    }
-
     // Check conditional allow rules
+    if subcmd_single == "status" {
+        return Some(GateResult::allow_with_reason(
+            "Shows the working tree status: staged, unstaged, and untracked files. Read-only.",
+        ));
+    }
+    if subcmd_single == "log" {
+        return Some(GateResult::allow_with_reason(
+            "Shows commit history. Read-only.",
+        ));
+    }
+    if subcmd_single == "diff" {
+        return Some(GateResult::allow_with_reason(
+            "Shows changes between commits, the working tree, and the index. Read-only.",
+        ));
+    }
+    if subcmd_single == "show" {
+        return Some(GateResult::allow_with_reason(
+            "Shows a commit, tag, or other object and its contents. Read-only.",
+        ));
+    }
     if subcmd_single == "tag"
         && !cmd.args.iter().any(|a| {
             [
@@ -726,7 +850,144 @@ pub fn check_git_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .contains(&a.as_str())
         })
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Lists tags when no mutating flag is given. Read-only in this form; creation and deletion flags are gated separately.",
+        ));
+    }
+    if subcmd_single == "describe" {
+        return Some(GateResult::allow_with_reason(
+            "Names a commit using the nearest reachable tag. Read-only.",
+        ));
+    }
+    if subcmd_single == "rev-parse" {
+        return Some(GateResult::allow_with_reason(
+            "Resolves refs and arguments to object names. Read-only.",
+        ));
+    }
+    if subcmd_single == "ls-files" {
+        return Some(GateResult::allow_with_reason(
+            "Lists files tracked in the index. Read-only.",
+        ));
+    }
+    if subcmd_single == "blame" {
+        return Some(GateResult::allow_with_reason(
+            "Shows the commit and author that last touched each line of a file. Read-only.",
+        ));
+    }
+    if subcmd_single == "reflog" {
+        return Some(GateResult::allow_with_reason(
+            "Shows the history of ref updates such as HEAD movements. Read-only.",
+        ));
+    }
+    if subcmd_single == "shortlog" {
+        return Some(GateResult::allow_with_reason(
+            "Summarizes commit history grouped by author. Read-only.",
+        ));
+    }
+    if subcmd_single == "whatchanged" {
+        return Some(GateResult::allow_with_reason(
+            "Shows commit history along with the files each commit changed. Read-only.",
+        ));
+    }
+    if subcmd_single == "ls-tree" {
+        return Some(GateResult::allow_with_reason(
+            "Lists the contents of a tree object. Read-only.",
+        ));
+    }
+    if subcmd_single == "cat-file" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the type, size, or contents of a repository object. Read-only.",
+        ));
+    }
+    if subcmd_single == "rev-list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists commit objects in reverse chronological order. Read-only.",
+        ));
+    }
+    if subcmd_single == "name-rev" {
+        return Some(GateResult::allow_with_reason(
+            "Names commits by their position relative to refs. Read-only.",
+        ));
+    }
+    if subcmd_single == "for-each-ref" {
+        return Some(GateResult::allow_with_reason(
+            "Lists refs matching a pattern, with a customizable format. Read-only.",
+        ));
+    }
+    if subcmd_single == "symbolic-ref" {
+        return Some(GateResult::allow_with_reason(
+            "Reads a symbolic ref such as HEAD. Read-only when no value is given; writes are gated separately.",
+        ));
+    }
+    if subcmd_single == "verify-commit" {
+        return Some(GateResult::allow_with_reason(
+            "Checks the GPG signature on a commit. Read-only.",
+        ));
+    }
+    if subcmd_single == "verify-tag" {
+        return Some(GateResult::allow_with_reason(
+            "Checks the GPG signature on a tag. Read-only.",
+        ));
+    }
+    if subcmd_single == "fsck" {
+        return Some(GateResult::allow_with_reason(
+            "Checks repository objects for connectivity and integrity. Read-only.",
+        ));
+    }
+    if subcmd_single == "count-objects" {
+        return Some(GateResult::allow_with_reason(
+            "Reports the count and on-disk size of repository objects. Read-only.",
+        ));
+    }
+    if subcmd_single == "check-ignore" {
+        return Some(GateResult::allow_with_reason(
+            "Reports which paths are ignored and the matching gitignore rule. Read-only.",
+        ));
+    }
+    if subcmd_single == "check-attr" {
+        return Some(GateResult::allow_with_reason(
+            "Reports the gitattributes values applied to given paths. Read-only.",
+        ));
+    }
+    if subcmd_single == "grep" {
+        return Some(GateResult::allow_with_reason(
+            "Searches tracked file contents for a pattern. Read-only.",
+        ));
+    }
+    if subcmd_single == "merge-base" {
+        return Some(GateResult::allow_with_reason(
+            "Finds the common ancestor of two or more commits. Read-only.",
+        ));
+    }
+    if subcmd_single == "show-ref" {
+        return Some(GateResult::allow_with_reason(
+            "Lists refs and the object names they point to. Read-only.",
+        ));
+    }
+    if subcmd_single == "help" {
+        return Some(GateResult::allow_with_reason(
+            "Shows Git help text for a subcommand. Read-only.",
+        ));
+    }
+    if subcmd_single == "version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the installed Git version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the installed Git version. Read-only.",
+        ));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason(
+            "Shows short usage help. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Shows full help text. Read-only.",
+        ));
     }
     if subcmd_single == "branch"
         && !cmd.args.iter().any(|a| {
@@ -736,7 +997,49 @@ pub fn check_git_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .contains(&a.as_str())
         })
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Lists or creates branches. Read-only when listing; delete, move, and copy flags are gated separately.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "config" && cmd.args[1] == "get" {
+        return Some(GateResult::allow_with_reason(
+            "Reads a Git configuration value. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "config" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists Git configuration values. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "config" && cmd.args[1] == "--get" {
+        return Some(GateResult::allow_with_reason(
+            "Reads a Git configuration value. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "config" && cmd.args[1] == "--list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists Git configuration values. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "stash" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists stash entries. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "stash" && cmd.args[1] == "show" {
+        return Some(GateResult::allow_with_reason(
+            "Shows the diff recorded in a stash entry. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "worktree" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists the linked worktrees of this repository. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "submodule" && cmd.args[1] == "status" {
+        return Some(GateResult::allow_with_reason(
+            "Reports the status and checked-out commit of each submodule. Read-only.",
+        ));
     }
     if subcmd_single == "remote"
         && !cmd
@@ -744,7 +1047,24 @@ pub fn check_git_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["add", "remove", "rename", "set-url"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Lists configured remotes. Read-only when listing; add, remove, rename, and set-url are gated separately.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "remote" && cmd.args[1] == "show" {
+        return Some(GateResult::allow_with_reason(
+            "Shows details about a remote, including its tracked branches. Read-only network query.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "remote" && cmd.args[1] == "-v" {
+        return Some(GateResult::allow_with_reason(
+            "Lists remotes with their fetch and push URLs. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "remote" && cmd.args[1] == "get-url" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the URL of a remote. Read-only.",
+        ));
     }
 
     if let Some(reason) = GIT_ASK
@@ -758,19 +1078,6 @@ pub fn check_git_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === AWS (from cloud.toml) ===
-
-pub static AWS_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "--version",
-        "help",
-        "s3 ls",
-        "sts get-caller-identity",
-        "sts get-session-token",
-        "configure list",
-    ]
-    .into_iter()
-    .collect()
-});
 
 pub static AWS_BLOCK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -932,31 +1239,71 @@ pub fn check_aws_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         ));
     }
 
-    if AWS_ALLOW.contains(subcmd.as_str()) || AWS_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
-    }
-
     // Check conditional allow rules
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the AWS CLI version. Read-only.",
+        ));
+    }
+    if subcmd_single == "help" {
+        return Some(GateResult::allow_with_reason(
+            "Shows AWS CLI help text. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "s3" && cmd.args[1] == "ls" {
+        return Some(GateResult::allow_with_reason(
+            "Lists S3 buckets or objects under a prefix. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "sts" && cmd.args[1] == "get-caller-identity" {
+        return Some(GateResult::allow_with_reason(
+            "Reports the IAM identity of the current credentials (account, ARN, user ID). Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "sts" && cmd.args[1] == "get-session-token" {
+        return Some(GateResult::allow_with_reason(
+            "Returns temporary session credentials for the current identity. Read-only call; the returned token grants the same access until it expires.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "configure" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Shows the resolved CLI configuration (profile, region, credential source). Read-only; values are masked.",
+        ));
+    }
     if cmd.args.get(1).is_some_and(|a| a.starts_with("describe")) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "AWS describe-* operation: reads the configuration or state of a resource. Read-only.",
+        ));
     }
     if cmd.args.get(1).is_some_and(|a| a.starts_with("list")) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "AWS list-* operation: enumerates resources in the account/region. Read-only.",
+        ));
     }
     if cmd.args.get(1).is_some_and(|a| a.starts_with("get")) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "AWS get-* operation: fetches an attribute, object, or value. Read-only.",
+        ));
     }
     if cmd.args.get(1).is_some_and(|a| a.starts_with("head")) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "AWS head-* operation: fetches metadata only (e.g. S3 object headers) without the body. Read-only.",
+        ));
     }
     if cmd.args.get(1).is_some_and(|a| a.starts_with("query")) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "AWS query operation: reads items from a table or index (e.g. DynamoDB query). Read-only.",
+        ));
     }
     if cmd.args.get(1).is_some_and(|a| a.starts_with("scan")) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "AWS scan operation: reads across a whole table or index (e.g. DynamoDB scan). Read-only; can consume significant read capacity on large tables.",
+        ));
     }
     if cmd.args.get(1).is_some_and(|a| a.starts_with("filter")) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "AWS filter-* operation: reads a filtered view of events or records (e.g. CloudWatch Logs filter). Read-only.",
+        ));
     }
 
     Some(GateResult::ask(format!("aws: {}", subcmd_single)))
@@ -964,47 +1311,9 @@ pub fn check_aws_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === GCLOUD (from cloud.toml) ===
 
-pub static GCLOUD_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "config list",
-        "config get-value",
-        "auth list",
-        "auth describe",
-        "projects list",
-        "projects describe",
-        "compute instances list",
-        "compute instances describe",
-        "compute zones list",
-        "compute regions list",
-        "compute machine-types list",
-        "container clusters list",
-        "container clusters describe",
-        "storage ls",
-        "storage cat",
-        "functions list",
-        "functions describe",
-        "functions logs",
-        "run services list",
-        "run services describe",
-        "sql instances list",
-        "sql instances describe",
-        "logging read",
-        "iam list",
-        "iam describe",
-        "secrets list",
-        "secrets describe",
-        "secrets versions",
-        "--version",
-        "help",
-        "info",
-    ]
-    .into_iter()
-    .collect()
-});
-
 pub static GCLOUD_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("container clusters get-credentials", "Updating kubeconfig (writes to `~/.kube/config`)"),
+        ("container clusters get-credentials", "Fetches GKE cluster credentials and writes a context entry to `~/.kube/config`. Subsequent kubectl commands target that cluster."),
         ("compute instances create", "GCE create: provisions a new VM in the project. Billing starts when it boots; verify zone, machine type, and network."),
         ("compute instances delete", "GCE compute delete: terminates the VM. Persistent disks may or may not be deleted depending on flags."),
         ("compute instances start", "GCE start: boots a stopped VM. Compute billing resumes once the instance is running."),
@@ -1048,8 +1357,205 @@ pub fn check_gcloud_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if GCLOUD_ALLOW.contains(subcmd.as_str()) || GCLOUD_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if cmd.args.len() >= 2 && cmd.args[0] == "config" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Shows the active gcloud configuration (account, project, region/zone). Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "config" && cmd.args[1] == "get-value" {
+        return Some(GateResult::allow_with_reason(
+            "Prints a single gcloud config value (e.g. `project`, `account`). Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "auth" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists credentialed accounts and marks the active one. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "auth" && cmd.args[1] == "describe" {
+        return Some(GateResult::allow_with_reason(
+            "Shows details of a credentialed account (token status, scopes). Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "projects" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists GCP projects the active account can see. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "projects" && cmd.args[1] == "describe" {
+        return Some(GateResult::allow_with_reason(
+            "Shows metadata for a project (number, state, labels). Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 3
+        && cmd.args.first() == Some(&"compute".to_string())
+        && cmd.args.get(1) == Some(&"instances".to_string())
+        && cmd.args.get(2) == Some(&"list".to_string())
+    {
+        return Some(GateResult::allow_with_reason(
+            "Lists Compute Engine VMs in the project. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 3
+        && cmd.args.first() == Some(&"compute".to_string())
+        && cmd.args.get(1) == Some(&"instances".to_string())
+        && cmd.args.get(2) == Some(&"describe".to_string())
+    {
+        return Some(GateResult::allow_with_reason(
+            "Shows the configuration and status of a VM. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 3
+        && cmd.args.first() == Some(&"compute".to_string())
+        && cmd.args.get(1) == Some(&"zones".to_string())
+        && cmd.args.get(2) == Some(&"list".to_string())
+    {
+        return Some(GateResult::allow_with_reason(
+            "Lists available Compute Engine zones. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 3
+        && cmd.args.first() == Some(&"compute".to_string())
+        && cmd.args.get(1) == Some(&"regions".to_string())
+        && cmd.args.get(2) == Some(&"list".to_string())
+    {
+        return Some(GateResult::allow_with_reason(
+            "Lists available Compute Engine regions and quotas. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 3
+        && cmd.args.first() == Some(&"compute".to_string())
+        && cmd.args.get(1) == Some(&"machine-types".to_string())
+        && cmd.args.get(2) == Some(&"list".to_string())
+    {
+        return Some(GateResult::allow_with_reason(
+            "Lists available machine types per zone. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 3
+        && cmd.args.first() == Some(&"container".to_string())
+        && cmd.args.get(1) == Some(&"clusters".to_string())
+        && cmd.args.get(2) == Some(&"list".to_string())
+    {
+        return Some(GateResult::allow_with_reason(
+            "Lists GKE clusters in the project. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 3
+        && cmd.args.first() == Some(&"container".to_string())
+        && cmd.args.get(1) == Some(&"clusters".to_string())
+        && cmd.args.get(2) == Some(&"describe".to_string())
+    {
+        return Some(GateResult::allow_with_reason(
+            "Shows the configuration and status of a GKE cluster. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "storage" && cmd.args[1] == "ls" {
+        return Some(GateResult::allow_with_reason(
+            "Lists Cloud Storage buckets or objects under a prefix. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "storage" && cmd.args[1] == "cat" {
+        return Some(GateResult::allow_with_reason(
+            "Streams the contents of a Cloud Storage object to stdout. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "functions" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists Cloud Functions in the project. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "functions" && cmd.args[1] == "describe" {
+        return Some(GateResult::allow_with_reason(
+            "Shows the configuration and status of a Cloud Function. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "functions" && cmd.args[1] == "logs" {
+        return Some(GateResult::allow_with_reason(
+            "Reads execution logs for a Cloud Function. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 3
+        && cmd.args.first() == Some(&"run".to_string())
+        && cmd.args.get(1) == Some(&"services".to_string())
+        && cmd.args.get(2) == Some(&"list".to_string())
+    {
+        return Some(GateResult::allow_with_reason(
+            "Lists Cloud Run services in the project. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 3
+        && cmd.args.first() == Some(&"run".to_string())
+        && cmd.args.get(1) == Some(&"services".to_string())
+        && cmd.args.get(2) == Some(&"describe".to_string())
+    {
+        return Some(GateResult::allow_with_reason(
+            "Shows the configuration, revisions, and traffic split of a Cloud Run service. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 3
+        && cmd.args.first() == Some(&"sql".to_string())
+        && cmd.args.get(1) == Some(&"instances".to_string())
+        && cmd.args.get(2) == Some(&"list".to_string())
+    {
+        return Some(GateResult::allow_with_reason(
+            "Lists Cloud SQL instances in the project. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 3
+        && cmd.args.first() == Some(&"sql".to_string())
+        && cmd.args.get(1) == Some(&"instances".to_string())
+        && cmd.args.get(2) == Some(&"describe".to_string())
+    {
+        return Some(GateResult::allow_with_reason(
+            "Shows the configuration and status of a Cloud SQL instance. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "logging" && cmd.args[1] == "read" {
+        return Some(GateResult::allow_with_reason(
+            "Reads log entries from Cloud Logging. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "iam" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists IAM resources (roles, service accounts, etc.) in the project. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "iam" && cmd.args[1] == "describe" {
+        return Some(GateResult::allow_with_reason(
+            "Shows details of an IAM resource (role, service account). Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "secrets" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists secrets in Secret Manager (names only, not payloads). Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "secrets" && cmd.args[1] == "describe" {
+        return Some(GateResult::allow_with_reason(
+            "Shows metadata for a secret (replication, labels). Does not reveal the payload. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "secrets" && cmd.args[1] == "versions" {
+        return Some(GateResult::allow_with_reason(
+            "Lists or describes versions of a secret (state, create time). Read-only; does not print payloads.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the gcloud CLI version. Read-only.",
+        ));
+    }
+    if subcmd_single == "help" {
+        return Some(GateResult::allow_with_reason(
+            "Shows gcloud help text. Read-only.",
+        ));
+    }
+    if subcmd_single == "info" {
+        return Some(GateResult::allow_with_reason(
+            "Shows gcloud environment diagnostics (SDK paths, active config, account). Read-only.",
+        ));
     }
 
     if let Some(reason) = GCLOUD_ASK
@@ -1063,9 +1569,6 @@ pub fn check_gcloud_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === AZ (from cloud.toml) ===
-
-pub static AZ_ALLOW: LazyLock<HashSet<&str>> =
-    LazyLock::new(|| ["--version", "--help", "-h"].into_iter().collect());
 
 /// Check az commands declaratively
 pub fn check_az_declarative(cmd: &CommandInfo) -> Option<GateResult> {
@@ -1084,36 +1587,27 @@ pub fn check_az_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if AZ_ALLOW.contains(subcmd.as_str()) || AZ_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the Azure CLI version and component versions. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Shows Azure CLI help text. Read-only.",
+        ));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason(
+            "Shows Azure CLI help text. Read-only.",
+        ));
     }
 
     Some(GateResult::ask(format!("az: {}", subcmd_single)))
 }
 
 // === TERRAFORM (from cloud.toml) ===
-
-pub static TERRAFORM_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "plan",
-        "show",
-        "output",
-        "validate",
-        "version",
-        "providers",
-        "graph",
-        "-version",
-        "--version",
-        "-help",
-        "--help",
-        "state list",
-        "state show",
-        "workspace list",
-        "workspace show",
-    ]
-    .into_iter()
-    .collect()
-});
 
 pub static TERRAFORM_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -1154,13 +1648,86 @@ pub fn check_terraform_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if TERRAFORM_ALLOW.contains(subcmd.as_str()) || TERRAFORM_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
-    }
-
     // Check conditional allow rules
+    if subcmd_single == "plan" {
+        return Some(GateResult::allow_with_reason(
+            "Terraform plan: computes and prints the diff between config and state without changing infrastructure. Read-only.",
+        ));
+    }
+    if subcmd_single == "show" {
+        return Some(GateResult::allow_with_reason(
+            "Terraform show: prints the current state or a saved plan in human-readable form. Read-only.",
+        ));
+    }
+    if subcmd_single == "output" {
+        return Some(GateResult::allow_with_reason(
+            "Terraform output: prints the values of root module outputs from state. Read-only; may expose sensitive output values.",
+        ));
+    }
+    if subcmd_single == "validate" {
+        return Some(GateResult::allow_with_reason(
+            "Terraform validate: checks config for syntax and internal consistency. Read-only; does not touch state or providers' APIs.",
+        ));
+    }
+    if subcmd_single == "version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the Terraform and provider versions. Read-only.",
+        ));
+    }
+    if subcmd_single == "providers" {
+        return Some(GateResult::allow_with_reason(
+            "Terraform providers: lists the providers required by the configuration. Read-only.",
+        ));
+    }
+    if subcmd_single == "graph" {
+        return Some(GateResult::allow_with_reason(
+            "Terraform graph: emits the dependency graph in DOT format. Read-only.",
+        ));
+    }
+    if subcmd_single == "-version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the Terraform version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the Terraform version. Read-only.",
+        ));
+    }
+    if subcmd_single == "-help" {
+        return Some(GateResult::allow_with_reason(
+            "Shows Terraform help text. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Shows Terraform help text. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "state" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Terraform state list: lists the resource addresses tracked in state. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "state" && cmd.args[1] == "show" {
+        return Some(GateResult::allow_with_reason(
+            "Terraform state show: prints the attributes of one resource from state. Read-only; may expose sensitive values.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "workspace" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Terraform workspace list: lists workspaces and marks the active one. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "workspace" && cmd.args[1] == "show" {
+        return Some(GateResult::allow_with_reason(
+            "Terraform workspace show: prints the name of the active workspace. Read-only.",
+        ));
+    }
     if subcmd_single == "fmt" && cmd.args.iter().any(|a| ["-check"].contains(&a.as_str())) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Terraform fmt -check: reports whether `.tf` files match canonical style without rewriting them. Read-only.",
+        ));
     }
 
     if let Some(reason) = TERRAFORM_ASK
@@ -1174,33 +1741,6 @@ pub fn check_terraform_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === KUBECTL (from cloud.toml) ===
-
-pub static KUBECTL_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "get",
-        "describe",
-        "logs",
-        "top",
-        "explain",
-        "api-resources",
-        "api-versions",
-        "cluster-info",
-        "version",
-        "-h",
-        "--help",
-        "config view",
-        "config get-contexts",
-        "config current-context",
-        "config get-clusters",
-        "auth can-i",
-        "auth whoami",
-        "diff",
-        "kustomize",
-        "wait",
-    ]
-    .into_iter()
-    .collect()
-});
 
 pub static KUBECTL_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -1261,8 +1801,106 @@ pub fn check_kubectl_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::block(format!("kubectl: {}", reason)));
     }
 
-    if KUBECTL_ALLOW.contains(subcmd.as_str()) || KUBECTL_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "get" {
+        return Some(GateResult::allow_with_reason(
+            "kubectl get: lists or prints resources in the current context/namespace. Read-only.",
+        ));
+    }
+    if subcmd_single == "describe" {
+        return Some(GateResult::allow_with_reason(
+            "kubectl describe: prints detailed state and recent events for a resource. Read-only.",
+        ));
+    }
+    if subcmd_single == "logs" {
+        return Some(GateResult::allow_with_reason(
+            "kubectl logs: streams or prints container logs from a pod. Read-only.",
+        ));
+    }
+    if subcmd_single == "top" {
+        return Some(GateResult::allow_with_reason(
+            "kubectl top: shows CPU/memory usage for nodes or pods via the metrics API. Read-only.",
+        ));
+    }
+    if subcmd_single == "explain" {
+        return Some(GateResult::allow_with_reason(
+            "kubectl explain: prints the schema/field docs for a resource kind. Read-only.",
+        ));
+    }
+    if subcmd_single == "api-resources" {
+        return Some(GateResult::allow_with_reason(
+            "kubectl api-resources: lists the resource types the cluster serves. Read-only.",
+        ));
+    }
+    if subcmd_single == "api-versions" {
+        return Some(GateResult::allow_with_reason(
+            "kubectl api-versions: lists the API group/versions the cluster serves. Read-only.",
+        ));
+    }
+    if subcmd_single == "cluster-info" {
+        return Some(GateResult::allow_with_reason(
+            "kubectl cluster-info: prints the control plane and core service endpoints. Read-only.",
+        ));
+    }
+    if subcmd_single == "version" {
+        return Some(GateResult::allow_with_reason(
+            "kubectl version: prints client and server versions. Read-only.",
+        ));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason(
+            "Shows kubectl help text. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Shows kubectl help text. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "config" && cmd.args[1] == "view" {
+        return Some(GateResult::allow_with_reason(
+            "kubectl config view: prints the merged kubeconfig. Read-only; secret values are redacted unless `--raw` is passed.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "config" && cmd.args[1] == "get-contexts" {
+        return Some(GateResult::allow_with_reason(
+            "kubectl config get-contexts: lists contexts and marks the current one. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "config" && cmd.args[1] == "current-context" {
+        return Some(GateResult::allow_with_reason(
+            "kubectl config current-context: prints the name of the active context. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "config" && cmd.args[1] == "get-clusters" {
+        return Some(GateResult::allow_with_reason(
+            "kubectl config get-clusters: lists cluster entries in the kubeconfig. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "auth" && cmd.args[1] == "can-i" {
+        return Some(GateResult::allow_with_reason(
+            "kubectl auth can-i: checks whether the current user may perform an action. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "auth" && cmd.args[1] == "whoami" {
+        return Some(GateResult::allow_with_reason(
+            "kubectl auth whoami: prints the identity attributes the API server sees for the current user. Read-only.",
+        ));
+    }
+    if subcmd_single == "diff" {
+        return Some(GateResult::allow_with_reason(
+            "kubectl diff: shows what `apply` would change by comparing the manifest against live state. Read-only.",
+        ));
+    }
+    if subcmd_single == "kustomize" {
+        return Some(GateResult::allow_with_reason(
+            "kubectl kustomize: renders a kustomization to stdout. Read-only; does not contact the cluster.",
+        ));
+    }
+    if subcmd_single == "wait" {
+        return Some(GateResult::allow_with_reason(
+            "kubectl wait: blocks until a resource reaches a condition. Polls state; does not modify resources.",
+        ));
     }
 
     if let Some(reason) = KUBECTL_ASK
@@ -1276,64 +1914,6 @@ pub fn check_kubectl_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === DOCKER (from cloud.toml) ===
-
-pub static DOCKER_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "ps",
-        "images",
-        "inspect",
-        "logs",
-        "stats",
-        "top",
-        "port",
-        "version",
-        "info",
-        "history",
-        "-v",
-        "--version",
-        "-h",
-        "--help",
-        "network ls",
-        "network list",
-        "network inspect",
-        "volume ls",
-        "volume list",
-        "volume inspect",
-        "system df",
-        "system info",
-        "buildx ls",
-        "buildx inspect",
-        "buildx version",
-        "scout quickview",
-        "scout cves",
-        "scout recommendations",
-        "scout compare",
-        "context ls",
-        "context list",
-        "context show",
-        "context inspect",
-        "manifest inspect",
-        "image ls",
-        "image list",
-        "image inspect",
-        "image history",
-        "container ls",
-        "container list",
-        "container inspect",
-        "container logs",
-        "container top",
-        "container stats",
-        "compose ps",
-        "compose logs",
-        "compose config",
-        "compose images",
-        "compose ls",
-        "compose version",
-        "compose top",
-    ]
-    .into_iter()
-    .collect()
-});
 
 pub static DOCKER_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -1420,8 +2000,261 @@ pub fn check_docker_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if DOCKER_ALLOW.contains(subcmd.as_str()) || DOCKER_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "ps" {
+        return Some(GateResult::allow_with_reason(
+            "Docker ps: lists running (or with `-a`, all) containers. Read-only.",
+        ));
+    }
+    if subcmd_single == "images" {
+        return Some(GateResult::allow_with_reason(
+            "Docker images: lists local images. Read-only.",
+        ));
+    }
+    if subcmd_single == "inspect" {
+        return Some(GateResult::allow_with_reason(
+            "Docker inspect: prints the low-level config of a container, image, or other object. Read-only.",
+        ));
+    }
+    if subcmd_single == "logs" {
+        return Some(GateResult::allow_with_reason(
+            "Docker logs: prints or streams a container's stdout/stderr. Read-only.",
+        ));
+    }
+    if subcmd_single == "stats" {
+        return Some(GateResult::allow_with_reason(
+            "Docker stats: shows live CPU/memory/IO usage per container. Read-only.",
+        ));
+    }
+    if subcmd_single == "top" {
+        return Some(GateResult::allow_with_reason(
+            "Docker top: lists the processes running inside a container. Read-only.",
+        ));
+    }
+    if subcmd_single == "port" {
+        return Some(GateResult::allow_with_reason(
+            "Docker port: shows the published port mappings for a container. Read-only.",
+        ));
+    }
+    if subcmd_single == "version" {
+        return Some(GateResult::allow_with_reason(
+            "Docker version: prints client and daemon versions. Read-only.",
+        ));
+    }
+    if subcmd_single == "info" {
+        return Some(GateResult::allow_with_reason(
+            "Docker info: prints daemon-wide configuration and resource counts. Read-only.",
+        ));
+    }
+    if subcmd_single == "history" {
+        return Some(GateResult::allow_with_reason(
+            "Docker history: shows the layer history of an image. Read-only.",
+        ));
+    }
+    if subcmd_single == "-v" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the Docker version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the Docker version. Read-only.",
+        ));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason(
+            "Shows Docker help text. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Shows Docker help text. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "network" && cmd.args[1] == "ls" {
+        return Some(GateResult::allow_with_reason(
+            "Docker network ls: lists Docker networks. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "network" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Docker network list: lists Docker networks. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "network" && cmd.args[1] == "inspect" {
+        return Some(GateResult::allow_with_reason(
+            "Docker network inspect: prints a network's config and attached containers. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "volume" && cmd.args[1] == "ls" {
+        return Some(GateResult::allow_with_reason(
+            "Docker volume ls: lists Docker volumes. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "volume" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Docker volume list: lists Docker volumes. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "volume" && cmd.args[1] == "inspect" {
+        return Some(GateResult::allow_with_reason(
+            "Docker volume inspect: prints a volume's config and mountpoint. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "system" && cmd.args[1] == "df" {
+        return Some(GateResult::allow_with_reason(
+            "Docker system df: reports disk usage by images, containers, volumes, and cache. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "system" && cmd.args[1] == "info" {
+        return Some(GateResult::allow_with_reason(
+            "Docker system info: prints daemon-wide configuration and resource counts. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "buildx" && cmd.args[1] == "ls" {
+        return Some(GateResult::allow_with_reason(
+            "Docker buildx ls: lists builder instances and their nodes. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "buildx" && cmd.args[1] == "inspect" {
+        return Some(GateResult::allow_with_reason(
+            "Docker buildx inspect: prints a builder's config and status. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "buildx" && cmd.args[1] == "version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the buildx plugin version. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "scout" && cmd.args[1] == "quickview" {
+        return Some(GateResult::allow_with_reason(
+            "Docker Scout quickview: prints a vulnerability summary for an image. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "scout" && cmd.args[1] == "cves" {
+        return Some(GateResult::allow_with_reason(
+            "Docker Scout cves: lists known CVEs in an image. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "scout" && cmd.args[1] == "recommendations" {
+        return Some(GateResult::allow_with_reason(
+            "Docker Scout recommendations: suggests base-image and dependency updates for an image. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "scout" && cmd.args[1] == "compare" {
+        return Some(GateResult::allow_with_reason(
+            "Docker Scout compare: diffs the vulnerability profile of two images. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "context" && cmd.args[1] == "ls" {
+        return Some(GateResult::allow_with_reason(
+            "Docker context ls: lists Docker contexts and marks the active one. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "context" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Docker context list: lists Docker contexts and marks the active one. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "context" && cmd.args[1] == "show" {
+        return Some(GateResult::allow_with_reason(
+            "Docker context show: prints the name of the active context. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "context" && cmd.args[1] == "inspect" {
+        return Some(GateResult::allow_with_reason(
+            "Docker context inspect: prints a context's endpoint config. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "manifest" && cmd.args[1] == "inspect" {
+        return Some(GateResult::allow_with_reason(
+            "Docker manifest inspect: prints a manifest list or image manifest from a registry. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "image" && cmd.args[1] == "ls" {
+        return Some(GateResult::allow_with_reason(
+            "Docker image ls: lists local images. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "image" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Docker image list: lists local images. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "image" && cmd.args[1] == "inspect" {
+        return Some(GateResult::allow_with_reason(
+            "Docker image inspect: prints an image's low-level config. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "image" && cmd.args[1] == "history" {
+        return Some(GateResult::allow_with_reason(
+            "Docker image history: shows the layer history of an image. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "container" && cmd.args[1] == "ls" {
+        return Some(GateResult::allow_with_reason(
+            "Docker container ls: lists running (or with `-a`, all) containers. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "container" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Docker container list: lists running (or with `-a`, all) containers. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "container" && cmd.args[1] == "inspect" {
+        return Some(GateResult::allow_with_reason(
+            "Docker container inspect: prints a container's low-level config. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "container" && cmd.args[1] == "logs" {
+        return Some(GateResult::allow_with_reason(
+            "Docker container logs: prints or streams a container's stdout/stderr. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "container" && cmd.args[1] == "top" {
+        return Some(GateResult::allow_with_reason(
+            "Docker container top: lists the processes running inside a container. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "container" && cmd.args[1] == "stats" {
+        return Some(GateResult::allow_with_reason(
+            "Docker container stats: shows live CPU/memory/IO usage per container. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "compose" && cmd.args[1] == "ps" {
+        return Some(GateResult::allow_with_reason(
+            "Compose ps: lists the containers for the current compose project. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "compose" && cmd.args[1] == "logs" {
+        return Some(GateResult::allow_with_reason(
+            "Compose logs: prints or streams logs from the project's service containers. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "compose" && cmd.args[1] == "config" {
+        return Some(GateResult::allow_with_reason(
+            "Compose config: renders the fully-resolved compose file to stdout. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "compose" && cmd.args[1] == "images" {
+        return Some(GateResult::allow_with_reason(
+            "Compose images: lists the images used by the project's services. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "compose" && cmd.args[1] == "ls" {
+        return Some(GateResult::allow_with_reason(
+            "Compose ls: lists running compose projects. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "compose" && cmd.args[1] == "version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the Compose plugin version. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "compose" && cmd.args[1] == "top" {
+        return Some(GateResult::allow_with_reason(
+            "Compose top: lists the processes running in the project's service containers. Read-only.",
+        ));
     }
 
     if let Some(reason) = DOCKER_ASK
@@ -1435,49 +2268,6 @@ pub fn check_docker_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === PODMAN (from cloud.toml) ===
-
-pub static PODMAN_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "ps",
-        "images",
-        "inspect",
-        "logs",
-        "stats",
-        "top",
-        "port",
-        "version",
-        "info",
-        "history",
-        "search",
-        "healthcheck",
-        "-v",
-        "--version",
-        "-h",
-        "--help",
-        "network ls",
-        "network list",
-        "network inspect",
-        "volume ls",
-        "volume list",
-        "volume inspect",
-        "system df",
-        "system info",
-        "machine info",
-        "machine inspect",
-        "machine list",
-        "pod ps",
-        "pod list",
-        "pod inspect",
-        "pod logs",
-        "pod top",
-        "pod stats",
-        "secret ls",
-        "secret list",
-        "secret inspect",
-    ]
-    .into_iter()
-    .collect()
-});
 
 pub static PODMAN_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -1523,8 +2313,186 @@ pub fn check_podman_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if PODMAN_ALLOW.contains(subcmd.as_str()) || PODMAN_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "ps" {
+        return Some(GateResult::allow_with_reason(
+            "Podman ps: lists running (or with `-a`, all) containers. Read-only.",
+        ));
+    }
+    if subcmd_single == "images" {
+        return Some(GateResult::allow_with_reason(
+            "Podman images: lists local images. Read-only.",
+        ));
+    }
+    if subcmd_single == "inspect" {
+        return Some(GateResult::allow_with_reason(
+            "Podman inspect: prints the low-level config of a container or image. Read-only.",
+        ));
+    }
+    if subcmd_single == "logs" {
+        return Some(GateResult::allow_with_reason(
+            "Podman logs: prints or streams a container's stdout/stderr. Read-only.",
+        ));
+    }
+    if subcmd_single == "stats" {
+        return Some(GateResult::allow_with_reason(
+            "Podman stats: shows live CPU/memory/IO usage per container. Read-only.",
+        ));
+    }
+    if subcmd_single == "top" {
+        return Some(GateResult::allow_with_reason(
+            "Podman top: lists the processes running inside a container. Read-only.",
+        ));
+    }
+    if subcmd_single == "port" {
+        return Some(GateResult::allow_with_reason(
+            "Podman port: shows the published port mappings for a container. Read-only.",
+        ));
+    }
+    if subcmd_single == "version" {
+        return Some(GateResult::allow_with_reason(
+            "Podman version: prints client and (where applicable) service versions. Read-only.",
+        ));
+    }
+    if subcmd_single == "info" {
+        return Some(GateResult::allow_with_reason(
+            "Podman info: prints host and storage configuration. Read-only.",
+        ));
+    }
+    if subcmd_single == "history" {
+        return Some(GateResult::allow_with_reason(
+            "Podman history: shows the layer history of an image. Read-only.",
+        ));
+    }
+    if subcmd_single == "search" {
+        return Some(GateResult::allow_with_reason(
+            "Podman search: queries configured registries for matching images. Read-only.",
+        ));
+    }
+    if subcmd_single == "healthcheck" {
+        return Some(GateResult::allow_with_reason(
+            "Podman healthcheck: runs or reports a container's configured health check. Reports status; does not modify the container.",
+        ));
+    }
+    if subcmd_single == "-v" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the Podman version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the Podman version. Read-only.",
+        ));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason(
+            "Shows Podman help text. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Shows Podman help text. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "network" && cmd.args[1] == "ls" {
+        return Some(GateResult::allow_with_reason(
+            "Podman network ls: lists Podman networks. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "network" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Podman network list: lists Podman networks. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "network" && cmd.args[1] == "inspect" {
+        return Some(GateResult::allow_with_reason(
+            "Podman network inspect: prints a network's config and attached containers. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "volume" && cmd.args[1] == "ls" {
+        return Some(GateResult::allow_with_reason(
+            "Podman volume ls: lists Podman volumes. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "volume" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Podman volume list: lists Podman volumes. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "volume" && cmd.args[1] == "inspect" {
+        return Some(GateResult::allow_with_reason(
+            "Podman volume inspect: prints a volume's config and mountpoint. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "system" && cmd.args[1] == "df" {
+        return Some(GateResult::allow_with_reason(
+            "Podman system df: reports disk usage by images, containers, and volumes. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "system" && cmd.args[1] == "info" {
+        return Some(GateResult::allow_with_reason(
+            "Podman system info: prints host and storage configuration. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "machine" && cmd.args[1] == "info" {
+        return Some(GateResult::allow_with_reason(
+            "Podman machine info: prints info about the Podman machine VM environment. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "machine" && cmd.args[1] == "inspect" {
+        return Some(GateResult::allow_with_reason(
+            "Podman machine inspect: prints a Podman machine VM's config. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "machine" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Podman machine list: lists Podman machine VMs and their state. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "pod" && cmd.args[1] == "ps" {
+        return Some(GateResult::allow_with_reason(
+            "Podman pod ps: lists pods and their state. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "pod" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Podman pod list: lists pods and their state. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "pod" && cmd.args[1] == "inspect" {
+        return Some(GateResult::allow_with_reason(
+            "Podman pod inspect: prints a pod's config and member containers. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "pod" && cmd.args[1] == "logs" {
+        return Some(GateResult::allow_with_reason(
+            "Podman pod logs: prints or streams logs from a pod's containers. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "pod" && cmd.args[1] == "top" {
+        return Some(GateResult::allow_with_reason(
+            "Podman pod top: lists the processes running across a pod's containers. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "pod" && cmd.args[1] == "stats" {
+        return Some(GateResult::allow_with_reason(
+            "Podman pod stats: shows live resource usage for a pod's containers. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "secret" && cmd.args[1] == "ls" {
+        return Some(GateResult::allow_with_reason(
+            "Podman secret ls: lists secret names and metadata (not values). Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "secret" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Podman secret list: lists secret names and metadata (not values). Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "secret" && cmd.args[1] == "inspect" {
+        return Some(GateResult::allow_with_reason(
+            "Podman secret inspect: prints a secret's metadata. Does not reveal the value. Read-only.",
+        ));
     }
 
     if let Some(reason) = PODMAN_ASK
@@ -1538,14 +2506,6 @@ pub fn check_podman_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === DOCKER-COMPOSE (from cloud.toml) ===
-
-pub static DOCKER_COMPOSE_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "ps", "logs", "config", "images", "ls", "version", "-h", "--help",
-    ]
-    .into_iter()
-    .collect()
-});
 
 pub static DOCKER_COMPOSE_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -1584,10 +2544,46 @@ pub fn check_docker_compose_declarative(cmd: &CommandInfo) -> Option<GateResult>
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if DOCKER_COMPOSE_ALLOW.contains(subcmd.as_str())
-        || DOCKER_COMPOSE_ALLOW.contains(subcmd_single)
-    {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "ps" {
+        return Some(GateResult::allow_with_reason(
+            "Compose ps: lists the containers for the current compose project. Read-only.",
+        ));
+    }
+    if subcmd_single == "logs" {
+        return Some(GateResult::allow_with_reason(
+            "Compose logs: prints or streams logs from the project's service containers. Read-only.",
+        ));
+    }
+    if subcmd_single == "config" {
+        return Some(GateResult::allow_with_reason(
+            "Compose config: renders the fully-resolved compose file to stdout. Read-only.",
+        ));
+    }
+    if subcmd_single == "images" {
+        return Some(GateResult::allow_with_reason(
+            "Compose images: lists the images used by the project's services. Read-only.",
+        ));
+    }
+    if subcmd_single == "ls" {
+        return Some(GateResult::allow_with_reason(
+            "Compose ls: lists running compose projects. Read-only.",
+        ));
+    }
+    if subcmd_single == "version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the Compose version. Read-only.",
+        ));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason(
+            "Shows Compose help text. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Shows Compose help text. Read-only.",
+        ));
     }
 
     if let Some(reason) = DOCKER_COMPOSE_ASK
@@ -1604,27 +2600,6 @@ pub fn check_docker_compose_declarative(cmd: &CommandInfo) -> Option<GateResult>
 }
 
 // === HELM (from cloud.toml) ===
-
-pub static HELM_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "list",
-        "ls",
-        "get",
-        "show",
-        "search",
-        "repo list",
-        "status",
-        "history",
-        "version",
-        "-h",
-        "--help",
-        "template",
-        "lint",
-        "verify",
-    ]
-    .into_iter()
-    .collect()
-});
 
 pub static HELM_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -1658,8 +2633,76 @@ pub fn check_helm_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if HELM_ALLOW.contains(subcmd.as_str()) || HELM_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Helm list: lists releases in the current namespace (or all with `-A`). Read-only.",
+        ));
+    }
+    if subcmd_single == "ls" {
+        return Some(GateResult::allow_with_reason(
+            "Helm ls: lists releases in the current namespace (or all with `-A`). Read-only.",
+        ));
+    }
+    if subcmd_single == "get" {
+        return Some(GateResult::allow_with_reason(
+            "Helm get: prints details of an installed release (values, manifest, notes, hooks). Read-only.",
+        ));
+    }
+    if subcmd_single == "show" {
+        return Some(GateResult::allow_with_reason(
+            "Helm show: prints chart metadata, values, or README from a chart. Read-only.",
+        ));
+    }
+    if subcmd_single == "search" {
+        return Some(GateResult::allow_with_reason(
+            "Helm search: searches repositories or the Artifact Hub for charts. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "repo" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Helm repo list: lists configured chart repositories. Read-only.",
+        ));
+    }
+    if subcmd_single == "status" {
+        return Some(GateResult::allow_with_reason(
+            "Helm status: prints the status of a named release. Read-only.",
+        ));
+    }
+    if subcmd_single == "history" {
+        return Some(GateResult::allow_with_reason(
+            "Helm history: lists the revision history of a release. Read-only.",
+        ));
+    }
+    if subcmd_single == "version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the Helm client version. Read-only.",
+        ));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason(
+            "Shows Helm help text. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Shows Helm help text. Read-only.",
+        ));
+    }
+    if subcmd_single == "template" {
+        return Some(GateResult::allow_with_reason(
+            "Helm template: renders chart templates to stdout locally. Read-only; does not contact the cluster.",
+        ));
+    }
+    if subcmd_single == "lint" {
+        return Some(GateResult::allow_with_reason(
+            "Helm lint: checks a chart for issues and best-practice violations. Read-only.",
+        ));
+    }
+    if subcmd_single == "verify" {
+        return Some(GateResult::allow_with_reason(
+            "Helm verify: checks that a packaged chart's provenance signature is valid. Read-only.",
+        ));
     }
 
     if let Some(reason) = HELM_ASK
@@ -1673,24 +2716,6 @@ pub fn check_helm_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === PULUMI (from cloud.toml) ===
-
-pub static PULUMI_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "preview",
-        "whoami",
-        "version",
-        "-h",
-        "--help",
-        "stack ls",
-        "stack list",
-        "stack output",
-        "stack history",
-        "stack export",
-        "config get",
-    ]
-    .into_iter()
-    .collect()
-});
 
 pub static PULUMI_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -1725,8 +2750,61 @@ pub fn check_pulumi_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if PULUMI_ALLOW.contains(subcmd.as_str()) || PULUMI_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "preview" {
+        return Some(GateResult::allow_with_reason(
+            "Pulumi preview: computes and prints the planned changes for the selected stack without applying them. Read-only.",
+        ));
+    }
+    if subcmd_single == "whoami" {
+        return Some(GateResult::allow_with_reason(
+            "Pulumi whoami: prints the currently logged-in Pulumi identity and backend. Read-only.",
+        ));
+    }
+    if subcmd_single == "version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the Pulumi CLI version. Read-only.",
+        ));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason(
+            "Shows Pulumi help text. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Shows Pulumi help text. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "stack" && cmd.args[1] == "ls" {
+        return Some(GateResult::allow_with_reason(
+            "Pulumi stack ls: lists stacks for the current project and marks the active one. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "stack" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Pulumi stack list: lists stacks for the current project and marks the active one. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "stack" && cmd.args[1] == "output" {
+        return Some(GateResult::allow_with_reason(
+            "Pulumi stack output: prints the selected stack's outputs. Read-only; may expose sensitive outputs with `--show-secrets`.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "stack" && cmd.args[1] == "history" {
+        return Some(GateResult::allow_with_reason(
+            "Pulumi stack history: lists past updates for the selected stack. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "stack" && cmd.args[1] == "export" {
+        return Some(GateResult::allow_with_reason(
+            "Pulumi stack export: writes the selected stack's state deployment to stdout. Read-only; exposes full state including secrets.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "config" && cmd.args[1] == "get" {
+        return Some(GateResult::allow_with_reason(
+            "Pulumi config get: prints a single config value for the selected stack. Read-only; `--secret` values are decrypted to stdout.",
+        ));
     }
 
     if let Some(reason) = PULUMI_ASK
@@ -1740,49 +2818,6 @@ pub fn check_pulumi_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === NPM (from package_managers.toml) ===
-
-pub static NPM_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "list",
-        "ls",
-        "ll",
-        "la",
-        "view",
-        "show",
-        "info",
-        "search",
-        "help",
-        "get",
-        "prefix",
-        "root",
-        "bin",
-        "whoami",
-        "token",
-        "team",
-        "outdated",
-        "doctor",
-        "explain",
-        "why",
-        "fund",
-        "query",
-        "-v",
-        "--version",
-        "-h",
-        "--help",
-        "test",
-        "build",
-        "dev",
-        "lint",
-        "check",
-        "typecheck",
-        "format",
-        "prettier",
-        "eslint",
-        "tsc",
-    ]
-    .into_iter()
-    .collect()
-});
 
 pub static NPM_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -1850,21 +2885,197 @@ pub fn check_npm_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         ));
     }
 
-    if NPM_ALLOW.contains(subcmd.as_str()) || NPM_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
-    }
-
     // Check conditional allow rules
+    if subcmd_single == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists installed packages in the dependency tree. Read-only.",
+        ));
+    }
+    if subcmd_single == "ls" {
+        return Some(GateResult::allow_with_reason(
+            "Lists installed packages in the dependency tree (`npm ls` aliases `npm list`). Read-only.",
+        ));
+    }
+    if subcmd_single == "ll" {
+        return Some(GateResult::allow_with_reason(
+            "Lists installed packages in long format with extra detail. Read-only.",
+        ));
+    }
+    if subcmd_single == "la" {
+        return Some(GateResult::allow_with_reason(
+            "Lists installed packages in long format including transitive deps. Read-only.",
+        ));
+    }
+    if subcmd_single == "view" {
+        return Some(GateResult::allow_with_reason(
+            "Shows registry metadata for a package (versions, dependencies, dist-tags). Read-only.",
+        ));
+    }
+    if subcmd_single == "show" {
+        return Some(GateResult::allow_with_reason(
+            "Shows registry metadata for a package (`npm show` aliases `npm view`). Read-only.",
+        ));
+    }
+    if subcmd_single == "info" {
+        return Some(GateResult::allow_with_reason(
+            "Shows registry metadata for a package (`npm info` aliases `npm view`). Read-only.",
+        ));
+    }
+    if subcmd_single == "search" {
+        return Some(GateResult::allow_with_reason(
+            "Searches the registry for packages matching the given terms. Read-only.",
+        ));
+    }
+    if subcmd_single == "help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints help for npm or a specific subcommand. Read-only.",
+        ));
+    }
     if subcmd_single == "config"
         && !cmd
             .args
             .iter()
             .any(|a| ["set", "delete", "edit"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Shows npm config values. Read-only unless `set`, `delete`, or `edit` is present, which is gated separately.",
+        ));
+    }
+    if subcmd_single == "get" {
+        return Some(GateResult::allow_with_reason(
+            "Reads a single npm config value. Read-only.",
+        ));
+    }
+    if subcmd_single == "prefix" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the npm prefix (install root) path. Read-only.",
+        ));
+    }
+    if subcmd_single == "root" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the effective `node_modules` path. Read-only.",
+        ));
+    }
+    if subcmd_single == "bin" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the directory where npm installs executables. Read-only.",
+        ));
+    }
+    if subcmd_single == "whoami" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the username of the logged-in registry account. Read-only.",
+        ));
+    }
+    if subcmd_single == "token" {
+        return Some(GateResult::allow_with_reason(
+            "Lists authentication tokens for the registry account. Read-only; does not create or revoke.",
+        ));
+    }
+    if subcmd_single == "team" {
+        return Some(GateResult::allow_with_reason(
+            "Lists or inspects organization teams on the registry. Read-only.",
+        ));
+    }
+    if subcmd_single == "outdated" {
+        return Some(GateResult::allow_with_reason(
+            "Reports which installed packages are out of date versus the registry. Read-only; no installs.",
+        ));
+    }
+    if subcmd_single == "doctor" {
+        return Some(GateResult::allow_with_reason(
+            "Runs environment and registry health checks and reports findings. Read-only.",
+        ));
+    }
+    if subcmd_single == "explain" {
+        return Some(GateResult::allow_with_reason(
+            "Explains why a package is present in the dependency tree. Read-only.",
+        ));
+    }
+    if subcmd_single == "why" {
+        return Some(GateResult::allow_with_reason(
+            "Explains why a package is installed and what depends on it. Read-only.",
+        ));
+    }
+    if subcmd_single == "fund" {
+        return Some(GateResult::allow_with_reason(
+            "Lists funding URLs declared by installed dependencies. Read-only.",
+        ));
     }
     if subcmd_single == "audit" && !cmd.args.iter().any(|a| ["fix"].contains(&a.as_str())) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Reports known vulnerabilities in the dependency tree. Read-only unless `fix` is present, which is gated separately.",
+        ));
+    }
+    if subcmd_single == "query" {
+        return Some(GateResult::allow_with_reason(
+            "Runs a dependency-selector query against the installed tree. Read-only.",
+        ));
+    }
+    if subcmd_single == "-v" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the npm version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the npm version. Read-only.",
+        ));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason("Prints npm help. Read-only."));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason("Prints npm help. Read-only."));
+    }
+    if subcmd_single == "test" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the package `test` script from `package.json`. Compiles and executes test code locally.",
+        ));
+    }
+    if subcmd_single == "build" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the package `build` script from `package.json`. Local build step.",
+        ));
+    }
+    if subcmd_single == "dev" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the package `dev` script from `package.json`. Starts the local dev workflow.",
+        ));
+    }
+    if subcmd_single == "lint" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the package `lint` script from `package.json`. Reports style and correctness issues.",
+        ));
+    }
+    if subcmd_single == "check" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the package `check` script from `package.json`. Local validation step.",
+        ));
+    }
+    if subcmd_single == "typecheck" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the package `typecheck` script from `package.json`. Reports type errors.",
+        ));
+    }
+    if subcmd_single == "format" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the package `format` script from `package.json`. Rewrites local source to match style.",
+        ));
+    }
+    if subcmd_single == "prettier" {
+        return Some(GateResult::allow_with_reason(
+            "Delegates to the Prettier formatter via npm. Formatting is gated by the devtools handler.",
+        ));
+    }
+    if subcmd_single == "eslint" {
+        return Some(GateResult::allow_with_reason(
+            "Delegates to the ESLint linter via npm. Linting is read-only unless `--fix` is passed.",
+        ));
+    }
+    if subcmd_single == "tsc" {
+        return Some(GateResult::allow_with_reason(
+            "Delegates to the TypeScript compiler via npm. Reports type errors and emits declared output.",
+        ));
     }
 
     if let Some(reason) = NPM_ASK
@@ -1878,30 +3089,6 @@ pub fn check_npm_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === PNPM (from package_managers.toml) ===
-
-pub static PNPM_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "list",
-        "ls",
-        "ll",
-        "why",
-        "outdated",
-        "-v",
-        "--version",
-        "-h",
-        "--help",
-        "test",
-        "build",
-        "dev",
-        "lint",
-        "check",
-        "typecheck",
-        "format",
-        "tsc",
-    ]
-    .into_iter()
-    .collect()
-});
 
 pub static PNPM_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -1952,13 +3139,96 @@ pub fn check_pnpm_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         ));
     }
 
-    if PNPM_ALLOW.contains(subcmd.as_str()) || PNPM_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
-    }
-
     // Check conditional allow rules
+    if subcmd_single == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists installed packages in the dependency tree. Read-only.",
+        ));
+    }
+    if subcmd_single == "ls" {
+        return Some(GateResult::allow_with_reason(
+            "Lists installed packages in the dependency tree (`pnpm ls` aliases `pnpm list`). Read-only.",
+        ));
+    }
+    if subcmd_single == "ll" {
+        return Some(GateResult::allow_with_reason(
+            "Lists installed packages in long format with extra detail. Read-only.",
+        ));
+    }
+    if subcmd_single == "why" {
+        return Some(GateResult::allow_with_reason(
+            "Explains why a package is installed and what depends on it. Read-only.",
+        ));
+    }
+    if subcmd_single == "outdated" {
+        return Some(GateResult::allow_with_reason(
+            "Reports which installed packages are out of date versus the registry. Read-only; no installs.",
+        ));
+    }
     if subcmd_single == "audit" && !cmd.args.iter().any(|a| ["--fix"].contains(&a.as_str())) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Reports known vulnerabilities in the dependency tree. Read-only unless `--fix` is present, which is gated separately.",
+        ));
+    }
+    if subcmd_single == "-v" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the pnpm version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the pnpm version. Read-only.",
+        ));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason(
+            "Prints pnpm help. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints pnpm help. Read-only.",
+        ));
+    }
+    if subcmd_single == "test" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the package `test` script from `package.json`. Compiles and executes test code locally.",
+        ));
+    }
+    if subcmd_single == "build" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the package `build` script from `package.json`. Local build step.",
+        ));
+    }
+    if subcmd_single == "dev" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the package `dev` script from `package.json`. Starts the local dev workflow.",
+        ));
+    }
+    if subcmd_single == "lint" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the package `lint` script from `package.json`. Reports style and correctness issues.",
+        ));
+    }
+    if subcmd_single == "check" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the package `check` script from `package.json`. Local validation step.",
+        ));
+    }
+    if subcmd_single == "typecheck" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the package `typecheck` script from `package.json`. Reports type errors.",
+        ));
+    }
+    if subcmd_single == "format" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the package `format` script from `package.json`. Rewrites local source to match style.",
+        ));
+    }
+    if subcmd_single == "tsc" {
+        return Some(GateResult::allow_with_reason(
+            "Delegates to the TypeScript compiler via pnpm. Reports type errors and emits declared output.",
+        ));
     }
 
     if let Some(reason) = PNPM_ASK
@@ -1972,29 +3242,6 @@ pub fn check_pnpm_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === YARN (from package_managers.toml) ===
-
-pub static YARN_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "list",
-        "info",
-        "why",
-        "outdated",
-        "audit",
-        "-v",
-        "--version",
-        "-h",
-        "--help",
-        "test",
-        "build",
-        "dev",
-        "lint",
-        "check",
-        "typecheck",
-        "format",
-    ]
-    .into_iter()
-    .collect()
-});
 
 pub static YARN_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -2045,18 +3292,96 @@ pub fn check_yarn_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::ask("Modifying yarn config"));
     }
 
-    if YARN_ALLOW.contains(subcmd.as_str()) || YARN_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
-    }
-
     // Check conditional allow rules
+    if subcmd_single == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists installed packages in the dependency tree. Read-only.",
+        ));
+    }
+    if subcmd_single == "info" {
+        return Some(GateResult::allow_with_reason(
+            "Shows registry metadata for a package (versions, dependencies). Read-only.",
+        ));
+    }
+    if subcmd_single == "why" {
+        return Some(GateResult::allow_with_reason(
+            "Explains why a package is installed and what depends on it. Read-only.",
+        ));
+    }
+    if subcmd_single == "outdated" {
+        return Some(GateResult::allow_with_reason(
+            "Reports which installed packages are out of date versus the registry. Read-only; no installs.",
+        ));
+    }
+    if subcmd_single == "audit" {
+        return Some(GateResult::allow_with_reason(
+            "Reports known vulnerabilities in the dependency tree. Read-only.",
+        ));
+    }
     if subcmd_single == "config"
         && !cmd
             .args
             .iter()
             .any(|a| ["set", "delete"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Shows yarn config values. Read-only unless `set` or `delete` is present, which is gated separately.",
+        ));
+    }
+    if subcmd_single == "-v" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the yarn version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the yarn version. Read-only.",
+        ));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason(
+            "Prints yarn help. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints yarn help. Read-only.",
+        ));
+    }
+    if subcmd_single == "test" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the package `test` script from `package.json`. Compiles and executes test code locally.",
+        ));
+    }
+    if subcmd_single == "build" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the package `build` script from `package.json`. Local build step.",
+        ));
+    }
+    if subcmd_single == "dev" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the package `dev` script from `package.json`. Starts the local dev workflow.",
+        ));
+    }
+    if subcmd_single == "lint" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the package `lint` script from `package.json`. Reports style and correctness issues.",
+        ));
+    }
+    if subcmd_single == "check" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the package `check` script from `package.json`. Local validation step.",
+        ));
+    }
+    if subcmd_single == "typecheck" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the package `typecheck` script from `package.json`. Reports type errors.",
+        ));
+    }
+    if subcmd_single == "format" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the package `format` script from `package.json`. Rewrites local source to match style.",
+        ));
     }
 
     if let Some(reason) = YARN_ASK
@@ -2070,24 +3395,6 @@ pub fn check_yarn_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === PIP (from package_managers.toml) ===
-
-pub static PIP_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "list",
-        "show",
-        "freeze",
-        "check",
-        "search",
-        "index",
-        "debug",
-        "-V",
-        "--version",
-        "-h",
-        "--help",
-    ]
-    .into_iter()
-    .collect()
-});
 
 pub static PIP_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -2144,18 +3451,46 @@ pub fn check_pip_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::ask("Deleting pip cache"));
     }
 
-    if PIP_ALLOW.contains(subcmd.as_str()) || PIP_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
-    }
-
     // Check conditional allow rules
+    if subcmd_single == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists installed Python packages and their versions. Read-only.",
+        ));
+    }
+    if subcmd_single == "show" {
+        return Some(GateResult::allow_with_reason(
+            "Shows metadata for an installed package (version, location, dependencies). Read-only.",
+        ));
+    }
+    if subcmd_single == "freeze" {
+        return Some(GateResult::allow_with_reason(
+            "Prints installed packages in `requirements.txt` format. Read-only.",
+        ));
+    }
+    if subcmd_single == "check" {
+        return Some(GateResult::allow_with_reason(
+            "Verifies that installed packages have compatible dependencies and reports conflicts. Read-only.",
+        ));
+    }
+    if subcmd_single == "search" {
+        return Some(GateResult::allow_with_reason(
+            "Searches the package index for matching packages. Read-only.",
+        ));
+    }
+    if subcmd_single == "index" {
+        return Some(GateResult::allow_with_reason(
+            "Queries package index information such as available versions. Read-only.",
+        ));
+    }
     if subcmd_single == "config"
         && !cmd
             .args
             .iter()
             .any(|a| ["set", "edit", "unset"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Shows pip config values. Read-only unless `set`, `edit`, or `unset` is present, which is gated separately.",
+        ));
     }
     if subcmd_single == "cache"
         && !cmd
@@ -2163,7 +3498,30 @@ pub fn check_pip_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["purge", "remove"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Shows pip cache info and location. Read-only unless `purge` or `remove` is present, which is gated separately.",
+        ));
+    }
+    if subcmd_single == "debug" {
+        return Some(GateResult::allow_with_reason(
+            "Prints pip and environment debug information. Read-only.",
+        ));
+    }
+    if subcmd_single == "-V" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the pip version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the pip version. Read-only.",
+        ));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason("Prints pip help. Read-only."));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason("Prints pip help. Read-only."));
     }
 
     if let Some(reason) = PIP_ASK
@@ -2177,24 +3535,6 @@ pub fn check_pip_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === UV (from package_managers.toml) ===
-
-pub static UV_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "version",
-        "help",
-        "tree",
-        "--version",
-        "-V",
-        "-h",
-        "--help",
-        "pip list",
-        "pip show",
-        "pip freeze",
-        "pip check",
-    ]
-    .into_iter()
-    .collect()
-});
 
 pub static UV_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -2232,8 +3572,57 @@ pub fn check_uv_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if UV_ALLOW.contains(subcmd.as_str()) || UV_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the uv version. Read-only.",
+        ));
+    }
+    if subcmd_single == "help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints help for uv or a specific subcommand. Read-only.",
+        ));
+    }
+    if subcmd_single == "tree" {
+        return Some(GateResult::allow_with_reason(
+            "Displays the project dependency graph as a tree. Read-only.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the uv version. Read-only.",
+        ));
+    }
+    if subcmd_single == "-V" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the uv version. Read-only.",
+        ));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason("Prints uv help. Read-only."));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason("Prints uv help. Read-only."));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "pip" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists packages in the active venv via uv's pip-compatible frontend. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "pip" && cmd.args[1] == "show" {
+        return Some(GateResult::allow_with_reason(
+            "Shows metadata for a package in the active venv via uv's pip-compatible frontend. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "pip" && cmd.args[1] == "freeze" {
+        return Some(GateResult::allow_with_reason(
+            "Prints active-venv packages in `requirements.txt` format via uv's pip-compatible frontend. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "pip" && cmd.args[1] == "check" {
+        return Some(GateResult::allow_with_reason(
+            "Verifies active-venv dependencies are compatible via uv's pip-compatible frontend. Read-only.",
+        ));
     }
 
     if let Some(reason) = UV_ASK
@@ -2248,60 +3637,21 @@ pub fn check_uv_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === CARGO (from package_managers.toml) ===
 
-pub static CARGO_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "check",
-        "doc",
-        "tree",
-        "metadata",
-        "pkgid",
-        "verify-project",
-        "search",
-        "info",
-        "locate-project",
-        "read-manifest",
-        "version",
-        "-V",
-        "--version",
-        "-h",
-        "--help",
-        "help",
-        "build",
-        "run",
-        "test",
-        "bench",
-        "fmt",
-        "clean",
-        "nextest",
-        "audit",
-        "deny",
-        "expand",
-        "semver-checks",
-        "llvm-cov",
-        "outdated",
-        "bloat",
-        "machete",
-        "depgraph",
-    ]
-    .into_iter()
-    .collect()
-});
-
 pub static CARGO_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("watch", "Running commands on file changes"),
+        ("watch", "Re-runs a given cargo command on every file change. Executes that command repeatedly; runs until interrupted."),
         ("mutants", "Mutation testing rewrites source files to introduce synthetic bugs and checks test coverage. Files are restored on completion; interrupting mid-run can leave the tree mutated."),
-        ("install", "Installing"),
-        ("uninstall", "Uninstalling"),
-        ("new", "Creating project"),
+        ("install", "Installs a binary crate into `~/.cargo/bin`. Compiles from source and puts the binary on PATH for the current user."),
+        ("uninstall", "Removes a previously `cargo install`ed binary from `~/.cargo/bin`."),
+        ("new", "Scaffolds a new Cargo package in a new directory, writing `Cargo.toml` and `src/`."),
         ("init", "Initializing project"),
         ("add", "Adding dependency"),
         ("remove", "Removing dependency"),
-        ("update", "Updating dependencies"),
+        ("update", "Updates dependencies in `Cargo.lock` to newer compatible versions. Changes resolved versions; no manifest edits."),
         ("publish", "Publishing crate"),
-        ("yank", "Yanking version"),
-        ("fix", "Auto-fixing code"),
-        ("generate-lockfile", "Generating lockfile"),
+        ("yank", "Yanks a published crate version on crates.io so new projects can't select it. Existing lockfiles keep resolving it; reversible with `--undo`."),
+        ("fix", "Applies compiler-suggested fixes to source files in place. Rewrites code; run on a clean tree so changes stay reviewable."),
+        ("generate-lockfile", "Creates or regenerates `Cargo.lock` by resolving dependencies. May change pinned versions."),
     ].into_iter().collect()
 });
 
@@ -2332,16 +3682,176 @@ pub fn check_cargo_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["review", "accept", "reject"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Snapshot testing"));
-    }
-
-    if CARGO_ALLOW.contains(subcmd.as_str()) || CARGO_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+        return Some(GateResult::ask(
+            "Reviews or applies insta snapshot changes. `accept` overwrites `.snap` files with current output; `reject` discards pending snapshots.",
+        ));
     }
 
     // Check conditional allow rules
+    if subcmd_single == "check" {
+        return Some(GateResult::allow_with_reason(
+            "Type-checks the crate without producing a final binary. Writes only build artifacts under `target`.",
+        ));
+    }
     if subcmd_single == "clippy" && !cmd.args.iter().any(|a| ["--fix"].contains(&a.as_str())) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Runs the Clippy linter over the crate and reports warnings. Read-only unless `--fix` is present, which is gated separately.",
+        ));
+    }
+    if subcmd_single == "doc" {
+        return Some(GateResult::allow_with_reason(
+            "Builds the crate's API documentation into `target/doc`. Writes only documentation artifacts.",
+        ));
+    }
+    if subcmd_single == "tree" {
+        return Some(GateResult::allow_with_reason(
+            "Displays the crate dependency graph as a tree. Read-only.",
+        ));
+    }
+    if subcmd_single == "metadata" {
+        return Some(GateResult::allow_with_reason(
+            "Prints resolved package and dependency metadata as JSON. Read-only.",
+        ));
+    }
+    if subcmd_single == "pkgid" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the fully qualified package ID for a dependency. Read-only.",
+        ));
+    }
+    if subcmd_single == "verify-project" {
+        return Some(GateResult::allow_with_reason(
+            "Checks that the `Cargo.toml` manifest is valid and reports the result. Read-only.",
+        ));
+    }
+    if subcmd_single == "search" {
+        return Some(GateResult::allow_with_reason(
+            "Searches crates.io for packages matching the given terms. Read-only.",
+        ));
+    }
+    if subcmd_single == "info" {
+        return Some(GateResult::allow_with_reason(
+            "Shows registry metadata for a crate (versions, features, dependencies). Read-only.",
+        ));
+    }
+    if subcmd_single == "locate-project" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the path to the nearest `Cargo.toml`. Read-only.",
+        ));
+    }
+    if subcmd_single == "read-manifest" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the resolved manifest of the current package as JSON. Read-only.",
+        ));
+    }
+    if subcmd_single == "version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the cargo version. Read-only.",
+        ));
+    }
+    if subcmd_single == "-V" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the cargo version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the cargo version. Read-only.",
+        ));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason(
+            "Prints cargo help. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints cargo help. Read-only.",
+        ));
+    }
+    if subcmd_single == "help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints help for cargo or a specific subcommand. Read-only.",
+        ));
+    }
+    if subcmd_single == "build" {
+        return Some(GateResult::allow_with_reason(
+            "Compiles the local crate and its dependencies into the `target` directory. Local build; fetches declared dependencies as needed.",
+        ));
+    }
+    if subcmd_single == "run" {
+        return Some(GateResult::allow_with_reason(
+            "Builds and runs the crate's binary target locally. Executes the just-built local binary.",
+        ));
+    }
+    if subcmd_single == "test" {
+        return Some(GateResult::allow_with_reason(
+            "Builds and runs the crate's test suite. Compiles and executes test code locally.",
+        ));
+    }
+    if subcmd_single == "bench" {
+        return Some(GateResult::allow_with_reason(
+            "Builds and runs the crate's benchmarks. Compiles and executes benchmark code locally.",
+        ));
+    }
+    if subcmd_single == "fmt" {
+        return Some(GateResult::allow_with_reason(
+            "Formats Rust source files in place using `rustfmt`. Rewrites local source to match style.",
+        ));
+    }
+    if subcmd_single == "clean" {
+        return Some(GateResult::allow_with_reason(
+            "Removes the `target` build-output directory. Deletes only local build artifacts; next build recompiles.",
+        ));
+    }
+    if subcmd_single == "nextest" {
+        return Some(GateResult::allow_with_reason(
+            "Builds and runs the test suite with the nextest runner. Compiles and executes test code locally.",
+        ));
+    }
+    if subcmd_single == "audit" {
+        return Some(GateResult::allow_with_reason(
+            "Scans `Cargo.lock` for dependencies with known security advisories. Read-only.",
+        ));
+    }
+    if subcmd_single == "deny" {
+        return Some(GateResult::allow_with_reason(
+            "Checks dependencies against license, advisory, and ban policies. Read-only.",
+        ));
+    }
+    if subcmd_single == "expand" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the crate source after macro expansion. Read-only.",
+        ));
+    }
+    if subcmd_single == "semver-checks" {
+        return Some(GateResult::allow_with_reason(
+            "Compares the crate's public API against a baseline for semver violations. Read-only.",
+        ));
+    }
+    if subcmd_single == "llvm-cov" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the test suite and reports code coverage. Compiles and executes test code locally.",
+        ));
+    }
+    if subcmd_single == "outdated" {
+        return Some(GateResult::allow_with_reason(
+            "Reports dependencies that have newer versions available. Read-only; no updates.",
+        ));
+    }
+    if subcmd_single == "bloat" {
+        return Some(GateResult::allow_with_reason(
+            "Analyzes the built binary and reports what takes up space. Read-only.",
+        ));
+    }
+    if subcmd_single == "machete" {
+        return Some(GateResult::allow_with_reason(
+            "Scans for declared but unused dependencies and reports them. Read-only.",
+        ));
+    }
+    if subcmd_single == "depgraph" {
+        return Some(GateResult::allow_with_reason(
+            "Generates a dependency-graph description for the crate. Read-only.",
+        ));
     }
     if subcmd_single == "insta"
         && !cmd
@@ -2349,7 +3859,9 @@ pub fn check_cargo_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["review", "accept", "reject"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Runs insta snapshot tests and reports mismatches. Read-only unless `review`, `accept`, or `reject` is present, which is gated separately.",
+        ));
     }
 
     if let Some(reason) = CARGO_ASK
@@ -2396,33 +3908,18 @@ pub fn check_rustc_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .contains(&a.as_str())
         })
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Queries the Rust compiler for version, target, or diagnostic info without compiling. Read-only.",
+        ));
     }
 
     // Bare ask rule - any rustc invocation asks
-    Some(GateResult::ask("rustc: Compiling"))
+    Some(GateResult::ask(
+        "rustc: Compiles Rust source directly with rustc. Writes an output binary or library to the cwd or `-o` path.",
+    ))
 }
 
 // === RUSTUP (from package_managers.toml) ===
-
-pub static RUSTUP_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "show",
-        "toolchain list",
-        "target list",
-        "component list",
-        "run",
-        "which",
-        "doc",
-        "--version",
-        "-V",
-        "--help",
-        "-h",
-        "help",
-    ]
-    .into_iter()
-    .collect()
-});
 
 pub static RUSTUP_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -2459,8 +3956,66 @@ pub fn check_rustup_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if RUSTUP_ALLOW.contains(subcmd.as_str()) || RUSTUP_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "show" {
+        return Some(GateResult::allow_with_reason(
+            "Shows the active toolchain and installed targets and components. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "toolchain" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists installed Rust toolchains. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "target" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists available and installed compilation targets. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "component" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists available and installed toolchain components. Read-only.",
+        ));
+    }
+    if subcmd_single == "run" {
+        return Some(GateResult::allow_with_reason(
+            "Runs a command under a specific toolchain without changing the default. Executes the named command with that toolchain on PATH.",
+        ));
+    }
+    if subcmd_single == "which" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the resolved path to a binary for the active toolchain. Read-only.",
+        ));
+    }
+    if subcmd_single == "doc" {
+        return Some(GateResult::allow_with_reason(
+            "Opens or locates the offline Rust documentation for the active toolchain. Read-only.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the rustup version. Read-only.",
+        ));
+    }
+    if subcmd_single == "-V" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the rustup version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints rustup help. Read-only.",
+        ));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason(
+            "Prints rustup help. Read-only.",
+        ));
+    }
+    if subcmd_single == "help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints help for rustup or a specific subcommand. Read-only.",
+        ));
     }
 
     if let Some(reason) = RUSTUP_ASK
@@ -2475,26 +4030,6 @@ pub fn check_rustup_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === GO (from package_managers.toml) ===
 
-pub static GO_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "list",
-        "doc",
-        "version",
-        "vet",
-        "help",
-        "-h",
-        "--help",
-        "build",
-        "test",
-        "clean",
-        "mod graph",
-        "mod verify",
-        "mod why",
-    ]
-    .into_iter()
-    .collect()
-});
-
 pub static GO_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
         ("fmt", "Formatting files"),
@@ -2502,15 +4037,13 @@ pub static GO_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("mod tidy", "Tidying go.mod/go.sum"),
         ("mod download", "Downloading modules"),
         ("install", "Installing"),
-        ("get", "Getting packages"),
-        ("generate", "Generating code"),
-        ("fix", "Fixing code"),
-        ("work", "Workspace operation"),
-        ("mod init", "go mod: init"),
-        ("mod edit", "go mod: edit"),
-    ]
-    .into_iter()
-    .collect()
+        ("get", "Adds or updates module dependencies in `go.mod`/`go.sum` and downloads them. Changes the dependency set."),
+        ("generate", "Runs `//go:generate` directives found in source. Executes arbitrary commands those directives specify."),
+        ("fix", "Rewrites packages to use newer Go APIs in place. Modifies source files."),
+        ("work", "Manages the Go workspace file `go.work` (init, use, edit, sync). Changes which modules resolve locally."),
+        ("mod init", "Initializes a new module by writing `go.mod` in the current directory."),
+        ("mod edit", "Edits `go.mod` programmatically (require, replace, drop, go directive). Rewrites the manifest."),
+    ].into_iter().collect()
 });
 
 /// Check go commands declaratively
@@ -2535,13 +4068,76 @@ pub fn check_go_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::ask("Modifying Go environment config"));
     }
 
-    if GO_ALLOW.contains(subcmd.as_str()) || GO_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
-    }
-
     // Check conditional allow rules
+    if subcmd_single == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists the packages or modules matching the given import paths. Read-only.",
+        ));
+    }
+    if subcmd_single == "doc" {
+        return Some(GateResult::allow_with_reason(
+            "Prints documentation for a package, symbol, or method. Read-only.",
+        ));
+    }
     if subcmd_single == "env" && !cmd.args.iter().any(|a| ["-w", "-u"].contains(&a.as_str())) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Prints Go environment configuration. Read-only unless `-w` or `-u` is present, which is gated separately.",
+        ));
+    }
+    if subcmd_single == "version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the Go version. Read-only.",
+        ));
+    }
+    if subcmd_single == "vet" {
+        return Some(GateResult::allow_with_reason(
+            "Runs Go static analysis and reports suspicious constructs. Read-only.",
+        ));
+    }
+    if subcmd_single == "help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints help for the go command or a topic. Read-only.",
+        ));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason(
+            "Prints go command help. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints go command help. Read-only.",
+        ));
+    }
+    if subcmd_single == "build" {
+        return Some(GateResult::allow_with_reason(
+            "Compiles the packages in the current module to verify they build. Local build; fetches declared dependencies as needed.",
+        ));
+    }
+    if subcmd_single == "test" {
+        return Some(GateResult::allow_with_reason(
+            "Builds and runs the module's test suite. Compiles and executes test code locally.",
+        ));
+    }
+    if subcmd_single == "clean" {
+        return Some(GateResult::allow_with_reason(
+            "Removes object files and cached build artifacts for the current module. Deletes only generated artifacts.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "mod" && cmd.args[1] == "graph" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the module requirement graph. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "mod" && cmd.args[1] == "verify" {
+        return Some(GateResult::allow_with_reason(
+            "Checks that downloaded module dependencies match `go.sum` and reports the result. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "mod" && cmd.args[1] == "why" {
+        return Some(GateResult::allow_with_reason(
+            "Explains why a package or module is needed by the build. Read-only.",
+        ));
     }
 
     if let Some(reason) = GO_ASK
@@ -2555,25 +4151,6 @@ pub fn check_go_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === BUN (from package_managers.toml) ===
-
-pub static BUN_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "pm",
-        "-v",
-        "--version",
-        "-h",
-        "--help",
-        "test",
-        "build",
-        "dev",
-        "lint",
-        "check",
-        "typecheck",
-        "format",
-    ]
-    .into_iter()
-    .collect()
-});
 
 pub static BUN_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -2611,8 +4188,62 @@ pub fn check_bun_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if BUN_ALLOW.contains(subcmd.as_str()) || BUN_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "pm" {
+        return Some(GateResult::allow_with_reason(
+            "Inspects bun's package manager state (ls, cache dir, bin path, hash). Read-only.",
+        ));
+    }
+    if subcmd_single == "-v" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the bun version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the bun version. Read-only.",
+        ));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason("Prints bun help. Read-only."));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason("Prints bun help. Read-only."));
+    }
+    if subcmd_single == "test" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the project's test suite with Bun's test runner. Compiles and executes test code locally.",
+        ));
+    }
+    if subcmd_single == "build" {
+        return Some(GateResult::allow_with_reason(
+            "Bundles the project's entry points into output artifacts. Local build step.",
+        ));
+    }
+    if subcmd_single == "dev" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the package `dev` script from `package.json`. Starts the local dev workflow.",
+        ));
+    }
+    if subcmd_single == "lint" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the package `lint` script from `package.json`. Reports style and correctness issues.",
+        ));
+    }
+    if subcmd_single == "check" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the package `check` script from `package.json`. Local validation step.",
+        ));
+    }
+    if subcmd_single == "typecheck" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the package `typecheck` script from `package.json`. Reports type errors.",
+        ));
+    }
+    if subcmd_single == "format" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the package `format` script from `package.json`. Rewrites local source to match style.",
+        ));
     }
 
     if let Some(reason) = BUN_ASK
@@ -2626,25 +4257,6 @@ pub fn check_bun_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === CONDA (from package_managers.toml) ===
-
-pub static CONDA_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "info",
-        "list",
-        "search",
-        "package",
-        "--version",
-        "-V",
-        "--help",
-        "-h",
-        "doctor",
-        "notices",
-        "compare",
-        "env list",
-    ]
-    .into_iter()
-    .collect()
-});
 
 pub static CONDA_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -2699,11 +4311,22 @@ pub fn check_conda_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::ask("Modifying conda config"));
     }
 
-    if CONDA_ALLOW.contains(subcmd.as_str()) || CONDA_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
-    }
-
     // Check conditional allow rules
+    if subcmd_single == "info" {
+        return Some(GateResult::allow_with_reason(
+            "Prints conda installation and environment configuration details. Read-only.",
+        ));
+    }
+    if subcmd_single == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists packages installed in the active or named environment. Read-only.",
+        ));
+    }
+    if subcmd_single == "search" {
+        return Some(GateResult::allow_with_reason(
+            "Searches configured channels for packages matching the given terms. Read-only.",
+        ));
+    }
     if subcmd_single == "config"
         && !cmd.args.iter().any(|a| {
             [
@@ -2717,7 +4340,54 @@ pub fn check_conda_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .contains(&a.as_str())
         })
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Shows conda config values. Read-only unless a write flag (`--add`, `--remove`, `--set`, `--append`, `--prepend`, `--remove-key`) is present, which is gated separately.",
+        ));
+    }
+    if subcmd_single == "package" {
+        return Some(GateResult::allow_with_reason(
+            "Inspects or queries package metadata (low-level package operations in read mode). Read-only.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the conda version. Read-only.",
+        ));
+    }
+    if subcmd_single == "-V" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the conda version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints conda help. Read-only.",
+        ));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason(
+            "Prints conda help. Read-only.",
+        ));
+    }
+    if subcmd_single == "doctor" {
+        return Some(GateResult::allow_with_reason(
+            "Runs environment health checks and reports integrity findings. Read-only.",
+        ));
+    }
+    if subcmd_single == "notices" {
+        return Some(GateResult::allow_with_reason(
+            "Displays channel notices and announcements. Read-only.",
+        ));
+    }
+    if subcmd_single == "compare" {
+        return Some(GateResult::allow_with_reason(
+            "Compares the active environment against an environment spec file and reports differences. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "env" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists all conda environments on the machine. Read-only.",
+        ));
     }
 
     if let Some(reason) = CONDA_ASK
@@ -2731,28 +4401,6 @@ pub fn check_conda_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === POETRY (from package_managers.toml) ===
-
-pub static POETRY_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "show",
-        "search",
-        "check",
-        "config list",
-        "env info",
-        "env list",
-        "env activate",
-        "version",
-        "about",
-        "--version",
-        "-V",
-        "--help",
-        "-h",
-        "build",
-        "lock",
-    ]
-    .into_iter()
-    .collect()
-});
 
 pub static POETRY_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -2791,13 +4439,86 @@ pub fn check_poetry_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if POETRY_ALLOW.contains(subcmd.as_str()) || POETRY_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
-    }
-
     // Check conditional allow rules
+    if subcmd_single == "show" {
+        return Some(GateResult::allow_with_reason(
+            "Lists installed packages or shows details for one package. Read-only.",
+        ));
+    }
+    if subcmd_single == "search" {
+        return Some(GateResult::allow_with_reason(
+            "Searches configured repositories for packages matching the given terms. Read-only.",
+        ));
+    }
+    if subcmd_single == "check" {
+        return Some(GateResult::allow_with_reason(
+            "Validates the `pyproject.toml` and lockfile consistency and reports problems. Read-only.",
+        ));
+    }
     if subcmd_single == "config" && !cmd.args.iter().any(|a| ["--unset"].contains(&a.as_str())) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Shows poetry config values. Read-only unless `--unset` is present, which removes a key.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "config" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists all poetry config values. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "env" && cmd.args[1] == "info" {
+        return Some(GateResult::allow_with_reason(
+            "Shows information about the active project virtualenv. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "env" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists the virtualenvs associated with the project. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "env" && cmd.args[1] == "activate" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the command to activate the project virtualenv. Read-only; does not modify the shell itself.",
+        ));
+    }
+    if subcmd_single == "version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the project version or the poetry version. Read-only.",
+        ));
+    }
+    if subcmd_single == "about" {
+        return Some(GateResult::allow_with_reason(
+            "Prints information about poetry itself. Read-only.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the poetry version. Read-only.",
+        ));
+    }
+    if subcmd_single == "-V" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the poetry version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints poetry help. Read-only.",
+        ));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason(
+            "Prints poetry help. Read-only.",
+        ));
+    }
+    if subcmd_single == "build" {
+        return Some(GateResult::allow_with_reason(
+            "Builds source and wheel distributions into `dist/`. Writes artifacts; does not publish.",
+        ));
+    }
+    if subcmd_single == "lock" {
+        return Some(GateResult::allow_with_reason(
+            "Resolves dependencies and writes `poetry.lock`. Network access; pinned versions may change.",
+        ));
     }
 
     if let Some(reason) = POETRY_ASK
@@ -2811,12 +4532,6 @@ pub fn check_poetry_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === PIPX (from package_managers.toml) ===
-
-pub static PIPX_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    ["list", "environment", "--version", "--help"]
-        .into_iter()
-        .collect()
-});
 
 pub static PIPX_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -2852,8 +4567,26 @@ pub fn check_pipx_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if PIPX_ALLOW.contains(subcmd.as_str()) || PIPX_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists applications installed by pipx and their entrypoints. Read-only.",
+        ));
+    }
+    if subcmd_single == "environment" {
+        return Some(GateResult::allow_with_reason(
+            "Prints pipx environment paths and configuration. Read-only.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the pipx version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints pipx help. Read-only.",
+        ));
     }
 
     if let Some(reason) = PIPX_ASK
@@ -2867,38 +4600,6 @@ pub fn check_pipx_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === MISE (from package_managers.toml) ===
-
-pub static MISE_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "ls",
-        "list",
-        "ls-remote",
-        "current",
-        "where",
-        "which",
-        "env",
-        "version",
-        "--version",
-        "-V",
-        "--help",
-        "-h",
-        "help",
-        "doctor",
-        "plugins",
-        "settings",
-        "alias",
-        "bin-paths",
-        "completion",
-        "direnv",
-        "outdated",
-        "reshim",
-        "trust",
-        "exec",
-        "registry",
-    ]
-    .into_iter()
-    .collect()
-});
 
 pub static MISE_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -2944,8 +4645,131 @@ pub fn check_mise_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if MISE_ALLOW.contains(subcmd.as_str()) || MISE_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "ls" {
+        return Some(GateResult::allow_with_reason(
+            "Lists installed tool versions managed by mise. Read-only.",
+        ));
+    }
+    if subcmd_single == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists installed tool versions managed by mise (`mise list` aliases `mise ls`). Read-only.",
+        ));
+    }
+    if subcmd_single == "ls-remote" {
+        return Some(GateResult::allow_with_reason(
+            "Lists versions available to install for a tool from upstream. Read-only.",
+        ));
+    }
+    if subcmd_single == "current" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the tool versions active in the current directory. Read-only.",
+        ));
+    }
+    if subcmd_single == "where" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the install path of a given tool version. Read-only.",
+        ));
+    }
+    if subcmd_single == "which" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the resolved path to a tool binary. Read-only.",
+        ));
+    }
+    if subcmd_single == "env" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the environment variables mise would export for the current directory. Read-only.",
+        ));
+    }
+    if subcmd_single == "version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the mise version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the mise version. Read-only.",
+        ));
+    }
+    if subcmd_single == "-V" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the mise version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints mise help. Read-only.",
+        ));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason(
+            "Prints mise help. Read-only.",
+        ));
+    }
+    if subcmd_single == "help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints help for mise or a specific subcommand. Read-only.",
+        ));
+    }
+    if subcmd_single == "doctor" {
+        return Some(GateResult::allow_with_reason(
+            "Runs mise health checks and reports configuration problems. Read-only.",
+        ));
+    }
+    if subcmd_single == "plugins" {
+        return Some(GateResult::allow_with_reason(
+            "Lists installed mise plugins. Read-only unless an install/remove/update subcommand is given, which is gated separately.",
+        ));
+    }
+    if subcmd_single == "settings" {
+        return Some(GateResult::allow_with_reason(
+            "Shows mise settings values. Read-only in list form.",
+        ));
+    }
+    if subcmd_single == "alias" {
+        return Some(GateResult::allow_with_reason(
+            "Shows tool-version aliases configured in mise. Read-only in list form.",
+        ));
+    }
+    if subcmd_single == "bin-paths" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the bin directories mise would add to PATH. Read-only.",
+        ));
+    }
+    if subcmd_single == "completion" {
+        return Some(GateResult::allow_with_reason(
+            "Prints shell completion scripts for mise. Read-only; output is not installed automatically.",
+        ));
+    }
+    if subcmd_single == "direnv" {
+        return Some(GateResult::allow_with_reason(
+            "Prints direnv integration helpers for mise. Read-only; output is not installed automatically.",
+        ));
+    }
+    if subcmd_single == "outdated" {
+        return Some(GateResult::allow_with_reason(
+            "Reports installed tool versions that have newer releases available. Read-only; no updates.",
+        ));
+    }
+    if subcmd_single == "reshim" {
+        return Some(GateResult::allow_with_reason(
+            "Regenerates mise shim scripts for installed tools. Rewrites only mise-managed shim files.",
+        ));
+    }
+    if subcmd_single == "trust" {
+        return Some(GateResult::allow_with_reason(
+            "Marks a project's mise config file as trusted so its tool versions and env load. Records trust for the local config path.",
+        ));
+    }
+    if subcmd_single == "exec" {
+        return Some(GateResult::allow_with_reason(
+            "Runs a command with mise-managed tool versions on PATH. Devtool delegation is handled by the mise handler.",
+        ));
+    }
+    if subcmd_single == "registry" {
+        return Some(GateResult::allow_with_reason(
+            "Lists tools available in the mise registry. Read-only.",
+        ));
     }
 
     if let Some(reason) = MISE_ASK
@@ -2960,89 +4784,6 @@ pub fn check_mise_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === BD (from beads.toml) ===
 
-pub static BD_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "list",
-        "show",
-        "ready",
-        "blocked",
-        "count",
-        "search",
-        "where",
-        "info",
-        "version",
-        "help",
-        "status",
-        "doctor",
-        "lint",
-        "human",
-        "onboard",
-        "completion",
-        "thanks",
-        "detect-pollution",
-        "dep tree",
-        "dep cycles",
-        "graph",
-        "label list",
-        "label list-all",
-        "daemons list",
-        "daemons health",
-        "daemons logs",
-        "daemon health",
-        "daemon logs",
-        "config get",
-        "config list",
-        "stats",
-        "activity",
-        "stale",
-        "orphans",
-        "preflight",
-        "epic status",
-        "close-eligible",
-        "swarm list",
-        "gate list",
-        "gate show",
-        "gate check",
-        "gate discover",
-        "template list",
-        "template show",
-        "formula list",
-        "formula show",
-        "mol show",
-        "mol current",
-        "mol stale",
-        "mol progress",
-        "mol list",
-        "slot show",
-        "slot list",
-        "agent show",
-        "agent list",
-        "state",
-        "state list",
-        "worktree list",
-        "repo list",
-        "repo show",
-        "jira status",
-        "jira list",
-        "jira show",
-        "linear status",
-        "linear list",
-        "linear show",
-        "ship list",
-        "ship show",
-        "upgrade status",
-        "upgrade review",
-        "prime",
-        "quickstart",
-        "workflow",
-        "tips",
-        "deleted",
-        "hook",
-    ]
-    .into_iter()
-    .collect()
-});
-
 pub static BD_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
         ("create", "Creating new issue"),
@@ -3054,7 +4795,7 @@ pub static BD_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("close", "Closing issue"),
         ("reopen", "Reopening issue"),
         ("delete", "Deleting issue"),
-        ("move", "Moving issue to different rig"),
+        ("move", "Moves an issue to a different rig (workspace). Changes the issue's owning database; sync source and target to keep both consistent."),
         ("refile", "Refiling issue"),
         ("set-state", "Setting issue state"),
         ("defer", "Deferring issue"),
@@ -3069,7 +4810,7 @@ pub static BD_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("label remove", "Removing label"),
         ("comments add", "Adding comment"),
         ("comment add", "Adding comment"),
-        ("sync", "Syncing issues with git"),
+        ("sync", "Syncs local issues with the git-backed remote. Pulls and pushes issue changes; may merge or overwrite local edits if the remote diverged."),
         ("export", "Exporting issues"),
         ("import", "Importing issues"),
         ("init", "Initializing beads in project"),
@@ -3090,15 +4831,15 @@ pub static BD_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("migrate issues", "Migrating issues"),
         ("migrate hash-ids", "Migrating hash IDs"),
         ("migrate tombstones", "Migrating tombstones"),
-        ("admin", "Admin operation"),
-        ("admin cleanup", "Cleaning up issues"),
-        ("admin compact", "Compacting issues"),
+        ("admin", "Runs a beads admin operation (cleanup, compact, or reset depending on the subcommand). Scope varies; `admin reset` is destructive."),
+        ("admin cleanup", "Admin-level cleanup of stale or orphaned issues. Removes records matching cleanup rules; preview first with `--dry-run`. Recoverable via git."),
+        ("admin compact", "Admin-level compaction to shrink the database. Condenses resolved issue history; preview first with `--dry-run`. Recoverable via git."),
         ("admin reset", "Resets the beads database. Drops all issues, history, and local state. Cannot be undone without a backup or remote sync."),
-        ("compact", "Compacting old issues"),
-        ("cleanup", "Cleaning up issues"),
-        ("merge", "Merging issues"),
+        ("compact", "Compacts old issues to shrink the database. Condenses or removes resolved history; preview first with `--dry-run`. Recoverable via git."),
+        ("cleanup", "Cleans up stale or orphaned issues. Removes records that match cleanup rules; preview first with `--dry-run`. Recoverable via git."),
+        ("merge", "Merges two issues into one. Combines their fields and history and tombstones the merged-away issue. Recoverable via git history."),
         ("repair", "Repairs the beads database from local logs and remote state. Can modify or roll back issue records to resolve inconsistencies."),
-        ("restore", "Restoring issue"),
+        ("restore", "Restores a soft-deleted (tombstoned) issue back to active state."),
         ("upgrade ack", "Acknowledging upgrade"),
         ("epic create", "Creating epic"),
         ("epic close", "Closing epic"),
@@ -3137,7 +4878,7 @@ pub static BD_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("ship publish", "Publishing capability"),
         ("ship create", "Creating ship"),
         ("ship delete", "Deleting ship"),
-        ("rename-prefix", "Renaming issue prefix"),
+        ("rename-prefix", "Renames the workspace issue-ID prefix. Rewrites the ID of every issue; update any external references that pin the old prefix."),
         ("worktree add", "Adding worktree"),
         ("worktree remove", "Removing worktree"),
         ("worktree prune", "Pruning worktrees"),
@@ -3209,18 +4950,121 @@ pub fn check_bd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::ask("Pinning work to agent"));
     }
 
-    if BD_ALLOW.contains(subcmd.as_str()) || BD_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
-    }
-
     // Check conditional allow rules
+    if subcmd_single == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists issues, optionally filtered by status, priority, type, or assignee. Read-only.",
+        ));
+    }
+    if subcmd_single == "show" {
+        return Some(GateResult::allow_with_reason(
+            "Shows full details of one issue: description, status, dependencies, and history. Read-only.",
+        ));
+    }
+    if subcmd_single == "ready" {
+        return Some(GateResult::allow_with_reason(
+            "Lists issues ready to work on (all dependencies satisfied). Read-only.",
+        ));
+    }
+    if subcmd_single == "blocked" {
+        return Some(GateResult::allow_with_reason(
+            "Lists issues blocked by unmet dependencies. Read-only.",
+        ));
+    }
+    if subcmd_single == "count" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the number of issues matching a filter. Read-only.",
+        ));
+    }
+    if subcmd_single == "search" {
+        return Some(GateResult::allow_with_reason(
+            "Full-text search across issue titles and descriptions. Read-only.",
+        ));
+    }
+    if subcmd_single == "where" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the path to the active beads database and workspace. Read-only.",
+        ));
+    }
+    if subcmd_single == "info" {
+        return Some(GateResult::allow_with_reason(
+            "Shows workspace metadata: database location, issue prefix, and counts. Read-only.",
+        ));
+    }
+    if subcmd_single == "version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the bd version string. Read-only.",
+        ));
+    }
+    if subcmd_single == "help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints command help text. Read-only.",
+        ));
+    }
+    if subcmd_single == "status" {
+        return Some(GateResult::allow_with_reason(
+            "Shows workspace status: pending sync, daemon state, and issue counts. Read-only.",
+        ));
+    }
+    if subcmd_single == "doctor" {
+        return Some(GateResult::allow_with_reason(
+            "Runs diagnostic checks on the workspace and reports problems. Read-only.",
+        ));
+    }
+    if subcmd_single == "lint" {
+        return Some(GateResult::allow_with_reason(
+            "Checks issues for consistency problems and reports findings. Read-only.",
+        ));
+    }
+    if subcmd_single == "human" {
+        return Some(GateResult::allow_with_reason(
+            "Prints issues in a human-readable summary format. Read-only.",
+        ));
+    }
+    if subcmd_single == "onboard" {
+        return Some(GateResult::allow_with_reason(
+            "Prints onboarding guidance for getting started with beads. Read-only.",
+        ));
+    }
+    if subcmd_single == "completion" {
+        return Some(GateResult::allow_with_reason(
+            "Prints a shell completion script to stdout. Read-only.",
+        ));
+    }
+    if subcmd_single == "thanks" {
+        return Some(GateResult::allow_with_reason(
+            "Prints project credits. Read-only.",
+        ));
+    }
+    if subcmd_single == "detect-pollution" {
+        return Some(GateResult::allow_with_reason(
+            "Scans for cross-workspace data pollution and reports findings. Read-only.",
+        ));
+    }
     if subcmd_single == "dep"
         && !cmd
             .args
             .iter()
             .any(|a| ["add", "remove"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Inspects issue dependencies. Read-only unless `add` or `remove` is given, which edit edges and ask separately.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "dep" && cmd.args[1] == "tree" {
+        return Some(GateResult::allow_with_reason(
+            "Displays the dependency tree for an issue. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "dep" && cmd.args[1] == "cycles" {
+        return Some(GateResult::allow_with_reason(
+            "Detects and reports dependency cycles in the issue graph. Read-only.",
+        ));
+    }
+    if subcmd_single == "graph" {
+        return Some(GateResult::allow_with_reason(
+            "Renders the issue dependency graph. Read-only.",
+        ));
     }
     if subcmd_single == "label"
         && !cmd
@@ -3228,13 +5072,29 @@ pub fn check_bd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["add", "remove"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Inspects issue labels. Read-only unless `add` or `remove` is given, which mutate labels and ask separately.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "label" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists labels in use. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "label" && cmd.args[1] == "list-all" {
+        return Some(GateResult::allow_with_reason(
+            "Lists all defined labels, including unused ones. Read-only.",
+        ));
     }
     if subcmd_single == "comments" && !cmd.args.iter().any(|a| ["add"].contains(&a.as_str())) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Shows comments on an issue. Read-only unless `add` is given, which posts a comment and asks separately.",
+        ));
     }
     if subcmd_single == "comment" && !cmd.args.iter().any(|a| ["add"].contains(&a.as_str())) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Shows comments on an issue. Read-only unless `add` is given, which posts a comment and asks separately.",
+        ));
     }
     if subcmd_single == "daemons"
         && !cmd
@@ -3242,7 +5102,24 @@ pub fn check_bd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["start", "stop", "restart", "killall"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Reports daemon status. Read-only unless a control verb (`start`, `stop`, `restart`, `killall`) is given, which asks separately.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "daemons" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists running beads daemons. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "daemons" && cmd.args[1] == "health" {
+        return Some(GateResult::allow_with_reason(
+            "Reports health of running daemons. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "daemons" && cmd.args[1] == "logs" {
+        return Some(GateResult::allow_with_reason(
+            "Prints daemon log output. Read-only.",
+        ));
     }
     if subcmd_single == "daemon"
         && !cmd
@@ -3250,7 +5127,19 @@ pub fn check_bd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["start", "stop", "restart", "kill", "run"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Reports daemon status. Read-only unless a control verb (`start`, `stop`, `restart`, `kill`, `run`) is given, which asks separately.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "daemon" && cmd.args[1] == "health" {
+        return Some(GateResult::allow_with_reason(
+            "Reports health of the daemon. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "daemon" && cmd.args[1] == "logs" {
+        return Some(GateResult::allow_with_reason(
+            "Prints daemon log output. Read-only.",
+        ));
     }
     if subcmd_single == "config"
         && !cmd
@@ -3258,7 +5147,44 @@ pub fn check_bd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["set", "unset"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Reads configuration. Read-only unless `set` or `unset` is given, which write config and ask separately.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "config" && cmd.args[1] == "get" {
+        return Some(GateResult::allow_with_reason(
+            "Prints a single configuration value. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "config" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Prints all configuration values. Read-only.",
+        ));
+    }
+    if subcmd_single == "stats" {
+        return Some(GateResult::allow_with_reason(
+            "Shows aggregate issue counts by status, priority, and type. Read-only.",
+        ));
+    }
+    if subcmd_single == "activity" {
+        return Some(GateResult::allow_with_reason(
+            "Shows recent issue activity. Read-only.",
+        ));
+    }
+    if subcmd_single == "stale" {
+        return Some(GateResult::allow_with_reason(
+            "Lists issues with no recent activity. Read-only.",
+        ));
+    }
+    if subcmd_single == "orphans" {
+        return Some(GateResult::allow_with_reason(
+            "Lists orphaned issues with no parent or links. Read-only.",
+        ));
+    }
+    if subcmd_single == "preflight" {
+        return Some(GateResult::allow_with_reason(
+            "Runs preflight checks and reports readiness. Read-only.",
+        ));
     }
     if subcmd_single == "audit"
         && !cmd
@@ -3266,7 +5192,9 @@ pub fn check_bd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["record", "label"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Shows the audit log. Read-only unless `record` or `label` is given, which write audit entries and ask separately.",
+        ));
     }
     if subcmd_single == "epic"
         && !cmd
@@ -3274,7 +5202,19 @@ pub fn check_bd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["create", "close", "update"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Inspects epics. Read-only unless `create`, `close`, or `update` is given, which mutate epics and ask separately.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "epic" && cmd.args[1] == "status" {
+        return Some(GateResult::allow_with_reason(
+            "Shows epic progress and child-issue rollup. Read-only.",
+        ));
+    }
+    if subcmd_single == "close-eligible" {
+        return Some(GateResult::allow_with_reason(
+            "Lists issues eligible to be closed. Read-only.",
+        ));
     }
     if subcmd_single == "swarm"
         && !cmd
@@ -3282,7 +5222,12 @@ pub fn check_bd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["create", "close", "update", "add", "remove"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Inspects swarms. Read-only unless a mutating verb (`create`, `close`, `update`, `add`, `remove`) is given, which asks separately.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "swarm" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason("Lists swarms. Read-only."));
     }
     if subcmd_single == "gate"
         && !cmd
@@ -3290,7 +5235,27 @@ pub fn check_bd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["resolve", "add-waiter"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Inspects gates. Read-only unless `resolve` or `add-waiter` is given, which mutate gate state and ask separately.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "gate" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason("Lists gates. Read-only."));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "gate" && cmd.args[1] == "show" {
+        return Some(GateResult::allow_with_reason(
+            "Shows details of one gate. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "gate" && cmd.args[1] == "check" {
+        return Some(GateResult::allow_with_reason(
+            "Checks whether a gate's conditions are met. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "gate" && cmd.args[1] == "discover" {
+        return Some(GateResult::allow_with_reason(
+            "Discovers gates from the workspace and reports them. Read-only.",
+        ));
     }
     if subcmd_single == "template"
         && !cmd
@@ -3298,7 +5263,19 @@ pub fn check_bd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["instantiate"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Inspects templates. Read-only unless `instantiate` is given, which creates issues and asks separately.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "template" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists available templates. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "template" && cmd.args[1] == "show" {
+        return Some(GateResult::allow_with_reason(
+            "Shows the contents of one template. Read-only.",
+        ));
     }
     if subcmd_single == "formula"
         && !cmd
@@ -3306,7 +5283,19 @@ pub fn check_bd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["create", "delete", "update", "edit", "convert"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Inspects formulas. Read-only unless a mutating verb (`create`, `delete`, `update`, `edit`, `convert`) is given, which asks separately.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "formula" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists available formulas. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "formula" && cmd.args[1] == "show" {
+        return Some(GateResult::allow_with_reason(
+            "Shows the contents of one formula. Read-only.",
+        ));
     }
     if subcmd_single == "mol"
         && !cmd
@@ -3314,7 +5303,32 @@ pub fn check_bd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["burn", "squash", "bond", "distill", "create"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Inspects molecules. Read-only unless a mutating verb (`burn`, `squash`, `bond`, `distill`, `create`) is given, which asks separately.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "mol" && cmd.args[1] == "show" {
+        return Some(GateResult::allow_with_reason(
+            "Shows details of one molecule. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "mol" && cmd.args[1] == "current" {
+        return Some(GateResult::allow_with_reason(
+            "Shows the currently active molecule. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "mol" && cmd.args[1] == "stale" {
+        return Some(GateResult::allow_with_reason(
+            "Lists molecules with no recent activity. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "mol" && cmd.args[1] == "progress" {
+        return Some(GateResult::allow_with_reason(
+            "Shows progress of a molecule's issues. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "mol" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason("Lists molecules. Read-only."));
     }
     if subcmd_single == "slot"
         && !cmd
@@ -3322,7 +5336,17 @@ pub fn check_bd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["set", "clear", "claim", "release"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Inspects slots. Read-only unless a mutating verb (`set`, `clear`, `claim`, `release`) is given, which asks separately.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "slot" && cmd.args[1] == "show" {
+        return Some(GateResult::allow_with_reason(
+            "Shows details of one slot. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "slot" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason("Lists slots. Read-only."));
     }
     if subcmd_single == "agent"
         && !cmd
@@ -3330,7 +5354,27 @@ pub fn check_bd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["set", "clear", "update", "create"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Inspects agents. Read-only unless a mutating verb (`set`, `clear`, `update`, `create`) is given, which asks separately.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "agent" && cmd.args[1] == "show" {
+        return Some(GateResult::allow_with_reason(
+            "Shows details of one agent. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "agent" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason("Lists agents. Read-only."));
+    }
+    if subcmd_single == "state" {
+        return Some(GateResult::allow_with_reason(
+            "Inspects workflow states. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "state" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists configured workflow states. Read-only.",
+        ));
     }
     if subcmd_single == "worktree"
         && !cmd
@@ -3338,7 +5382,12 @@ pub fn check_bd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["add", "remove", "prune"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Inspects worktrees. Read-only unless `add`, `remove`, or `prune` is given, which mutate worktrees and ask separately.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "worktree" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason("Lists worktrees. Read-only."));
     }
     if subcmd_single == "repo"
         && !cmd
@@ -3346,7 +5395,19 @@ pub fn check_bd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["add", "remove", "set", "sync"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Inspects linked repositories. Read-only unless a mutating verb (`add`, `remove`, `set`, `sync`) is given, which asks separately.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "repo" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists linked repositories. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "repo" && cmd.args[1] == "show" {
+        return Some(GateResult::allow_with_reason(
+            "Shows details of one linked repository. Read-only.",
+        ));
     }
     if subcmd_single == "jira"
         && !cmd
@@ -3354,7 +5415,24 @@ pub fn check_bd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["sync", "push", "import", "create"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Inspects the Jira integration. Read-only unless a data-flow verb (`sync`, `push`, `import`, `create`) is given, which asks separately.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "jira" && cmd.args[1] == "status" {
+        return Some(GateResult::allow_with_reason(
+            "Shows Jira integration status. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "jira" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists Jira issues visible to the integration. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "jira" && cmd.args[1] == "show" {
+        return Some(GateResult::allow_with_reason(
+            "Shows one Jira issue. Read-only.",
+        ));
     }
     if subcmd_single == "linear"
         && !cmd
@@ -3362,7 +5440,24 @@ pub fn check_bd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["sync", "push", "import", "create"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Inspects the Linear integration. Read-only unless a data-flow verb (`sync`, `push`, `import`, `create`) is given, which asks separately.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "linear" && cmd.args[1] == "status" {
+        return Some(GateResult::allow_with_reason(
+            "Shows Linear integration status. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "linear" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists Linear issues visible to the integration. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "linear" && cmd.args[1] == "show" {
+        return Some(GateResult::allow_with_reason(
+            "Shows one Linear issue. Read-only.",
+        ));
     }
     if subcmd_single == "ship"
         && !cmd
@@ -3370,7 +5465,17 @@ pub fn check_bd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["publish", "create", "delete"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Inspects ships. Read-only unless `publish`, `create`, or `delete` is given, which mutate ships and ask separately.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "ship" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason("Lists ships. Read-only."));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "ship" && cmd.args[1] == "show" {
+        return Some(GateResult::allow_with_reason(
+            "Shows details of one ship. Read-only.",
+        ));
     }
     if subcmd_single == "upgrade"
         && !cmd
@@ -3378,7 +5483,19 @@ pub fn check_bd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--apply", "--install", "ack"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Reports available upgrades. Read-only unless `--apply`, `--install`, or `ack` is given, which change state and ask separately.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "upgrade" && cmd.args[1] == "status" {
+        return Some(GateResult::allow_with_reason(
+            "Shows current upgrade status. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "upgrade" && cmd.args[1] == "review" {
+        return Some(GateResult::allow_with_reason(
+            "Shows what an upgrade would change before applying it. Read-only.",
+        ));
     }
     if subcmd_single == "migrate"
         && !cmd
@@ -3386,7 +5503,9 @@ pub fn check_bd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--apply", "--force"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Previews a database migration. Read-only unless `--apply` or `--force` is given, which writes the migration and asks separately.",
+        ));
     }
     if subcmd_single == "duplicates"
         && !cmd
@@ -3394,30 +5513,72 @@ pub fn check_bd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--auto-merge"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Lists suspected duplicate issues. Read-only unless `--auto-merge` is given, which merges them and asks separately.",
+        ));
     }
     if subcmd_single == "cleanup" && cmd.args.iter().any(|a| ["--dry-run"].contains(&a.as_str())) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Previews cleanup of stale or orphaned issues. Read-only because `--dry-run` reports what would be removed without writing.",
+        ));
     }
     if subcmd_single == "compact" && cmd.args.iter().any(|a| ["--dry-run"].contains(&a.as_str())) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Previews database compaction. Read-only because `--dry-run` reports what would change without writing.",
+        ));
     }
     if subcmd_single == "delete" && cmd.args.iter().any(|a| ["--dry-run"].contains(&a.as_str())) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Previews an issue deletion. Read-only because `--dry-run` reports what would be deleted without writing.",
+        ));
     }
     if cmd.args.len() >= 2
         && cmd.args[0] == "admin"
         && cmd.args[1] == "cleanup"
         && cmd.args.iter().any(|a| ["--dry-run"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Previews admin-level cleanup. Read-only because `--dry-run` reports what would be removed without writing.",
+        ));
     }
     if cmd.args.len() >= 2
         && cmd.args[0] == "admin"
         && cmd.args[1] == "compact"
         && cmd.args.iter().any(|a| ["--dry-run"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Previews admin-level compaction. Read-only because `--dry-run` reports what would change without writing.",
+        ));
+    }
+    if subcmd_single == "prime" {
+        return Some(GateResult::allow_with_reason(
+            "Prints a context summary to prime an AI assistant. Read-only.",
+        ));
+    }
+    if subcmd_single == "quickstart" {
+        return Some(GateResult::allow_with_reason(
+            "Prints quickstart guidance. Read-only.",
+        ));
+    }
+    if subcmd_single == "workflow" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the configured workflow description. Read-only.",
+        ));
+    }
+    if subcmd_single == "tips" {
+        return Some(GateResult::allow_with_reason(
+            "Prints usage tips. Read-only.",
+        ));
+    }
+    if subcmd_single == "deleted" {
+        return Some(GateResult::allow_with_reason(
+            "Lists soft-deleted (tombstoned) issues. Read-only.",
+        ));
+    }
+    if subcmd_single == "hook" {
+        return Some(GateResult::allow_with_reason(
+            "Inspects configured hooks. Read-only.",
+        ));
     }
     if subcmd_single == "pin"
         && !cmd
@@ -3425,7 +5586,9 @@ pub fn check_bd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--set", "--clear"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Shows the pinned issue for an agent. Read-only unless `--set` or `--clear` is given, which change the pin and ask separately.",
+        ));
     }
 
     if let Some(reason) = BD_ASK
@@ -3439,20 +5602,6 @@ pub fn check_bd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === TOOL-GATES (from tool_gates.toml) ===
-
-pub static TOOL_GATES_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "pending list",
-        "pending count",
-        "rules list",
-        "hooks status",
-        "hooks json",
-        "doctor",
-        "rules ask-audit",
-    ]
-    .into_iter()
-    .collect()
-});
 
 pub static TOOL_GATES_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -3493,18 +5642,44 @@ pub fn check_tool_gates_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         ));
     }
 
-    if TOOL_GATES_ALLOW.contains(subcmd.as_str()) || TOOL_GATES_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
-    }
-
     // Check conditional allow rules
+    if cmd.args.len() >= 2 && cmd.args[0] == "pending" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Inspect the pending-approvals queue.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "rules" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "List active permission rules.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "hooks" && cmd.args[1] == "status" {
+        return Some(GateResult::allow_with_reason(
+            "Report hook wiring per client / scope.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "hooks" && cmd.args[1] == "json" {
+        return Some(GateResult::allow_with_reason(
+            "Report hook wiring per client / scope.",
+        ));
+    }
+    if subcmd_single == "doctor" {
+        return Some(GateResult::allow_with_reason(
+            "Health check. Read-only; safe to run anytime.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "rules" && cmd.args[1] == "ask-audit" {
+        return Some(GateResult::allow_with_reason(
+            "Categorise `permissions.ask` rules. Read-only listing without `--apply`.",
+        ));
+    }
     if true
         && cmd
             .args
             .iter()
             .any(|a| ["--help", "-h"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason("Info flags."));
     }
     if true
         && cmd
@@ -3512,7 +5687,7 @@ pub fn check_tool_gates_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--version", "-V"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason("Info flags."));
     }
     if true
         && cmd
@@ -3520,7 +5695,7 @@ pub fn check_tool_gates_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--tools-status"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason("Info flags."));
     }
 
     if let Some(reason) = TOOL_GATES_ASK
@@ -3807,8 +5982,6 @@ pub fn check_watchexec_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === BIOME (from devtools.toml) ===
 
-pub static BIOME_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| ["lint"].into_iter().collect());
-
 /// Check biome commands declaratively
 pub fn check_biome_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if !["biome"].contains(&cmd.program.as_str()) {
@@ -3839,8 +6012,11 @@ pub fn check_biome_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(GateResult::ask("Formatting files"));
     }
 
-    if BIOME_ALLOW.contains(subcmd.as_str()) || BIOME_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "lint" {
+        return Some(GateResult::allow_with_reason(
+            "Reports Biome lint diagnostics for the matched files. Read-only; writing fixes needs `--write`/`--fix`.",
+        ));
     }
 
     Some(GateResult::allow())
@@ -3939,7 +6115,9 @@ pub fn check_ruff_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--check", "--diff"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Checks Python formatting and prints the diff. Read-only with `--check`/`--diff`; no files are written.",
+        ));
     }
 
     if let Some(reason) = RUFF_ASK
@@ -3978,7 +6156,9 @@ pub fn check_black_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--check", "--diff"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Reports whether files are `black`-formatted and prints the diff. Read-only with `--check`/`--diff`; no files are written.",
+        ));
     }
 
     // Bare ask rule - any black invocation asks
@@ -4011,7 +6191,9 @@ pub fn check_isort_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--check", "--check-only", "--diff"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Reports whether imports are sorted and prints the diff. Read-only with `--check`/`--check-only`/`--diff`; no files are written.",
+        ));
     }
 
     // Bare ask rule - any isort invocation asks
@@ -4184,9 +6366,6 @@ pub fn check_gitleaks_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === LEFTHOOK (from devtools.toml) ===
 
-pub static LEFTHOOK_ALLOW: LazyLock<HashSet<&str>> =
-    LazyLock::new(|| ["run", "version", "dump"].into_iter().collect());
-
 pub static LEFTHOOK_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
         ("install", "lefthook install: writes hook scripts to `.git/hooks/` per `lefthook.yml`. Subsequent git operations invoke them."),
@@ -4212,8 +6391,21 @@ pub fn check_lefthook_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if LEFTHOOK_ALLOW.contains(subcmd.as_str()) || LEFTHOOK_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "run" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the configured git hooks on demand (the commands defined in `lefthook.yml`). Side effects depend on those configured commands.",
+        ));
+    }
+    if subcmd_single == "version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the lefthook version. Read-only.",
+        ));
+    }
+    if subcmd_single == "dump" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the merged lefthook configuration to stdout. Read-only.",
+        ));
     }
 
     if let Some(reason) = LEFTHOOK_ASK
@@ -4597,7 +6789,9 @@ pub fn check_rustfmt_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
     // Check conditional allow rules
     if true && cmd.args.iter().any(|a| ["--check"].contains(&a.as_str())) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Reports whether files are `rustfmt`-formatted via the exit code. Read-only with `--check`; no files are written.",
+        ));
     }
 
     // Bare ask rule - any rustfmt invocation asks
@@ -4625,7 +6819,9 @@ pub fn check_stylua_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
     // Check conditional allow rules
     if true && cmd.args.iter().any(|a| ["--check"].contains(&a.as_str())) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Reports whether Lua files are `stylua`-formatted via the exit code. Read-only with `--check`; no files are written.",
+        ));
     }
 
     // Bare ask rule - any stylua invocation asks
@@ -4776,7 +6972,9 @@ pub fn check_patch_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
     // Check conditional allow rules
     if true && cmd.args.iter().any(|a| ["--dry-run"].contains(&a.as_str())) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Simulates applying a patch and reports whether it would succeed. Read-only with `--dry-run`; no files are modified.",
+        ));
     }
 
     // Bare ask rule - any patch invocation asks
@@ -4942,9 +7140,6 @@ pub fn check_dartfmt_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === DART (from devtools.toml) ===
 
-pub static DART_ALLOW: LazyLock<HashSet<&str>> =
-    LazyLock::new(|| ["analyze", "info", "--version"].into_iter().collect());
-
 pub static DART_ASK: LazyLock<HashMap<&str, &str>> =
     LazyLock::new(|| [("format", "Formatting files")].into_iter().collect());
 
@@ -4965,8 +7160,21 @@ pub fn check_dart_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if DART_ALLOW.contains(subcmd.as_str()) || DART_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "analyze" {
+        return Some(GateResult::allow_with_reason(
+            "Runs Dart static analysis and reports diagnostics. Read-only; no files are written.",
+        ));
+    }
+    if subcmd_single == "info" {
+        return Some(GateResult::allow_with_reason(
+            "Prints Dart/Flutter environment and tooling info. Read-only.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the Dart SDK version. Read-only.",
+        ));
     }
 
     if let Some(reason) = DART_ASK
@@ -5023,7 +7231,9 @@ pub fn check_scalafmt_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
     // Check conditional allow rules
     if true && cmd.args.iter().any(|a| ["--check"].contains(&a.as_str())) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Reports whether Scala files are `scalafmt`-formatted via the exit code. Read-only with `--check`; no files are written.",
+        ));
     }
 
     // Bare ask rule - any scalafmt invocation asks
@@ -5083,7 +7293,9 @@ pub fn check_swiftformat_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
     // Check conditional allow rules
     if true && cmd.args.iter().any(|a| ["--lint"].contains(&a.as_str())) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Reports Swift formatting violations without rewriting. Read-only with `--lint`; no files are written.",
+        ));
     }
 
     // Bare ask rule - any swiftformat invocation asks
@@ -5091,12 +7303,6 @@ pub fn check_swiftformat_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === BUF (from devtools.toml) ===
-
-pub static BUF_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    ["lint", "breaking", "ls-files", "--version"]
-        .into_iter()
-        .collect()
-});
 
 pub static BUF_ASK: LazyLock<HashMap<&str, &str>> =
     LazyLock::new(|| [("format", "Formatting files")].into_iter().collect());
@@ -5118,8 +7324,26 @@ pub fn check_buf_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if BUF_ALLOW.contains(subcmd.as_str()) || BUF_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "lint" {
+        return Some(GateResult::allow_with_reason(
+            "Reports Protobuf lint diagnostics for the schema. Read-only; no files are written.",
+        ));
+    }
+    if subcmd_single == "breaking" {
+        return Some(GateResult::allow_with_reason(
+            "Reports breaking-change diagnostics against a baseline schema. Read-only; no files are written.",
+        ));
+    }
+    if subcmd_single == "ls-files" {
+        return Some(GateResult::allow_with_reason(
+            "Lists the Protobuf files in the module. Read-only.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the `buf` version. Read-only.",
+        ));
     }
 
     if let Some(reason) = BUF_ASK
@@ -5266,9 +7490,6 @@ pub fn check_bandit_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === COVERAGE (from devtools.toml) ===
 
-pub static COVERAGE_ALLOW: LazyLock<HashSet<&str>> =
-    LazyLock::new(|| ["report", "--version", "--help"].into_iter().collect());
-
 pub static COVERAGE_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
         ("run", "coverage run: executes the given Python script/module under coverage. Writes a `.coverage` data file in cwd."),
@@ -5298,8 +7519,21 @@ pub fn check_coverage_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if COVERAGE_ALLOW.contains(subcmd.as_str()) || COVERAGE_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "report" {
+        return Some(GateResult::allow_with_reason(
+            "Prints a coverage summary to stdout from the existing `.coverage` data file. Read-only; no report files are written.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the coverage.py version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints coverage.py usage help. Read-only.",
+        ));
     }
 
     if let Some(reason) = COVERAGE_ASK
@@ -5313,9 +7547,6 @@ pub fn check_coverage_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === TOX (from devtools.toml) ===
-
-pub static TOX_ALLOW: LazyLock<HashSet<&str>> =
-    LazyLock::new(|| ["--version", "--help"].into_iter().collect());
 
 /// Check tox commands declaratively
 pub fn check_tox_declarative(cmd: &CommandInfo) -> Option<GateResult> {
@@ -5334,18 +7565,26 @@ pub fn check_tox_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if TOX_ALLOW.contains(subcmd.as_str()) || TOX_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
-    }
-
     // Check conditional allow rules
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the tox version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints tox usage help. Read-only.",
+        ));
+    }
     if true
         && cmd
             .args
             .iter()
             .any(|a| ["-l", "--list", "--listenvs"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Lists the environments declared in `tox.ini` / `pyproject.toml`. Read-only; no env is run.",
+        ));
     }
 
     // Bare ask rule - any tox invocation asks
@@ -5355,9 +7594,6 @@ pub fn check_tox_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === NOX (from devtools.toml) ===
-
-pub static NOX_ALLOW: LazyLock<HashSet<&str>> =
-    LazyLock::new(|| ["--version", "--help"].into_iter().collect());
 
 /// Check nox commands declaratively
 pub fn check_nox_declarative(cmd: &CommandInfo) -> Option<GateResult> {
@@ -5376,18 +7612,26 @@ pub fn check_nox_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if NOX_ALLOW.contains(subcmd.as_str()) || NOX_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
-    }
-
     // Check conditional allow rules
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the nox version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints nox usage help. Read-only.",
+        ));
+    }
     if true
         && cmd
             .args
             .iter()
             .any(|a| ["-l", "--list"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Lists the sessions declared in `noxfile.py`. Read-only; no session is run.",
+        ));
     }
 
     // Bare ask rule - any nox invocation asks
@@ -5434,16 +7678,15 @@ pub fn check_autoflake_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--check", "--check-diff"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Reports unused imports/variables and prints the diff. Read-only with `--check`/`--check-diff`; no files are written.",
+        ));
     }
 
     Some(GateResult::ask(format!("autoflake: {}", subcmd_single)))
 }
 
 // === TSX (from devtools.toml) ===
-
-pub static TSX_ALLOW: LazyLock<HashSet<&str>> =
-    LazyLock::new(|| ["--version", "--help"].into_iter().collect());
 
 /// Check tsx commands declaratively
 pub fn check_tsx_declarative(cmd: &CommandInfo) -> Option<GateResult> {
@@ -5462,8 +7705,16 @@ pub fn check_tsx_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if TSX_ALLOW.contains(subcmd.as_str()) || TSX_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the tsx version. Read-only; no script is run.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints tsx usage help. Read-only; no script is run.",
+        ));
     }
 
     // Bare ask rule - any tsx invocation asks
@@ -5473,9 +7724,6 @@ pub fn check_tsx_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === TS-NODE (from devtools.toml) ===
-
-pub static TS_NODE_ALLOW: LazyLock<HashSet<&str>> =
-    LazyLock::new(|| ["--version", "--help"].into_iter().collect());
 
 /// Check ts-node commands declaratively
 pub fn check_ts_node_declarative(cmd: &CommandInfo) -> Option<GateResult> {
@@ -5494,8 +7742,16 @@ pub fn check_ts_node_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if TS_NODE_ALLOW.contains(subcmd.as_str()) || TS_NODE_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the ts-node version. Read-only; no script is run.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints ts-node usage help. Read-only; no script is run.",
+        ));
     }
 
     // Bare ask rule - any ts-node invocation asks
@@ -5572,9 +7828,6 @@ pub fn check_swc_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === PARCEL (from devtools.toml) ===
 
-pub static PARCEL_ALLOW: LazyLock<HashSet<&str>> =
-    LazyLock::new(|| ["build", "--version", "--help"].into_iter().collect());
-
 pub static PARCEL_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
         ("serve", "parcel serve: starts the Parcel dev server on a local port. Binds to localhost until interrupted."),
@@ -5599,8 +7852,21 @@ pub fn check_parcel_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if PARCEL_ALLOW.contains(subcmd.as_str()) || PARCEL_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "build" {
+        return Some(GateResult::allow_with_reason(
+            "Builds the production bundle into the configured dist dir. Writes build artifacts only; no dev server is started.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the Parcel version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints Parcel usage help. Read-only.",
+        ));
     }
 
     if let Some(reason) = PARCEL_ASK
@@ -5614,12 +7880,6 @@ pub fn check_parcel_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === PLAYWRIGHT (from devtools.toml) ===
-
-pub static PLAYWRIGHT_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    ["test", "show-report", "show-trace", "--version", "--help"]
-        .into_iter()
-        .collect()
-});
 
 pub static PLAYWRIGHT_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -5645,8 +7905,31 @@ pub fn check_playwright_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if PLAYWRIGHT_ALLOW.contains(subcmd.as_str()) || PLAYWRIGHT_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "test" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the Playwright test suite headless and reports results. Writes test artifacts (report, traces) to the configured output dir.",
+        ));
+    }
+    if subcmd_single == "show-report" {
+        return Some(GateResult::allow_with_reason(
+            "Serves the existing HTML test report locally for viewing. Read-only; no tests are run.",
+        ));
+    }
+    if subcmd_single == "show-trace" {
+        return Some(GateResult::allow_with_reason(
+            "Opens the trace viewer on an existing trace file. Read-only; no tests are run.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the Playwright version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints Playwright usage help. Read-only.",
+        ));
     }
 
     if let Some(reason) = PLAYWRIGHT_ASK
@@ -5660,12 +7943,6 @@ pub fn check_playwright_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === CYPRESS (from devtools.toml) ===
-
-pub static CYPRESS_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    ["run", "verify", "version", "info", "--version", "--help"]
-        .into_iter()
-        .collect()
-});
 
 pub static CYPRESS_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -5691,8 +7968,36 @@ pub fn check_cypress_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if CYPRESS_ALLOW.contains(subcmd.as_str()) || CYPRESS_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "run" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the Cypress test suite headless and reports results. Writes test artifacts (videos, screenshots) to the configured output dir.",
+        ));
+    }
+    if subcmd_single == "verify" {
+        return Some(GateResult::allow_with_reason(
+            "Verifies that the installed Cypress binary is runnable. Read-only check; no tests are run.",
+        ));
+    }
+    if subcmd_single == "version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints Cypress binary and package versions. Read-only.",
+        ));
+    }
+    if subcmd_single == "info" {
+        return Some(GateResult::allow_with_reason(
+            "Prints Cypress environment and detected-browser info. Read-only.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the Cypress version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints Cypress usage help. Read-only.",
+        ));
     }
 
     if let Some(reason) = CYPRESS_ASK
@@ -5706,12 +8011,6 @@ pub fn check_cypress_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === WRANGLER (from devtools.toml) ===
-
-pub static WRANGLER_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    ["whoami", "--version", "--help", "tail"]
-        .into_iter()
-        .collect()
-});
 
 pub static WRANGLER_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -5740,8 +8039,26 @@ pub fn check_wrangler_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if WRANGLER_ALLOW.contains(subcmd.as_str()) || WRANGLER_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "whoami" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the authenticated Cloudflare account for the current credentials. Read-only.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the wrangler version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints wrangler usage help. Read-only.",
+        ));
+    }
+    if subcmd_single == "tail" {
+        return Some(GateResult::allow_with_reason(
+            "Streams live logs from a deployed Worker. Read-only observation; does not change the deployment.",
+        ));
     }
 
     if let Some(reason) = WRANGLER_ASK
@@ -5890,7 +8207,9 @@ pub fn check_ffmpeg_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-version", "-buildconf", "-L", "-h", "--help"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Prints ffmpeg version, build config, license, or usage help. Read-only info flags; no transcode runs.",
+        ));
     }
 
     Some(GateResult::ask(format!("ffmpeg: {}", subcmd_single)))
@@ -5943,7 +8262,7 @@ pub fn check_python3_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--version", "-V", "-VV"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason("Info flags. Always safe."));
     }
     if true
         && cmd
@@ -5951,7 +8270,7 @@ pub fn check_python3_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--help", "-h"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason("Info flags. Always safe."));
     }
 
     // Bare ask rule - any python3 invocation asks
@@ -5998,7 +8317,7 @@ pub fn check_node_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--version", "-v"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason("Info flags. Always safe."));
     }
     if true
         && cmd
@@ -6006,7 +8325,7 @@ pub fn check_node_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--help", "-h"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason("Info flags. Always safe."));
     }
     if true
         && cmd
@@ -6014,7 +8333,9 @@ pub fn check_node_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-c", "--check"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Syntax check without execution.",
+        ));
     }
 
     // Bare ask rule - any node invocation asks
@@ -6056,7 +8377,7 @@ pub fn check_ruby_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--version", "-v"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason("Info flags. Always safe."));
     }
     if true
         && cmd
@@ -6064,10 +8385,12 @@ pub fn check_ruby_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--help", "-h"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason("Info flags. Always safe."));
     }
     if true && cmd.args.iter().any(|a| ["-c"].contains(&a.as_str())) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Per-language syntax checks. Read-only.",
+        ));
     }
 
     // Bare ask rule - any ruby invocation asks
@@ -6077,26 +8400,6 @@ pub fn check_ruby_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === DENO (from runtimes.toml) ===
-
-pub static DENO_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "--version",
-        "-V",
-        "--help",
-        "-h",
-        "check",
-        "lint",
-        "doc",
-        "info",
-        "types",
-        "completions",
-        "help",
-        "test",
-        "bench",
-    ]
-    .into_iter()
-    .collect()
-});
 
 pub static DENO_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -6131,13 +8434,68 @@ pub fn check_deno_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if DENO_ALLOW.contains(subcmd.as_str()) || DENO_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
-    }
-
     // Check conditional allow rules
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason("Info flags. Always safe."));
+    }
+    if subcmd_single == "-V" {
+        return Some(GateResult::allow_with_reason("Info flags. Always safe."));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason("Info flags. Always safe."));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason("Info flags. Always safe."));
+    }
+    if subcmd_single == "check" {
+        return Some(GateResult::allow_with_reason(
+            "Deno's read-only inspection subcommands. `fmt --check` and `test` also allow.",
+        ));
+    }
+    if subcmd_single == "lint" {
+        return Some(GateResult::allow_with_reason(
+            "Deno's read-only inspection subcommands. `fmt --check` and `test` also allow.",
+        ));
+    }
+    if subcmd_single == "doc" {
+        return Some(GateResult::allow_with_reason(
+            "Deno's read-only inspection subcommands. `fmt --check` and `test` also allow.",
+        ));
+    }
+    if subcmd_single == "info" {
+        return Some(GateResult::allow_with_reason(
+            "Deno's read-only inspection subcommands. `fmt --check` and `test` also allow.",
+        ));
+    }
+    if subcmd_single == "types" {
+        return Some(GateResult::allow_with_reason(
+            "Deno's read-only inspection subcommands. `fmt --check` and `test` also allow.",
+        ));
+    }
+    if subcmd_single == "completions" {
+        return Some(GateResult::allow_with_reason(
+            "Prints shell completion script for `deno` to stdout. Read-only.",
+        ));
+    }
+    if subcmd_single == "help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints `deno` help text. Read-only.",
+        ));
+    }
     if subcmd_single == "fmt" && cmd.args.iter().any(|a| ["--check"].contains(&a.as_str())) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Deno's read-only inspection subcommands. `fmt --check` and `test` also allow.",
+        ));
+    }
+    if subcmd_single == "test" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the Deno test suite. Executes test files in the default sandbox; no files written and no global installs.",
+        ));
+    }
+    if subcmd_single == "bench" {
+        return Some(GateResult::allow_with_reason(
+            "Runs Deno benchmarks. Executes bench files in the default sandbox; no files written and no global installs.",
+        ));
     }
 
     if let Some(reason) = DENO_ASK
@@ -6183,7 +8541,7 @@ pub fn check_php_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--version", "-v"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason("Info flags. Always safe."));
     }
     if true
         && cmd
@@ -6191,7 +8549,7 @@ pub fn check_php_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--help", "-h"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason("Info flags. Always safe."));
     }
     if true
         && cmd
@@ -6199,7 +8557,9 @@ pub fn check_php_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--info", "-i"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Prints PHP configuration (`phpinfo`). Read-only.",
+        ));
     }
     if true
         && cmd
@@ -6207,10 +8567,14 @@ pub fn check_php_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-l", "--syntax-check"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Per-language syntax checks. Read-only.",
+        ));
     }
     if true && cmd.args.iter().any(|a| ["-m"].contains(&a.as_str())) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Lists compiled-in PHP modules. Read-only.",
+        ));
     }
 
     // Bare ask rule - any php invocation asks
@@ -6247,7 +8611,7 @@ pub fn check_lua_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
     // Check conditional allow rules
     if true && cmd.args.iter().any(|a| ["-v"].contains(&a.as_str())) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason("Info flags. Always safe."));
     }
 
     // Bare ask rule - any lua invocation asks
@@ -6282,7 +8646,7 @@ pub fn check_java_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--version", "-version", "--help", "-help", "-h"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason("Info flags. Always safe."));
     }
 
     // Bare ask rule - any java invocation asks
@@ -6317,7 +8681,7 @@ pub fn check_javac_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--version", "-version", "--help", "-help"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason("Info flags. Always safe."));
     }
 
     // Bare ask rule - any javac invocation asks
@@ -6327,14 +8691,6 @@ pub fn check_javac_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === DOTNET (from runtimes.toml) ===
-
-pub static DOTNET_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "--help", "-h", "help", "build", "test", "run", "clean", "restore", "list", "sln",
-    ]
-    .into_iter()
-    .collect()
-});
 
 pub static DOTNET_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -6368,17 +8724,59 @@ pub fn check_dotnet_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if DOTNET_ALLOW.contains(subcmd.as_str()) || DOTNET_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
-    }
-
     // Check conditional allow rules
     if true
         && cmd.args.iter().any(|a| {
             ["--version", "--info", "--list-sdks", "--list-runtimes"].contains(&a.as_str())
         })
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason("Info flags. Always safe."));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason("Info flags. Always safe."));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason("Info flags. Always safe."));
+    }
+    if subcmd_single == "help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints `dotnet` help text. Read-only.",
+        ));
+    }
+    if subcmd_single == "build" {
+        return Some(GateResult::allow_with_reason(
+            "Local build, test, and dependency restore. Outputs land under `bin/` and `obj/`.",
+        ));
+    }
+    if subcmd_single == "test" {
+        return Some(GateResult::allow_with_reason(
+            "Local build, test, and dependency restore. Outputs land under `bin/` and `obj/`.",
+        ));
+    }
+    if subcmd_single == "run" {
+        return Some(GateResult::allow_with_reason(
+            "Local build, test, and dependency restore. Outputs land under `bin/` and `obj/`.",
+        ));
+    }
+    if subcmd_single == "clean" {
+        return Some(GateResult::allow_with_reason(
+            "Deletes build outputs under `bin/` and `obj/` for the project. Local cleanup only.",
+        ));
+    }
+    if subcmd_single == "restore" {
+        return Some(GateResult::allow_with_reason(
+            "Local build, test, and dependency restore. Outputs land under `bin/` and `obj/`.",
+        ));
+    }
+    if subcmd_single == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists project references or installed packages. Read-only.",
+        ));
+    }
+    if subcmd_single == "sln" {
+        return Some(GateResult::allow_with_reason(
+            "Inspects or edits the solution file's project list. Reads with no args; `add`/`remove` rewrite the `.sln`.",
+        ));
     }
     if subcmd_single == "format"
         && cmd
@@ -6386,7 +8784,9 @@ pub fn check_dotnet_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--check", "--verify-no-changes"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Reports formatting issues without writing. `--check` and `--verify-no-changes` make it read-only.",
+        ));
     }
 
     if let Some(reason) = DOTNET_ASK
@@ -6400,9 +8800,6 @@ pub fn check_dotnet_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === SWIFT (from runtimes.toml) ===
-
-pub static SWIFT_ALLOW: LazyLock<HashSet<&str>> =
-    LazyLock::new(|| ["build", "test"].into_iter().collect());
 
 pub static SWIFT_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -6428,10 +8825,6 @@ pub fn check_swift_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if SWIFT_ALLOW.contains(subcmd.as_str()) || SWIFT_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
-    }
-
     // Check conditional allow rules
     if true
         && cmd
@@ -6439,7 +8832,17 @@ pub fn check_swift_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--version", "--help", "-h"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason("Info flags. Always safe."));
+    }
+    if subcmd_single == "build" {
+        return Some(GateResult::allow_with_reason(
+            "Compiles the Swift package. Outputs land under `.build/`; no code is executed.",
+        ));
+    }
+    if subcmd_single == "test" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the Swift package test suite. Builds and executes tests locally; outputs land under `.build/`.",
+        ));
     }
 
     if let Some(reason) = SWIFT_ASK
@@ -6485,7 +8888,7 @@ pub fn check_elixir_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--version", "-v"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason("Info flags. Always safe."));
     }
     if true
         && cmd
@@ -6493,7 +8896,7 @@ pub fn check_elixir_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--help", "-h"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason("Info flags. Always safe."));
     }
 
     // Bare ask rule - any elixir invocation asks
@@ -6528,7 +8931,7 @@ pub fn check_iex_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--version", "-v"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason("Info flags. Always safe."));
     }
 
     // Bare ask rule - any iex invocation asks
@@ -6844,9 +9247,6 @@ pub fn check_perl_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === TAR (from filesystem.toml) ===
 
-pub static TAR_ALLOW: LazyLock<HashSet<&str>> =
-    LazyLock::new(|| ["-t", "--list"].into_iter().collect());
-
 /// Check tar commands declaratively
 pub fn check_tar_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if !["tar"].contains(&cmd.program.as_str()) {
@@ -6864,8 +9264,16 @@ pub fn check_tar_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if TAR_ALLOW.contains(subcmd.as_str()) || TAR_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "-t" {
+        return Some(GateResult::allow_with_reason(
+            "Lists archive contents without extracting. Read-only.",
+        ));
+    }
+    if subcmd_single == "--list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists archive contents without extracting. Read-only.",
+        ));
     }
 
     Some(GateResult::ask(format!("tar: {}", subcmd_single)))
@@ -6892,7 +9300,9 @@ pub fn check_unzip_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
     // Check conditional allow rules
     if true && cmd.args.iter().any(|a| ["-l"].contains(&a.as_str())) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Lists zip archive contents. Read-only. `zip -l` is not a listing flag (it converts line endings). Use `zipinfo` from the basics gate.",
+        ));
     }
 
     // Bare ask rule - any unzip invocation asks
@@ -6928,9 +9338,6 @@ pub fn check_zip_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === CURL (from network.toml) ===
 
-pub static CURL_ALLOW: LazyLock<HashSet<&str>> =
-    LazyLock::new(|| ["--version", "-h", "--help"].into_iter().collect());
-
 /// Check curl commands declaratively
 pub fn check_curl_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if !["curl"].contains(&cmd.program.as_str()) {
@@ -6948,27 +9355,37 @@ pub fn check_curl_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if CURL_ALLOW.contains(subcmd.as_str()) || CURL_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
-    }
-
     // Check conditional allow rules
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the curl version and supported protocols. Read-only.",
+        ));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason(
+            "Shows curl usage help. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Shows curl usage help. Read-only.",
+        ));
+    }
     if true
         && cmd
             .args
             .iter()
             .any(|a| ["-I", "--head"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "HEAD request. Returns response headers only, no body. Read-only.",
+        ));
     }
 
     Some(GateResult::allow())
 }
 
 // === WGET (from network.toml) ===
-
-pub static WGET_ALLOW: LazyLock<HashSet<&str>> =
-    LazyLock::new(|| ["--version", "-h", "--help"].into_iter().collect());
 
 /// Check wget commands declaratively
 pub fn check_wget_declarative(cmd: &CommandInfo) -> Option<GateResult> {
@@ -7029,13 +9446,26 @@ pub fn check_wget_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         ));
     }
 
-    if WGET_ALLOW.contains(subcmd.as_str()) || WGET_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
-    }
-
     // Check conditional allow rules
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the wget version and build info. Read-only.",
+        ));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason(
+            "Shows wget usage help. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Shows wget usage help. Read-only.",
+        ));
+    }
     if true && cmd.args.iter().any(|a| ["--spider"].contains(&a.as_str())) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Spider mode. Checks that a URL resolves; does not download. Read-only.",
+        ));
     }
 
     // Bare ask rule - any wget invocation asks
@@ -7189,9 +9619,6 @@ pub fn check_nc_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === HTTP (from network.toml) ===
 
-pub static HTTP_ALLOW: LazyLock<HashSet<&str>> =
-    LazyLock::new(|| ["--version", "--help", "GET"].into_iter().collect());
-
 pub static HTTP_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
         ("POST", "Sends an HTTP POST request. Mutating method; server-side effects depend on the endpoint."),
@@ -7218,8 +9645,21 @@ pub fn check_http_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if HTTP_ALLOW.contains(subcmd.as_str()) || HTTP_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the HTTPie client version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Shows HTTPie usage help. Read-only.",
+        ));
+    }
+    if subcmd_single == "GET" {
+        return Some(GateResult::allow_with_reason(
+            "HTTPie GET requests, including URL-only invocations that default to GET. `check_httpie` routes POST/PUT/DELETE/PATCH to ask.",
+        ));
     }
 
     if let Some(reason) = HTTP_ASK
@@ -7233,9 +9673,6 @@ pub fn check_http_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === NMAP (from network.toml) ===
-
-pub static NMAP_ALLOW: LazyLock<HashSet<&str>> =
-    LazyLock::new(|| ["--version", "-V", "--help", "-h"].into_iter().collect());
 
 /// Check nmap commands declaratively
 pub fn check_nmap_declarative(cmd: &CommandInfo) -> Option<GateResult> {
@@ -7254,8 +9691,26 @@ pub fn check_nmap_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if NMAP_ALLOW.contains(subcmd.as_str()) || NMAP_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the nmap version and build info. Read-only; sends no probes.",
+        ));
+    }
+    if subcmd_single == "-V" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the nmap version and build info. Read-only; sends no probes.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Shows nmap usage help. Read-only; sends no probes.",
+        ));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason(
+            "Shows nmap usage help. Read-only; sends no probes.",
+        ));
     }
 
     // Bare ask rule - any nmap invocation asks
@@ -7265,9 +9720,6 @@ pub fn check_nmap_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === SOCAT (from network.toml) ===
-
-pub static SOCAT_ALLOW: LazyLock<HashSet<&str>> =
-    LazyLock::new(|| ["--version", "-V", "--help", "-h"].into_iter().collect());
 
 /// Check socat commands declaratively
 pub fn check_socat_declarative(cmd: &CommandInfo) -> Option<GateResult> {
@@ -7286,8 +9738,26 @@ pub fn check_socat_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if SOCAT_ALLOW.contains(subcmd.as_str()) || SOCAT_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the socat version and feature list. Read-only; opens no connection.",
+        ));
+    }
+    if subcmd_single == "-V" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the socat version and feature list. Read-only; opens no connection.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Shows socat usage help. Read-only; opens no connection.",
+        ));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason(
+            "Shows socat usage help. Read-only; opens no connection.",
+        ));
     }
 
     // Bare ask rule - any socat invocation asks
@@ -7767,7 +10237,9 @@ pub fn check_mount_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--version", "--help", "-h", "-V"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Prints the mount version or help text. Read-only; takes no action on filesystems.",
+        ));
     }
 
     // Bare ask rule - any mount invocation asks
@@ -7886,7 +10358,9 @@ pub fn check_psql_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-l", "--list"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Lists the databases on the PostgreSQL server. Read-only; runs no queries against the data.",
+        ));
     }
 
     Some(GateResult::ask(format!("psql: {}", subcmd_single)))
@@ -8091,12 +10565,6 @@ pub fn check_flyway_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === ALEMBIC (from system.toml) ===
 
-pub static ALEMBIC_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    ["history", "current", "heads", "branches", "show"]
-        .into_iter()
-        .collect()
-});
-
 pub static ALEMBIC_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
         ("upgrade", "Applies pending Alembic migrations to the database. Schema/data changes are not auto-reversible."),
@@ -8123,8 +10591,31 @@ pub fn check_alembic_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if ALEMBIC_ALLOW.contains(subcmd.as_str()) || ALEMBIC_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "history" {
+        return Some(GateResult::allow_with_reason(
+            "Lists the Alembic migration history. Read-only; runs no migrations.",
+        ));
+    }
+    if subcmd_single == "current" {
+        return Some(GateResult::allow_with_reason(
+            "Shows the current Alembic revision recorded in the database. Read-only.",
+        ));
+    }
+    if subcmd_single == "heads" {
+        return Some(GateResult::allow_with_reason(
+            "Shows the head revision(s) of the Alembic migration tree. Read-only.",
+        ));
+    }
+    if subcmd_single == "branches" {
+        return Some(GateResult::allow_with_reason(
+            "Shows branch points in the Alembic migration tree. Read-only.",
+        ));
+    }
+    if subcmd_single == "show" {
+        return Some(GateResult::allow_with_reason(
+            "Displays details of a specific Alembic revision. Read-only; applies nothing.",
+        ));
     }
 
     if let Some(reason) = ALEMBIC_ASK
@@ -8180,7 +10671,9 @@ pub fn check_sqlite3_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
     // Check conditional allow rules
     if true && cmd.args.iter().any(|a| ["-readonly"].contains(&a.as_str())) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Opens a SQLite database in read-only mode. Writes are rejected; queries only.",
+        ));
     }
 
     // Bare ask rule - any sqlite3 invocation asks
@@ -8264,7 +10757,9 @@ pub fn check_kill_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
     // Check conditional allow rules
     if true && cmd.args.iter().any(|a| ["-0"].contains(&a.as_str())) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Checks whether a PID exists without sending a signal. Read-only probe; the process is not affected.",
+        ));
     }
 
     // Bare ask rule - any kill invocation asks
@@ -8350,26 +10845,6 @@ pub fn check_xkill_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === MAKE (from system.toml) ===
 
-pub static MAKE_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "test",
-        "tests",
-        "check",
-        "lint",
-        "build",
-        "all",
-        "clean",
-        "format",
-        "fmt",
-        "typecheck",
-        "dev",
-        "run",
-        "help",
-    ]
-    .into_iter()
-    .collect()
-});
-
 /// Check make commands declaratively
 pub fn check_make_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if !["make"].contains(&cmd.program.as_str()) {
@@ -8403,17 +10878,77 @@ pub fn check_make_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if MAKE_ALLOW.contains(subcmd.as_str()) || MAKE_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "test" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the project's `test` make target. Conventionally runs the test suite.",
+        ));
+    }
+    if subcmd_single == "tests" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the project's `tests` make target. Conventionally runs the test suite.",
+        ));
+    }
+    if subcmd_single == "check" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the project's `check` make target. Conventionally runs tests or lint checks.",
+        ));
+    }
+    if subcmd_single == "lint" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the project's `lint` make target. Conventionally runs linters over the source.",
+        ));
+    }
+    if subcmd_single == "build" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the project's `build` make target. Compiles or assembles build outputs.",
+        ));
+    }
+    if subcmd_single == "all" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the project's default `all` make target. Builds the standard set of outputs.",
+        ));
+    }
+    if subcmd_single == "clean" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the project's `clean` make target. Removes build artifacts in the working tree.",
+        ));
+    }
+    if subcmd_single == "format" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the project's `format` make target. Reformats source files in place.",
+        ));
+    }
+    if subcmd_single == "fmt" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the project's `fmt` make target. Reformats source files in place.",
+        ));
+    }
+    if subcmd_single == "typecheck" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the project's `typecheck` make target. Conventionally runs a static type checker.",
+        ));
+    }
+    if subcmd_single == "dev" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the project's `dev` make target. Conventionally starts a local development task.",
+        ));
+    }
+    if subcmd_single == "run" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the project's `run` make target. Executes the project's configured run command.",
+        ));
+    }
+    if subcmd_single == "help" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the project's `help` make target. Conventionally prints available targets.",
+        ));
     }
 
     Some(GateResult::ask(format!("make: {}", subcmd_single)))
 }
 
 // === CMAKE (from system.toml) ===
-
-pub static CMAKE_ALLOW: LazyLock<HashSet<&str>> =
-    LazyLock::new(|| ["--version", "--help"].into_iter().collect());
 
 /// Check cmake commands declaratively
 pub fn check_cmake_declarative(cmd: &CommandInfo) -> Option<GateResult> {
@@ -8441,8 +10976,16 @@ pub fn check_cmake_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if CMAKE_ALLOW.contains(subcmd.as_str()) || CMAKE_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the CMake version. Read-only; configures or builds nothing.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints CMake help text. Read-only; configures or builds nothing.",
+        ));
     }
 
     // Bare ask rule - any cmake invocation asks
@@ -8452,8 +10995,6 @@ pub fn check_cmake_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === NINJA (from system.toml) ===
-
-pub static NINJA_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| ["-t"].into_iter().collect());
 
 pub static NINJA_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [(
@@ -8481,8 +11022,11 @@ pub fn check_ninja_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if NINJA_ALLOW.contains(subcmd.as_str()) || NINJA_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "-t" {
+        return Some(GateResult::allow_with_reason(
+            "Runs a Ninja subtool (`-t query`, `-t graph`, etc.). Inspection only; does not build targets.",
+        ));
     }
 
     if let Some(reason) = NINJA_ASK
@@ -8496,12 +11040,6 @@ pub fn check_ninja_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === JUST (from system.toml) ===
-
-pub static JUST_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    ["--list", "--summary", "--dump", "--evaluate"]
-        .into_iter()
-        .collect()
-});
 
 /// Check just commands declaratively
 pub fn check_just_declarative(cmd: &CommandInfo) -> Option<GateResult> {
@@ -8520,17 +11058,32 @@ pub fn check_just_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if JUST_ALLOW.contains(subcmd.as_str()) || JUST_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "--list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists the recipes defined in the `justfile`. Read-only; runs no recipe.",
+        ));
+    }
+    if subcmd_single == "--summary" {
+        return Some(GateResult::allow_with_reason(
+            "Prints a one-line summary of `justfile` recipe names. Read-only; runs no recipe.",
+        ));
+    }
+    if subcmd_single == "--dump" {
+        return Some(GateResult::allow_with_reason(
+            "Dumps the parsed `justfile` back out. Read-only; runs no recipe.",
+        ));
+    }
+    if subcmd_single == "--evaluate" {
+        return Some(GateResult::allow_with_reason(
+            "Evaluates and prints `justfile` variables. Read-only; runs no recipe.",
+        ));
     }
 
     Some(GateResult::ask(format!("just: {}", subcmd_single)))
 }
 
 // === TASK (from system.toml) ===
-
-pub static TASK_ALLOW: LazyLock<HashSet<&str>> =
-    LazyLock::new(|| ["--list", "--list-all"].into_iter().collect());
 
 /// Check task commands declaratively
 pub fn check_task_declarative(cmd: &CommandInfo) -> Option<GateResult> {
@@ -8549,29 +11102,22 @@ pub fn check_task_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if TASK_ALLOW.contains(subcmd.as_str()) || TASK_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "--list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists the Taskfile tasks that have a description. Read-only; runs no task.",
+        ));
+    }
+    if subcmd_single == "--list-all" {
+        return Some(GateResult::allow_with_reason(
+            "Lists all Taskfile tasks, including undocumented ones. Read-only; runs no task.",
+        ));
     }
 
     Some(GateResult::ask(format!("task: {}", subcmd_single)))
 }
 
 // === GRADLE (from system.toml) ===
-
-pub static GRADLE_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "tasks",
-        "help",
-        "dependencies",
-        "properties",
-        "build",
-        "test",
-        "check",
-        "clean",
-    ]
-    .into_iter()
-    .collect()
-});
 
 pub static GRADLE_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -8597,8 +11143,46 @@ pub fn check_gradle_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if GRADLE_ALLOW.contains(subcmd.as_str()) || GRADLE_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "tasks" {
+        return Some(GateResult::allow_with_reason(
+            "Lists the available Gradle tasks for the project. Read-only; runs no task.",
+        ));
+    }
+    if subcmd_single == "help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints Gradle help for the project or a task. Read-only; runs no task.",
+        ));
+    }
+    if subcmd_single == "dependencies" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the project's resolved Gradle dependency tree. Read-only.",
+        ));
+    }
+    if subcmd_single == "properties" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the project's Gradle properties. Read-only; changes nothing.",
+        ));
+    }
+    if subcmd_single == "build" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the Gradle `build` task. Compiles, tests, and assembles project outputs.",
+        ));
+    }
+    if subcmd_single == "test" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the Gradle `test` task. Executes the project's test suite.",
+        ));
+    }
+    if subcmd_single == "check" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the Gradle `check` task. Runs verification tasks such as tests and linters.",
+        ));
+    }
+    if subcmd_single == "clean" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the Gradle `clean` task. Deletes the project's build directory.",
+        ));
     }
 
     if let Some(reason) = GRADLE_ASK
@@ -8612,22 +11196,6 @@ pub fn check_gradle_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === MVN (from system.toml) ===
-
-pub static MVN_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "help",
-        "validate",
-        "compile",
-        "test",
-        "package",
-        "verify",
-        "clean",
-        "dependency:tree",
-        "dependency:analyze",
-    ]
-    .into_iter()
-    .collect()
-});
 
 pub static MVN_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -8653,8 +11221,51 @@ pub fn check_mvn_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if MVN_ALLOW.contains(subcmd.as_str()) || MVN_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "help" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the Maven help plugin. Read-only; prints plugin or goal information.",
+        ));
+    }
+    if subcmd_single == "validate" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the Maven `validate` phase. Checks the project is correct; produces no artifacts.",
+        ));
+    }
+    if subcmd_single == "compile" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the Maven `compile` phase. Compiles the project's main sources.",
+        ));
+    }
+    if subcmd_single == "test" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the Maven `test` phase. Compiles and executes the project's unit tests.",
+        ));
+    }
+    if subcmd_single == "package" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the Maven `package` phase. Builds the project artifact into `target/`.",
+        ));
+    }
+    if subcmd_single == "verify" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the Maven `verify` phase. Runs integration tests and verification checks.",
+        ));
+    }
+    if subcmd_single == "clean" {
+        return Some(GateResult::allow_with_reason(
+            "Runs the Maven `clean` phase. Deletes the `target/` build directory.",
+        ));
+    }
+    if subcmd_single == "dependency:tree" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the project's resolved Maven dependency tree. Read-only.",
+        ));
+    }
+    if subcmd_single == "dependency:analyze" {
+        return Some(GateResult::allow_with_reason(
+            "Analyzes declared vs used Maven dependencies and reports findings. Read-only.",
+        ));
     }
 
     if let Some(reason) = MVN_ASK
@@ -8668,14 +11279,6 @@ pub fn check_mvn_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === BAZEL (from system.toml) ===
-
-pub static BAZEL_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "info", "query", "cquery", "aquery", "build", "test", "coverage", "version", "help",
-    ]
-    .into_iter()
-    .collect()
-});
 
 pub static BAZEL_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -8701,8 +11304,51 @@ pub fn check_bazel_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if BAZEL_ALLOW.contains(subcmd.as_str()) || BAZEL_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "info" {
+        return Some(GateResult::allow_with_reason(
+            "Prints Bazel workspace and configuration info. Read-only; builds nothing.",
+        ));
+    }
+    if subcmd_single == "query" {
+        return Some(GateResult::allow_with_reason(
+            "Queries the Bazel target graph. Read-only; builds nothing.",
+        ));
+    }
+    if subcmd_single == "cquery" {
+        return Some(GateResult::allow_with_reason(
+            "Queries the Bazel configured-target graph. Read-only; builds nothing.",
+        ));
+    }
+    if subcmd_single == "aquery" {
+        return Some(GateResult::allow_with_reason(
+            "Queries the Bazel action graph. Read-only; builds nothing.",
+        ));
+    }
+    if subcmd_single == "build" {
+        return Some(GateResult::allow_with_reason(
+            "Builds the requested Bazel targets. Produces build outputs; runs no target.",
+        ));
+    }
+    if subcmd_single == "test" {
+        return Some(GateResult::allow_with_reason(
+            "Builds and runs the requested Bazel test targets.",
+        ));
+    }
+    if subcmd_single == "coverage" {
+        return Some(GateResult::allow_with_reason(
+            "Builds and runs Bazel test targets while collecting coverage data.",
+        ));
+    }
+    if subcmd_single == "version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the Bazel version. Read-only; builds nothing.",
+        ));
+    }
+    if subcmd_single == "help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints Bazel help text. Read-only; builds nothing.",
+        ));
     }
 
     if let Some(reason) = BAZEL_ASK
@@ -8716,12 +11362,6 @@ pub fn check_bazel_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === MESON (from system.toml) ===
-
-pub static MESON_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    ["introspect", "configure", "--version", "--help"]
-        .into_iter()
-        .collect()
-});
 
 pub static MESON_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -8748,8 +11388,26 @@ pub fn check_meson_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if MESON_ALLOW.contains(subcmd.as_str()) || MESON_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "introspect" {
+        return Some(GateResult::allow_with_reason(
+            "Prints build-system metadata for a Meson project. Read-only.",
+        ));
+    }
+    if subcmd_single == "configure" {
+        return Some(GateResult::allow_with_reason(
+            "Shows or changes Meson build options. Without options, reports the current configuration.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the Meson version. Read-only; configures or builds nothing.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints Meson help text. Read-only; configures or builds nothing.",
+        ));
     }
 
     if let Some(reason) = MESON_ASK
@@ -8763,18 +11421,6 @@ pub fn check_meson_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === ANSIBLE (from system.toml) ===
-
-pub static ANSIBLE_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "--version",
-        "--help",
-        "--list-hosts",
-        "--list-tasks",
-        "--syntax-check",
-    ]
-    .into_iter()
-    .collect()
-});
 
 /// Check ansible commands declaratively
 pub fn check_ansible_declarative(cmd: &CommandInfo) -> Option<GateResult> {
@@ -8809,8 +11455,31 @@ pub fn check_ansible_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if ANSIBLE_ALLOW.contains(subcmd.as_str()) || ANSIBLE_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the Ansible version and config paths. Read-only; runs no play.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints Ansible help text. Read-only; runs no play.",
+        ));
+    }
+    if subcmd_single == "--list-hosts" {
+        return Some(GateResult::allow_with_reason(
+            "Lists the hosts a playbook would target. Read-only; runs no task.",
+        ));
+    }
+    if subcmd_single == "--list-tasks" {
+        return Some(GateResult::allow_with_reason(
+            "Lists the tasks a playbook would run. Read-only; runs no task.",
+        ));
+    }
+    if subcmd_single == "--syntax-check" {
+        return Some(GateResult::allow_with_reason(
+            "Parses a playbook to check its syntax. Read-only; runs no task.",
+        ));
     }
 
     // Bare ask rule - any ansible invocation asks
@@ -8820,19 +11489,6 @@ pub fn check_ansible_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === VAGRANT (from system.toml) ===
-
-pub static VAGRANT_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "status",
-        "global-status",
-        "ssh-config",
-        "port",
-        "version",
-        "--help",
-    ]
-    .into_iter()
-    .collect()
-});
 
 pub static VAGRANT_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -8862,8 +11518,36 @@ pub fn check_vagrant_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if VAGRANT_ALLOW.contains(subcmd.as_str()) || VAGRANT_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "status" {
+        return Some(GateResult::allow_with_reason(
+            "Reports the state of the Vagrant machines for this project. Read-only.",
+        ));
+    }
+    if subcmd_single == "global-status" {
+        return Some(GateResult::allow_with_reason(
+            "Reports the state of all known Vagrant machines on the host. Read-only.",
+        ));
+    }
+    if subcmd_single == "ssh-config" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the SSH config for connecting to the Vagrant VM. Read-only.",
+        ));
+    }
+    if subcmd_single == "port" {
+        return Some(GateResult::allow_with_reason(
+            "Lists the forwarded ports for the Vagrant VM. Read-only.",
+        ));
+    }
+    if subcmd_single == "version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the installed and latest Vagrant version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints Vagrant help text. Read-only; changes no VM.",
+        ));
     }
 
     if let Some(reason) = VAGRANT_ASK
@@ -8877,9 +11561,6 @@ pub fn check_vagrant_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === HYPERFINE (from system.toml) ===
-
-pub static HYPERFINE_ALLOW: LazyLock<HashSet<&str>> =
-    LazyLock::new(|| ["--version", "--help"].into_iter().collect());
 
 /// Check hyperfine commands declaratively
 pub fn check_hyperfine_declarative(cmd: &CommandInfo) -> Option<GateResult> {
@@ -8898,8 +11579,16 @@ pub fn check_hyperfine_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if HYPERFINE_ALLOW.contains(subcmd.as_str()) || HYPERFINE_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the hyperfine version. Read-only; runs no benchmark.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints hyperfine help text. Read-only; runs no benchmark.",
+        ));
     }
 
     // Bare ask rule - any hyperfine invocation asks
@@ -8934,7 +11623,9 @@ pub fn check_sudo_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-l", "--list"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Lists the commands the current user may run via sudo. Read-only; executes nothing.",
+        ));
     }
     if true
         && cmd
@@ -8942,7 +11633,9 @@ pub fn check_sudo_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-v", "--validate"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Refreshes the sudo timestamp without running a command. Executes nothing.",
+        ));
     }
     if true
         && cmd
@@ -8950,37 +11643,15 @@ pub fn check_sudo_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-k", "--reset-timestamp"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Invalidates the cached sudo timestamp. Executes no command.",
+        ));
     }
 
     Some(GateResult::ask(format!("sudo: {}", subcmd_single)))
 }
 
 // === SYSTEMCTL (from system.toml) ===
-
-pub static SYSTEMCTL_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "status",
-        "show",
-        "list-units",
-        "list-unit-files",
-        "list-sockets",
-        "list-timers",
-        "list-jobs",
-        "list-dependencies",
-        "is-active",
-        "is-enabled",
-        "is-failed",
-        "is-system-running",
-        "cat",
-        "help",
-        "--version",
-        "-h",
-        "--help",
-    ]
-    .into_iter()
-    .collect()
-});
 
 pub static SYSTEMCTL_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -9019,8 +11690,91 @@ pub fn check_systemctl_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if SYSTEMCTL_ALLOW.contains(subcmd.as_str()) || SYSTEMCTL_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "status" {
+        return Some(GateResult::allow_with_reason(
+            "Shows the runtime status and recent logs of a systemd unit. Read-only.",
+        ));
+    }
+    if subcmd_single == "show" {
+        return Some(GateResult::allow_with_reason(
+            "Prints a systemd unit's properties as key=value pairs. Read-only.",
+        ));
+    }
+    if subcmd_single == "list-units" {
+        return Some(GateResult::allow_with_reason(
+            "Lists systemd units currently loaded in memory. Read-only.",
+        ));
+    }
+    if subcmd_single == "list-unit-files" {
+        return Some(GateResult::allow_with_reason(
+            "Lists installed systemd unit files and their enablement state. Read-only.",
+        ));
+    }
+    if subcmd_single == "list-sockets" {
+        return Some(GateResult::allow_with_reason(
+            "Lists systemd socket units and what they activate. Read-only.",
+        ));
+    }
+    if subcmd_single == "list-timers" {
+        return Some(GateResult::allow_with_reason(
+            "Lists systemd timer units and their next elapse. Read-only.",
+        ));
+    }
+    if subcmd_single == "list-jobs" {
+        return Some(GateResult::allow_with_reason(
+            "Lists systemd jobs currently in progress. Read-only.",
+        ));
+    }
+    if subcmd_single == "list-dependencies" {
+        return Some(GateResult::allow_with_reason(
+            "Shows the dependency tree of a systemd unit. Read-only.",
+        ));
+    }
+    if subcmd_single == "is-active" {
+        return Some(GateResult::allow_with_reason(
+            "Reports whether a systemd unit is active. Read-only.",
+        ));
+    }
+    if subcmd_single == "is-enabled" {
+        return Some(GateResult::allow_with_reason(
+            "Reports whether a systemd unit is enabled at boot. Read-only.",
+        ));
+    }
+    if subcmd_single == "is-failed" {
+        return Some(GateResult::allow_with_reason(
+            "Reports whether a systemd unit is in the failed state. Read-only.",
+        ));
+    }
+    if subcmd_single == "is-system-running" {
+        return Some(GateResult::allow_with_reason(
+            "Reports the overall systemd system state. Read-only.",
+        ));
+    }
+    if subcmd_single == "cat" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the on-disk contents of a systemd unit file. Read-only.",
+        ));
+    }
+    if subcmd_single == "help" {
+        return Some(GateResult::allow_with_reason(
+            "Opens help for a systemd unit. Read-only; changes no unit.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the systemd version. Read-only.",
+        ));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason(
+            "Prints systemctl help text. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints systemctl help text. Read-only.",
+        ));
     }
 
     if let Some(reason) = SYSTEMCTL_ASK
@@ -9059,7 +11813,9 @@ pub fn check_service_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--status-all"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Reports the status of all init services. Read-only; starts or stops nothing.",
+        ));
     }
 
     Some(GateResult::ask(format!("service: {}", subcmd_single)))
@@ -9086,7 +11842,9 @@ pub fn check_crontab_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
     // Check conditional allow rules
     if true && cmd.args.iter().any(|a| ["-l"].contains(&a.as_str())) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Lists the current user's scheduled cron jobs. Read-only; does not change the crontab.",
+        ));
     }
 
     // Bare ask rule - any crontab invocation asks
@@ -9097,40 +11855,13 @@ pub fn check_crontab_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === APT (from system.toml) ===
 
-pub static APT_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "list",
-        "search",
-        "show",
-        "showpkg",
-        "depends",
-        "rdepends",
-        "policy",
-        "madison",
-        "pkgnames",
-        "dotty",
-        "xvcg",
-        "stats",
-        "dump",
-        "dumpavail",
-        "showsrc",
-        "changelog",
-        "--version",
-        "-v",
-        "--help",
-        "-h",
-    ]
-    .into_iter()
-    .collect()
-});
-
 pub static APT_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
         ("download", "Downloads `.deb` package files to the current directory without installing."),
-        ("install", "Installing packages"),
+        ("install", "Installs packages and their dependencies system-wide. Network operation; pulls from the configured apt repositories."),
         ("remove", "Removes packages but keeps their config files. Use `purge` to also remove configs."),
         ("purge", "Removes packages and their config files. Stronger than `remove`."),
-        ("update", "Updating package lists"),
+        ("update", "Refreshes the apt package index from the configured repositories. Does not upgrade installed packages."),
         ("upgrade", "Upgrades installed packages to newer versions from the configured sources."),
         ("full-upgrade", "Upgrades packages and can remove others to resolve dependencies. Heavier than plain `upgrade`."),
         ("dist-upgrade", "Distribution upgrade can install/remove many packages, including kernel and base packages. Review proposed changes before approving."),
@@ -9161,8 +11892,106 @@ pub fn check_apt_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if APT_ALLOW.contains(subcmd.as_str()) || APT_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists packages known to apt. Read-only; installs or removes nothing.",
+        ));
+    }
+    if subcmd_single == "search" {
+        return Some(GateResult::allow_with_reason(
+            "Searches apt for packages matching a term. Read-only.",
+        ));
+    }
+    if subcmd_single == "show" {
+        return Some(GateResult::allow_with_reason(
+            "Prints apt package details. Read-only; installs or removes nothing.",
+        ));
+    }
+    if subcmd_single == "showpkg" {
+        return Some(GateResult::allow_with_reason(
+            "Prints low-level apt package records. Read-only.",
+        ));
+    }
+    if subcmd_single == "depends" {
+        return Some(GateResult::allow_with_reason(
+            "Prints an apt package's dependencies. Read-only.",
+        ));
+    }
+    if subcmd_single == "rdepends" {
+        return Some(GateResult::allow_with_reason(
+            "Prints packages that depend on an apt package. Read-only.",
+        ));
+    }
+    if subcmd_single == "policy" {
+        return Some(GateResult::allow_with_reason(
+            "Prints apt install candidates and version priorities. Read-only.",
+        ));
+    }
+    if subcmd_single == "madison" {
+        return Some(GateResult::allow_with_reason(
+            "Prints available apt package versions and their sources. Read-only.",
+        ));
+    }
+    if subcmd_single == "pkgnames" {
+        return Some(GateResult::allow_with_reason(
+            "Lists apt package names matching a prefix. Read-only.",
+        ));
+    }
+    if subcmd_single == "dotty" {
+        return Some(GateResult::allow_with_reason(
+            "Emits an apt package dependency graph in dot format. Read-only.",
+        ));
+    }
+    if subcmd_single == "xvcg" {
+        return Some(GateResult::allow_with_reason(
+            "Emits an apt package dependency graph in xvcg format. Read-only.",
+        ));
+    }
+    if subcmd_single == "stats" {
+        return Some(GateResult::allow_with_reason(
+            "Prints apt package cache statistics. Read-only.",
+        ));
+    }
+    if subcmd_single == "dump" {
+        return Some(GateResult::allow_with_reason(
+            "Dumps the full apt package cache. Read-only.",
+        ));
+    }
+    if subcmd_single == "dumpavail" {
+        return Some(GateResult::allow_with_reason(
+            "Dumps the apt available-packages list. Read-only.",
+        ));
+    }
+    if subcmd_single == "showsrc" {
+        return Some(GateResult::allow_with_reason(
+            "Prints apt source-package records. Read-only.",
+        ));
+    }
+    if subcmd_single == "changelog" {
+        return Some(GateResult::allow_with_reason(
+            "Prints an apt package's changelog. Read-only.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the apt version. Read-only.",
+        ));
+    }
+    if subcmd_single == "-v" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the apt version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints apt help text. Read-only.",
+        ));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason(
+            "Prints apt help text. Read-only.",
+        ));
     }
 
     if let Some(reason) = APT_ASK
@@ -9199,33 +12028,9 @@ pub fn check_apt_cache_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === DNF (from system.toml) ===
 
-pub static DNF_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "list",
-        "info",
-        "search",
-        "provides",
-        "whatprovides",
-        "repolist",
-        "repoinfo",
-        "repoquery",
-        "deplist",
-        "check",
-        "check-update",
-        "history",
-        "alias",
-        "--version",
-        "-v",
-        "--help",
-        "-h",
-    ]
-    .into_iter()
-    .collect()
-});
-
 pub static DNF_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("install", "Installing packages"),
+        ("install", "Installs packages and their dependencies from the enabled repos. Network operation; changes system package state."),
         ("remove", "Removes packages from the system."),
         ("erase", "Removes packages from the system (alias for `remove`)."),
         ("update", "Updates installed packages to the latest version available in the enabled repos."),
@@ -9259,8 +12064,91 @@ pub fn check_dnf_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if DNF_ALLOW.contains(subcmd.as_str()) || DNF_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists packages known to dnf. Read-only; installs or removes nothing.",
+        ));
+    }
+    if subcmd_single == "info" {
+        return Some(GateResult::allow_with_reason(
+            "Prints dnf package details. Read-only; installs or removes nothing.",
+        ));
+    }
+    if subcmd_single == "search" {
+        return Some(GateResult::allow_with_reason(
+            "Searches dnf for packages matching a term. Read-only.",
+        ));
+    }
+    if subcmd_single == "provides" {
+        return Some(GateResult::allow_with_reason(
+            "Reports which dnf package provides a given capability or file. Read-only.",
+        ));
+    }
+    if subcmd_single == "whatprovides" {
+        return Some(GateResult::allow_with_reason(
+            "Reports which dnf package provides a given capability or file. Read-only.",
+        ));
+    }
+    if subcmd_single == "repolist" {
+        return Some(GateResult::allow_with_reason(
+            "Lists configured dnf repositories. Read-only.",
+        ));
+    }
+    if subcmd_single == "repoinfo" {
+        return Some(GateResult::allow_with_reason(
+            "Prints details of configured dnf repositories. Read-only.",
+        ));
+    }
+    if subcmd_single == "repoquery" {
+        return Some(GateResult::allow_with_reason(
+            "Queries dnf repository metadata for packages. Read-only.",
+        ));
+    }
+    if subcmd_single == "deplist" {
+        return Some(GateResult::allow_with_reason(
+            "Prints a dnf package's dependency list. Read-only.",
+        ));
+    }
+    if subcmd_single == "check" {
+        return Some(GateResult::allow_with_reason(
+            "Checks the dnf package database for problems. Read-only.",
+        ));
+    }
+    if subcmd_single == "check-update" {
+        return Some(GateResult::allow_with_reason(
+            "Checks for available dnf package updates without installing them. Read-only.",
+        ));
+    }
+    if subcmd_single == "history" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the dnf transaction history. Read-only.",
+        ));
+    }
+    if subcmd_single == "alias" {
+        return Some(GateResult::allow_with_reason(
+            "Lists or prints configured dnf command aliases. Read-only.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the dnf version. Read-only.",
+        ));
+    }
+    if subcmd_single == "-v" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the dnf version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints dnf help text. Read-only.",
+        ));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason(
+            "Prints dnf help text. Read-only.",
+        ));
     }
 
     if let Some(reason) = DNF_ASK
@@ -9274,29 +12162,6 @@ pub fn check_dnf_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === PACMAN (from system.toml) ===
-
-pub static PACMAN_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "-Q",
-        "--query",
-        "-Qs",
-        "-Qi",
-        "-Ql",
-        "-Qo",
-        "-Ss",
-        "-Si",
-        "-Sl",
-        "-Sg",
-        "-F",
-        "--files",
-        "-V",
-        "--version",
-        "-h",
-        "--help",
-    ]
-    .into_iter()
-    .collect()
-});
 
 /// Check pacman commands declaratively
 pub fn check_pacman_declarative(cmd: &CommandInfo) -> Option<GateResult> {
@@ -9315,8 +12180,86 @@ pub fn check_pacman_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if PACMAN_ALLOW.contains(subcmd.as_str()) || PACMAN_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "-Q" {
+        return Some(GateResult::allow_with_reason(
+            "Queries installed pacman packages. Read-only.",
+        ));
+    }
+    if subcmd_single == "--query" {
+        return Some(GateResult::allow_with_reason(
+            "Queries installed pacman packages. Read-only.",
+        ));
+    }
+    if subcmd_single == "-Qs" {
+        return Some(GateResult::allow_with_reason(
+            "Searches installed pacman packages by pattern. Read-only.",
+        ));
+    }
+    if subcmd_single == "-Qi" {
+        return Some(GateResult::allow_with_reason(
+            "Prints details of an installed pacman package. Read-only.",
+        ));
+    }
+    if subcmd_single == "-Ql" {
+        return Some(GateResult::allow_with_reason(
+            "Lists the files owned by an installed pacman package. Read-only.",
+        ));
+    }
+    if subcmd_single == "-Qo" {
+        return Some(GateResult::allow_with_reason(
+            "Reports which pacman package owns a given file. Read-only.",
+        ));
+    }
+    if subcmd_single == "-Ss" {
+        return Some(GateResult::allow_with_reason(
+            "Searches sync repositories for pacman packages. Read-only.",
+        ));
+    }
+    if subcmd_single == "-Si" {
+        return Some(GateResult::allow_with_reason(
+            "Prints details of a pacman package in the sync repos. Read-only.",
+        ));
+    }
+    if subcmd_single == "-Sl" {
+        return Some(GateResult::allow_with_reason(
+            "Lists packages available in a sync repository. Read-only.",
+        ));
+    }
+    if subcmd_single == "-Sg" {
+        return Some(GateResult::allow_with_reason(
+            "Lists the members of a pacman package group. Read-only.",
+        ));
+    }
+    if subcmd_single == "-F" {
+        return Some(GateResult::allow_with_reason(
+            "Searches the pacman files database for a file. Read-only.",
+        ));
+    }
+    if subcmd_single == "--files" {
+        return Some(GateResult::allow_with_reason(
+            "Searches the pacman files database for a file. Read-only.",
+        ));
+    }
+    if subcmd_single == "-V" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the pacman version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the pacman version. Read-only.",
+        ));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason(
+            "Prints pacman help text. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints pacman help text. Read-only.",
+        ));
     }
 
     Some(GateResult::ask(format!("pacman: {}", subcmd_single)))
@@ -9324,93 +12267,24 @@ pub fn check_pacman_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === BREW (from system.toml) ===
 
-pub static BREW_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "list",
-        "ls",
-        "search",
-        "info",
-        "home",
-        "homepage",
-        "deps",
-        "uses",
-        "leaves",
-        "outdated",
-        "config",
-        "doctor",
-        "commands",
-        "desc",
-        "--version",
-        "-v",
-        "--help",
-        "-h",
-        "cat",
-        "formula",
-        "cask",
-    ]
-    .into_iter()
-    .collect()
-});
-
 pub static BREW_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("install", "Installing packages"),
-        (
-            "uninstall",
-            "Removes installed Homebrew packages from the prefix.",
-        ),
-        (
-            "remove",
-            "Removes installed Homebrew packages (alias for `uninstall`).",
-        ),
-        (
-            "upgrade",
-            "Upgrades installed Homebrew formulae/casks to the latest available versions.",
-        ),
-        (
-            "update",
-            "Updates Homebrew's tap metadata. Does not upgrade installed packages.",
-        ),
-        (
-            "reinstall",
-            "Removes and re-installs a Homebrew formula or cask.",
-        ),
-        (
-            "link",
-            "Symlinks a formula's files into the Homebrew prefix.",
-        ),
-        (
-            "unlink",
-            "Removes a formula's symlinks from the Homebrew prefix without uninstalling.",
-        ),
-        (
-            "pin",
-            "Prevents a formula from being upgraded by `brew upgrade`.",
-        ),
+        ("install", "Installs a Homebrew formula or cask plus its dependencies into the prefix. Network operation."),
+        ("uninstall", "Removes installed Homebrew packages from the prefix."),
+        ("remove", "Removes installed Homebrew packages (alias for `uninstall`)."),
+        ("upgrade", "Upgrades installed Homebrew formulae/casks to the latest available versions."),
+        ("update", "Updates Homebrew's tap metadata. Does not upgrade installed packages."),
+        ("reinstall", "Removes and re-installs a Homebrew formula or cask."),
+        ("link", "Symlinks a formula's files into the Homebrew prefix."),
+        ("unlink", "Removes a formula's symlinks from the Homebrew prefix without uninstalling."),
+        ("pin", "Prevents a formula from being upgraded by `brew upgrade`."),
         ("unpin", "Removes a pin so a formula can be upgraded again."),
-        (
-            "tap",
-            "Adds a third-party Homebrew tap to the list of trusted sources.",
-        ),
-        (
-            "untap",
-            "Removes a Homebrew tap and its formulae from the local list of sources.",
-        ),
-        (
-            "cleanup",
-            "Removes old versions of installed formulae and the download cache.",
-        ),
-        (
-            "autoremove",
-            "Removes Homebrew formulae installed as dependencies that are no longer needed.",
-        ),
-        (
-            "services",
-            "Manages Homebrew background services (start/stop/run/list).",
-        ),
-    ]
-    .into_iter()
-    .collect()
+        ("tap", "Adds a third-party Homebrew tap to the list of trusted sources."),
+        ("untap", "Removes a Homebrew tap and its formulae from the local list of sources."),
+        ("cleanup", "Removes old versions of installed formulae and the download cache."),
+        ("autoremove", "Removes Homebrew formulae installed as dependencies that are no longer needed."),
+        ("services", "Manages Homebrew background services (start/stop/run/list)."),
+    ].into_iter().collect()
 });
 
 /// Check brew commands declaratively
@@ -9430,8 +12304,111 @@ pub fn check_brew_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if BREW_ALLOW.contains(subcmd.as_str()) || BREW_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists packages known to Homebrew. Read-only; installs or removes nothing.",
+        ));
+    }
+    if subcmd_single == "ls" {
+        return Some(GateResult::allow_with_reason(
+            "Lists packages or repositories known to Homebrew. Read-only.",
+        ));
+    }
+    if subcmd_single == "search" {
+        return Some(GateResult::allow_with_reason(
+            "Searches Homebrew for packages matching a term. Read-only.",
+        ));
+    }
+    if subcmd_single == "info" {
+        return Some(GateResult::allow_with_reason(
+            "Prints Homebrew package details. Read-only; installs or removes nothing.",
+        ));
+    }
+    if subcmd_single == "home" {
+        return Some(GateResult::allow_with_reason(
+            "Opens or prints a Homebrew package's homepage URL. Read-only.",
+        ));
+    }
+    if subcmd_single == "homepage" {
+        return Some(GateResult::allow_with_reason(
+            "Opens or prints a Homebrew package's homepage URL. Read-only.",
+        ));
+    }
+    if subcmd_single == "deps" {
+        return Some(GateResult::allow_with_reason(
+            "Lists a Homebrew package's dependencies. Read-only.",
+        ));
+    }
+    if subcmd_single == "uses" {
+        return Some(GateResult::allow_with_reason(
+            "Lists Homebrew packages that depend on a given formula. Read-only.",
+        ));
+    }
+    if subcmd_single == "leaves" {
+        return Some(GateResult::allow_with_reason(
+            "Lists Homebrew packages installed on their own, not as dependencies. Read-only.",
+        ));
+    }
+    if subcmd_single == "outdated" {
+        return Some(GateResult::allow_with_reason(
+            "Lists installed Homebrew packages with newer versions available. Read-only.",
+        ));
+    }
+    if subcmd_single == "config" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the Homebrew configuration. Read-only.",
+        ));
+    }
+    if subcmd_single == "doctor" {
+        return Some(GateResult::allow_with_reason(
+            "Runs Homebrew self-diagnostic checks and reports issues. Read-only.",
+        ));
+    }
+    if subcmd_single == "commands" {
+        return Some(GateResult::allow_with_reason(
+            "Lists available Homebrew commands. Read-only.",
+        ));
+    }
+    if subcmd_single == "desc" {
+        return Some(GateResult::allow_with_reason(
+            "Prints a Homebrew package description. Read-only.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the Homebrew version. Read-only.",
+        ));
+    }
+    if subcmd_single == "-v" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the Homebrew version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints Homebrew help text. Read-only.",
+        ));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason(
+            "Prints Homebrew help text. Read-only.",
+        ));
+    }
+    if subcmd_single == "cat" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the source of a Homebrew package definition. Read-only.",
+        ));
+    }
+    if subcmd_single == "formula" {
+        return Some(GateResult::allow_with_reason(
+            "Prints Homebrew formula information. Read-only.",
+        ));
+    }
+    if subcmd_single == "cask" {
+        return Some(GateResult::allow_with_reason(
+            "Prints Homebrew cask information. Read-only.",
+        ));
     }
 
     if let Some(reason) = BREW_ASK
@@ -9446,36 +12423,9 @@ pub fn check_brew_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === ZYPPER (from system.toml) ===
 
-pub static ZYPPER_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "search",
-        "se",
-        "info",
-        "if",
-        "list-updates",
-        "lu",
-        "packages",
-        "pa",
-        "patterns",
-        "pt",
-        "products",
-        "pd",
-        "repos",
-        "lr",
-        "services",
-        "ls",
-        "--version",
-        "-V",
-        "--help",
-        "-h",
-    ]
-    .into_iter()
-    .collect()
-});
-
 pub static ZYPPER_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("install", "Installing packages"),
+        ("install", "Installs packages and dependencies from the configured repositories. Network operation; changes system package state."),
         ("in", "Installing packages (alias for `install`)."),
         ("remove", "Removes installed zypper packages."),
         ("rm", "Removes installed zypper packages (alias for `remove`)."),
@@ -9511,8 +12461,106 @@ pub fn check_zypper_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if ZYPPER_ALLOW.contains(subcmd.as_str()) || ZYPPER_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "search" {
+        return Some(GateResult::allow_with_reason(
+            "Searches zypper for packages matching a term. Read-only.",
+        ));
+    }
+    if subcmd_single == "se" {
+        return Some(GateResult::allow_with_reason(
+            "Searches zypper for packages matching a term. Read-only.",
+        ));
+    }
+    if subcmd_single == "info" {
+        return Some(GateResult::allow_with_reason(
+            "Prints zypper package details. Read-only; installs or removes nothing.",
+        ));
+    }
+    if subcmd_single == "if" {
+        return Some(GateResult::allow_with_reason(
+            "Prints zypper package details. Read-only; installs or removes nothing.",
+        ));
+    }
+    if subcmd_single == "list-updates" {
+        return Some(GateResult::allow_with_reason(
+            "Lists available zypper package updates without installing them. Read-only.",
+        ));
+    }
+    if subcmd_single == "lu" {
+        return Some(GateResult::allow_with_reason(
+            "Lists available zypper package updates without installing them. Read-only.",
+        ));
+    }
+    if subcmd_single == "packages" {
+        return Some(GateResult::allow_with_reason(
+            "Lists packages known to zypper. Read-only.",
+        ));
+    }
+    if subcmd_single == "pa" {
+        return Some(GateResult::allow_with_reason(
+            "Lists packages known to zypper. Read-only.",
+        ));
+    }
+    if subcmd_single == "patterns" {
+        return Some(GateResult::allow_with_reason(
+            "Lists zypper installation patterns. Read-only.",
+        ));
+    }
+    if subcmd_single == "pt" {
+        return Some(GateResult::allow_with_reason(
+            "Lists zypper installation patterns. Read-only.",
+        ));
+    }
+    if subcmd_single == "products" {
+        return Some(GateResult::allow_with_reason(
+            "Lists zypper products. Read-only.",
+        ));
+    }
+    if subcmd_single == "pd" {
+        return Some(GateResult::allow_with_reason(
+            "Lists zypper products. Read-only.",
+        ));
+    }
+    if subcmd_single == "repos" {
+        return Some(GateResult::allow_with_reason(
+            "Lists configured zypper repositories. Read-only.",
+        ));
+    }
+    if subcmd_single == "lr" {
+        return Some(GateResult::allow_with_reason(
+            "Lists configured zypper repositories. Read-only.",
+        ));
+    }
+    if subcmd_single == "services" {
+        return Some(GateResult::allow_with_reason(
+            "Lists configured zypper services. Read-only.",
+        ));
+    }
+    if subcmd_single == "ls" {
+        return Some(GateResult::allow_with_reason(
+            "Lists packages or repositories known to zypper. Read-only.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the zypper version. Read-only.",
+        ));
+    }
+    if subcmd_single == "-V" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the zypper version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints zypper help text. Read-only.",
+        ));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason(
+            "Prints zypper help text. Read-only.",
+        ));
     }
 
     if let Some(reason) = ZYPPER_ASK
@@ -9526,24 +12574,6 @@ pub fn check_zypper_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === APK (from system.toml) ===
-
-pub static APK_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "info",
-        "list",
-        "search",
-        "dot",
-        "policy",
-        "stats",
-        "audit",
-        "--version",
-        "-V",
-        "--help",
-        "-h",
-    ]
-    .into_iter()
-    .collect()
-});
 
 pub static APK_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -9591,8 +12621,61 @@ pub fn check_apk_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if APK_ALLOW.contains(subcmd.as_str()) || APK_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "info" {
+        return Some(GateResult::allow_with_reason(
+            "Prints apk package details. Read-only; installs or removes nothing.",
+        ));
+    }
+    if subcmd_single == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists packages known to apk. Read-only; installs or removes nothing.",
+        ));
+    }
+    if subcmd_single == "search" {
+        return Some(GateResult::allow_with_reason(
+            "Searches apk for packages matching a term. Read-only.",
+        ));
+    }
+    if subcmd_single == "dot" {
+        return Some(GateResult::allow_with_reason(
+            "Emits an apk package dependency graph in dot format. Read-only.",
+        ));
+    }
+    if subcmd_single == "policy" {
+        return Some(GateResult::allow_with_reason(
+            "Prints apk install candidates and version priorities. Read-only.",
+        ));
+    }
+    if subcmd_single == "stats" {
+        return Some(GateResult::allow_with_reason(
+            "Prints apk package cache statistics. Read-only.",
+        ));
+    }
+    if subcmd_single == "audit" {
+        return Some(GateResult::allow_with_reason(
+            "Reports apk packages with known security advisories. Read-only.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the apk version. Read-only.",
+        ));
+    }
+    if subcmd_single == "-V" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the apk version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints apk help text. Read-only.",
+        ));
+    }
+    if subcmd_single == "-h" {
+        return Some(GateResult::allow_with_reason(
+            "Prints apk help text. Read-only.",
+        ));
     }
 
     if let Some(reason) = APK_ASK
@@ -9606,25 +12689,6 @@ pub fn check_apk_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === NIX (from system.toml) ===
-
-pub static NIX_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "search",
-        "show",
-        "eval",
-        "repl",
-        "flake",
-        "path-info",
-        "derivation",
-        "store",
-        "log",
-        "why-depends",
-        "--version",
-        "--help",
-    ]
-    .into_iter()
-    .collect()
-});
 
 pub static NIX_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -9656,8 +12720,66 @@ pub fn check_nix_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if NIX_ALLOW.contains(subcmd.as_str()) || NIX_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "search" {
+        return Some(GateResult::allow_with_reason(
+            "Searches Nixpkgs (or a flake) for packages. Read-only; builds nothing.",
+        ));
+    }
+    if subcmd_single == "show" {
+        return Some(GateResult::allow_with_reason(
+            "Shows package or flake-output metadata. Read-only; builds nothing.",
+        ));
+    }
+    if subcmd_single == "eval" {
+        return Some(GateResult::allow_with_reason(
+            "Evaluates a Nix expression and prints the result. Read-only; builds nothing.",
+        ));
+    }
+    if subcmd_single == "repl" {
+        return Some(GateResult::allow_with_reason(
+            "Opens a read-only Nix evaluation REPL. Builds nothing.",
+        ));
+    }
+    if subcmd_single == "flake" {
+        return Some(GateResult::allow_with_reason(
+            "Inspects a Nix flake (`show`, `metadata`, etc.). Read-only.",
+        ));
+    }
+    if subcmd_single == "path-info" {
+        return Some(GateResult::allow_with_reason(
+            "Prints metadata about Nix store paths. Read-only.",
+        ));
+    }
+    if subcmd_single == "derivation" {
+        return Some(GateResult::allow_with_reason(
+            "Shows or manipulates a Nix derivation in read contexts. Inspection only.",
+        ));
+    }
+    if subcmd_single == "store" {
+        return Some(GateResult::allow_with_reason(
+            "Runs a read-oriented Nix store query subcommand. Inspection only.",
+        ));
+    }
+    if subcmd_single == "log" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the build log for a Nix store path. Read-only.",
+        ));
+    }
+    if subcmd_single == "why-depends" {
+        return Some(GateResult::allow_with_reason(
+            "Explains why one Nix path depends on another. Read-only.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the Nix version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints Nix help text. Read-only.",
+        ));
     }
 
     if let Some(reason) = NIX_ASK
@@ -9671,9 +12793,6 @@ pub fn check_nix_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === NIX-ENV (from system.toml) ===
-
-pub static NIX_ENV_ALLOW: LazyLock<HashSet<&str>> =
-    LazyLock::new(|| ["-q", "--query"].into_iter().collect());
 
 pub static NIX_ENV_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -9720,8 +12839,16 @@ pub fn check_nix_env_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if NIX_ENV_ALLOW.contains(subcmd.as_str()) || NIX_ENV_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "-q" {
+        return Some(GateResult::allow_with_reason(
+            "Queries installed or available Nix packages. Read-only; the profile is not modified.",
+        ));
+    }
+    if subcmd_single == "--query" {
+        return Some(GateResult::allow_with_reason(
+            "Queries installed or available Nix packages. Read-only; the profile is not modified.",
+        ));
     }
 
     if let Some(reason) = NIX_ENV_ASK
@@ -9760,21 +12887,6 @@ pub fn check_nix_shell_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === FLATPAK (from system.toml) ===
-
-pub static FLATPAK_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "list",
-        "info",
-        "search",
-        "remote-ls",
-        "remotes",
-        "history",
-        "--version",
-        "--help",
-    ]
-    .into_iter()
-    .collect()
-});
 
 pub static FLATPAK_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -9827,8 +12939,46 @@ pub fn check_flatpak_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if FLATPAK_ALLOW.contains(subcmd.as_str()) || FLATPAK_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists installed Flatpak applications and runtimes. Read-only.",
+        ));
+    }
+    if subcmd_single == "info" {
+        return Some(GateResult::allow_with_reason(
+            "Prints details of an installed Flatpak application. Read-only.",
+        ));
+    }
+    if subcmd_single == "search" {
+        return Some(GateResult::allow_with_reason(
+            "Searches configured Flatpak remotes for applications. Read-only.",
+        ));
+    }
+    if subcmd_single == "remote-ls" {
+        return Some(GateResult::allow_with_reason(
+            "Lists applications available from a Flatpak remote. Read-only.",
+        ));
+    }
+    if subcmd_single == "remotes" {
+        return Some(GateResult::allow_with_reason(
+            "Lists configured Flatpak remotes. Read-only.",
+        ));
+    }
+    if subcmd_single == "history" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the Flatpak installation history. Read-only.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the Flatpak version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints Flatpak help text. Read-only.",
+        ));
     }
 
     if let Some(reason) = FLATPAK_ASK
@@ -9925,7 +13075,9 @@ pub fn check_dpkg_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .contains(&a.as_str())
         })
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Queries the dpkg database (list, list files, search, status, or print package info). Read-only.",
+        ));
     }
     if true
         && cmd.args.iter().any(|a| {
@@ -9937,7 +13089,9 @@ pub fn check_dpkg_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .contains(&a.as_str())
         })
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Prints dpkg selections or the configured architectures. Read-only.",
+        ));
     }
     if true
         && cmd.args.iter().any(|a| {
@@ -9952,7 +13106,9 @@ pub fn check_dpkg_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .contains(&a.as_str())
         })
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Audits or verifies dpkg package state, or compares versions. Read-only; changes no package.",
+        ));
     }
     if true
         && cmd
@@ -9960,27 +13116,15 @@ pub fn check_dpkg_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--version", "--help", "-?"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Prints the dpkg version or help text. Read-only.",
+        ));
     }
 
     Some(GateResult::ask(format!("dpkg: {}", subcmd_single)))
 }
 
 // === APT-MARK (from system.toml) ===
-
-pub static APT_MARK_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "showmanual",
-        "showauto",
-        "showhold",
-        "showinstall",
-        "showremove",
-        "showpurge",
-        "--help",
-    ]
-    .into_iter()
-    .collect()
-});
 
 pub static APT_MARK_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -10009,8 +13153,41 @@ pub fn check_apt_mark_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if APT_MARK_ALLOW.contains(subcmd.as_str()) || APT_MARK_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "showmanual" {
+        return Some(GateResult::allow_with_reason(
+            "Lists packages apt has marked as manually installed. Read-only.",
+        ));
+    }
+    if subcmd_single == "showauto" {
+        return Some(GateResult::allow_with_reason(
+            "Lists packages apt has marked as automatically installed. Read-only.",
+        ));
+    }
+    if subcmd_single == "showhold" {
+        return Some(GateResult::allow_with_reason(
+            "Lists packages apt is holding at their current version. Read-only.",
+        ));
+    }
+    if subcmd_single == "showinstall" {
+        return Some(GateResult::allow_with_reason(
+            "Lists packages marked for installation. Read-only.",
+        ));
+    }
+    if subcmd_single == "showremove" {
+        return Some(GateResult::allow_with_reason(
+            "Lists packages marked for removal. Read-only.",
+        ));
+    }
+    if subcmd_single == "showpurge" {
+        return Some(GateResult::allow_with_reason(
+            "Lists packages marked for purge. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints apt-mark help text. Read-only.",
+        ));
     }
 
     if let Some(reason) = APT_MARK_ASK
@@ -10024,25 +13201,6 @@ pub fn check_apt_mark_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === PACTL (from system.toml) ===
-
-pub static PACTL_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "list",
-        "info",
-        "stat",
-        "get-default-sink",
-        "get-default-source",
-        "get-sink-volume",
-        "get-source-volume",
-        "get-sink-mute",
-        "get-source-mute",
-        "subscribe",
-        "--version",
-        "--help",
-    ]
-    .into_iter()
-    .collect()
-});
 
 pub static PACTL_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -10075,8 +13233,66 @@ pub fn check_pactl_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
-    if PACTL_ALLOW.contains(subcmd.as_str()) || PACTL_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
+    // Check conditional allow rules
+    if subcmd_single == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists PulseAudio objects (sinks, sources, modules, etc.). Read-only.",
+        ));
+    }
+    if subcmd_single == "info" {
+        return Some(GateResult::allow_with_reason(
+            "Prints PulseAudio server information. Read-only.",
+        ));
+    }
+    if subcmd_single == "stat" {
+        return Some(GateResult::allow_with_reason(
+            "Prints PulseAudio memory-block statistics. Read-only.",
+        ));
+    }
+    if subcmd_single == "get-default-sink" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the default PulseAudio output sink. Read-only.",
+        ));
+    }
+    if subcmd_single == "get-default-source" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the default PulseAudio input source. Read-only.",
+        ));
+    }
+    if subcmd_single == "get-sink-volume" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the volume of a PulseAudio sink. Read-only.",
+        ));
+    }
+    if subcmd_single == "get-source-volume" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the volume of a PulseAudio source. Read-only.",
+        ));
+    }
+    if subcmd_single == "get-sink-mute" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the mute state of a PulseAudio sink. Read-only.",
+        ));
+    }
+    if subcmd_single == "get-source-mute" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the mute state of a PulseAudio source. Read-only.",
+        ));
+    }
+    if subcmd_single == "subscribe" {
+        return Some(GateResult::allow_with_reason(
+            "Streams PulseAudio server events as they occur. Read-only; changes nothing.",
+        ));
+    }
+    if subcmd_single == "--version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the pactl version. Read-only.",
+        ));
+    }
+    if subcmd_single == "--help" {
+        return Some(GateResult::allow_with_reason(
+            "Prints pactl help text. Read-only.",
+        ));
     }
 
     if let Some(reason) = PACTL_ASK
@@ -10090,26 +13306,6 @@ pub fn check_pactl_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 }
 
 // === OPENSSL (from system.toml) ===
-
-pub static OPENSSL_ALLOW: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    [
-        "version",
-        "s_client",
-        "dgst",
-        "md5",
-        "sha1",
-        "sha256",
-        "sha512",
-        "verify",
-        "ciphers",
-        "list",
-        "asn1parse",
-        "speed",
-        "prime",
-    ]
-    .into_iter()
-    .collect()
-});
 
 pub static OPENSSL_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
@@ -10157,16 +13353,81 @@ pub fn check_openssl_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         ));
     }
 
-    if OPENSSL_ALLOW.contains(subcmd.as_str()) || OPENSSL_ALLOW.contains(subcmd_single) {
-        return Some(GateResult::allow());
-    }
-
     // Check conditional allow rules
+    if subcmd_single == "version" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the OpenSSL version. Read-only.",
+        ));
+    }
     if subcmd_single == "x509" && !cmd.args.iter().any(|a| ["-req"].contains(&a.as_str())) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Inspects an X.509 certificate (without `-req`). Read-only; prints fields, signs nothing.",
+        ));
+    }
+    if subcmd_single == "s_client" {
+        return Some(GateResult::allow_with_reason(
+            "Opens a debug TLS client connection to inspect a server's certificate and handshake. Read-only locally.",
+        ));
+    }
+    if subcmd_single == "dgst" {
+        return Some(GateResult::allow_with_reason(
+            "Computes a message digest of the input. Read-only; writes no key material.",
+        ));
+    }
+    if subcmd_single == "md5" {
+        return Some(GateResult::allow_with_reason(
+            "Computes an MD5 digest of the input. Read-only.",
+        ));
+    }
+    if subcmd_single == "sha1" {
+        return Some(GateResult::allow_with_reason(
+            "Computes a SHA-1 digest of the input. Read-only.",
+        ));
+    }
+    if subcmd_single == "sha256" {
+        return Some(GateResult::allow_with_reason(
+            "Computes a SHA-256 digest of the input. Read-only.",
+        ));
+    }
+    if subcmd_single == "sha512" {
+        return Some(GateResult::allow_with_reason(
+            "Computes a SHA-512 digest of the input. Read-only.",
+        ));
+    }
+    if subcmd_single == "verify" {
+        return Some(GateResult::allow_with_reason(
+            "Verifies a certificate chain against trusted roots. Read-only.",
+        ));
+    }
+    if subcmd_single == "ciphers" {
+        return Some(GateResult::allow_with_reason(
+            "Lists the cipher suites matching a selection string. Read-only.",
+        ));
+    }
+    if subcmd_single == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists OpenSSL algorithms, digests, or other capabilities. Read-only.",
+        ));
+    }
+    if subcmd_single == "asn1parse" {
+        return Some(GateResult::allow_with_reason(
+            "Parses and prints the ASN.1 structure of the input. Read-only.",
+        ));
+    }
+    if subcmd_single == "speed" {
+        return Some(GateResult::allow_with_reason(
+            "Benchmarks OpenSSL algorithm throughput. Read-only; writes no key material.",
+        ));
+    }
+    if subcmd_single == "prime" {
+        return Some(GateResult::allow_with_reason(
+            "Tests whether a number is prime or generates one to stdout. Read-only.",
+        ));
     }
     if subcmd_single == "rand" && !cmd.args.iter().any(|a| ["-out"].contains(&a.as_str())) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Generates random bytes to stdout (without `-out`). Writes no file.",
+        ));
     }
 
     if let Some(reason) = OPENSSL_ASK
@@ -10292,7 +13553,9 @@ pub fn check_gpg_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--list-keys", "-k", "--list-secret-keys", "-K"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Lists keys in the local GPG keyring. Read-only; the keyring is not modified.",
+        ));
     }
     if true
         && cmd
@@ -10300,10 +13563,14 @@ pub fn check_gpg_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--fingerprint"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Prints key fingerprints from the local GPG keyring. Read-only.",
+        ));
     }
     if true && cmd.args.iter().any(|a| ["--verify"].contains(&a.as_str())) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Verifies a GPG signature against a message. Read-only; imports nothing.",
+        ));
     }
     if true
         && cmd
@@ -10311,10 +13578,14 @@ pub fn check_gpg_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--list-packets"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Dumps the low-level packet structure of GPG input. Read-only.",
+        ));
     }
     if true && cmd.args.iter().any(|a| ["--version"].contains(&a.as_str())) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Prints the GPG version and supported algorithms. Read-only.",
+        ));
     }
     if true
         && cmd
@@ -10322,7 +13593,9 @@ pub fn check_gpg_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--help", "-h"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Prints GPG help text. Read-only.",
+        ));
     }
 
     Some(GateResult::ask(format!("gpg: {}", subcmd_single)))
@@ -10361,13 +13634,19 @@ pub fn check_ssh_keygen_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-l", "-lf", "-lv"].contains(&a.as_str()))
     {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Prints the fingerprint of a key file. Read-only; generates no key.",
+        ));
     }
     if true && cmd.args.iter().any(|a| ["-F"].contains(&a.as_str())) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Searches `known_hosts` for a host. Read-only; removes nothing.",
+        ));
     }
     if true && cmd.args.iter().any(|a| ["-B"].contains(&a.as_str())) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Prints the bubblebabble digest of a key file. Read-only.",
+        ));
     }
 
     // Bare ask rule - any ssh-keygen invocation asks
@@ -10397,7 +13676,9 @@ pub fn check_age_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
     // Check conditional allow rules
     if true && cmd.args.iter().any(|a| ["--version"].contains(&a.as_str())) {
-        return Some(GateResult::allow());
+        return Some(GateResult::allow_with_reason(
+            "Prints the age version string. Read-only; encrypts or decrypts nothing.",
+        ));
     }
 
     // Bare ask rule - any age invocation asks
@@ -10410,8 +13691,11 @@ pub fn check_age_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 pub static SHORT_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("install", "Configuring Shortcut API token"),
-        ("create", "Creating new story"),
+        (
+            "install",
+            "Writes the Shortcut API token to the local `short` config. One-time auth setup.",
+        ),
+        ("create", "Creates a new story in the workspace."),
     ]
     .into_iter()
     .collect()
@@ -10441,7 +13725,9 @@ pub fn check_short_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-S", "--save"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Saving workspace to config"));
+        return Some(GateResult::ask(
+            "Saves the current search as a named workspace in the local `short` config. Writes to disk; does not change anything on shortcut.com.",
+        ));
     }
     if subcmd_single == "story"
         && cmd
@@ -10449,7 +13735,9 @@ pub fn check_short_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--git-branch", "--git-branch-short"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Checking out git branch"));
+        return Some(GateResult::ask(
+            "Creates and checks out a local git branch named for the story. Switches your working tree; commit or stash first.",
+        ));
     }
     if subcmd_single == "story"
         && cmd
@@ -10457,7 +13745,9 @@ pub fn check_short_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-D", "--download"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Downloading attachments to disk"));
+        return Some(GateResult::ask(
+            "Downloads the story's attachments to the current directory. Writes files to disk.",
+        ));
     }
     if subcmd_single == "story"
         && cmd
@@ -10465,7 +13755,9 @@ pub fn check_short_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-c", "--comment"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Adding comment to story"));
+        return Some(GateResult::ask(
+            "Posts a comment to the story on shortcut.com. Visible to all workspace members.",
+        ));
     }
     if subcmd_single == "story"
         && cmd
@@ -10473,7 +13765,9 @@ pub fn check_short_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-d", "--description"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Updating story description"));
+        return Some(GateResult::ask(
+            "Overwrites the story's description field. Replaces existing text; back up the current body if it matters.",
+        ));
     }
     if subcmd_single == "story"
         && cmd
@@ -10481,10 +13775,10 @@ pub fn check_short_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-e", "--estimate"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Updating story estimate"));
+        return Some(GateResult::ask("Sets the story's point estimate."));
     }
     if subcmd_single == "story" && cmd.args.iter().any(|a| ["--epic"].contains(&a.as_str())) {
-        return Some(GateResult::ask("Setting story epic"));
+        return Some(GateResult::ask("Reassigns the story to a different epic."));
     }
     if subcmd_single == "story"
         && cmd
@@ -10492,7 +13786,9 @@ pub fn check_short_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-i", "--iteration"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Setting story iteration"));
+        return Some(GateResult::ask(
+            "Moves the story into a different iteration (sprint).",
+        ));
     }
     if subcmd_single == "story"
         && cmd
@@ -10500,14 +13796,16 @@ pub fn check_short_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-l", "--label"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Updating story labels"));
+        return Some(GateResult::ask("Sets the story's labels."));
     }
     if subcmd_single == "story"
         && cmd.args.iter().any(|a| {
             ["--move-after", "--move-before", "--move-down", "--move-up"].contains(&a.as_str())
         })
     {
-        return Some(GateResult::ask("Moving story position"));
+        return Some(GateResult::ask(
+            "Reorders the story within its workflow column.",
+        ));
     }
     if subcmd_single == "story"
         && cmd
@@ -10515,7 +13813,9 @@ pub fn check_short_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-o", "--owners"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Updating story owners"));
+        return Some(GateResult::ask(
+            "Sets the story's owners. Replaces the existing owner list.",
+        ));
     }
     if subcmd_single == "story"
         && cmd
@@ -10533,7 +13833,7 @@ pub fn check_short_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-t", "--title"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Updating story title"));
+        return Some(GateResult::ask("Renames the story's title."));
     }
     if subcmd_single == "story"
         && cmd
@@ -10541,10 +13841,10 @@ pub fn check_short_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-T", "--team"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Updating story team"));
+        return Some(GateResult::ask("Reassigns the story to a different team."));
     }
     if subcmd_single == "story" && cmd.args.iter().any(|a| ["--task"].contains(&a.as_str())) {
-        return Some(GateResult::ask("Creating task on story"));
+        return Some(GateResult::ask("Adds a subtask to the story."));
     }
     if subcmd_single == "story"
         && cmd
@@ -10552,7 +13852,9 @@ pub fn check_short_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--task-complete"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Toggling task completion"));
+        return Some(GateResult::ask(
+            "Toggles a subtask's done state on the story.",
+        ));
     }
     if subcmd_single == "story"
         && cmd
@@ -10560,7 +13862,9 @@ pub fn check_short_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["-y", "--type"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask("Updating story type"));
+        return Some(GateResult::ask(
+            "Sets the story type (feature, bug, or chore).",
+        ));
     }
     if subcmd_single == "story"
         && cmd

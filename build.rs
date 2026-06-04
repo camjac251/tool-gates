@@ -2,13 +2,34 @@
 //!
 //! Reads all rules/*.toml files and generates:
 //! - src/generated/rules.rs - Rust code for declarative gates
+//!
+//! The rule-file deserialization types live in `src/rules_schema.rs` and are
+//! shared with the library. The build script pulls them in directly with
+//! `#[path = ...]` because it compiles before the lib crate exists, so it
+//! cannot `use tool_gates::...`. That module's optional `schemars` derives are
+//! gated on the `lib_only` cfg (set in `main()` for the lib/bin compile only),
+//! so the build script never references the `schemars` crate, which lives under
+//! `[dependencies]` and is not linkable from a build script.
 
-use serde::Deserialize;
+#[path = "src/rules_schema.rs"]
+mod rules_schema;
+
+use rules_schema::*;
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
 fn main() {
+    // `lib_only` marks the library/binary compile so rules_schema.rs can gate
+    // its `schemars`/JsonSchema references on it. Cargo propagates package
+    // features into the build script too, but `schemars` is not a
+    // build-dependency, so without this discriminator `--features schemars`
+    // would fail to compile the build script's `#[path]` copy of the module.
+    // This `rustc-cfg` applies to the lib/bin compile, not to the build
+    // script's own compile, which is exactly the distinction we need. The cfg
+    // name is registered package-wide via `[lints.rust]` in Cargo.toml.
+    println!("cargo:rustc-cfg=lib_only");
+
     // Set git version info for --version flag
     println!("cargo:rerun-if-changed=.git/HEAD");
     println!("cargo:rerun-if-changed=.git/refs/");
@@ -179,6 +200,46 @@ fn validate_rule_file(path: &Path, rules: &RuleFile) {
             );
         }
     }
+
+    // Validate command_groups (docs-only grid grouping). When present, the
+    // groups must cover every safe_command exactly once and reference no
+    // unknown command, so the generated grid never silently drops or
+    // duplicates a command.
+    if !rules.command_groups.is_empty() {
+        use std::collections::HashSet;
+        let safe: HashSet<&str> = rules.safe_commands.iter().map(String::as_str).collect();
+        let mut seen: HashSet<&str> = HashSet::new();
+        for group in &rules.command_groups {
+            if group.title.trim().is_empty() {
+                panic!(
+                    "{}: command_groups has a group with an empty title",
+                    file_name
+                );
+            }
+            for cmd in &group.commands {
+                if !safe.contains(cmd.as_str()) {
+                    panic!(
+                        "{}: command_groups: '{}' (in group '{}') is not a safe_command",
+                        file_name, cmd, group.title
+                    );
+                }
+                if !seen.insert(cmd.as_str()) {
+                    panic!(
+                        "{}: command_groups: '{}' appears in more than one group",
+                        file_name, cmd
+                    );
+                }
+            }
+        }
+        for cmd in &rules.safe_commands {
+            if !seen.contains(cmd.as_str()) {
+                panic!(
+                    "{}: command_groups: safe_command '{}' is not in any group (grid would drop it)",
+                    file_name, cmd
+                );
+            }
+        }
+    }
 }
 
 fn validate_program_rules(path: &Path, program: &ProgramRules) {
@@ -226,6 +287,16 @@ fn validate_program_rules(path: &Path, program: &ProgramRules) {
                     file_name, prog_name, i, j
                 );
             }
+        }
+        // Allow reasons are documentation that also rides the runtime decision,
+        // so hold them to the same length cap as ask/block reasons.
+        if let Some(ref reason) = rule.reason {
+            let key = if parts.is_empty() {
+                format!("rule #{i}")
+            } else {
+                parts.join(" ")
+            };
+            check_reason_length(&file_name, prog_name, "allow", &key, reason);
         }
     }
 
@@ -331,235 +402,6 @@ fn validate_program_rules(path: &Path, program: &ProgramRules) {
                     file_name, prog_name, key
                 );
             }
-        }
-    }
-}
-
-// ============================================================================
-// Types (duplicated from src/codegen/types.rs for build.rs independence)
-// ============================================================================
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-#[allow(dead_code)]
-struct RuleFile {
-    #[serde(default)]
-    meta: RuleMeta,
-    #[serde(default)]
-    programs: Vec<ProgramRules>,
-    #[serde(default)]
-    safe_commands: Vec<String>,
-    #[serde(default)]
-    conditional_allow: Vec<ConditionalRule>,
-    #[serde(default)]
-    custom_handlers: Vec<CustomHandler>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[serde(deny_unknown_fields)]
-#[allow(dead_code)]
-struct RuleMeta {
-    name: Option<String>,
-    description: Option<String>,
-    priority: Option<u32>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-#[allow(dead_code)]
-struct ProgramRules {
-    name: String,
-    #[serde(default)]
-    aliases: Vec<String>,
-    #[serde(default)]
-    allow: Vec<AllowRule>,
-    #[serde(default)]
-    ask: Vec<AskRule>,
-    #[serde(default)]
-    block: Vec<BlockRule>,
-    #[serde(default)]
-    allow_if_flags: Vec<FlagOverride>,
-    #[serde(default)]
-    api_rules: Option<ApiRules>,
-    #[serde(default)]
-    default_allow: bool,
-    #[serde(default)]
-    unknown_action: UnknownAction,
-}
-
-#[derive(Debug, Default, Clone, Copy, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-enum UnknownAction {
-    #[default]
-    Ask,
-    Allow,
-    Skip,
-    Block,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct AllowRule {
-    #[serde(default)]
-    subcommand: Option<String>,
-    #[serde(default)]
-    subcommands: Vec<String>,
-    #[serde(default)]
-    subcommand_prefix: Option<String>,
-    /// Check if args[1] (the "action" in commands like `aws <service> <action>`)
-    /// starts with this prefix. Useful for AWS-style commands where the action
-    /// is the second argument regardless of which service is used.
-    #[serde(default)]
-    action_prefix: Option<String>,
-    #[serde(default)]
-    unless_flags: Vec<String>,
-    #[serde(default)]
-    unless_args_contain: Vec<String>,
-    #[serde(default)]
-    if_flags_any: Vec<String>,
-    /// Optional reason for allowing (shown in decision output)
-    #[serde(default)]
-    reason: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct AskRule {
-    #[serde(default)]
-    subcommand: Option<String>,
-    #[serde(default)]
-    subcommands: Vec<String>,
-    #[serde(default)]
-    subcommand_prefix: Option<String>,
-    /// Check if args[1] (the "action" in commands like `aws <service> <action>`)
-    /// starts with this prefix. Useful for AWS-style commands where the action
-    /// is the second argument regardless of which service is used.
-    #[serde(default)]
-    action_prefix: Option<String>,
-    reason: String,
-    #[serde(default)]
-    #[allow(dead_code)]
-    warn: bool,
-    #[serde(default)]
-    if_flags: Vec<String>,
-    #[serde(default)]
-    if_flags_any: Vec<String>,
-    /// If true, this ask rule should be auto-allowed in acceptEdits mode
-    /// (when the command targets files within the allowed directories).
-    #[serde(default)]
-    accept_edits_auto_allow: bool,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct BlockRule {
-    #[serde(default)]
-    subcommand: Option<String>,
-    #[serde(default)]
-    subcommands: Vec<String>,
-    #[serde(default)]
-    subcommand_prefix: Option<String>,
-    reason: String,
-    #[serde(default)]
-    if_args_contain: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-#[allow(dead_code)]
-struct FlagOverride {
-    flags_any: Vec<String>,
-    #[serde(default)]
-    for_subcommands: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ApiRules {
-    trigger: String,
-    #[serde(default)]
-    method_flags: Vec<String>,
-    #[serde(default)]
-    safe_methods: Vec<String>,
-    #[serde(default)]
-    default_method: Option<String>,
-    /// Flags that implicitly trigger POST (e.g., -f, --field for gh api)
-    #[serde(default)]
-    implicit_post_flags: Vec<String>,
-    /// Endpoint prefixes that are always GET (e.g., "search/" for GitHub API)
-    #[serde(default)]
-    read_only_endpoints: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-#[allow(dead_code)]
-struct ConditionalRule {
-    program: String,
-    #[serde(default)]
-    aliases: Vec<String>,
-    #[serde(default)]
-    unless_flags: Vec<String>,
-    #[serde(default)]
-    on_flag_present: OnFlagAction,
-    #[serde(default)]
-    description: Option<String>,
-    /// If true, this conditional ask should be auto-allowed in acceptEdits mode
-    #[serde(default)]
-    accept_edits_auto_allow: bool,
-}
-
-#[derive(Debug, Default, Clone, Copy, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-enum OnFlagAction {
-    #[default]
-    Skip,
-    Ask,
-    Block,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-#[allow(dead_code)]
-struct CustomHandler {
-    program: String,
-    handler: String,
-    #[serde(default)]
-    description: Option<String>,
-}
-
-impl AllowRule {
-    fn subcommand_parts(&self) -> Vec<&str> {
-        if let Some(ref s) = self.subcommand {
-            s.split_whitespace().collect()
-        } else if !self.subcommands.is_empty() {
-            self.subcommands.iter().map(String::as_str).collect()
-        } else {
-            vec![]
-        }
-    }
-}
-
-impl AskRule {
-    fn subcommand_parts(&self) -> Vec<&str> {
-        if let Some(ref s) = self.subcommand {
-            s.split_whitespace().collect()
-        } else if !self.subcommands.is_empty() {
-            self.subcommands.iter().map(String::as_str).collect()
-        } else {
-            vec![]
-        }
-    }
-}
-
-impl BlockRule {
-    fn subcommand_parts(&self) -> Vec<&str> {
-        if let Some(ref s) = self.subcommand {
-            s.split_whitespace().collect()
-        } else if !self.subcommands.is_empty() {
-            self.subcommands.iter().map(String::as_str).collect()
-        } else {
-            vec![]
         }
     }
 }
@@ -1279,9 +1121,16 @@ fn generate_subcommand_match(parts: &[&str]) -> String {
                 .iter()
                 .enumerate()
                 .map(|(i, p)| {
+                    // Index 0 uses `.first()` so the generated code satisfies
+                    // clippy's `get_first` lint (the crate builds under
+                    // `-D warnings`); later indices use `.get(i)`.
+                    let accessor = if i == 0 {
+                        "cmd.args.first()".to_string()
+                    } else {
+                        format!("cmd.args.get({i})")
+                    };
                     format!(
-                        "cmd.args.get({}) == Some(&\"{}\".to_string())",
-                        i,
+                        "{accessor} == Some(&\"{}\".to_string())",
                         escape_rust_string(p)
                     )
                 })

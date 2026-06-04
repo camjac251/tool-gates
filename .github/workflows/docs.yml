@@ -1,0 +1,113 @@
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "rules/**"
+      - "build.rs"
+      - "src/**"
+      - "docs/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "rules/**"
+      - "build.rs"
+      - "src/**"
+      - "docs/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/docs.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build site
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+
+      - name: Install zig (C cross-compiler for the wasm tree-sitter scanner)
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.15.2
+
+      - name: Install docs toolchain
+        uses: taiki-e/install-action@59012be0884e296ca2da49b530610e72c49039ad # v2.81.6
+        with:
+          # wasm-bindgen-cli must match the wasm-bindgen crate version (Cargo.lock).
+          tool: mdbook,wasm-bindgen-cli@0.2.108,wasm-opt
+
+      - name: Regenerate gate docs from rules
+        run: cargo run --release -- rules export --format md
+
+      - name: Drift gate (committed docs must match generated)
+        run: |
+          if ! git diff --exit-code docs/src/gates docs/src/security-floor.md docs/src/hints.md; then
+            echo "::error::Generated docs are stale. Run 'cargo run --release -- rules export --format md' and commit the result."
+            exit 1
+          fi
+
+      - name: Build WASM simulator
+        # Mirrors `mise run build-wasm`. zig cc compiles tree-sitter-bash's C
+        # scanner for wasm32: the CFLAGS -target wasm32-wasi is appended after
+        # cc's own --target and clang honors the last one, so zig supplies libc
+        # headers; the five libc symbols resolve to the Rust shims in src/lib.rs
+        # at link time.
+        env:
+          CC_wasm32_unknown_unknown: "zig cc"
+          CFLAGS_wasm32_unknown_unknown: "-target wasm32-wasi"
+        run: |
+          cargo build --profile release-wasm --lib --target wasm32-unknown-unknown --features wasm
+          wasm-bindgen --target web --no-typescript --out-dir docs/src/wasm/ target/wasm32-unknown-unknown/release-wasm/tool_gates.wasm
+          wasm-opt -Oz --enable-bulk-memory -o docs/src/wasm/tool_gates_bg.wasm docs/src/wasm/tool_gates_bg.wasm
+
+      - name: Build mdBook
+        run: mdbook build docs
+
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: docs/book
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0

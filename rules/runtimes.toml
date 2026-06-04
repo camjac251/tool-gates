@@ -22,6 +22,14 @@
 name = "runtimes"
 description = "Language runtime permission gate"
 priority = 27
+lede = "Language runtime invocations. Version and syntax-check flags are safe. Anything that executes code (inline via <code>-c</code>/<code>-e</code> or a script file) asks. No blocks at this layer; the filesystem-level floor catches the destructive cases."
+behavior_tags = [
+  "covers <b>python · node · ruby · deno · php · lua · java · dotnet · swift · elixir</b>",
+]
+
+[meta.card_titles]
+allow = "inspection"
+ask = "code execution"
 
 # =============================================================================
 # PYTHON3 / PYTHON
@@ -35,9 +43,11 @@ unknown_action = "ask"
 # Read-only flags
 [[programs.allow]]
 if_flags_any = ["--version", "-V", "-VV"]
+reason = "Info flags. Always safe."
 
 [[programs.allow]]
 if_flags_any = ["--help", "-h"]
+reason = "Info flags. Always safe."
 
 [[programs.ask]]
 reason = "Executes inline Python via `-c`. Treat the code as an inline script; can import any installed module."
@@ -61,13 +71,16 @@ unknown_action = "ask"
 # Read-only flags
 [[programs.allow]]
 if_flags_any = ["--version", "-v"]
+reason = "Info flags. Always safe."
 
 [[programs.allow]]
 if_flags_any = ["--help", "-h"]
+reason = "Info flags. Always safe."
 
 # Syntax check is safe (no execution)
 [[programs.allow]]
 if_flags_any = ["-c", "--check"]
+reason = "Syntax check without execution."
 
 [[programs.ask]]
 reason = "Executes inline JavaScript via `-e`. Treat the code as an inline script; full Node API access."
@@ -86,13 +99,16 @@ unknown_action = "ask"
 
 [[programs.allow]]
 if_flags_any = ["--version", "-v"]
+reason = "Info flags. Always safe."
 
 [[programs.allow]]
 if_flags_any = ["--help", "-h"]
+reason = "Info flags. Always safe."
 
 # Syntax check is safe (no execution)
 [[programs.allow]]
 if_flags_any = ["-c"]
+reason = "Per-language syntax checks. Read-only."
 
 [[programs.ask]]
 reason = "Executes inline Ruby via `-e`. Treat the code as an inline script; full stdlib access."
@@ -112,48 +128,62 @@ unknown_action = "ask"
 # Read-only commands
 [[programs.allow]]
 subcommand = "--version"
+reason = "Info flags. Always safe."
 
 [[programs.allow]]
 subcommand = "-V"
+reason = "Info flags. Always safe."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Info flags. Always safe."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Info flags. Always safe."
 
 [[programs.allow]]
 subcommand = "check"
+reason = "Deno's read-only inspection subcommands. `fmt --check` and `test` also allow."
 
 [[programs.allow]]
 subcommand = "lint"
+reason = "Deno's read-only inspection subcommands. `fmt --check` and `test` also allow."
 
 [[programs.allow]]
 subcommand = "doc"
+reason = "Deno's read-only inspection subcommands. `fmt --check` and `test` also allow."
 
 [[programs.allow]]
 subcommand = "info"
+reason = "Deno's read-only inspection subcommands. `fmt --check` and `test` also allow."
 
 [[programs.allow]]
 subcommand = "types"
+reason = "Deno's read-only inspection subcommands. `fmt --check` and `test` also allow."
 
 [[programs.allow]]
 subcommand = "completions"
+reason = "Prints shell completion script for `deno` to stdout. Read-only."
 
 [[programs.allow]]
 subcommand = "help"
+reason = "Prints `deno` help text. Read-only."
 
 # Read-only when --check is present
 [[programs.allow]]
 subcommand = "fmt"
 if_flags_any = ["--check"]
+reason = "Deno's read-only inspection subcommands. `fmt --check` and `test` also allow."
 
 # Test runner (read-only execution)
 [[programs.allow]]
 subcommand = "test"
+reason = "Runs the Deno test suite. Executes test files in the default sandbox; no files written and no global installs."
 
 [[programs.allow]]
 subcommand = "bench"
+reason = "Runs Deno benchmarks. Executes bench files in the default sandbox; no files written and no global installs."
 
 # Write/execute commands
 [[programs.ask]]
@@ -211,20 +241,25 @@ unknown_action = "ask"
 
 [[programs.allow]]
 if_flags_any = ["--version", "-v"]
+reason = "Info flags. Always safe."
 
 [[programs.allow]]
 if_flags_any = ["--help", "-h"]
+reason = "Info flags. Always safe."
 
 [[programs.allow]]
 if_flags_any = ["--info", "-i"]
+reason = "Prints PHP configuration (`phpinfo`). Read-only."
 
 # Syntax check is read-only
 [[programs.allow]]
 if_flags_any = ["-l", "--syntax-check"]
+reason = "Per-language syntax checks. Read-only."
 
 # List modules is safe
 [[programs.allow]]
 if_flags_any = ["-m"]
+reason = "Lists compiled-in PHP modules. Read-only."
 
 [[programs.ask]]
 reason = "Executes inline PHP via `-r`. Treat the code as an inline script."
@@ -244,6 +279,7 @@ unknown_action = "ask"
 
 [[programs.allow]]
 if_flags_any = ["-v"]
+reason = "Info flags. Always safe."
 
 [[programs.ask]]
 reason = "Executes inline Lua via `-e`. Treat the code as an inline script."
@@ -262,6 +298,7 @@ unknown_action = "ask"
 
 [[programs.allow]]
 if_flags_any = ["--version", "-version", "--help", "-help", "-h"]
+reason = "Info flags. Always safe."
 
 [[programs.ask]]
 reason = "Runs a Java class, JAR, or single source file. Full JVM access; classpath-loaded code runs unsandboxed."
@@ -272,6 +309,7 @@ unknown_action = "ask"
 
 [[programs.allow]]
 if_flags_any = ["--version", "-version", "--help", "-help"]
+reason = "Info flags. Always safe."
 
 [[programs.ask]]
 reason = "Compiles Java source files into `.class` bytecode. Writes output to the configured destination directory."
@@ -287,38 +325,49 @@ unknown_action = "ask"
 # Read-only
 [[programs.allow]]
 if_flags_any = ["--version", "--info", "--list-sdks", "--list-runtimes"]
+reason = "Info flags. Always safe."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Info flags. Always safe."
 
 [[programs.allow]]
 subcommand = "-h"
+reason = "Info flags. Always safe."
 
 [[programs.allow]]
 subcommand = "help"
+reason = "Prints `dotnet` help text. Read-only."
 
 # Local build/test (safe)
 [[programs.allow]]
 subcommand = "build"
+reason = "Local build, test, and dependency restore. Outputs land under `bin/` and `obj/`."
 
 [[programs.allow]]
 subcommand = "test"
+reason = "Local build, test, and dependency restore. Outputs land under `bin/` and `obj/`."
 
 [[programs.allow]]
 subcommand = "run"
+reason = "Local build, test, and dependency restore. Outputs land under `bin/` and `obj/`."
 
 [[programs.allow]]
 subcommand = "clean"
+reason = "Deletes build outputs under `bin/` and `obj/` for the project. Local cleanup only."
 
 [[programs.allow]]
 subcommand = "restore"
+reason = "Local build, test, and dependency restore. Outputs land under `bin/` and `obj/`."
 
 # Read-only inspection
 [[programs.allow]]
 subcommand = "list"
+reason = "Lists project references or installed packages. Read-only."
 
 [[programs.allow]]
 subcommand = "sln"
+reason = "Inspects or edits the solution file's project list. Reads with no args; `add`/`remove` rewrite the `.sln`."
 
 # Mutation commands
 [[programs.ask]]
@@ -353,6 +402,7 @@ reason = "Creating NuGet package"
 [[programs.allow]]
 subcommand = "format"
 if_flags_any = ["--check", "--verify-no-changes"]
+reason = "Reports formatting issues without writing. `--check` and `--verify-no-changes` make it read-only."
 
 [[programs.ask]]
 subcommand = "format"
@@ -369,12 +419,15 @@ unknown_action = "ask"
 
 [[programs.allow]]
 if_flags_any = ["--version", "--help", "-h"]
+reason = "Info flags. Always safe."
 
 [[programs.allow]]
 subcommand = "build"
+reason = "Compiles the Swift package. Outputs land under `.build/`; no code is executed."
 
 [[programs.allow]]
 subcommand = "test"
+reason = "Runs the Swift package test suite. Builds and executes tests locally; outputs land under `.build/`."
 
 [[programs.ask]]
 subcommand = "run"
@@ -394,9 +447,11 @@ unknown_action = "ask"
 
 [[programs.allow]]
 if_flags_any = ["--version", "-v"]
+reason = "Info flags. Always safe."
 
 [[programs.allow]]
 if_flags_any = ["--help", "-h"]
+reason = "Info flags. Always safe."
 
 [[programs.ask]]
 reason = "Executes inline Elixir via `-e`. Treat the code as an inline script."
@@ -411,6 +466,7 @@ unknown_action = "ask"
 
 [[programs.allow]]
 if_flags_any = ["--version", "-v"]
+reason = "Info flags. Always safe."
 
 [[programs.ask]]
 reason = "Starts the interactive Elixir REPL. Each input is evaluated with full Elixir and Erlang stdlib access."

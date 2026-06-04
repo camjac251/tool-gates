@@ -1,16 +1,23 @@
 ---
-description: "Batch-promote frequently-asked tool-gates patterns to permanent permission rules in settings.json. Lists pending approvals (commands the user approved one-time through the prompt, accumulated across sessions), shows counts and suggested glob patterns, multi-selects to write at user/project/local scope. Use after several sessions to triage what's piled up, or to share patterns across projects. For single-prompt approvals the user should usually click 'Yes, and don't ask again for X' in the CC prompt instead -- it covers the in-session case organically since tool-gates defers benign asks. NOT for manual settings.json edits, hooks, env vars, or MCP config (use update-config). NOT for scanning a transcript to build an allowlist from scratch (use fewer-permission-prompts)."
-when_to_use: >-
-  When the user wants to triage their pending approval queue, batch-promote
-  frequently-asked patterns to permanent rules, share approvals across
-  projects, or audit what's accumulated. Triggers on 'review pending',
-  'pending approvals', 'tool-gates review', 'promote to permanent',
-  'clean up the queue', 'share these rules', 'batch approve',
-  'audit my approvals'. NOT for in-session "stop asking me about X" --
-  that's the CC prompt's third button.
+description: >-
+  Batch-promote frequently-asked tool-gates patterns to permanent permission rules in settings.json.
+  Lists pending approvals (commands the user approved one-time through the prompt, accumulated
+  across sessions), shows counts and suggested glob patterns, multi-selects to write at user/project/local
+  scope. Use after several sessions to triage what's piled up, or to share patterns across
+  projects. For single-prompt approvals the user should usually click 'Yes, and don't ask
+  again for X' in the CC prompt instead. It covers the in-session case organically since
+  tool-gates defers benign asks. NOT for manual settings.json edits, hooks, env vars, or MCP
+  config (use update-config). NOT for scanning a transcript to build an allowlist from scratch
+  (use fewer-permission-prompts). When the user wants to triage their pending approval queue,
+  batch-promote frequently-asked patterns to permanent rules, share approvals across projects,
+  or audit what's accumulated. Triggers on 'review pending', 'pending approvals', 'tool-gates
+  review', 'promote to permanent', 'clean up the queue', 'share these rules', 'batch approve',
+  'audit my approvals'. NOT for in-session "stop asking me about X". That's the CC prompt's
+  third button.
 argument-hint: "[--all]"
 disable-model-invocation: true
-allowed-tools: "Bash(tool-gates pending list:*) Bash(tool-gates rules list:*) Bash(tool-gates approve:*)"
+allowed-tools: "Bash(tool-gates pending list:*) Bash(tool-gates rules list:*) Bash(tool-gates
+  approve:*)"
 ---
 
 # Review Pending Approvals
@@ -19,9 +26,9 @@ Promote pending one-time approvals into permanent settings.json rules. Single-sh
 
 ## Steps
 
-1. Run `tool-gates pending list $ARGUMENTS` to fetch the queue.
-   - Default: current project only
-   - `--all`: every project
+1. Run `tool-gates pending list --project` to fetch the current project's queue.
+   - This skill defaults to project scope by passing `--project`.
+   - If `$ARGUMENTS` contains `--all`, run `tool-gates pending list` instead to fetch every project.
 
 2. If the queue is empty, tell the user and stop.
 
@@ -47,7 +54,7 @@ Promote pending one-time approvals into permanent settings.json rules. Single-sh
 ## Safety Notes
 
 - Warn on overly broad patterns. `git:*` allows force-push; `rm:*` allows recursive delete; `curl:*` plus a separate output-redirect rule can defeat the soft-ask check.
-- Skip rows with count 1-2x unless the user is sure -- those are usually one-offs that won't recur.
+- Skip rows with count 1-2x unless the user is sure. Those are usually one-offs that won't recur.
 - Prefer the most-specific pattern that covers the user's real workflow over the broadest one the queue suggests.
 - The compaction logic in `pending.rs` already collapses near-duplicates by broadest-non-program-only pattern (e.g. `npm install foo/bar/baz` -> one row keyed on `npm install:*`). Trust the suggestion; broaden manually only when you've inspected the breakdown.
 
@@ -57,6 +64,6 @@ If the user is here because they *aren't getting* the third "Yes, and don't ask 
 
 ## Gotchas
 
-- The CC prompt's "Yes, and don't ask again for X" writes the rule to `localSettings`. tool-gates' approve-via-skill writes wherever the user picks. If a pattern already exists in localSettings from the prompt button, the user might want `project` or `user` scope here for sharing -- duplicates across scopes are harmless, the more-specific scope wins.
-- Pending entries that match a settings allow rule already get filtered at PostToolUse time (handled in `post_tool_use.rs`). If the user sees a row that they think should already be allowed, check `tool-gates rules list` -- the rule may exist but not match the row's exact subcommand shape.
+- The CC prompt's "Yes, and don't ask again for X" writes the rule to `localSettings`. tool-gates' approve-via-skill writes wherever the user picks. If a pattern already exists in localSettings from the prompt button, the user might want `project` or `user` scope here for sharing. Duplicates across scopes are harmless, the more-specific scope wins.
+- Pending entries that match a settings allow rule already get filtered at PostToolUse time (handled in `post_tool_use.rs`). If the user sees a row that they think should already be allowed, check `tool-gates rules list`. The rule may exist but not match the row's exact subcommand shape.
 - Plan mode and auto mode never produce pending entries via this skill's flow. Plan mode denies; auto mode lets the classifier decide silently. Both bypass the human-approval tracking path that feeds the queue.

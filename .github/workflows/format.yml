@@ -1,0 +1,44 @@
+name: Format
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: format-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  format:
+    name: Format
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      # Versions pinned to match mise.toml so CI and local agree on formatting.
+      - name: Install taplo
+        uses: taiki-e/install-action@59012be0884e296ca2da49b530610e72c49039ad # v2.81.6
+        with:
+          tool: taplo@0.10.0
+
+      - name: biome (js/css/json)
+        run: npx --yes @biomejs/biome@2.4.16 ci
+
+      - name: prettier (md/yaml)
+        # .prettierignore handles excludes; CLAUDE.md/GEMINI.md are symlinks that
+        # prettier errors on when passed explicitly, so filter them out here.
+        run: |
+          git ls-files '*.md' '*.yml' '*.yaml' \
+            | grep -vE '^(CLAUDE|GEMINI)\.md$' \
+            | xargs npx --yes prettier@3.8.3 --check
+
+      - name: taplo (toml)
+        run: git ls-files '*.toml' | xargs taplo fmt --check

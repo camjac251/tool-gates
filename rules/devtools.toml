@@ -23,6 +23,12 @@
 name = "devtools"
 description = "Developer tools permission gate"
 priority = 25
+lede = "Developer tools that can modify files. Linters and type checkers run in inspection mode by default and ask when a write flag (<code>--write</code>, <code>--fix</code>, <code>-i</code>, <code>-w</code>) appears. Default <code>unknown_action</code> is <code>allow</code> because most tools in this category are read-only analysis."
+behavior_tags = ["covers <b>77+ tools</b>", "write-flag detection"]
+
+[meta.card_titles]
+allow = "read-only modes"
+ask = "write flags"
 
 # =============================================================================
 # SD (pipe mode safe, file args ask)
@@ -48,7 +54,7 @@ description = "sd without file args is a stdin→stdout pipe filter (safe); with
 
 [[programs]]
 name = "sad"
-unknown_action = "allow"  # Default is preview mode
+unknown_action = "allow" # Default is preview mode
 
 [[programs.ask]]
 reason = "sad --commit: applies the proposed search-and-replace to the matched files. Default sad without `--commit` is preview-only."
@@ -62,7 +68,7 @@ accept_edits_auto_allow = true
 [[programs]]
 name = "ast-grep"
 aliases = ["sg"]
-unknown_action = "allow"  # Default is search mode
+unknown_action = "allow" # Default is search mode
 
 [[programs.ask]]
 reason = "ast-grep -U: applies the rewrite pattern across matched files. Default ast-grep is search-only; `-U`/`--update-all` writes the changes."
@@ -75,7 +81,7 @@ accept_edits_auto_allow = true
 
 [[programs]]
 name = "yq"
-unknown_action = "allow"  # Default is read mode
+unknown_action = "allow" # Default is read mode
 
 [[programs.ask]]
 reason = "yq -i: rewrites the YAML file in place per the given expression. Default yq prints to stdout; `-i`/`--inplace` writes the file."
@@ -89,6 +95,7 @@ accept_edits_auto_allow = true
 [[programs]]
 name = "jq"
 unknown_action = "allow"
+reason = "Processes JSON from files or stdin and prints the result. Read-only."
 
 # =============================================================================
 # SEMGREP (scan safe, --autofix/--fix asks)
@@ -96,7 +103,7 @@ unknown_action = "allow"
 
 [[programs]]
 name = "semgrep"
-unknown_action = "allow"  # Default is scan mode
+unknown_action = "allow" # Default is scan mode
 
 [[programs.ask]]
 reason = "semgrep --autofix: applies rule-driven code rewrites to matched files. Default semgrep only reports findings."
@@ -109,7 +116,7 @@ accept_edits_auto_allow = true
 
 [[programs]]
 name = "comby"
-unknown_action = "allow"  # Default is match mode
+unknown_action = "allow" # Default is match mode
 
 [[programs.ask]]
 reason = "comby -in-place: applies the structural match-and-rewrite to the matched files. Default comby prints diffs to stdout."
@@ -165,6 +172,7 @@ accept_edits_auto_allow = true
 # lint is read-only
 [[programs.allow]]
 subcommand = "lint"
+reason = "Reports Biome lint diagnostics for the matched files. Read-only; writing fixes needs `--write`/`--fix`."
 
 # =============================================================================
 # PRETTIER (check safe, --write/-w asks)
@@ -211,6 +219,7 @@ accept_edits_auto_allow = true
 [[programs.allow]]
 subcommand = "format"
 if_flags_any = ["--check", "--diff"]
+reason = "Checks Python formatting and prints the diff. Read-only with `--check`/`--diff`; no files are written."
 
 # format without --check/--diff asks (writes files)
 [[programs.ask]]
@@ -229,6 +238,7 @@ unknown_action = "ask"
 # --check and --diff are safe (read-only verification)
 [[programs.allow]]
 if_flags_any = ["--check", "--diff"]
+reason = "Reports whether files are `black`-formatted and prints the diff. Read-only with `--check`/`--diff`; no files are written."
 
 [[programs.ask]]
 reason = "Formatting files"
@@ -245,6 +255,7 @@ unknown_action = "ask"
 # --check, --check-only, and --diff are safe (read-only verification)
 [[programs.allow]]
 if_flags_any = ["--check", "--check-only", "--diff"]
+reason = "Reports whether imports are sorted and prints the diff. Read-only with `--check`/`--check-only`/`--diff`; no files are written."
 
 [[programs.ask]]
 reason = "Sorting imports"
@@ -257,10 +268,12 @@ accept_edits_auto_allow = true
 [[programs]]
 name = "shellcheck"
 unknown_action = "allow"
+reason = "Lints shell scripts and reports issues. Read-only static analysis."
 
 [[programs]]
 name = "hadolint"
 unknown_action = "allow"
+reason = "Lints Dockerfiles and reports issues. Read-only static analysis."
 
 # =============================================================================
 # GOLANGCI-LINT (--fix modifies files, otherwise read-only)
@@ -294,7 +307,8 @@ accept_edits_auto_allow = true
 
 [[programs]]
 name = "air"
-unknown_action = "allow"  # Just runs go build/run in watch mode
+unknown_action = "allow"                                                                                                 # Just runs go build/run in watch mode
+reason = "Live-reloads a Go app, rebuilding and restarting it on file changes. Runs the project's own build and binary."
 
 # =============================================================================
 # ACTIONLINT (GitHub Actions linter - read-only)
@@ -303,11 +317,13 @@ unknown_action = "allow"  # Just runs go build/run in watch mode
 [[programs]]
 name = "actionlint"
 unknown_action = "allow"
+reason = "Lints GitHub Actions workflow files. Read-only static analysis."
 
 # Gitleaks - secret scanner (read-only)
 [[programs]]
 name = "gitleaks"
 unknown_action = "allow"
+reason = "Scans for committed secrets and reports findings. Read-only; does not modify files."
 
 # Lefthook - git hooks manager
 [[programs]]
@@ -316,12 +332,15 @@ unknown_action = "ask"
 
 [[programs.allow]]
 subcommand = "run"
+reason = "Runs the configured git hooks on demand (the commands defined in `lefthook.yml`). Side effects depend on those configured commands."
 
 [[programs.allow]]
 subcommand = "version"
+reason = "Prints the lefthook version. Read-only."
 
 [[programs.allow]]
 subcommand = "dump"
+reason = "Prints the merged lefthook configuration to stdout. Read-only."
 
 [[programs.ask]]
 subcommand = "install"
@@ -342,6 +361,7 @@ reason = "lefthook add: creates hook script files under `.git/hooks/` for the na
 [[programs]]
 name = "vite"
 unknown_action = "allow"
+reason = "Runs the Vite dev server or build. A build writes to the configured dist directory."
 
 # =============================================================================
 # VITEST (test runner)
@@ -350,6 +370,7 @@ unknown_action = "allow"
 [[programs]]
 name = "vitest"
 unknown_action = "allow"
+reason = "Runs the Vitest test suite and prints results. Read-only unless tests write files or `-u` updates snapshots."
 
 # =============================================================================
 # JEST (test runner)
@@ -358,6 +379,7 @@ unknown_action = "allow"
 [[programs]]
 name = "jest"
 unknown_action = "allow"
+reason = "Runs the Jest test suite and prints results. Read-only unless tests write files or `-u` updates snapshots."
 
 # =============================================================================
 # MOCHA (test runner)
@@ -366,6 +388,7 @@ unknown_action = "allow"
 [[programs]]
 name = "mocha"
 unknown_action = "allow"
+reason = "Runs the Mocha test suite and prints results. Read-only unless the tests write files."
 
 # =============================================================================
 # TSC (TypeScript compiler - type checking)
@@ -374,6 +397,7 @@ unknown_action = "allow"
 [[programs]]
 name = "tsc"
 unknown_action = "allow"
+reason = "Type-checks TypeScript and reports errors. Emits compiled output only when configured to (`--noEmit` disables writes)."
 
 # =============================================================================
 # TSUP (TypeScript bundler)
@@ -382,6 +406,7 @@ unknown_action = "allow"
 [[programs]]
 name = "tsup"
 unknown_action = "allow"
+reason = "Bundles TypeScript/JavaScript. Outputs to the configured dist directory."
 
 # =============================================================================
 # ESBUILD (JavaScript bundler)
@@ -390,6 +415,7 @@ unknown_action = "allow"
 [[programs]]
 name = "esbuild"
 unknown_action = "allow"
+reason = "Bundles JS/TS. Writes output when an outfile or outdir is set, otherwise prints to stdout."
 
 # =============================================================================
 # TURBO (monorepo build tool)
@@ -398,6 +424,7 @@ unknown_action = "allow"
 [[programs]]
 name = "turbo"
 unknown_action = "allow"
+reason = "Runs Turborepo tasks across the workspace. Executes the configured pipeline scripts."
 
 # =============================================================================
 # NX (monorepo build tool)
@@ -406,6 +433,7 @@ unknown_action = "allow"
 [[programs]]
 name = "nx"
 unknown_action = "allow"
+reason = "Runs Nx workspace tasks. Executes the configured target scripts."
 
 # =============================================================================
 # KNIP (dead code detector)
@@ -414,6 +442,7 @@ unknown_action = "allow"
 [[programs]]
 name = "knip"
 unknown_action = "allow"
+reason = "Finds unused files, dependencies, and exports. Read-only analysis."
 
 # =============================================================================
 # OXLINT (fast linter)
@@ -422,6 +451,7 @@ unknown_action = "allow"
 [[programs]]
 name = "oxlint"
 unknown_action = "allow"
+reason = "Lints JS/TS and reports findings. Read-only unless `--fix` is set."
 
 # =============================================================================
 # GOFMT (Go formatter)
@@ -487,6 +517,7 @@ unknown_action = "ask"
 
 [[programs.allow]]
 if_flags_any = ["--check"]
+reason = "Reports whether files are `rustfmt`-formatted via the exit code. Read-only with `--check`; no files are written."
 
 [[programs.ask]]
 reason = "Formatting files"
@@ -502,6 +533,7 @@ unknown_action = "ask"
 
 [[programs.allow]]
 if_flags_any = ["--check"]
+reason = "Reports whether Lua files are `stylua`-formatted via the exit code. Read-only with `--check`; no files are written."
 
 [[programs.ask]]
 reason = "Formatting files"
@@ -569,6 +601,7 @@ unknown_action = "ask"
 
 [[programs.allow]]
 if_flags_any = ["--dry-run"]
+reason = "Simulates applying a patch and reports whether it would succeed. Read-only with `--dry-run`; no files are modified."
 
 [[programs.ask]]
 reason = "Applying patch (targets come from patch file content, not CLI args)"
@@ -654,12 +687,15 @@ unknown_action = "ask"
 
 [[programs.allow]]
 subcommand = "analyze"
+reason = "Runs Dart static analysis and reports diagnostics. Read-only; no files are written."
 
 [[programs.allow]]
 subcommand = "info"
+reason = "Prints Dart/Flutter environment and tooling info. Read-only."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the Dart SDK version. Read-only."
 
 [[programs.ask]]
 subcommand = "format"
@@ -688,6 +724,7 @@ unknown_action = "ask"
 
 [[programs.allow]]
 if_flags_any = ["--check"]
+reason = "Reports whether Scala files are `scalafmt`-formatted via the exit code. Read-only with `--check`; no files are written."
 
 [[programs.ask]]
 reason = "Formatting files"
@@ -716,6 +753,7 @@ unknown_action = "ask"
 
 [[programs.allow]]
 if_flags_any = ["--lint"]
+reason = "Reports Swift formatting violations without rewriting. Read-only with `--lint`; no files are written."
 
 [[programs.ask]]
 reason = "Formatting files"
@@ -731,15 +769,19 @@ unknown_action = "ask"
 
 [[programs.allow]]
 subcommand = "lint"
+reason = "Reports Protobuf lint diagnostics for the schema. Read-only; no files are written."
 
 [[programs.allow]]
 subcommand = "breaking"
+reason = "Reports breaking-change diagnostics against a baseline schema. Read-only; no files are written."
 
 [[programs.allow]]
 subcommand = "ls-files"
+reason = "Lists the Protobuf files in the module. Read-only."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the `buf` version. Read-only."
 
 [[programs.ask]]
 subcommand = "format"
@@ -754,6 +796,7 @@ accept_edits_auto_allow = true
 name = "pytest"
 aliases = ["py.test"]
 unknown_action = "allow"
+reason = "Runs the Python test suite and prints results. Read-only unless the tests write files or hit external services."
 
 # =============================================================================
 # MYPY (Python type checker - read-only)
@@ -762,6 +805,7 @@ unknown_action = "allow"
 [[programs]]
 name = "mypy"
 unknown_action = "allow"
+reason = "Type-checks Python and reports errors. Read-only static analysis."
 
 # =============================================================================
 # PYRIGHT / BASEDPYRIGHT (Python type checker - read-only)
@@ -771,6 +815,7 @@ unknown_action = "allow"
 name = "pyright"
 aliases = ["basedpyright"]
 unknown_action = "allow"
+reason = "Type-checks Python and reports errors. Read-only static analysis."
 
 # =============================================================================
 # PYLINT (Python linter - read-only)
@@ -779,6 +824,7 @@ unknown_action = "allow"
 [[programs]]
 name = "pylint"
 unknown_action = "allow"
+reason = "Lints Python and reports findings. Read-only static analysis."
 
 # =============================================================================
 # FLAKE8 (Python linter - read-only)
@@ -787,6 +833,7 @@ unknown_action = "allow"
 [[programs]]
 name = "flake8"
 unknown_action = "allow"
+reason = "Lints Python and reports style and error findings. Read-only static analysis."
 
 # =============================================================================
 # BANDIT (Python security scanner - read-only)
@@ -795,6 +842,7 @@ unknown_action = "allow"
 [[programs]]
 name = "bandit"
 unknown_action = "allow"
+reason = "Scans Python for common security issues. Read-only static analysis."
 
 # =============================================================================
 # COVERAGE (Python code coverage)
@@ -807,12 +855,15 @@ unknown_action = "ask"
 # Read-only reporting (stdout only)
 [[programs.allow]]
 subcommand = "report"
+reason = "Prints a coverage summary to stdout from the existing `.coverage` data file. Read-only; no report files are written."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the coverage.py version. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints coverage.py usage help. Read-only."
 
 # Commands that run code or write files
 [[programs.ask]]
@@ -853,12 +904,15 @@ unknown_action = "ask"
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the tox version. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints tox usage help. Read-only."
 
 [[programs.allow]]
 if_flags_any = ["-l", "--list", "--listenvs"]
+reason = "Lists the environments declared in `tox.ini` / `pyproject.toml`. Read-only; no env is run."
 
 [[programs.ask]]
 reason = "tox: runs the configured environments from `tox.ini` / `pyproject.toml`. Each env creates/uses a virtualenv and runs arbitrary commands per config."
@@ -873,12 +927,15 @@ unknown_action = "ask"
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the nox version. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints nox usage help. Read-only."
 
 [[programs.allow]]
 if_flags_any = ["-l", "--list"]
+reason = "Lists the sessions declared in `noxfile.py`. Read-only; no session is run."
 
 [[programs.ask]]
 reason = "nox: runs the configured sessions from `noxfile.py`. Each session creates/uses a virtualenv and runs arbitrary Python code per the noxfile."
@@ -893,6 +950,7 @@ unknown_action = "ask"
 
 [[programs.allow]]
 if_flags_any = ["--check", "--check-diff"]
+reason = "Reports unused imports/variables and prints the diff. Read-only with `--check`/`--check-diff`; no files are written."
 
 [[programs.ask]]
 reason = "autoflake --in-place: rewrites Python files to remove unused imports/variables. Default autoflake prints suggested diffs only."
@@ -909,9 +967,11 @@ unknown_action = "ask"
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the tsx version. Read-only; no script is run."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints tsx usage help. Read-only; no script is run."
 
 [[programs.ask]]
 reason = "tsx: runs the given TypeScript file directly (Node + esbuild). The script's side effects (network, FS, child processes) execute."
@@ -926,9 +986,11 @@ unknown_action = "ask"
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the ts-node version. Read-only; no script is run."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints ts-node usage help. Read-only; no script is run."
 
 [[programs.ask]]
 reason = "ts-node: runs the given TypeScript file under Node. The script's side effects (network, FS, child processes) execute."
@@ -941,6 +1003,7 @@ reason = "ts-node: runs the given TypeScript file under Node. The script's side 
 name = "webpack"
 aliases = ["webpack-cli"]
 unknown_action = "allow"
+reason = "Bundles assets to the output directory. Runs plugins and loaders that can execute build code."
 
 # =============================================================================
 # ROLLUP (JavaScript bundler - local build)
@@ -949,6 +1012,7 @@ unknown_action = "allow"
 [[programs]]
 name = "rollup"
 unknown_action = "allow"
+reason = "Bundles JS modules. Outputs to the configured file or directory."
 
 # =============================================================================
 # SWC (Fast compiler - local build)
@@ -957,6 +1021,7 @@ unknown_action = "allow"
 [[programs]]
 name = "swc"
 unknown_action = "allow"
+reason = "Compiles and transforms JS/TS. Writes output to the configured location."
 
 # =============================================================================
 # PARCEL (Web bundler - build safe, serve asks)
@@ -968,12 +1033,15 @@ unknown_action = "ask"
 
 [[programs.allow]]
 subcommand = "build"
+reason = "Builds the production bundle into the configured dist dir. Writes build artifacts only; no dev server is started."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the Parcel version. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints Parcel usage help. Read-only."
 
 [[programs.ask]]
 subcommand = "serve"
@@ -993,18 +1061,23 @@ unknown_action = "ask"
 
 [[programs.allow]]
 subcommand = "test"
+reason = "Runs the Playwright test suite headless and reports results. Writes test artifacts (report, traces) to the configured output dir."
 
 [[programs.allow]]
 subcommand = "show-report"
+reason = "Serves the existing HTML test report locally for viewing. Read-only; no tests are run."
 
 [[programs.allow]]
 subcommand = "show-trace"
+reason = "Opens the trace viewer on an existing trace file. Read-only; no tests are run."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the Playwright version. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints Playwright usage help. Read-only."
 
 [[programs.ask]]
 subcommand = "install"
@@ -1024,21 +1097,27 @@ unknown_action = "ask"
 
 [[programs.allow]]
 subcommand = "run"
+reason = "Runs the Cypress test suite headless and reports results. Writes test artifacts (videos, screenshots) to the configured output dir."
 
 [[programs.allow]]
 subcommand = "verify"
+reason = "Verifies that the installed Cypress binary is runnable. Read-only check; no tests are run."
 
 [[programs.allow]]
 subcommand = "version"
+reason = "Prints Cypress binary and package versions. Read-only."
 
 [[programs.allow]]
 subcommand = "info"
+reason = "Prints Cypress environment and detected-browser info. Read-only."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the Cypress version. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints Cypress usage help. Read-only."
 
 [[programs.ask]]
 subcommand = "open"
@@ -1058,15 +1137,19 @@ unknown_action = "ask"
 
 [[programs.allow]]
 subcommand = "whoami"
+reason = "Prints the authenticated Cloudflare account for the current credentials. Read-only."
 
 [[programs.allow]]
 subcommand = "--version"
+reason = "Prints the wrangler version. Read-only."
 
 [[programs.allow]]
 subcommand = "--help"
+reason = "Prints wrangler usage help. Read-only."
 
 [[programs.allow]]
 subcommand = "tail"
+reason = "Streams live logs from a deployed Worker. Read-only observation; does not change the deployment."
 
 [[programs.ask]]
 subcommand = "dev"
@@ -1124,11 +1207,13 @@ accept_edits_auto_allow = true
 [[programs]]
 name = "ffprobe"
 unknown_action = "allow"
+reason = "Inspects media files and prints stream and format metadata. Read-only."
 
 # d2: deterministic diagram renderer (text -> svg/png), same class as a formatter.
 [[programs]]
 name = "d2"
 unknown_action = "allow"
+reason = "Renders D2 diagram source to an image. Writes the output file when one is specified."
 
 # ffmpeg: transcoding writes output files, so ask by default. Allow only the
 # standalone info flags that never accompany a transcode.
@@ -1138,3 +1223,4 @@ unknown_action = "ask"
 
 [[programs.allow]]
 if_flags_any = ["-version", "-buildconf", "-L", "-h", "--help"]
+reason = "Prints ffmpeg version, build config, license, or usage help. Read-only info flags; no transcode runs."

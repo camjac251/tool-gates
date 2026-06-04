@@ -18,9 +18,9 @@
 //! Everything else (checkout -b/-B, checkout --, push --force-with-lease,
 //! config subcommands, etc.) is handled declaratively via TOML rules.
 
-use crate::generated::rules::{GIT_ALLOW, GIT_ASK, check_git_declarative};
+use crate::generated::rules::{GIT_ASK, check_git_declarative};
 use crate::git_aliases::{self, Resolved};
-use crate::models::{CommandInfo, GateResult};
+use crate::models::{CommandInfo, Decision, GateResult};
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
@@ -181,7 +181,17 @@ pub fn check_git_with_alias_map(
     // through this check, but conflicts there require an alias named after
     // a real git command (`alias.config = ...`), which is rare enough to
     // accept as a divergence.
-    let known_builtin = GIT_ALLOW.contains(subcommand)
+    // Built-ins win over aliases. A subcommand the declarative gate resolves to
+    // Allow or Block is a real git command and must not be treated as an alias,
+    // so probe it with the bare subcommand. Known asks (commit, push, ...) are
+    // tracked in GIT_ASK.
+    let subcmd_probe = CommandInfo {
+        program: cmd.program.clone(),
+        args: vec![subcommand.to_string()],
+        raw: cmd.raw.clone(),
+    };
+    let known_builtin = check_git_declarative(&subcmd_probe)
+        .is_some_and(|r| matches!(r.decision, Decision::Allow | Decision::Block))
         || GIT_ASK.contains_key(subcommand)
         || matches!(subcommand, "branch" | "tag");
 
@@ -300,7 +310,7 @@ mod tests {
             (&["push", "origin", "main"], "publishes"),
             (&["pull", "origin", "main"], "fetches"),
             (&["merge", "feature"], "merges"),
-            (&["rebase", "main"], "rebasing"),
+            (&["rebase", "main"], "replays commits"),
             (&["checkout", "feature"], "switches"),
             (&["checkout", "-b", "new-branch"], "creates a new branch"),
             (&["switch", "main"], "switches"),
@@ -312,7 +322,7 @@ mod tests {
             (&["clone", "https://github.com/user/repo"], "clones"),
             (&["mv", "old.txt", "new.txt"], "moves"),
             (&["rm", "file.txt"], "removes"),
-            (&["branch", "-d", "old-branch"], "deleting a branch"),
+            (&["branch", "-d", "old-branch"], "deletes a branch"),
             (&["branch", "-m", "old", "new"], "renames a branch"),
         ];
 
@@ -480,7 +490,7 @@ mod tests {
             ),
             (
                 &["-C", "/home/user/project", "branch", "-d", "old"],
-                "deleting a branch",
+                "deletes a branch",
             ),
         ];
 
