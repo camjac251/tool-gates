@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.23.0](https://github.com/camjac251/tool-gates/compare/v1.22.0...v1.23.0) - 2026-06-06
+
+### Added
+
+- docs site, rules export, and project edit approval
+
 ## [1.22.0](https://github.com/camjac251/tool-gates/compare/v1.21.2...v1.22.0) - 2026-05-26
 
 ### Added
