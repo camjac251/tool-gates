@@ -17,9 +17,7 @@
         </div>
         <div class="tab-panel" data-panel="bin" role="tabpanel">
           <p class="step-prose">Pick the right artifact for your platform; drop it on <code>PATH</code> and mark it executable. Pre-built binaries are available for versions v1.5.4 and newer.</p>
-<pre class="code-block"><span class="prompt">$</span> curl -Lo ~/.local/bin/tool-gates \
-    https://github.com/camjac251/tool-gates/releases/latest/download/tool-gates-macos-arm64
-<span class="prompt">$</span> chmod +x ~/.local/bin/tool-gates</pre>
+<pre class="code-block"><span class="prompt">$</span> curl -Lo ~/.local/bin/tool-gates https://github.com/camjac251/tool-gates/releases/latest/download/tool-gates-macos-arm64 &amp;&amp; chmod +x ~/.local/bin/tool-gates</pre>
           <p class="step-prose">Replace <code>macos-arm64</code> with <code>macos-x86_64</code>, <code>linux-arm64</code>, or <code>linux-x86_64</code> for your platform. Windows binaries are available for Bash-like environments such as Git Bash or MSYS2. PowerShell/cmd.exe command classification is not first-class yet; WSL users should use the Linux binary.</p>
         </div>
         <div class="tab-panel" data-panel="cargo" role="tabpanel">
@@ -80,32 +78,38 @@
       </article>
     </div>
     <p class="step-prose">Preview what would change with <code>--dry-run</code>:</p>
-<pre class="code-block"><span class="prompt">$</span> tool-gates hooks add -s user --dry-run
-<span class="prompt">$</span> tool-gates hooks add --gemini  --dry-run
-<span class="prompt">$</span> tool-gates hooks add --codex   --dry-run</pre>
+    <p class="step-prose">Claude Code:</p>
+    <pre class="code-block"><span class="prompt">$</span> tool-gates hooks add -s user --dry-run</pre>
+    <p class="step-prose">Gemini CLI:</p>
+    <pre class="code-block"><span class="prompt">$</span> tool-gates hooks add --gemini --dry-run</pre>
+    <p class="step-prose">Codex CLI:</p>
+    <pre class="code-block"><span class="prompt">$</span> tool-gates hooks add --codex --dry-run</pre>
   </div>
   <div class="step">
     <p class="step-label">Step 3 · Verify</p>
     <p class="step-prose">Confirm every hook is wired across every client:</p>
-<pre class="code-block"><span class="prompt">$</span> tool-gates hooks status</pre>
+    <pre class="code-block"><span class="prompt">$</span> tool-gates hooks status</pre>
     <p class="step-prose">Or pipe a tool-call payload directly into the binary and watch the decision come back:</p>
-<pre class="code-block"><span class="prompt">$</span> echo '{"tool_name":"Bash","tool_input":{"command":"git status"}}' \
-    | tool-gates
-<span class="comment">→ {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","permissionDecisionReason":"Read-only operation"}}</span>
-<span class="prompt">$</span> echo '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}' \
-    | tool-gates
+    <p class="step-prose">Test a safe command (allowed):</p>
+    <pre class="code-block"><span class="prompt">$</span> echo '{"tool_name":"Bash","tool_input":{"command":"git status"}}' | tool-gates
+<span class="comment">→ {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","permissionDecisionReason":"Read-only operation"}}</span></pre>
+    <p class="step-prose">Test a dangerous command (blocked):</p>
+    <pre class="code-block"><span class="prompt">$</span> echo '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}' | tool-gates
 <span class="comment">→ {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"rm: `rm -rf /` blocked: would recursively delete the entire root filesystem."}}</span></pre>
     <p class="step-prose">For a full health check on config, hooks, cache files, and legacy <code>bash-gates</code> remnants: <code>tool-gates doctor</code>.</p>
   </div>
   <div class="step">
     <p class="step-label">Step 4 · Optional Claude Code plugin</p>
     <p class="step-prose">tool-gates also ships as a Claude Code plugin with two slash commands: <code>/tool-gates:review</code> opens the approval TUI, <code>/tool-gates:test-gate</code> runs a command against the gate engine without executing it. The plugin provides skills only; the hook installation above is the prerequisite.</p>
-<pre class="code-block"><span class="comment"># Add the marketplace and install the plugin</span>
-<span class="prompt">/plugin</span> marketplace add camjac251/tool-gates
-<span class="prompt">/plugin</span> install tool-gates@camjac251-tool-gates</pre>
+    <p class="step-prose">Add the marketplace:</p>
+    <pre class="code-block"><span class="prompt">/plugin</span> marketplace add camjac251/tool-gates</pre>
+    <p class="step-prose">Install the plugin:</p>
+    <pre class="code-block"><span class="prompt">/plugin</span> install tool-gates@camjac251-tool-gates</pre>
     <p class="step-prose">Or from a local clone:</p>
-<pre class="code-block"><span class="prompt">$</span> claude --plugin-dir /path/to/tool-gates/claude-plugin</pre>
+    <pre class="code-block"><span class="prompt">$</span> claude --plugin-dir /path/to/tool-gates/claude-plugin</pre>
     <p class="step-prose">After install, the two slash commands are available inside any Claude Code session:</p>
-<pre class="code-block"><span class="prompt">/tool-gates:review</span>     <span class="comment"># open the approval TUI</span>
-<span class="prompt">/tool-gates:test-gate</span>  <span class="comment"># preview how the engine would decide a command</span></pre>
+    <p class="step-prose">Open the approval TUI:</p>
+    <pre class="code-block"><span class="prompt">/tool-gates:review</span></pre>
+    <p class="step-prose">Preview how the engine would decide a command:</p>
+    <pre class="code-block"><span class="prompt">/tool-gates:test-gate</span></pre>
   </div>
