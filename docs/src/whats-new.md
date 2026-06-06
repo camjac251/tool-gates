@@ -4,7 +4,7 @@
   <div class="config-block">
     <header>
       <h3>v1.23.0 · June 6, 2026</h3>
-      <span class="src-tag">docs &amp; approvals · 673bd49</span>
+      <span class="src-tag">docs &amp; approvals · <a href="https://github.com/camjac251/tool-gates/commit/673bd49" target="_blank" rel="noopener">673bd49</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -25,7 +25,7 @@
   <div class="config-block">
     <header>
       <h3>v1.22.0 · May 26, 2026</h3>
-      <span class="src-tag">media &amp; CLI · 6657772</span>
+      <span class="src-tag">media &amp; CLI · <a href="https://github.com/camjac251/tool-gates/commit/6657772" target="_blank" rel="noopener">6657772</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -45,7 +45,7 @@
   <div class="config-block">
     <header>
       <h3>v1.21.2 · May 21, 2026</h3>
-      <span class="src-tag">maintenance · 57cac7e</span>
+      <span class="src-tag">maintenance · <a href="https://github.com/camjac251/tool-gates/commit/57cac7e" target="_blank" rel="noopener">57cac7e</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -60,7 +60,7 @@
   <div class="config-block">
     <header>
       <h3>v1.21.1 · May 21, 2026</h3>
-      <span class="src-tag">polish · 0e0a0d4</span>
+      <span class="src-tag">polish · <a href="https://github.com/camjac251/tool-gates/commit/0e0a0d4" target="_blank" rel="noopener">0e0a0d4</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -79,7 +79,7 @@
   <div class="config-block">
     <header>
       <h3>v1.21.0 · May 13, 2026</h3>
-      <span class="src-tag">polish · 9b2a6de</span>
+      <span class="src-tag">polish · <a href="https://github.com/camjac251/tool-gates/commit/9b2a6de" target="_blank" rel="noopener">9b2a6de</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -96,7 +96,7 @@
   <div class="config-block">
     <header>
       <h3>v1.20.0 · May 13, 2026</h3>
-      <span class="src-tag">reasons · de952ff</span>
+      <span class="src-tag">reasons · <a href="https://github.com/camjac251/tool-gates/commit/de952ff" target="_blank" rel="noopener">de952ff</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -113,7 +113,7 @@
   <div class="config-block">
     <header>
       <h3>v1.19.2 · May 8, 2026</h3>
-      <span class="src-tag">maintenance · 0480925</span>
+      <span class="src-tag">maintenance · <a href="https://github.com/camjac251/tool-gates/commit/0480925" target="_blank" rel="noopener">0480925</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -128,7 +128,7 @@
   <div class="config-block">
     <header>
       <h3>v1.19.1 · May 3, 2026</h3>
-      <span class="src-tag">maintenance · ebb6e6d</span>
+      <span class="src-tag">maintenance · <a href="https://github.com/camjac251/tool-gates/commit/ebb6e6d" target="_blank" rel="noopener">ebb6e6d</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -143,7 +143,7 @@
   <div class="config-block">
     <header>
       <h3>v1.19.0 · May 3, 2026</h3>
-      <span class="src-tag">Codex · 024465c</span>
+      <span class="src-tag">Codex · <a href="https://github.com/camjac251/tool-gates/commit/024465c" target="_blank" rel="noopener">024465c</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -161,7 +161,7 @@
   <div class="config-block">
     <header>
       <h3>v1.18.0 · April 30, 2026</h3>
-      <span class="src-tag">git aliases · 69175dc</span>
+      <span class="src-tag">git aliases · <a href="https://github.com/camjac251/tool-gates/commit/69175dc" target="_blank" rel="noopener">69175dc</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -181,7 +181,7 @@
   <div class="config-block">
     <header>
       <h3>v1.17.0 · April 30, 2026</h3>
-      <span class="src-tag">audit TUI · 8b48d7a</span>
+      <span class="src-tag">audit TUI · <a href="https://github.com/camjac251/tool-gates/commit/8b48d7a" target="_blank" rel="noopener">8b48d7a</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -215,7 +215,7 @@
   <div class="config-block">
     <header>
       <h3>v1.16.1 · April 24, 2026</h3>
-      <span class="src-tag">maintenance · 7ace761</span>
+      <span class="src-tag">maintenance · <a href="https://github.com/camjac251/tool-gates/commit/7ace761" target="_blank" rel="noopener">7ace761</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -230,7 +230,7 @@
   <div class="config-block">
     <header>
       <h3>v1.16.0 · April 23, 2026</h3>
-      <span class="src-tag">head/tail block · 6dad625</span>
+      <span class="src-tag">head/tail block · <a href="https://github.com/camjac251/tool-gates/commit/6dad625" target="_blank" rel="noopener">6dad625</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -247,7 +247,7 @@
   <div class="config-block">
     <header>
       <h3>v1.15.0 · April 23, 2026</h3>
-      <span class="src-tag">MCP approvals · 4c5aa93</span>
+      <span class="src-tag">MCP approvals · <a href="https://github.com/camjac251/tool-gates/commit/4c5aa93" target="_blank" rel="noopener">4c5aa93</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -262,7 +262,7 @@
   <div class="config-block">
     <header>
       <h3>v1.14.0 · April 22, 2026</h3>
-      <span class="src-tag">API hints · a53313b</span>
+      <span class="src-tag">API hints · <a href="https://github.com/camjac251/tool-gates/commit/a53313b" target="_blank" rel="noopener">a53313b</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -277,7 +277,7 @@
   <div class="config-block">
     <header>
       <h3>v1.13.0 · April 21, 2026</h3>
-      <span class="src-tag">auto mode · 1078f0f</span>
+      <span class="src-tag">auto mode · <a href="https://github.com/camjac251/tool-gates/commit/1078f0f" target="_blank" rel="noopener">1078f0f</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -292,7 +292,7 @@
   <div class="config-block">
     <header>
       <h3>v1.12.1 · April 15, 2026</h3>
-      <span class="src-tag">maintenance · 04889ff</span>
+      <span class="src-tag">maintenance · <a href="https://github.com/camjac251/tool-gates/commit/04889ff" target="_blank" rel="noopener">04889ff</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -310,7 +310,7 @@
   <div class="config-block">
     <header>
       <h3>v1.12.0 · April 10, 2026</h3>
-      <span class="src-tag">Monitor tool · e65011b</span>
+      <span class="src-tag">Monitor tool · <a href="https://github.com/camjac251/tool-gates/commit/e65011b" target="_blank" rel="noopener">e65011b</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -325,7 +325,7 @@
   <div class="config-block">
     <header>
       <h3>v1.11.0 · April 3, 2026</h3>
-      <span class="src-tag">wrapper resolution · 35b587e</span>
+      <span class="src-tag">wrapper resolution · <a href="https://github.com/camjac251/tool-gates/commit/35b587e" target="_blank" rel="noopener">35b587e</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -340,7 +340,7 @@
   <div class="config-block">
     <header>
       <h3>v1.10.0 · April 3, 2026</h3>
-      <span class="src-tag">runtimes · fbdccdf</span>
+      <span class="src-tag">runtimes · <a href="https://github.com/camjac251/tool-gates/commit/fbdccdf" target="_blank" rel="noopener">fbdccdf</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -355,7 +355,7 @@
   <div class="config-block">
     <header>
       <h3>v1.9.2 · March 31, 2026</h3>
-      <span class="src-tag">maintenance · 6c6e252</span>
+      <span class="src-tag">maintenance · <a href="https://github.com/camjac251/tool-gates/commit/6c6e252" target="_blank" rel="noopener">6c6e252</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -370,7 +370,7 @@
   <div class="config-block">
     <header>
       <h3>v1.9.1 · March 31, 2026</h3>
-      <span class="src-tag">maintenance · 4b7676e</span>
+      <span class="src-tag">maintenance · <a href="https://github.com/camjac251/tool-gates/commit/4b7676e" target="_blank" rel="noopener">4b7676e</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -385,7 +385,7 @@
   <div class="config-block">
     <header>
       <h3>v1.9.0 · March 31, 2026</h3>
-      <span class="src-tag">matchers · 8df9031</span>
+      <span class="src-tag">matchers · <a href="https://github.com/camjac251/tool-gates/commit/8df9031" target="_blank" rel="noopener">8df9031</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -400,7 +400,7 @@
   <div class="config-block">
     <header>
       <h3>v1.8.0 · March 30, 2026</h3>
-      <span class="src-tag">worktrees · 29fa637</span>
+      <span class="src-tag">worktrees · <a href="https://github.com/camjac251/tool-gates/commit/29fa637" target="_blank" rel="noopener">29fa637</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -419,7 +419,7 @@
   <div class="config-block">
     <header>
       <h3>v1.7.3 · March 28, 2026</h3>
-      <span class="src-tag">maintenance · 07d939c</span>
+      <span class="src-tag">maintenance · <a href="https://github.com/camjac251/tool-gates/commit/07d939c" target="_blank" rel="noopener">07d939c</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -436,7 +436,7 @@
   <div class="config-block">
     <header>
       <h3>v1.7.2 · March 25, 2026</h3>
-      <span class="src-tag">maintenance · 763b556</span>
+      <span class="src-tag">maintenance · <a href="https://github.com/camjac251/tool-gates/commit/763b556" target="_blank" rel="noopener">763b556</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -451,7 +451,7 @@
   <div class="config-block">
     <header>
       <h3>v1.7.1 · March 25, 2026</h3>
-      <span class="src-tag">maintenance · cf24984</span>
+      <span class="src-tag">maintenance · <a href="https://github.com/camjac251/tool-gates/commit/cf24984" target="_blank" rel="noopener">cf24984</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -466,7 +466,7 @@
   <div class="config-block">
     <header>
       <h3>v1.7.0 · March 25, 2026</h3>
-      <span class="src-tag">Gemini · b31c96d</span>
+      <span class="src-tag">Gemini · <a href="https://github.com/camjac251/tool-gates/commit/b31c96d" target="_blank" rel="noopener">b31c96d</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -481,7 +481,7 @@
   <div class="config-block">
     <header>
       <h3>v1.6.0 · March 22, 2026</h3>
-      <span class="src-tag">coverage · e7f5c40</span>
+      <span class="src-tag">coverage · <a href="https://github.com/camjac251/tool-gates/commit/e7f5c40" target="_blank" rel="noopener">e7f5c40</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -496,7 +496,7 @@
   <div class="config-block">
     <header>
       <h3>v1.5.10 · March 22, 2026</h3>
-      <span class="src-tag">maintenance · 6422d4a</span>
+      <span class="src-tag">maintenance · <a href="https://github.com/camjac251/tool-gates/commit/6422d4a" target="_blank" rel="noopener">6422d4a</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -526,7 +526,7 @@
   <div class="config-block">
     <header>
       <h3>v1.5.9 · March 21, 2026</h3>
-      <span class="src-tag">maintenance · b401b57</span>
+      <span class="src-tag">maintenance · <a href="https://github.com/camjac251/tool-gates/commit/b401b57" target="_blank" rel="noopener">b401b57</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -544,7 +544,7 @@
   <div class="config-block">
     <header>
       <h3>v1.5.8 · March 21, 2026</h3>
-      <span class="src-tag">maintenance · bd6973d</span>
+      <span class="src-tag">maintenance · <a href="https://github.com/camjac251/tool-gates/commit/bd6973d" target="_blank" rel="noopener">bd6973d</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -562,7 +562,7 @@
   <div class="config-block">
     <header>
       <h3>v1.5.7 · March 21, 2026</h3>
-      <span class="src-tag">maintenance · a714abb</span>
+      <span class="src-tag">maintenance · <a href="https://github.com/camjac251/tool-gates/commit/a714abb" target="_blank" rel="noopener">a714abb</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -581,7 +581,7 @@
   <div class="config-block">
     <header>
       <h3>v1.5.6 · March 21, 2026</h3>
-      <span class="src-tag">maintenance · 1b29246</span>
+      <span class="src-tag">maintenance · <a href="https://github.com/camjac251/tool-gates/commit/1b29246" target="_blank" rel="noopener">1b29246</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -598,7 +598,7 @@
   <div class="config-block">
     <header>
       <h3>v1.5.5 · March 20, 2026</h3>
-      <span class="src-tag">maintenance · 6b759cf</span>
+      <span class="src-tag">maintenance · <a href="https://github.com/camjac251/tool-gates/commit/6b759cf" target="_blank" rel="noopener">6b759cf</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -615,7 +615,7 @@
   <div class="config-block">
     <header>
       <h3>v1.5.4 · March 20, 2026</h3>
-      <span class="src-tag">maintenance · f3c372a</span>
+      <span class="src-tag">maintenance · <a href="https://github.com/camjac251/tool-gates/commit/f3c372a" target="_blank" rel="noopener">f3c372a</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -634,7 +634,7 @@
   <div class="config-block">
     <header>
       <h3>v1.5.3 · March 20, 2026</h3>
-      <span class="src-tag">maintenance · d3af03d</span>
+      <span class="src-tag">maintenance · <a href="https://github.com/camjac251/tool-gates/commit/d3af03d" target="_blank" rel="noopener">d3af03d</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -659,7 +659,7 @@
 <div class="config-block">
     <header>
       <h3>v1.5.2 · March 18, 2026</h3>
-      <span class="src-tag">maintenance · 55af0b2</span>
+      <span class="src-tag">maintenance · <a href="https://github.com/camjac251/tool-gates/commit/55af0b2" target="_blank" rel="noopener">55af0b2</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -674,7 +674,7 @@
   <div class="config-block">
     <header>
       <h3>v1.5.1 · March 14, 2026</h3>
-      <span class="src-tag">maintenance · 044e763</span>
+      <span class="src-tag">maintenance · <a href="https://github.com/camjac251/tool-gates/commit/044e763" target="_blank" rel="noopener">044e763</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -689,7 +689,7 @@
   <div class="config-block">
     <header>
       <h3>v1.5.0 · March 13, 2026</h3>
-      <span class="src-tag">safeties · b5e3a1d</span>
+      <span class="src-tag">safeties · <a href="https://github.com/camjac251/tool-gates/commit/b5e3a1d" target="_blank" rel="noopener">b5e3a1d</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -704,7 +704,7 @@
   <div class="config-block">
     <header>
       <h3>v1.4.0 · March 10, 2026</h3>
-      <span class="src-tag">skills &amp; doctor · e13491d</span>
+      <span class="src-tag">skills &amp; doctor · <a href="https://github.com/camjac251/tool-gates/commit/e13491d" target="_blank" rel="noopener">e13491d</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -719,7 +719,7 @@
   <div class="config-block">
     <header>
       <h3>v1.3.0 · March 10, 2026</h3>
-      <span class="src-tag">config · 662cb64</span>
+      <span class="src-tag">config · <a href="https://github.com/camjac251/tool-gates/commit/662cb64" target="_blank" rel="noopener">662cb64</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -734,7 +734,7 @@
   <div class="config-block">
     <header>
       <h3>v1.2.0 · March 10, 2026</h3>
-      <span class="src-tag">MCP &amp; reminders · 225407a</span>
+      <span class="src-tag">MCP &amp; reminders · <a href="https://github.com/camjac251/tool-gates/commit/225407a" target="_blank" rel="noopener">225407a</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -752,7 +752,7 @@
   <div class="config-block">
     <header>
       <h3>v1.1.0 · March 10, 2026</h3>
-      <span class="src-tag">initial release · 0cf5508</span>
+      <span class="src-tag">initial release · <a href="https://github.com/camjac251/tool-gates/commit/0cf5508" target="_blank" rel="noopener">0cf5508</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
