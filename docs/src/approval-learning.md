@@ -95,13 +95,78 @@
     <h2>Three-panel dashboard.</h2>
     <p>Run <code>tool-gates review</code> for an interactive view. Project list on the left, pending commands in the middle (with allow / ask / block segments coloured), detail and actions on the right.</p>
   </div>
-<pre class="code-block">┌── PROJECTS ────────┬── COMMANDS · tool-gates ─────────┬── DETAIL ──────────┐
-│ ▸ tool-gates    7  │ ▸ git status &amp;&amp; npm install      │ pattern: npm inst* │
-│   my-app        3  │   cargo build --release          │ scope:   local     │
-│   website       1  │   pytest -k slow                 │                    │
-│                    │   gh pr create                   │ [ Approve ] [ Skip │
-│                    │   uv add httpx                   │   ] [ Deny ]       │
-└────────────────────┴──────────────────────────────────┴────────────────────┘</pre>
+<div class="terminal-window">
+<div class="terminal-header">
+<div class="terminal-dots">
+<span class="dot dot-close"></span>
+<span class="dot dot-minimize"></span>
+<span class="dot dot-maximize"></span>
+</div>
+<div class="terminal-title">tool-gates review</div>
+</div>
+<div class="terminal-body">
+<div class="tui-mockup" aria-label="TUI Dashboard Mockup">
+<!-- Panel 1: Projects -->
+<div class="tui-panel tui-projects">
+<div class="tui-panel-title">PROJECTS</div>
+<div class="tui-row is-selected">
+<span class="tui-indicator">▸</span>
+<span class="tui-name">tool-gates</span>
+<span class="tui-count">7</span>
+</div>
+<div class="tui-row">
+<span class="tui-indicator">&nbsp;</span>
+<span class="tui-name">my-app</span>
+<span class="tui-count">3</span>
+</div>
+<div class="tui-row">
+<span class="tui-indicator">&nbsp;</span>
+<span class="tui-name">website</span>
+<span class="tui-count">1</span>
+</div>
+</div>
+
+<!-- Panel 2: Commands -->
+<div class="tui-panel tui-commands">
+<div class="tui-panel-title">COMMANDS · tool-gates</div>
+<div class="tui-row is-selected">
+<span class="tui-indicator">▸</span>
+<span class="tui-cmd">git status && npm install</span>
+</div>
+<div class="tui-row">
+<span class="tui-indicator">&nbsp;</span>
+<span class="tui-cmd">cargo build --release</span>
+</div>
+<div class="tui-row">
+<span class="tui-indicator">&nbsp;</span>
+<span class="tui-cmd">pytest -k slow</span>
+</div>
+<div class="tui-row">
+<span class="tui-indicator">&nbsp;</span>
+<span class="tui-cmd">gh pr create</span>
+</div>
+<div class="tui-row">
+<span class="tui-indicator">&nbsp;</span>
+<span class="tui-cmd">uv add httpx</span>
+</div>
+</div>
+
+<!-- Panel 3: Details -->
+<div class="tui-panel tui-detail">
+<div class="tui-panel-title">DETAIL</div>
+<div class="tui-detail-content">
+<div class="tui-detail-item"><strong>pattern:</strong> <code>npm inst*</code></div>
+<div class="tui-detail-item"><strong>scope:</strong> <code>local</code></div>
+<div class="tui-actions">
+<span class="tui-btn tui-btn-approve">[ Approve ]</span>
+<span class="tui-btn tui-btn-skip">[ Skip ]</span>
+<span class="tui-btn tui-btn-deny">[ Deny ]</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
   <table class="data-table" style="margin-top: var(--s-4)">
     <thead>
       <tr><th>Key</th><th>Action</th></tr>
