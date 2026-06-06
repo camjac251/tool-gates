@@ -832,6 +832,97 @@
     });
   }
 
+  /* ===== Code block copy buttons ===== */
+  // Normalizes code block contents for the clipboard by stripping leading terminal prompt
+  // characters ($) and console-output lines (starting with U+2192) so that copied commands
+  // can be pasted directly into a shell without syntax errors.
+  function getCodeToCopy(pre) {
+    var clone = pre.cloneNode(true);
+
+    clone.querySelectorAll(".tg-copy-btn").forEach((el) => {
+      el.remove();
+    });
+
+    clone.querySelectorAll(".prompt").forEach((el) => {
+      var next = el.nextSibling;
+      if (next && next.nodeType === Node.TEXT_NODE) {
+        next.nodeValue = next.nodeValue.replace(/^\s+/, "");
+      }
+      el.remove();
+    });
+
+    clone.querySelectorAll(".comment").forEach((el) => {
+      var txt = el.textContent.trim();
+      if (txt.startsWith("→")) {
+        var prev = el.previousSibling;
+        if (prev && prev.nodeType === Node.TEXT_NODE) {
+          prev.nodeValue = prev.nodeValue.replace(/\n\s*$/, "");
+        } else {
+          var next = el.nextSibling;
+          if (next && next.nodeType === Node.TEXT_NODE) {
+            next.nodeValue = next.nodeValue.replace(/^\s*\n/, "");
+          }
+        }
+        el.remove();
+      }
+    });
+
+    return clone.textContent.trim();
+  }
+
+  function createCopyButton(pre, target) {
+    var btn = document.createElement("button");
+    btn.className = "tg-copy-btn";
+    btn.type = "button";
+    btn.title = "Copy to clipboard";
+    btn.setAttribute("aria-label", "Copy to clipboard");
+
+    var timeoutId = null;
+
+    btn.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+      '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>' +
+      '<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>' +
+      "</svg>";
+
+    btn.addEventListener("click", () => {
+      var text = getCodeToCopy(pre);
+      navigator.clipboard.writeText(text).then(
+        () => {
+          btn.classList.add("is-success");
+
+          // Reset the success feedback timer on rapid clicks to prevent indicator visual glitching.
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+          }
+
+          timeoutId = setTimeout(() => {
+            btn.classList.remove("is-success");
+            timeoutId = null;
+          }, 800);
+        },
+        (err) => {
+          console.error("Failed to copy text: ", err);
+        },
+      );
+    });
+
+    target.appendChild(btn);
+  }
+
+  function initCopyButtons() {
+    document.querySelectorAll("pre.code-block").forEach((pre) => {
+      if (pre.querySelector(".tg-copy-btn")) return;
+      createCopyButton(pre, pre);
+    });
+
+    document.querySelectorAll(".config-toml").forEach((toml) => {
+      var pre = toml.querySelector("pre");
+      if (!pre || toml.querySelector(".tg-copy-btn")) return;
+      createCopyButton(pre, toml);
+    });
+  }
+
   function init() {
     initTabs();
     initChipFilter();
@@ -839,6 +930,7 @@
     initInlineSearch();
     initSimulator();
     initThemeToggle();
+    initCopyButtons();
   }
 
   if (document.readyState === "loading") {
