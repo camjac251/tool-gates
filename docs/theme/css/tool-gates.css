@@ -3488,3 +3488,70 @@ pre.code-block .flag {
 .sim-result .sim-reason {
   white-space: pre-wrap;
 }
+
+/* Copy to Clipboard Button */
+pre.code-block {
+  position: relative;
+}
+
+.config-toml {
+  position: relative;
+}
+
+.tg-copy-btn {
+  position: absolute;
+  top: var(--s-2);
+  right: var(--s-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-3);
+  border-radius: var(--r-1);
+  cursor: pointer;
+  transition:
+    transform 0.1s var(--ease),
+    background 0.1s var(--ease),
+    color 0.1s var(--ease),
+    border-color 0.1s var(--ease);
+  user-select: none;
+  z-index: 10;
+}
+
+.tg-copy-btn:focus {
+  outline: none;
+}
+
+.tg-copy-btn:focus-visible {
+  outline: 2px solid var(--accent);
+}
+
+.tg-copy-btn:hover {
+  background: var(--surface-3);
+  color: var(--text-1);
+  border-color: var(--border-2);
+  transform: scale(1.06);
+}
+
+.tg-copy-btn:active {
+  background: var(--surface-1);
+  transform: scale(0.96);
+}
+
+/* Success state when copied */
+.tg-copy-btn.is-success {
+  background: var(--accent);
+  color: var(--surface-1);
+  border-color: var(--accent);
+}
+
+/* SVG icon inside the button */
+.tg-copy-btn svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+}
