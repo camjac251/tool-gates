@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.24.0](https://github.com/camjac251/tool-gates/compare/v1.23.0...v1.24.0) - 2026-06-06
+
+### Added
+
+- *(docs)* add copy to clipboard button for terminal and config blocks
+
+### Fixed
+
+- *(docs)* eliminate visual flickers and layout shifts on page load
+
+### Other
+
+- ignore docs directory changes in CI and release workflows
+- center simulator upload box icon and text
+- wrap TUI mockup in terminal window and refine CSS comments
+- simplify installer and test commands to one-liners and fix layout margins
+- remove references to formerly bash-gates
+- trim README and add live documentation website URL
+- update v1.23.0 release tag and date in whats-new
+- optimize CI workflows and correct lefthook globs
+
 ## [1.23.0](https://github.com/camjac251/tool-gates/compare/v1.22.0...v1.23.0) - 2026-06-06
 
 ### Added
