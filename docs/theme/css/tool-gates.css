@@ -3489,7 +3489,7 @@ pre.code-block .flag {
   white-space: pre-wrap;
 }
 
-/* Copy to Clipboard Button */
+/* Styles for the clipboard copy interface on code blocks. Coordinates with JS-driven success indicator transitions. */
 pre.code-block {
   position: relative;
 }
@@ -3542,16 +3542,222 @@ pre.code-block {
   transform: scale(0.96);
 }
 
-/* Success state when copied */
+/* Active success feedback: switches background and border to the brand accent color for clear visual confirmation. */
 .tg-copy-btn.is-success {
   background: var(--accent);
   color: var(--surface-1);
   border-color: var(--accent);
 }
 
-/* SVG icon inside the button */
+/* Clipboard and checkmark SVG layout bounds. */
 .tg-copy-btn svg {
   width: 12px;
   height: 12px;
   stroke: currentColor;
+}
+
+/* Responsive CSS mockup of the review dashboard. Replicates the column sections, item lists, and highlighted selection states of the actual Ratatui terminal application. */
+.tui-mockup {
+  display: flex;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  overflow: hidden;
+  margin: var(--s-4) 0;
+  box-shadow: var(--shadow-sm);
+}
+
+@media (max-width: 600px) {
+  .tui-mockup {
+    flex-direction: column;
+  }
+}
+
+.tui-panel {
+  flex: 1;
+  padding: var(--s-3);
+  border-right: 1px solid var(--border);
+  min-width: 0;
+}
+
+@media (max-width: 600px) {
+  .tui-panel {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .tui-panel:last-child {
+    border-bottom: none;
+  }
+}
+
+.tui-panel:last-child {
+  border-right: none;
+}
+
+.tui-panel-title {
+  font-size: 11px;
+  font-weight: bold;
+  color: var(--text-3);
+  border-bottom: 1px dashed var(--border);
+  padding-bottom: var(--s-2);
+  margin-bottom: var(--s-3);
+  letter-spacing: 0.05em;
+}
+
+.tui-row {
+  display: flex;
+  align-items: center;
+  padding: 4px var(--s-2);
+  border-radius: var(--r-1);
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tui-row.is-selected {
+  background: var(--surface-2);
+  color: var(--text-1);
+  font-weight: 500;
+}
+
+.tui-indicator {
+  color: var(--accent);
+  margin-right: var(--s-2);
+  width: 8px;
+  font-weight: bold;
+}
+
+.tui-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tui-count {
+  color: var(--text-3);
+  margin-left: var(--s-2);
+}
+
+.tui-cmd {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tui-detail-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.tui-detail-item {
+  color: var(--text-2);
+}
+
+.tui-detail-item strong {
+  color: var(--text-3);
+  font-weight: normal;
+  display: inline-block;
+  width: 70px;
+}
+
+.tui-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+}
+
+.tui-btn {
+  font-size: 11px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 3px 6px;
+  border-radius: var(--r-1);
+  user-select: none;
+}
+
+.tui-btn-approve {
+  color: var(--allow);
+  border-color: color-mix(in oklab, var(--allow) 30%, var(--border));
+}
+
+.tui-btn-skip {
+  color: var(--text-3);
+}
+
+.tui-btn-deny {
+  color: var(--block);
+  border-color: color-mix(in oklab, var(--block) 30%, var(--border));
+}
+
+/* OS-like terminal frame wrapper that encapsulates the TUI mockup to visually group CLI components. */
+.terminal-window {
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  background: var(--surface-1);
+  overflow: hidden;
+  margin: var(--s-5) 0;
+  box-shadow: var(--shadow-sm);
+}
+
+.terminal-header {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  padding: 0 var(--s-3);
+  position: relative;
+}
+
+.terminal-dots {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.terminal-dots .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.dot-close {
+  background: #ff5f56;
+}
+
+.dot-minimize {
+  background: #ffbd2e;
+}
+
+.dot-maximize {
+  background: #27c93f;
+}
+
+.terminal-title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+  font-weight: 500;
+  pointer-events: none;
+}
+
+.terminal-body {
+  padding: var(--s-2);
+  background: var(--surface-1);
+}
+
+/* Remove redundant mockup borders, shadows, and margins so they blend cleanly inside the outer terminal frame. */
+.terminal-body .tui-mockup {
+  border: none;
+  box-shadow: none;
+  margin: 0;
+  background: transparent;
 }
