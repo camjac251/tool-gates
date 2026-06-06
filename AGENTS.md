@@ -585,6 +585,8 @@ cargo test -- --ignored                 # Slow tests only
 
 **Release**: Fully automated via release-plz. Push to main triggers `release-plz release-pr` which creates a version bump PR. Merging it publishes to GitHub Releases with cross-compiled binaries (linux x86_64/arm64, macos x86_64/arm64, windows x86_64/arm64) and updates the Homebrew tap.
 
+**Documentation Triggers & Commit Prefixes**: Both CI and Release workflows ignore changes inside `docs/**` and `**/*.md`. Pure documentation-only updates (including styles, layout tweaks, or markdown files) must use the `docs:` commit prefix (or `chore:`, `ci:`). Avoid using `feat:` or `fix:` prefixes for doc-only edits, as they will cause `release-plz` to generate premature version bumps and releases.
+
 **MSRV**: 1.86. Do not use language features or dependencies requiring a newer Rust version.
 
 **CLAUDE.md** and **GEMINI.md** are symlinks to AGENTS.md. Always edit AGENTS.md directly.
