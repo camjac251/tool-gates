@@ -42,18 +42,23 @@
     <p class="lbl">CLI</p>
     <h2>Inspect and promote without the TUI.</h2>
   </div>
-<pre class="code-block"><span class="comment"># Inspect the pending queue</span>
-<span class="prompt">$</span> tool-gates pending list
-<span class="prompt">$</span> tool-gates pending list --project
-<span class="prompt">$</span> tool-gates pending list --json
-<span class="comment"># Promote a pattern directly</span>
-<span class="prompt">$</span> tool-gates approve 'npm install*' -s local
-<span class="prompt">$</span> tool-gates approve 'cargo*' -s user
-<span class="comment"># Manage existing rules</span>
-<span class="prompt">$</span> tool-gates rules list
-<span class="prompt">$</span> tool-gates rules remove 'pattern' -s local
-<span class="prompt">$</span> tool-gates rules ask-audit          <span class="comment"># inspect ask rules that suppress the third button</span>
-<span class="prompt">$</span> tool-gates rules ask-audit --apply  <span class="comment"># multi-select TUI checklist</span></pre>
+  <p class="step-prose">Inspect the pending queue:</p>
+  <pre class="code-block"><span class="prompt">$</span> tool-gates pending list</pre>
+  <pre class="code-block"><span class="prompt">$</span> tool-gates pending list --project</pre>
+  <pre class="code-block"><span class="prompt">$</span> tool-gates pending list --json</pre>
+
+  <p class="step-prose">Promote a pattern directly:</p>
+  <pre class="code-block"><span class="prompt">$</span> tool-gates approve 'npm install*' -s local</pre>
+  <pre class="code-block"><span class="prompt">$</span> tool-gates approve 'cargo*' -s user</pre>
+
+  <p class="step-prose">Manage existing rules:</p>
+  <pre class="code-block"><span class="prompt">$</span> tool-gates rules list</pre>
+  <pre class="code-block"><span class="prompt">$</span> tool-gates rules remove 'pattern' -s local</pre>
+
+  <p class="step-prose">Inspect ask rules that suppress the third "don't ask again" button:</p>
+  <pre class="code-block"><span class="prompt">$</span> tool-gates rules ask-audit</pre>
+  <p class="step-prose">Interactively audit and clean up ask rules via a TUI checklist:</p>
+  <pre class="code-block"><span class="prompt">$</span> tool-gates rules ask-audit --apply</pre>
   <div class="sec-head">
     <p class="lbl">Scopes</p>
     <h2>Where the rule lives.</h2>
