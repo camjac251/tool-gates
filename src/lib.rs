@@ -1,6 +1,6 @@
 //! Tool Gates - Intelligent tool permission gate for AI coding assistants.
 //!
-//! Formerly `bash-gates`. This library provides command parsing and permission
+//! This library provides command parsing and permission
 //! checking for assistant tool calls, designed for use as hooks in Claude Code,
 //! Gemini CLI, and Codex CLI.
 //!

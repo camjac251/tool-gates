@@ -1,6 +1,6 @@
 //! Tool Gates - Intelligent tool permission gate for AI coding assistants.
 //!
-//! Formerly `bash-gates`. Single binary that handles all tool types:
+//! Single binary that handles all tool types:
 //! - **Bash/Monitor**: AST-parsed command gating (13 ordered gates, settings.json integration)
 //! - **Read/Write/Edit**: Symlink guard for AI config files
 //! - **Glob/Grep/MCP tools**: Configurable tool blocking

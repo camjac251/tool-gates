@@ -2,8 +2,6 @@
 
 # Tool Gates
 
-_formerly `bash-gates`_
-
 **Intelligent tool permission gate for AI coding assistants**
 
 [![Documentation](https://img.shields.io/badge/docs-live-blue.svg)](https://camjac251.github.io/tool-gates/)

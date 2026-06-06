@@ -766,7 +766,7 @@
   Redesign review TUI with project-first dashboard layout</pre>
       </div>
       <div class="config-prose">
-        <p>The initial public release of tool-gates (formerly bash-gates). It features an AST based bash parser for precise command identification. It integrates with settings files. It checks against shell execution patterns. It provides a terminal user interface for review and hooks subcommand management.</p>
+        <p>The initial public release of tool-gates. It features an AST based bash parser for precise command identification. It integrates with settings files. It checks against shell execution patterns. It provides a terminal user interface for review and hooks subcommand management.</p>
       </div>
     </div>
   </div>
