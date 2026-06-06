@@ -3,8 +3,8 @@
   <p class="page-lede">Release cadence is fast. Below is a curated set of recent versions and what shipped. Full history at <a href="https://github.com/camjac251/tool-gates/blob/main/CHANGELOG.md" target="_blank" rel="noopener">CHANGELOG.md</a>.</p>
   <div class="config-block">
     <header>
-      <h3>v1.23.0 · June 2026</h3>
-      <span class="src-tag">latest · unreleased</span>
+      <h3>v1.23.0 · June 6, 2026</h3>
+      <span class="src-tag">docs &amp; approvals · 673bd49</span>
     </header>
     <div class="config-body">
       <div class="config-toml">
