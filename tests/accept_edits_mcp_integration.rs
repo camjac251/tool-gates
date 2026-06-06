@@ -78,7 +78,7 @@ tool = "mcp__serena__*"
         r#"{"hook_event_name":"PreToolUse","tool_name":"mcp__serena__find_symbol","cwd":"/tmp","permission_mode":"default","tool_input":{},"session_id":"t","tool_use_id":"toolu_t"}"#,
         tmp.path(),
     );
-    // Not allow — either empty/no-opinion output or "ask". The rule must not
+    // Not allowed. Returns either empty/no-opinion output or "ask", as the rule must not
     // fire outside acceptEdits mode.
     assert!(
         !out.contains("\"permissionDecision\":\"allow\""),
@@ -112,10 +112,10 @@ tool = "*firecrawl*"
 fn permission_request_mcp_not_short_circuited() {
     // The PermissionRequest dispatcher must not short-circuit MCP tools
     // before reaching handle_permission_request. With no user rules, the
-    // handler returns None and we expect pass-through (empty output) —
-    // specifically, NOT a deny caused by some upstream guard.
+    // handler returns None and we expect pass-through (empty output),
+    // specifically not a deny caused by some upstream guard.
     let tmp = tempfile::tempdir().expect("tempdir");
-    // No config file — fully default behavior.
+    // No config file, using fully default behavior.
     let out = run(
         r#"{"hook_event_name":"PermissionRequest","tool_name":"mcp__serena__find_symbol","cwd":"/tmp","permission_mode":"acceptEdits","tool_input":{},"session_id":"t"}"#,
         tmp.path(),
@@ -132,7 +132,7 @@ fn permission_request_block_rule_denies_firecrawl_github() {
     // must deny. This asserts Fix 1 (block check runs before MCP allow)
     // in an integration-level test, not just a unit test.
     let tmp = tempfile::tempdir().expect("tempdir");
-    // No config — uses default block rules.
+    // No config, using default block rules.
     let out = run(
         r#"{"hook_event_name":"PermissionRequest","tool_name":"mcp__firecrawl__firecrawl_scrape","cwd":"/tmp","permission_mode":"acceptEdits","tool_input":{"url":"https://raw.githubusercontent.com/example/repo/main/file.txt"},"session_id":"t"}"#,
         tmp.path(),
