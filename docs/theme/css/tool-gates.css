@@ -3383,6 +3383,13 @@ pre.code-block .flag {
     background 200ms var(--ease);
 }
 
+.sim-settings-upload .drop-zone-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
 .sim-settings-upload:hover,
 .sim-settings-upload.is-dragover {
   border-color: color-mix(in oklab, var(--accent) 50%, var(--border));
