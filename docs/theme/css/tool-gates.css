@@ -321,16 +321,26 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
   display: none;
 }
 
-/* Beat .hidden { display:none !important } so the relocated box stays visible
- * even after Escape re-adds .hidden. tool-gates.js keeps .hidden off on desktop
- * via an observer, so this needs no !important and the mobile toggle still works
- * (where .hidden is respected and the box stays collapsed until tapped). */
-#mdbook-search-wrapper.inline-search:not(.hidden) {
-  display: flex;
-  align-items: center;
-  width: min(340px, 38vw);
-  margin: 0;
-  position: relative;
+/* Inline search visibility.
+ * On desktop (min-width: 761px), it is always displayed flex and never hidden.
+ * On mobile, it defaults to flex only when the .hidden class is absent. */
+@media (min-width: 761px) {
+  #mdbook-search-wrapper.inline-search {
+    display: flex !important;
+    align-items: center;
+    width: min(340px, 38vw);
+    margin: 0;
+    position: relative;
+  }
+}
+@media (max-width: 760px) {
+  #mdbook-search-wrapper.inline-search:not(.hidden) {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    margin: 0;
+    position: relative;
+  }
 }
 /* mdBook centers .searchbar-outer at content-max width; reset to fill the pill. */
 .inline-search .searchbar-outer {
@@ -423,6 +433,9 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
   border-radius: var(--r-2);
   box-shadow: var(--shadow);
   z-index: 80;
+}
+#mdbook-search-wrapper.hidden #mdbook-searchresults-outer {
+  display: none !important;
 }
 
 /* Page shell.
@@ -623,10 +636,26 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
   border-radius: 0 2px 2px 0;
   box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 25%, transparent);
 }
-/* Priority badge: tool-gates.js appends <span class="prio">N</span> to each
- * gates/<name>.html link; margin-inline-start:auto pushes it to the right edge
- * of the now-flex row. */
-#mdbook-sidebar .prio {
+/* Sidebar try.html hide */
+.sidebar-scrollbox li:has(a[href*="try.html"]) {
+  display: none !important;
+}
+
+/* Priority badge: margin-inline-start:auto pushes it to the right edge
+ * of the flex row. */
+.sidebar-scrollbox a[href*="git.html"]::after,
+.sidebar-scrollbox a[href*="gh.html"]::after,
+.sidebar-scrollbox a[href*="cloud.html"]::after,
+.sidebar-scrollbox a[href*="package_managers.html"]::after,
+.sidebar-scrollbox a[href*="beads.html"]::after,
+.sidebar-scrollbox a[href*="tool_gates.html"]::after,
+.sidebar-scrollbox a[href*="devtools.html"]::after,
+.sidebar-scrollbox a[href*="runtimes.html"]::after,
+.sidebar-scrollbox a[href*="filesystem.html"]::after,
+.sidebar-scrollbox a[href*="network.html"]::after,
+.sidebar-scrollbox a[href*="system.html"]::after,
+.sidebar-scrollbox a[href*="shortcut.html"]::after,
+.sidebar-scrollbox a[href*="basics.html"]::after {
   margin-inline-start: auto;
   font-family: var(--font-mono);
   font-size: 10.5px;
@@ -636,9 +665,62 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
   background: var(--surface-1);
   border: 1px solid var(--border);
   border-radius: var(--r-1);
+  display: inline-block;
 }
-#mdbook-sidebar a.active .prio {
+.sidebar-scrollbox a.active[href*="git.html"]::after,
+.sidebar-scrollbox a.active[href*="gh.html"]::after,
+.sidebar-scrollbox a.active[href*="cloud.html"]::after,
+.sidebar-scrollbox a.active[href*="package_managers.html"]::after,
+.sidebar-scrollbox a.active[href*="beads.html"]::after,
+.sidebar-scrollbox a.active[href*="tool_gates.html"]::after,
+.sidebar-scrollbox a.active[href*="devtools.html"]::after,
+.sidebar-scrollbox a.active[href*="runtimes.html"]::after,
+.sidebar-scrollbox a.active[href*="filesystem.html"]::after,
+.sidebar-scrollbox a.active[href*="network.html"]::after,
+.sidebar-scrollbox a.active[href*="system.html"]::after,
+.sidebar-scrollbox a.active[href*="shortcut.html"]::after,
+.sidebar-scrollbox a.active[href*="basics.html"]::after {
   color: var(--text-2);
+}
+
+.sidebar-scrollbox a[href*="git.html"]::after {
+  content: "10";
+}
+.sidebar-scrollbox a[href*="gh.html"]::after {
+  content: "10";
+}
+.sidebar-scrollbox a[href*="cloud.html"]::after {
+  content: "15";
+}
+.sidebar-scrollbox a[href*="package_managers.html"]::after {
+  content: "20";
+}
+.sidebar-scrollbox a[href*="beads.html"]::after {
+  content: "22";
+}
+.sidebar-scrollbox a[href*="tool_gates.html"]::after {
+  content: "23";
+}
+.sidebar-scrollbox a[href*="devtools.html"]::after {
+  content: "25";
+}
+.sidebar-scrollbox a[href*="runtimes.html"]::after {
+  content: "27";
+}
+.sidebar-scrollbox a[href*="filesystem.html"]::after {
+  content: "30";
+}
+.sidebar-scrollbox a[href*="network.html"]::after {
+  content: "35";
+}
+.sidebar-scrollbox a[href*="system.html"]::after {
+  content: "40";
+}
+.sidebar-scrollbox a[href*="shortcut.html"]::after {
+  content: "45";
+}
+.sidebar-scrollbox a[href*="basics.html"]::after {
+  content: "100";
 }
 
 /* Content column.

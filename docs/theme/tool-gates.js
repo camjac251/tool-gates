@@ -788,140 +788,21 @@
     runSim("git-status");
   }
 
-  /* ===== Sidebar priority badges + duplicate-CTA hide ===== */
-  // mdBook builds the sidebar from SUMMARY.md, so there is no per-gate badge
-  // hook in the markup. Append a mono priority badge after each gate link as
-  // <span class="prio">N</span> from this gate -> priority map (matches
-  // rules/*.toml [meta].priority). The map is hardcoded because the rendered
-  // sidebar carries no priority data.
-  var GATE_PRIORITY = {
-    git: 10,
-    gh: 10,
-    cloud: 15,
-    package_managers: 20,
-    beads: 22,
-    tool_gates: 23,
-    devtools: 25,
-    runtimes: 27,
-    filesystem: 30,
-    network: 35,
-    system: 40,
-    shortcut: 45,
-    basics: 100,
-  };
-
-  function decorateSidebar(scrollbox) {
-    var links = scrollbox.querySelectorAll("a[href]");
-    links.forEach((a) => {
-      var href = a.getAttribute("href") || "";
-      // The featured .sidebar-cta card already links to try.html, so the
-      // SUMMARY.md prefix-chapter "Try a command" link is a duplicate in the
-      // nav. try.md must stay in SUMMARY (it is what builds try.html), so hide
-      // that one rendered nav row instead of removing the source entry.
-      if (/(^|\/)try\.html(#.*)?$/.test(href)) {
-        var li = a.closest("li");
-        (li || a).style.display = "none";
-        return;
-      }
-      // gates/<name>.html -> append the priority badge for <name>.
-      var m = href.match(/(?:^|\/)gates\/([a-z_]+)\.html(?:[#?].*)?$/);
-      if (!m) return;
-      var prio = GATE_PRIORITY[m[1]];
-      if (prio === undefined) return;
-      if (a.querySelector(".prio")) return; // idempotent
-      var badge = document.createElement("span");
-      badge.className = "prio";
-      badge.textContent = String(prio);
-      a.appendChild(badge);
-    });
-  }
-
-  function initSidebarBadges() {
-    // The scrollbox is a custom element (toc.js) that may render after this
-    // script runs. Try immediately; if empty, observe until links appear.
-    var scrollbox =
-      document.querySelector("mdbook-sidebar-scrollbox") ||
-      document.querySelector(".sidebar-scrollbox");
-    if (!scrollbox) return;
-    if (scrollbox.querySelector("a[href]")) {
-      decorateSidebar(scrollbox);
-      return;
-    }
-    var obs = new MutationObserver(() => {
-      if (scrollbox.querySelector("a[href]")) {
-        obs.disconnect();
-        decorateSidebar(scrollbox);
-      }
-    });
-    obs.observe(scrollbox, { childList: true, subtree: true });
-  }
-
   /* ===== Inline always-visible search ===== */
-  // mdBook ships search as a toggle icon (#mdbook-search-toggle) that unhides
-  // #mdbook-search-wrapper. This relocates the wrapper into the menu bar as an
-  // always-visible ~340px input and keeps it shown. The search JS (searcher.js)
-  // finds elements by id, so moving the node does not break wiring.
-  // showSearch(true) lazy-loads the search index; trigger it once via the
-  // toggle so typing returns results without a manual click.
+  // On desktop, the search bar is always visible via CSS. To avoid layout shifts
+  // or focus/scroll jumps on page load, we do not programmatically trigger the
+  // toggle or focus the search bar. Instead, we listen for a focus event on
+  // the search input. If focused and search is still hidden/uninitialized, we
+  // trigger the toggle's click handler once to load the search index on demand.
   function initInlineSearch() {
-    var bar = document.getElementById("mdbook-menu-bar");
-    var wrapper = document.getElementById("mdbook-search-wrapper");
     var searchbar = document.getElementById("mdbook-searchbar");
-    if (!bar || !wrapper || !searchbar) return;
-
-    // Relocate the search wrapper into the bar, before .right-buttons, so the
-    // bar reads left-buttons (brand + version) | search | right-buttons
-    // (theme + github). CSS positions it inline.
-    var rightButtons = bar.querySelector(".right-buttons");
-    if (wrapper.parentElement !== bar) {
-      if (rightButtons) {
-        bar.insertBefore(wrapper, rightButtons);
-      } else {
-        bar.appendChild(wrapper);
+    if (!searchbar) return;
+    searchbar.addEventListener("focus", () => {
+      var toggle = document.getElementById("mdbook-search-toggle");
+      var wrapper = document.getElementById("mdbook-search-wrapper");
+      if (wrapper && wrapper.classList.contains("hidden") && toggle) {
+        toggle.click();
       }
-    }
-    wrapper.classList.add("inline-search");
-
-    // Set the placeholder + a `/` keyboard hint inside the field.
-    searchbar.setAttribute("placeholder", "Search gates, commands, reasons…");
-    var searchInner = searchbar.parentElement; // .search-wrapper
-    if (searchInner && !searchInner.querySelector(".search-kbd")) {
-      var kbd = document.createElement("span");
-      kbd.className = "search-kbd";
-      kbd.setAttribute("aria-hidden", "true");
-      kbd.innerHTML = "<kbd>/</kbd>";
-      searchInner.appendChild(kbd);
-    }
-
-    // Inline box is desktop-only; below 760px it falls back to mdBook's toggle
-    // icon. Match the CSS breakpoint here so mobile keeps the native toggle
-    // behaviour (the box stays collapsed until tapped).
-    var isDesktop = window.matchMedia("(min-width: 761px)").matches;
-    if (!isDesktop) return;
-
-    // Load the search index once so the always-visible input is functional.
-    // searcher.js only loads the index on the first showSearch(true); clicking
-    // the toggle (while the wrapper is hidden) is the public entry point.
-    var toggle = document.getElementById("mdbook-search-toggle");
-    if (wrapper.classList.contains("hidden") && toggle) {
-      toggle.click();
-      // The toggle also focuses + selects the searchbar and scrolls to top.
-      // Undo the focus so opening a page does not trap the caret in search.
-      if (document.activeElement === searchbar) searchbar.blur();
-      window.scrollTo(0, 0);
-    }
-
-    // Keep the box visible on desktop without a CSS !important war: searcher.js
-    // re-adds .hidden on Escape, so strip it whenever it reappears. The observer
-    // is desktop-only, so mobile (.hidden respected) keeps the toggle working.
-    var keepVisible = new MutationObserver(() => {
-      if (wrapper.classList.contains("hidden")) {
-        wrapper.classList.remove("hidden");
-      }
-    });
-    keepVisible.observe(wrapper, {
-      attributes: true,
-      attributeFilter: ["class"],
     });
   }
 
@@ -955,7 +836,6 @@
     initTabs();
     initChipFilter();
     initVersionPill();
-    initSidebarBadges();
     initInlineSearch();
     initSimulator();
     initThemeToggle();
