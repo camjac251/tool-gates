@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.24.0](https://github.com/camjac251/tool-gates/compare/v1.23.1...v1.24.0) - 2026-06-06
+
+### Added
+
+- *(docs)* add copy to clipboard button for terminal and config blocks
+
+### Other
+
+- center simulator upload box icon and text
+- wrap TUI mockup in terminal window and refine CSS comments
+- simplify installer and test commands to one-liners and fix layout margins
+
 ## [1.23.1](https://github.com/camjac251/tool-gates/compare/v1.23.0...v1.23.1) - 2026-06-06
 
 ### Fixed
