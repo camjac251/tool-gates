@@ -35,6 +35,7 @@ env:
 jobs:
   build:
     name: Build site
+    if: "!startsWith(github.event.head_commit.message, 'chore: release')"
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
