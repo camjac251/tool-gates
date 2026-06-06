@@ -1,5 +1,5 @@
-  <p class="breadcrumb"><a href="index.html">Reference</a> / tool-gates doctor</p>
-  <h1 id="doctor-h1">tool-gates doctor</h1>
+  <p class="breadcrumb"><a href="index.html">Reference</a> / Tool Gates Doctor</p>
+  <h1 id="doctor-h1">Tool Gates Doctor</h1>
   <p class="page-lede">A read-only health check. Verifies the binary is on PATH, hooks are wired into every supported client at every relevant scope, cache files are readable, and no legacy <code>bash-gates</code> configuration remains in your settings.</p>
   <div class="sec-head" style="margin-top: var(--s-6)">
     <p class="lbl">Run it</p>

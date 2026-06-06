@@ -1,6 +1,6 @@
 <div class="gate-head">
-  <p class="breadcrumb"><a href="../index.html">Gates</a> / filesystem</p>
-  <h1>filesystem gate</h1>
+  <p class="breadcrumb"><a href="../index.html">Gates</a> / Filesystem Operations</p>
+  <h1>Filesystem Operations gate</h1>
   <div class="gate-meta">
     <span class="tag">priority <b>30</b></span>
     <span class="tag">unknown <b>ask</b></span>

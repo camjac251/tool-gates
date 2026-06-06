@@ -20,7 +20,7 @@
 # Pattern: Most tools are safe in read mode, risky with write flags
 
 [meta]
-name = "devtools"
+name = "Development Tools"
 description = "Developer tools permission gate"
 priority = 25
 lede = "Developer tools that can modify files. Linters and type checkers run in inspection mode by default and ask when a write flag (<code>--write</code>, <code>--fix</code>, <code>-i</code>, <code>-w</code>) appears. Default <code>unknown_action</code> is <code>allow</code> because most tools in this category are read-only analysis."

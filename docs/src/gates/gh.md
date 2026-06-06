@@ -1,6 +1,6 @@
 <div class="gate-head">
-  <p class="breadcrumb"><a href="../index.html">Gates</a> / gh</p>
-  <h1>gh gate</h1>
+  <p class="breadcrumb"><a href="../index.html">Gates</a> / GitHub CLI</p>
+  <h1>GitHub CLI gate</h1>
   <div class="gate-meta">
     <span class="tag">priority <b>10</b></span>
     <span class="tag">unknown <b>ask</b></span>

@@ -232,7 +232,7 @@ safe_commands = [
 ]
 
 [meta]
-name = "basics"
+name = "Basic Utilities"
 description = "Safe read-only shell commands"
 priority = 100
 lede = "The default-safe list. Unlike other gates, basics doesn't define per-program rules: it's one big <code>safe_commands = […]</code> array of commands that are always allowed without prompting. Lowest priority (100) so other gates' specific rules win first."

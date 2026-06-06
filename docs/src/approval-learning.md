@@ -1,5 +1,5 @@
-  <p class="breadcrumb"><a href="index.html">Reference</a> / Approval learning</p>
-  <h1 id="approval-h1">Approval learning</h1>
+  <p class="breadcrumb"><a href="index.html">Core Concepts</a> / Approval Learning</p>
+  <h1 id="approval-h1">Approval Learning</h1>
   <p class="page-lede">When you click Yes on a tool-gates ask, the command joins a pending queue. The <code>tool-gates review</code> TUI lets you promote any of those patterns to a permanent rule in <code>settings.json</code>, so future matching calls auto-allow without prompting.</p>
   <div class="sec-head" style="margin-top: var(--s-6)">
     <p class="lbl">Lifecycle</p>

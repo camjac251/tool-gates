@@ -14,7 +14,7 @@
 # Note: Many of these require custom handlers for complex logic
 
 [meta]
-name = "system"
+name = "System Commands"
 description = "System command permission gate"
 priority = 40
 lede = "OS-level operations: power, disk, kernel modules, firewall, users, plus database clients and crypto. This gate owns the largest block floor of any gate (30+ patterns). See the <a href=\"../security-floor.html\">Security floor</a> for the full block list."

@@ -1,48 +1,58 @@
 # Summary
 
-[Try a command](try.md)
-
-# Start
+# Getting Started
 
 - [Introduction](index.md)
 - [Installation](install.md)
-- [Hook model](hook-model.md)
-- [Permission modes](modes.md)
-- [Auto mode](auto-mode.md)
-- [Codex approval model](codex.md)
+- [Try the Simulator](try.md)
 
-# Gates · 13 · by priority
+---
 
-- [git](gates/git.md)
-- [gh](gates/gh.md)
-- [cloud](gates/cloud.md)
-- [package_managers](gates/package_managers.md)
-- [beads](gates/beads.md)
-- [tool_gates](gates/tool_gates.md)
-- [devtools](gates/devtools.md)
-- [runtimes](gates/runtimes.md)
-- [filesystem](gates/filesystem.md)
-- [network](gates/network.md)
-- [system](gates/system.md)
-- [shortcut](gates/shortcut.md)
-- [basics](gates/basics.md)
+# Core Concepts
+
+- [Hook Model](hook-model.md)
+- [Permission Modes](modes.md)
+- [Auto Mode](auto-mode.md)
+- [Codex Approval Model](codex.md)
+- [Settings Precedence](settings-precedence.md)
+- [Approval Learning](approval-learning.md)
+
+---
+
+# Permission Gates
+
+- [Git](gates/git.md)
+- [GitHub CLI](gates/gh.md)
+- [Cloud Providers](gates/cloud.md)
+- [Package Managers](gates/package_managers.md)
+- [Beads Tracker (bd)](gates/beads.md)
+- [Tool Gates CLI](gates/tool_gates.md)
+- [Development Tools](gates/devtools.md)
+- [Language Runtimes](gates/runtimes.md)
+- [Filesystem Operations](gates/filesystem.md)
+- [Network & HTTP](gates/network.md)
+- [System Commands](gates/system.md)
+- [Shortcut CLI](gates/shortcut.md)
+- [Basic Utilities](gates/basics.md)
+
+---
 
 # Reference
 
 - [Configuration](configuration.md)
-- [settings.json precedence](settings-precedence.md)
-- [Security floor](security-floor.md)
-- [Security reminders](security-reminders.md)
-- [Modern CLI hints](hints.md)
-- [Approval learning](approval-learning.md)
-- [CLI](cli.md)
-- [tool-gates doctor](doctor.md)
-- [Recent releases](whats-new.md)
+- [CLI Reference](cli.md)
+- [Tool Gates Doctor](doctor.md)
+- [Security Floor](security-floor.md)
+- [Security Reminders](security-reminders.md)
+- [Modern CLI Hints](hints.md)
+- [Recent Releases](whats-new.md)
 - [Glossary](glossary.md)
 
-# Develop
+---
 
-- [Reason style](reason-style.md)
-- [Contributing](contributing.md)
+# Development
+
 - [Architecture](architecture.md)
-- [Custom handlers](custom-handlers.md)
+- [Custom Handlers](custom-handlers.md)
+- [Reason Style](reason-style.md)
+- [Contributing](contributing.md)

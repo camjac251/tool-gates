@@ -112,7 +112,7 @@ fn git_page_has_expected_shapes() {
 
     // gate-head + breadcrumb + h1
     assert!(git.contains("<div class=\"gate-head\">"));
-    assert!(git.contains("<h1>git gate</h1>"));
+    assert!(git.contains("<h1>Git gate</h1>"));
     assert!(git.contains("<span class=\"tag\">priority <b>10</b></span>"));
 
     // chips row with a real total count

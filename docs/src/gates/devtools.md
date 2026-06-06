@@ -1,6 +1,6 @@
 <div class="gate-head">
-  <p class="breadcrumb"><a href="../index.html">Gates</a> / devtools</p>
-  <h1>devtools gate</h1>
+  <p class="breadcrumb"><a href="../index.html">Gates</a> / Development Tools</p>
+  <h1>Development Tools gate</h1>
   <div class="gate-meta">
     <span class="tag">priority <b>25</b></span>
     <span class="tag">unknown <b>ask</b></span>

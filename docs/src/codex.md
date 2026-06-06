@@ -1,5 +1,5 @@
-  <p class="breadcrumb"><a href="index.html">Start</a> / Codex approval model</p>
-  <h1 id="codex-h1">Codex approval model</h1>
+  <p class="breadcrumb"><a href="index.html">Core Concepts</a> / Codex Approval Model</p>
+  <h1 id="codex-h1">Codex Approval Model</h1>
   <p class="page-lede">On Codex, whether a tool-gates <code>ask</code> becomes a visible prompt is decided by Codex's own <code>approval_policy</code>, not by tool-gates. This page covers what tool-gates can and cannot control on Codex, and the one supported lever, execpolicy rules, that makes it authoritative over Codex's built-in safe-read list.</p>
   <div class="sec-head" style="margin-top: var(--s-6)">
     <p class="lbl">Where the prompt comes from</p>

@@ -1,5 +1,5 @@
-  <p class="breadcrumb"><a href="index.html">Reference</a> / settings.json precedence</p>
-  <h1 id="settings-h1">settings.json precedence</h1>
+  <p class="breadcrumb"><a href="index.html">Core Concepts</a> / Settings Precedence</p>
+  <h1 id="settings-h1">Settings Precedence</h1>
   <p class="page-lede">Four settings files contribute to the final permission set. Higher-priority files win when keys conflict. tool-gates respects every explicit rule before applying its own gate decisions.</p>
   <div class="sec-head" style="margin-top: var(--s-6)">
     <p class="lbl">File priority</p>

@@ -1,5 +1,5 @@
-  <p class="breadcrumb"><a href="index.html">Develop</a> / Custom handlers</p>
-  <h1 id="handlers-h1">Custom handlers</h1>
+  <p class="breadcrumb"><a href="index.html">Development</a> / Custom Handlers</p>
+  <h1 id="handlers-h1">Custom Handlers</h1>
   <p class="page-lede">Each handler is a Rust function called by the gate when declarative TOML can't express the rule. The TOML declares <code>[[custom_handlers]]</code> with a program and handler name; the gate's Rust file implements the handler. Listed by gate.</p>
   <div class="sec-head" style="margin-top: var(--s-6)">
     <p class="lbl">filesystem</p>

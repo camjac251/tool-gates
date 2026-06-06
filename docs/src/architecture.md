@@ -1,4 +1,4 @@
-  <p class="breadcrumb"><a href="index.html">Develop</a> / Architecture</p>
+  <p class="breadcrumb"><a href="index.html">Development</a> / Architecture</p>
   <h1 id="arch-h1">Architecture</h1>
   <p class="page-lede">What happens between a tool call landing on stdin and a decision returning on stdout. The pipeline runs in the same Rust binary for every client; only the wire-format serialiser at the end varies.</p>
   <div class="lifecycle" aria-label="Internal pipeline" style="margin-top: var(--s-5)">

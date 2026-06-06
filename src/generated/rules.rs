@@ -13726,7 +13726,7 @@ pub fn check_short_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .any(|a| ["-S", "--save"].contains(&a.as_str()))
     {
         return Some(GateResult::ask(
-            "Saves the current search as a named workspace in the local `short` config. Writes to disk; does not change anything on shortcut.com.",
+            "Saves the current search as a named workspace in the local `short` config. Writes to disk; does not change anything on Shortcut.",
         ));
     }
     if subcmd_single == "story"
@@ -13756,7 +13756,7 @@ pub fn check_short_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .any(|a| ["-c", "--comment"].contains(&a.as_str()))
     {
         return Some(GateResult::ask(
-            "Posts a comment to the story on shortcut.com. Visible to all workspace members.",
+            "Posts a comment to the story on Shortcut. Visible to all workspace members.",
         ));
     }
     if subcmd_single == "story"
@@ -13883,7 +13883,7 @@ pub fn check_short_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .any(|a| ["-u", "--unset"].contains(&a.as_str()))
     {
         return Some(GateResult::ask(
-            "Removes a saved workspace (named search query) from the local `short` config. Does not delete anything on shortcut.com.",
+            "Removes a saved workspace (named search query) from the local `short` config. Does not delete anything on Shortcut.",
         ));
     }
 

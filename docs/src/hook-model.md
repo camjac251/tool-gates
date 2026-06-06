@@ -1,7 +1,7 @@
-  <p class="breadcrumb"><a href="index.html">Start</a> / Hook model</p>
-  <h1 id="hook-h1">Hook model</h1>
+  <p class="breadcrumb"><a href="index.html">Core Concepts</a> / Hook Model</p>
+  <h1 id="hook-h1">Hook Model</h1>
   <p class="page-lede">Claude Code exposes many hook points; tool-gates registers on the four that gate tool calls. Each one closes a gap the others can't. Gemini CLI and Codex CLI expose fewer of them; the engine routes around what's missing.</p>
-  <p class="note">This page shows when each hook runs. Mode-specific policy lives one layer up in <a href="modes.html">Permission modes</a>.</p>
+  <p class="note">This page shows when each hook runs. Mode-specific policy lives one layer up in <a href="modes.html">Permission Modes</a>.</p>
   <div class="lifecycle" aria-label="Tool-call lifecycle through tool-gates on Claude Code">
     <div class="lc-bar">
       <span class="lights"><i></i><i></i><i></i></span>

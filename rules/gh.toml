@@ -8,7 +8,7 @@
 # Special handling for `gh api` based on HTTP method.
 
 [meta]
-name = "gh"
+name = "GitHub CLI"
 description = "GitHub CLI permission gate"
 priority = 10
 lede = "GitHub CLI. Listing, viewing, searching, and read API are safe. Mutations ask. Two patterns are hard-blocked: deleting a repository (irreversible) and logging out (no way to re-authenticate without user interaction)."

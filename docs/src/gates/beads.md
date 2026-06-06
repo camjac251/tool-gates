@@ -1,6 +1,6 @@
 <div class="gate-head">
-  <p class="breadcrumb"><a href="../index.html">Gates</a> / beads</p>
-  <h1>beads gate</h1>
+  <p class="breadcrumb"><a href="../index.html">Gates</a> / Beads Tracker (bd)</p>
+  <h1>Beads Tracker (bd) gate</h1>
   <div class="gate-meta">
     <span class="tag">priority <b>22</b></span>
     <span class="tag">unknown <b>ask</b></span>

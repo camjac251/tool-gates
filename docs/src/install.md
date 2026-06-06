@@ -1,4 +1,4 @@
-  <p class="breadcrumb"><a href="index.html">Start</a> / Installation</p>
+  <p class="breadcrumb"><a href="index.html">Getting Started</a> / Installation</p>
   <h1 id="install-h1">Installation</h1>
   <p class="page-lede">tool-gates is a single Rust binary. Install it, then point your assistant's settings at it. The same binary serves Claude Code, Gemini CLI, and Codex CLI. Claude Code and Gemini CLI are auto-detected from the hook payload; Codex is selected by the <code>--client codex</code> flag the installer bakes into its hook command.</p>
   <div class="step">

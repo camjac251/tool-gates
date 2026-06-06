@@ -1,6 +1,6 @@
 <div class="gate-head">
-  <p class="breadcrumb"><a href="../index.html">Gates</a> / basics</p>
-  <h1>basics gate</h1>
+  <p class="breadcrumb"><a href="../index.html">Gates</a> / Basic Utilities</p>
+  <h1>Basic Utilities gate</h1>
   <div class="gate-meta">
     <span class="tag">priority <b>100</b></span>
     <span class="tag">unknown <b>ask</b></span>

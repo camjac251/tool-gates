@@ -1,6 +1,6 @@
 <div class="gate-head">
-  <p class="breadcrumb"><a href="../index.html">Gates</a> / runtimes</p>
-  <h1>runtimes gate</h1>
+  <p class="breadcrumb"><a href="../index.html">Gates</a> / Language Runtimes</p>
+  <h1>Language Runtimes gate</h1>
   <div class="gate-meta">
     <span class="tag">priority <b>27</b></span>
     <span class="tag">unknown <b>ask</b></span>

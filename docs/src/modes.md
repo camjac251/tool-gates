@@ -1,5 +1,5 @@
-  <p class="breadcrumb"><a href="index.html">Start</a> / Permission modes</p>
-  <h1 id="modes-h1">Permission modes</h1>
+  <p class="breadcrumb"><a href="index.html">Core Concepts</a> / Permission Modes</p>
+  <h1 id="modes-h1">Permission Modes</h1>
   <p class="page-lede">Clients send <code>permission_mode</code> with hook events, but each client gives that value a different shape. tool-gates treats mode as a policy layer above the normal gate decision so the same shell rule can behave differently in planning, batch-edit, and classifier-driven sessions.</p>
 
   <section aria-labelledby="mode-matrix">

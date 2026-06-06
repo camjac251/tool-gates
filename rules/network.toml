@@ -15,7 +15,7 @@
 # - rsync --dry-run is safe
 
 [meta]
-name = "network"
+name = "Network & HTTP"
 description = "Network command permission gate"
 priority = 35
 lede = "Outbound network operations. GET requests and head checks pass through; everything mutating, downloading, or interactive pauses for approval. The reverse-shell variant of netcat (<code>nc -e</code>) is the one hard block this gate owns."

@@ -1,6 +1,6 @@
-  <p class="breadcrumb"><a href="index.html">Reference</a> / Try a command</p>
+  <p class="breadcrumb"><a href="index.html">Getting Started</a> / Try the Simulator</p>
   <div class="try-title-bar">
-    <h1 id="sim-h1" style="margin: 0;">Try a command</h1>
+    <h1 id="sim-h1" style="margin: 0;">Try the Simulator</h1>
     <span class="sim-engine-status" id="simEngineStatus" data-state="loading" aria-live="polite">
       <span class="sim-engine-dot" aria-hidden="true"></span>
       <span class="sim-engine-label">Loading engine…</span>

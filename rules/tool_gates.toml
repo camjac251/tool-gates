@@ -8,7 +8,7 @@
 # Pattern: Read-only operations are safe, writes need approval
 
 [meta]
-name = "tool_gates"
+name = "Tool Gates CLI"
 description = "Tool Gates CLI permission gate"
 priority = 23
 lede = "tool-gates protects itself. Read-only queries (inspecting the pending queue, listing rules, hook status, doctor) skip prompting. Writes to settings files or the cache ask. See the <a href=\"../cli.html\">CLI reference</a> for the full subcommand set."

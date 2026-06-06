@@ -80,6 +80,7 @@ pub struct RuleEntry {
 
 /// Per-gate parse + render unit.
 struct Gate {
+    stem: String,
     name: String,
     priority: u32,
     rule_file: RuleFile,
@@ -95,7 +96,7 @@ pub fn export_markdown(rules_dir: &Path, out_dir: &Path) -> io::Result<()> {
 
     for gate in &gates {
         let page = render_gate_page(gate);
-        fs::write(gates_dir.join(format!("{}.md", gate.name)), page)?;
+        fs::write(gates_dir.join(format!("{}.md", gate.stem)), page)?;
     }
 
     let floor = render_security_floor(&gates);
@@ -135,12 +136,13 @@ fn load_gates(rules_dir: &Path) -> io::Result<Vec<Gate>> {
         let name = rule_file.meta.name.clone().unwrap_or_else(|| stem.clone());
         let priority = rule_file.meta.priority.unwrap_or(0);
         gates.push(Gate {
+            stem,
             name,
             priority,
             rule_file,
         });
     }
-    gates.sort_by(|a, b| a.name.cmp(&b.name));
+    gates.sort_by(|a, b| a.stem.cmp(&b.stem));
     Ok(gates)
 }
 
@@ -530,7 +532,7 @@ fn gate_rows(gate: &Gate) -> Vec<RuleEntry> {
         });
     }
 
-    finalize_ids(&gate.name, &mut rows);
+    finalize_ids(&gate.stem, &mut rows);
     rows
 }
 
@@ -759,7 +761,7 @@ fn render_gate_page(gate: &Gate) -> String {
         out.push_str("\n\n");
         out.push_str(&render_card(
             &title_block,
-            &gate.name,
+            &gate.stem,
             "block",
             &blocks,
             None,
@@ -769,7 +771,7 @@ fn render_gate_page(gate: &Gate) -> String {
         out.push_str("\n\n");
         out.push_str(&render_card(
             &title_allow,
-            &gate.name,
+            &gate.stem,
             "allow",
             &allows,
             None,
@@ -777,7 +779,7 @@ fn render_gate_page(gate: &Gate) -> String {
     }
     if !asks.is_empty() {
         out.push_str("\n\n");
-        out.push_str(&render_card(&title_ask, &gate.name, "ask", &asks, None));
+        out.push_str(&render_card(&title_ask, &gate.stem, "ask", &asks, None));
     }
 
     if let Some(note) = gate.rule_file.meta.note.as_deref() {
@@ -865,11 +867,11 @@ fn collect_floor(gates: &[Gate]) -> (Vec<FloorRow>, Vec<FloorRow>) {
         for row in gate_rows(gate) {
             match row.decision {
                 RowDecision::Block => hard_blocks.push(FloorRow {
-                    gate: gate.name.clone(),
+                    gate: gate.stem.clone(),
                     entry: row,
                 }),
                 RowDecision::Ask if row.warn => warn_rules.push(FloorRow {
-                    gate: gate.name.clone(),
+                    gate: gate.stem.clone(),
                     entry: row,
                 }),
                 _ => {}

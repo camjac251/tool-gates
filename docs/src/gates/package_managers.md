@@ -1,6 +1,6 @@
 <div class="gate-head">
-  <p class="breadcrumb"><a href="../index.html">Gates</a> / package_managers</p>
-  <h1>package_managers gate</h1>
+  <p class="breadcrumb"><a href="../index.html">Gates</a> / Package Managers</p>
+  <h1>Package Managers gate</h1>
   <div class="gate-meta">
     <span class="tag">priority <b>20</b></span>
     <span class="tag">unknown <b>ask</b></span>

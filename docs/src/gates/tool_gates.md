@@ -1,6 +1,6 @@
 <div class="gate-head">
-  <p class="breadcrumb"><a href="../index.html">Gates</a> / tool_gates</p>
-  <h1>tool_gates gate</h1>
+  <p class="breadcrumb"><a href="../index.html">Gates</a> / Tool Gates CLI</p>
+  <h1>Tool Gates CLI gate</h1>
   <div class="gate-meta">
     <span class="tag">priority <b>23</b></span>
     <span class="tag">unknown <b>ask</b></span>

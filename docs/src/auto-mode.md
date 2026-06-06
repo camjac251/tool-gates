@@ -1,5 +1,5 @@
-  <p class="breadcrumb"><a href="index.html">Start</a> / Auto mode</p>
-  <h1 id="auto-h1">Auto mode</h1>
+  <p class="breadcrumb"><a href="index.html">Core Concepts</a> / Auto Mode</p>
+  <h1 id="auto-h1">Auto Mode</h1>
   <p class="page-lede">When Claude Code runs in <code>auto</code> permission mode, a server-side classifier decides <code>ask</code> calls instead of prompting. tool-gates layers in as a deterministic pre-filter and safety floor: hard denies stay hard, allows skip the classifier, and only genuinely ambiguous calls reach the classifier.</p>
   <div class="sec-head" style="margin-top: var(--s-6)">
     <p class="lbl">Decision matrix</p>

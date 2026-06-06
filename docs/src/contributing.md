@@ -1,4 +1,4 @@
-  <p class="breadcrumb"><a href="index.html">Develop</a> / Contributing</p>
+  <p class="breadcrumb"><a href="index.html">Development</a> / Contributing</p>
   <h1 id="contrib-h1">Contributing</h1>
   <p class="page-lede">Adding a rule to an existing gate is usually a single TOML edit. Adding a new gate also needs a small Rust file. The build pipeline picks up TOML changes automatically; the generator in <code>build.rs</code> emits the Rust gate function from the TOML on every build.</p>
   <div class="sec-head" style="margin-top: var(--s-6)">

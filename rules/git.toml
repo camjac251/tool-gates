@@ -11,7 +11,7 @@
 # - Subcommand-specific rules for config, stash, worktree, submodule, remote
 
 [meta]
-name = "git"
+name = "Git"
 description = "Git version control permission gate"
 priority = 10
 lede = "Read-only history and inspection commands pass through. Anything that writes to the tree, the index, or a remote pauses for approval. <b>git</b> is never hard-blocked from this gate. The dangerous floor lives in the filesystem rules and the pre-AST raw-string pass."

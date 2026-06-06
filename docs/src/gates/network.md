@@ -1,6 +1,6 @@
 <div class="gate-head">
-  <p class="breadcrumb"><a href="../index.html">Gates</a> / network</p>
-  <h1>network gate</h1>
+  <p class="breadcrumb"><a href="../index.html">Gates</a> / Network & HTTP</p>
+  <h1>Network & HTTP gate</h1>
   <div class="gate-meta">
     <span class="tag">priority <b>35</b></span>
     <span class="tag">unknown <b>allow</b></span>

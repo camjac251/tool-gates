@@ -15,7 +15,7 @@
 # that requires custom handlers for full coverage.
 
 [meta]
-name = "cloud"
+name = "Cloud Providers"
 description = "Cloud provider and container CLI permission gates"
 priority = 15
 lede = "The largest gate. Cloud-provider CLIs and container orchestration. AWS uses an <code>action_prefix</code> pattern (every <code>describe-*</code> / <code>list-*</code> / <code>get-*</code> is allow; <code>create-*</code> / <code>delete-*</code> / <code>put-*</code> ask). kubectl, terraform, docker, podman, helm, and pulumi each have their own subcommand maps."

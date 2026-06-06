@@ -9,7 +9,7 @@
 # Pattern: Most read operations are safe, writes need approval
 
 [meta]
-name = "beads"
+name = "Beads Tracker (bd)"
 description = "Beads issue tracker CLI permission gate"
 priority = 22
 lede = "Beads git-native issue tracker. Reads are safe; writes ask. Nothing is hard-blocked because every beads state mutation is recoverable through git or remote sync. Two <code>warn = true</code> rules: <code>bd admin reset</code> and <code>bd reset</code> drop the local database."

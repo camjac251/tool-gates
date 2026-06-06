@@ -1,5 +1,5 @@
-  <p class="breadcrumb"><a href="index.html">Reference</a> / Recent releases</p>
-  <h1 id="whatsnew-h1">Recent releases</h1>
+  <p class="breadcrumb"><a href="index.html">Reference</a> / Recent Releases</p>
+  <h1 id="whatsnew-h1">Recent Releases</h1>
   <p class="page-lede">Release cadence is fast. Below is a curated set of recent versions and what shipped. Full history at <a href="https://github.com/camjac251/tool-gates/blob/main/CHANGELOG.md" target="_blank" rel="noopener">CHANGELOG.md</a>.</p>
   <div class="config-block">
     <header>

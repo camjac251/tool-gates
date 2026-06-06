@@ -1,11 +1,11 @@
-# Shortcut CLI (short) - Community CLI for Shortcut.com
+# Shortcut CLI (short) - Community CLI for Shortcut
 # https://github.com/shortcut-cli/shortcut-cli
 
 [meta]
-name = "shortcut"
-description = "Shortcut.com project management CLI"
+name = "Shortcut CLI"
+description = "Shortcut CLI"
 priority = 45
-lede = "Community <code>short</code> CLI for Shortcut.com. Searches and listings are safe. Story mutations, comments, attachments, and workflow-state changes ask. The custom handler routes <code>short api</code> by HTTP method."
+lede = "Community <code>short</code> CLI for Shortcut. Searches and listings are safe. Story mutations, comments, attachments, and workflow-state changes ask. The custom handler routes <code>short api</code> by HTTP method."
 behavior_tags = ["covers the <b>short</b> CLI"]
 
 [meta.card_titles]
@@ -31,7 +31,7 @@ reason = "Writes the Shortcut API token to the local `short` config. One-time au
 # Search with --save writes to config
 [[programs.ask]]
 subcommand = "search"
-reason = "Saves the current search as a named workspace in the local `short` config. Writes to disk; does not change anything on shortcut.com."
+reason = "Saves the current search as a named workspace in the local `short` config. Writes to disk; does not change anything on Shortcut."
 if_flags_any = ["-S", "--save"]
 
 [[programs.allow]]
@@ -60,7 +60,7 @@ if_flags_any = ["-D", "--download"]
 
 [[programs.ask]]
 subcommand = "story"
-reason = "Posts a comment to the story on shortcut.com. Visible to all workspace members."
+reason = "Posts a comment to the story on Shortcut. Visible to all workspace members."
 if_flags_any = ["-c", "--comment"]
 
 [[programs.ask]]
@@ -175,7 +175,7 @@ reason = "Listing projects"
 # Unsetting a workspace modifies config
 [[programs.ask]]
 subcommand = "workspace"
-reason = "Removes a saved workspace (named search query) from the local `short` config. Does not delete anything on shortcut.com."
+reason = "Removes a saved workspace (named search query) from the local `short` config. Does not delete anything on Shortcut."
 if_flags_any = ["-u", "--unset"]
 
 # List/load workspaces is read-only

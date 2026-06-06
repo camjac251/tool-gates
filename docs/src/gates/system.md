@@ -1,6 +1,6 @@
 <div class="gate-head">
-  <p class="breadcrumb"><a href="../index.html">Gates</a> / system</p>
-  <h1>system gate</h1>
+  <p class="breadcrumb"><a href="../index.html">Gates</a> / System Commands</p>
+  <h1>System Commands gate</h1>
   <div class="gate-meta">
     <span class="tag">priority <b>40</b></span>
     <span class="tag">unknown <b>block</b></span>

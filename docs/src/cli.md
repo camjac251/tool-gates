@@ -1,5 +1,5 @@
-  <p class="breadcrumb"><a href="index.html">Reference</a> / CLI</p>
-  <h1 id="cli-h1">CLI reference</h1>
+  <p class="breadcrumb"><a href="index.html">Reference</a> / CLI Reference</p>
+  <h1 id="cli-h1">CLI Reference</h1>
   <p class="page-lede">Every subcommand of <code>tool-gates</code>. The binary doubles as the hook entry point (reads tool-call JSON from stdin and emits a decision) and as a management CLI for inspecting and editing your settings.</p>
   <div class="sec-head" style="margin-top: var(--s-6)">
     <p class="lbl">Hook lifecycle</p>

@@ -1,6 +1,6 @@
 <div class="gate-head">
-  <p class="breadcrumb"><a href="../index.html">Gates</a> / cloud</p>
-  <h1>cloud gate</h1>
+  <p class="breadcrumb"><a href="../index.html">Gates</a> / Cloud Providers</p>
+  <h1>Cloud Providers gate</h1>
   <div class="gate-meta">
     <span class="tag">priority <b>15</b></span>
     <span class="tag">unknown <b>ask</b></span>

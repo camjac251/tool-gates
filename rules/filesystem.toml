@@ -19,7 +19,7 @@
 # - tar -t and unzip -l are read-only (listing)
 
 [meta]
-name = "filesystem"
+name = "Filesystem Operations"
 description = "Filesystem modification permission gate"
 priority = 30
 lede = "Everything that touches disk: <b>rm</b>, <b>mv</b>, <b>cp</b>, <b>mkdir</b>, <b>chmod</b>, <b>chown</b>, <b>ln</b>, <b>sed -i</b>, archives. This gate owns the destructive block floor. Patterns like <code>rm -rf /</code> are denied here so they can never reach the shell. Read-only archive listing is exempt."

@@ -1,5 +1,5 @@
-  <p class="breadcrumb"><a href="index.html">Develop</a> / Reason style</p>
-  <h1 id="reason-h1">Reason style guide</h1>
+  <p class="breadcrumb"><a href="index.html">Development</a> / Reason Style</p>
+  <h1 id="reason-h1">Reason Style Guide</h1>
   <p class="page-lede">Every <code>reason</code> string in <code>rules/*.toml</code> is sent to the AI agent as <code>permissionDecisionReason</code>. Treat each one as a help-menu entry, not a security disclaimer. The reasons are the docs.</p>
   <div class="sec-head" style="margin-top: var(--s-6)">
     <p class="lbl">Format</p>

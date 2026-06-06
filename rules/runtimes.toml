@@ -19,7 +19,7 @@
 # - Language-specific read-only subcommands are safe
 
 [meta]
-name = "runtimes"
+name = "Language Runtimes"
 description = "Language runtime permission gate"
 priority = 27
 lede = "Language runtime invocations. Version and syntax-check flags are safe. Anything that executes code (inline via <code>-c</code>/<code>-e</code> or a script file) asks. No blocks at this layer; the filesystem-level floor catches the destructive cases."

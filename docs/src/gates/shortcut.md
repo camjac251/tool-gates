@@ -1,6 +1,6 @@
 <div class="gate-head">
-  <p class="breadcrumb"><a href="../index.html">Gates</a> / shortcut</p>
-  <h1>shortcut gate</h1>
+  <p class="breadcrumb"><a href="../index.html">Gates</a> / Shortcut CLI</p>
+  <h1>Shortcut CLI gate</h1>
   <div class="gate-meta">
     <span class="tag">priority <b>45</b></span>
     <span class="tag">unknown <b>ask</b></span>
@@ -20,7 +20,7 @@
     </div>
   </div>
 
-  <p class="gate-lede">Community <code>short</code> CLI for Shortcut.com. Searches and listings are safe. Story mutations, comments, attachments, and workflow-state changes ask. The custom handler routes <code>short api</code> by HTTP method.</p>
+  <p class="gate-lede">Community <code>short</code> CLI for Shortcut. Searches and listings are safe. Story mutations, comments, attachments, and workflow-state changes ask. The custom handler routes <code>short api</code> by HTTP method.</p>
 </div>
 
 <div class="chips" role="group" aria-label="Filter rules by decision">
@@ -105,7 +105,7 @@
 <div class="rule-row" data-decision="ask" id="shortcut-short-search-s-save">
   <div class="rule-cmd"><span class="prog">short</span> search <span class="flag">-S</span> <span class="flag">--save</span></div>
   <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
-  <div class="rule-reason">Saves the current search as a named workspace in the local <code>short</code> config. Writes to disk; does not change anything on shortcut.com.</div>
+  <div class="rule-reason">Saves the current search as a named workspace in the local <code>short</code> config. Writes to disk; does not change anything on Shortcut.</div>
 </div>
 <div class="rule-row" data-decision="ask" id="shortcut-short-story-git-branch-git-branch-short">
   <div class="rule-cmd"><span class="prog">short</span> story <span class="flag">--git-branch</span> <span class="flag">--git-branch-short</span></div>
@@ -120,7 +120,7 @@
 <div class="rule-row" data-decision="ask" id="shortcut-short-story-c-comment">
   <div class="rule-cmd"><span class="prog">short</span> story <span class="flag">-c</span> <span class="flag">--comment</span></div>
   <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
-  <div class="rule-reason">Posts a comment to the story on shortcut.com. Visible to all workspace members.</div>
+  <div class="rule-reason">Posts a comment to the story on Shortcut. Visible to all workspace members.</div>
 </div>
 <div class="rule-row" data-decision="ask" id="shortcut-short-story-d-description">
   <div class="rule-cmd"><span class="prog">short</span> story <span class="flag">-d</span> <span class="flag">--description</span></div>
@@ -200,6 +200,6 @@
 <div class="rule-row" data-decision="ask" id="shortcut-short-workspace-u-unset">
   <div class="rule-cmd"><span class="prog">short</span> workspace <span class="flag">-u</span> <span class="flag">--unset</span></div>
   <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
-  <div class="rule-reason">Removes a saved workspace (named search query) from the local <code>short</code> config. Does not delete anything on shortcut.com.</div>
+  <div class="rule-reason">Removes a saved workspace (named search query) from the local <code>short</code> config. Does not delete anything on Shortcut.</div>
 </div>
 </div>

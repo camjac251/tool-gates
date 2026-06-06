@@ -13,7 +13,7 @@
 # - Risky commands (install, publish, init)
 
 [meta]
-name = "package_managers"
+name = "Package Managers"
 description = "Language package manager permission gates"
 priority = 20
 lede = "Language package managers. Listing, inspecting, and auditing are safe. Installing, removing, publishing, and running arbitrary scripts ask. No hard blocks at this layer (the dangerous floor is filesystem-level)."
