@@ -911,11 +911,13 @@
   }
 
   function initCopyButtons() {
+    // 1. Terminal code blocks
     document.querySelectorAll("pre.code-block").forEach((pre) => {
       if (pre.querySelector(".tg-copy-btn")) return;
       createCopyButton(pre, pre);
     });
 
+    // 2. Configuration blocks
     document.querySelectorAll(".config-toml").forEach((toml) => {
       var pre = toml.querySelector("pre");
       if (!pre || toml.querySelector(".tg-copy-btn")) return;
