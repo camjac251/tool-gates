@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.23.1](https://github.com/camjac251/tool-gates/compare/v1.23.0...v1.23.1) - 2026-06-06
+
+### Fixed
+
+- *(docs)* eliminate visual flickers and layout shifts on page load
+
+### Other
+
+- remove references to formerly bash-gates
+- trim README and add live documentation website URL
+- update v1.23.0 release tag and date in whats-new
+- optimize CI workflows and correct lefthook globs
+
 ## [1.23.0](https://github.com/camjac251/tool-gates/compare/v1.22.0...v1.23.0) - 2026-06-06
 
 ### Added
