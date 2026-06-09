@@ -14,6 +14,7 @@
 - [Permission Modes](modes.md)
 - [Auto Mode](auto-mode.md)
 - [Codex Approval Model](codex.md)
+- [Antigravity CLI](antigravity.md)
 - [Settings Precedence](settings-precedence.md)
 - [Approval Learning](approval-learning.md)
 

@@ -507,6 +507,14 @@ static DEFAULT_BLOCK_RULES: std::sync::LazyLock<Vec<BlockRule>> = std::sync::Laz
             block_domains: vec![],
             requires_tool: Some("fd".to_string()),
         },
+        // Antigravity: find_by_name (its glob equivalent). Kept symmetric with
+        // grep_search, which is already blocked above for Antigravity.
+        BlockRule {
+            tool: "find_by_name".to_string(),
+            message: "Glob tool is blocked. Use 'fd' instead.".to_string(),
+            block_domains: vec![],
+            requires_tool: Some("fd".to_string()),
+        },
         // Claude: Grep, Gemini: grep_search
         BlockRule {
             tool: "Grep".to_string(),
@@ -609,29 +617,31 @@ mod tests {
     fn test_default_block_rules() {
         let config = Config::default();
         let rules = config.block_rules();
-        assert_eq!(rules.len(), 7);
-        // Claude + Gemini Glob rules
+        assert_eq!(rules.len(), 8);
+        // Claude + Gemini Glob rules, plus Antigravity's find_by_name
         assert_eq!(rules[0].tool, "Glob");
         assert_eq!(rules[0].requires_tool.as_deref(), Some("fd"));
         assert_eq!(rules[1].tool, "glob");
         assert_eq!(rules[1].requires_tool.as_deref(), Some("fd"));
+        assert_eq!(rules[2].tool, "find_by_name");
+        assert_eq!(rules[2].requires_tool.as_deref(), Some("fd"));
         // Claude + Gemini Grep rules
-        assert_eq!(rules[2].tool, "Grep");
-        assert_eq!(rules[2].requires_tool.as_deref(), Some("rg"));
-        assert_eq!(rules[3].tool, "grep_search");
+        assert_eq!(rules[3].tool, "Grep");
         assert_eq!(rules[3].requires_tool.as_deref(), Some("rg"));
+        assert_eq!(rules[4].tool, "grep_search");
+        assert_eq!(rules[4].requires_tool.as_deref(), Some("rg"));
         // Firecrawl + ref + exa URL-fetchers, same github domain list
-        assert_eq!(rules[4].tool, "*firecrawl*");
+        assert_eq!(rules[5].tool, "*firecrawl*");
         // GitHub-domain block rules intentionally have no requires_tool,
         // as the enforcement is unconditional. The remediation hint points at
         // `gh api` but doesn't gate on `gh` being installed.
-        assert!(rules[4].requires_tool.is_none());
-        assert_eq!(rules[5].tool, "*ref_read_url*");
         assert!(rules[5].requires_tool.is_none());
-        assert_eq!(rules[6].tool, "*crawling_exa*");
+        assert_eq!(rules[6].tool, "*ref_read_url*");
         assert!(rules[6].requires_tool.is_none());
+        assert_eq!(rules[7].tool, "*crawling_exa*");
+        assert!(rules[7].requires_tool.is_none());
         // All three MCP rules share the same domain list
-        for rule in &rules[4..=6] {
+        for rule in &rules[5..=7] {
             let has = |d: &str| rule.block_domains.iter().any(|x| x == d);
             assert!(has("raw.githubusercontent.com"));
             assert!(has("api.github.com"));
@@ -648,7 +658,7 @@ file_guards = false
         let config: Config = toml::from_str(toml).unwrap();
         assert!(!config.features.file_guards);
         assert!(config.block_tools.is_none());
-        assert_eq!(config.block_rules().len(), 7);
+        assert_eq!(config.block_rules().len(), 8);
     }
 
     #[test]
@@ -774,7 +784,7 @@ requires_tool = "gh"
         let config: Config = toml::from_str("").unwrap();
         assert!(config.features.bash_gates);
         assert!(config.features.file_guards);
-        assert_eq!(config.block_rules().len(), 7);
+        assert_eq!(config.block_rules().len(), 8);
     }
 
     #[test]

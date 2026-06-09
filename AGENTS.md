@@ -3,8 +3,9 @@
 Intelligent tool permission gate using tree-sitter AST parsing. Handles Bash/Monitor commands, Read/Write/Edit file operations, Glob/Grep searches, and MCP tools. Auto-allows known safe operations, asks for writes and unknown commands, blocks dangerous patterns.
 
 **Claude Code:** Use as PreToolUse + PermissionRequest + PermissionDenied + PostToolUse hooks (native integration)
-**Gemini CLI:** Use as BeforeTool + AfterTool hooks (requires v0.36.0+ for `ask` decision support)
 **Codex CLI:** Use as PreToolUse + PermissionRequest + PostToolUse hooks. Selected via the explicit `--client codex` flag baked into the installed hook command (Codex emits the same `hook_event_name` strings as Claude).
+**Antigravity CLI (`agy`):** Use as a single PreToolUse hook. Selected via the explicit `--client antigravity` flag baked into the installed hook command (Antigravity sends no `hook_event_name` and uses a distinct payload shape).
+**Gemini CLI (deprecated):** Use as BeforeTool + AfterTool hooks (requires v0.36.0+ for `ask` decision support). Google sunsets the consumer Gemini CLI on 2026-06-18; use Antigravity for new setups.
 
 ## Quick Reference
 
@@ -22,7 +23,7 @@ echo '{"tool_name": "Bash", "tool_input": {"command": "git status"}}' | tool-gat
 
 ## Hook Types
 
-tool-gates supports Claude Code, Gemini CLI, and Codex CLI hook systems:
+tool-gates supports Claude Code, Codex CLI, and Antigravity CLI hook systems, plus the deprecated Gemini CLI:
 
 **Claude Code** (tool_name: `Bash`, `Monitor`):
 
@@ -48,23 +49,32 @@ tool-gates supports Claude Code, Gemini CLI, and Codex CLI hook systems:
 | **PermissionRequest** | Allow/deny Bash/apply_patch only (Codex rejects `addDirectories`, `updatedInput`, `updatedPermissions`, `interrupt`) | When Codex would prompt for approval |
 | **PostToolUse** | Tracking + Tier-2 security reminders; modern-CLI hints + Tier-3 warnings ride here for Codex (a tool-gates routing choice; Codex accepts `additionalContext` on PreToolUse) | After command completes |
 
-The client is auto-detected from `hook_event_name` for Claude/Gemini. **Codex must be selected via the explicit `--client codex` CLI flag** because it emits the same `hook_event_name` strings as Claude. The installer bakes that flag into the hook command. Output is serialized in the appropriate wire format:
+**Antigravity CLI** (`agy`) (tool names: `run_command`, `view_file`, `write_to_file`, `replace_file_content`, `multi_replace_file_content`, `grep_search`, `find_by_name`):
+
+| Hook | Purpose | When it runs |
+|------|---------|--------------|
+| **PreToolUse** | Route all tool types, block dangerous operations, allow safe ones, file guards, secret scanning. The whole gate runs here | Before tool execution |
+
+Antigravity also exposes `PostToolUse`, `PreInvocation`, `PostInvocation`, and `Stop`, but its post payload carries no tool name or input and it has no PermissionRequest event, so tool-gates installs only PreToolUse. Its `hooks.json` is a top-level object keyed by hook name (`{"tool-gates": {"PreToolUse": [...]}}`), not the flat `{event: [...]}` shape the other clients use. `main()` normalizes the Antigravity payload (`toolCall.name` + PascalCase args) into the canonical `HookInput` shape before the engine runs.
+
+The client is auto-detected from `hook_event_name` for Claude/Gemini. **Codex and Antigravity must be selected via the explicit `--client codex` / `--client antigravity` CLI flag** (the installer bakes it into the hook command): Codex emits the same `hook_event_name` strings as Claude, and Antigravity emits none. Output is serialized in the appropriate wire format:
 - Claude: nested `hookSpecificOutput` with `permissionDecision` (`allow`/`ask`/`deny`)
-- Gemini: flat `decision` + `reason` (tool-gates emits `"block"` for hard blocks; Gemini also accepts `"deny"`, and exit code 2 blocks)
 - Codex: empty stdout for Allow/Ask (pass-through to Codex; prompting depends on `approval_policy` and execpolicy), nested `hookSpecificOutput.permissionDecision: "deny"` for hard blocks. `updatedInput`, `addDirectories`, `interrupt`, `continue: false`, `stopReason`, `suppressOutput`, and PreToolUse `allow`/`ask` are all rejected by Codex's parser, so tool-gates only emits the fields Codex honors.
+- Antigravity: flat `{decision, reason}` where `decision` is `allow`/`ask`/`deny`/`force_ask` (the hard-ask floor uses `force_ask`). "No opinion" emits empty stdout so Antigravity's own fine-grained permission engine decides; tool-gates never auto-allows an unrecognized command. (`decision` is required by the schema; emitting none relies on the currently-undocumented behavior that Antigravity then defers to its own engine.) The Pre output has no `additionalContext` field, so hints/Tier-3 are dropped and deny remediation folds into the reason.
+- Gemini (deprecated): flat `decision` + `reason` (tool-gates emits `"block"` for hard blocks; Gemini also accepts `"deny"`, and exit code 2 blocks)
 
 **Tool name mapping** (canonical names per client):
 
-| Claude | Gemini | Codex | Category |
-|--------|--------|-------|----------|
-| `Bash`, `Monitor` | `run_shell_command` | `Bash` | Shell commands |
-| `Read` | `read_file`, `read_many_files` | (no read hook) | File read |
-| `Write` | `write_file` | `apply_patch` (matcher aliases: `Write`, `Edit`) | File write/edit |
-| `Edit` | `replace` | `apply_patch` (single payload carries the whole patch) | File edit |
-| `Glob` | `glob` | (no glob hook) | File search |
-| `Grep` | `grep_search` | (no grep hook) | Text search |
-| `Skill` | `activate_skill` | (n/a) | Skills/extensions |
-| `mcp__server__tool` | `mcp_server_tool` | `mcp__server__tool` | MCP tools |
+| Claude | Codex | Antigravity (`agy`) | Gemini (deprecated) | Category |
+|--------|-------|---------------------|---------------------|----------|
+| `Bash`, `Monitor` | `Bash` | `run_command` | `run_shell_command` | Shell commands |
+| `Read` | (no read hook) | `view_file` | `read_file`, `read_many_files` | File read |
+| `Write` | `apply_patch` (matcher aliases: `Write`, `Edit`) | `write_to_file` | `write_file` | File write |
+| `Edit` | `apply_patch` (single payload carries the whole patch) | `replace_file_content`, `multi_replace_file_content` | `replace` | File edit |
+| `Glob` | (no glob hook) | `find_by_name` | `glob` | File search |
+| `Grep` | (no grep hook) | `grep_search` | `grep_search` | Text search |
+| `Skill` | (n/a) | (slash commands, no tool) | `activate_skill` | Skills/extensions |
+| `mcp__server__tool` | `mcp__server__tool` | (not wired yet) | `mcp_server_tool` | MCP tools |
 
 Codex `apply_patch` payloads put the unified-diff body in `tool_input.command`. tool-gates parses out the `*** Add File: <path>` / `*** Update File: <path>` / `*** Delete File: <path>` headers (and any `*** Move to: <path>` rename targets) so file_guards and security_reminders run against every affected path.
 
@@ -81,6 +91,13 @@ Codex `apply_patch` payloads put the unified-diff body in `tool_input.command`. 
 - PostToolUse `updatedMCPToolOutput` is rejected -> hook output is stripped to prevent validation failure
 - Codex currently emits `permission_mode` as `default` or `bypassPermissions`, not `acceptEdits`, so `[[accept_edits_mcp]]` rules are inactive for Codex MCP calls
 - No PermissionDenied event in Codex (no auto-mode classifier)
+
+**Antigravity notes** (`agy`):
+- Selected via `--client antigravity` (or `--client agy`). The payload nests the tool under `toolCall.name` with PascalCase args (command at `toolCall.args.CommandLine`, write target at `toolCall.args.TargetFile`). `normalize_antigravity_pre_tool_use` in `main.rs` rewrites it into the canonical `HookInput` shape (`command`/`file_path`/`content` keys) before the engine runs; the original args are preserved alongside.
+- Single PreToolUse hook: no PermissionRequest event, and the Post payload has no tool name/input, so there is nothing to track or scan after the fact. A payload without `toolCall` (a Post/Stop event) is a no-op.
+- Flat `{decision, reason}` output. `Approve` (no opinion) emits empty stdout so Antigravity's own permission engine decides. `Defer` collapses to `ask` (no resolver-suggestion path). Hard blocks emit `deny`; remediation context is folded into the reason.
+- `hooks.json` is keyed by hook name; the installer owns the `tool-gates` entry and leaves any other named hooks untouched. Global-only path `~/.gemini/antigravity-cli/hooks.json` (binary-validated via strace of agy v1.0.6: it loads hooks solely from this file; the `.agents/` and `~/.gemini/config/` locations the published docs list are not read for hooks, and there is no per-project hooks.json).
+- The hard-ask safety floor (pipe-to-shell, eval, dangerous substitution) maps to `force_ask`, not `ask`: Antigravity's plain `ask` honors a prior "Always Allow" grant, which would let a granted command bypass the floor, while `force_ask` always prompts. `permissionOverrides` is part of the schema but tool-gates does not emit it. MCP is not wired for Antigravity yet (its MCP tool-name format for hook matchers is undocumented).
 
 ## Project Structure
 
@@ -170,7 +187,7 @@ Most gate behavior is defined in TOML; custom handlers in Rust cover cases TOML 
 
 ### PreToolUse Flow
 
-1. **Input**: JSON from PreToolUse (Claude) or BeforeTool (Gemini) hook (includes `tool_name`, `cwd`, `permission_mode`, `tool_use_id`, and `effort` in newer versions)
+1. **Input**: JSON from PreToolUse (Claude/Codex), BeforeTool (Gemini), or a normalized Antigravity PreToolUse payload (includes `tool_name`, `cwd`, `permission_mode`, `tool_use_id`, and `effort` in newer versions)
 2. **Load config**: Read user configuration from `~/.config/tool-gates/config.toml`
 3. **Configurable block rules**: Check `[[block_tools]]` rules against all tool types. Blocks matching tools with a deny message
 4. **Route by tool_name**:
@@ -625,15 +642,17 @@ Cache files under `~/.cache/tool-gates/`:
 | Command | Description |
 |---------|-------------|
 | `tool-gates` | Read hook input from stdin (default) |
-| `tool-gates --client <name>` | Force client (`claude`/`gemini`/`codex`); used in installed hook commands |
+| `tool-gates --client <name>` | Force client (`claude`/`codex`/`antigravity`/`gemini`); used in installed hook commands |
 | `tool-gates hooks add -s <scope>` | Install Claude Code hooks into settings file |
-| `tool-gates hooks add --gemini` | Install Gemini CLI hooks |
 | `tool-gates hooks add --codex` | Install Codex CLI hooks (~/.codex/hooks.json) |
+| `tool-gates hooks add --antigravity` | Install Antigravity CLI hooks (~/.gemini/antigravity-cli/hooks.json, global-only) |
+| `tool-gates hooks add --gemini` | Install Gemini CLI hooks (deprecated) |
 | `tool-gates hooks add ... --dry-run` | Preview hook changes without writing (any `hooks add` variant) |
-| `tool-gates hooks status` | Show hook installation status (all three clients) |
+| `tool-gates hooks status` | Show hook installation status (all clients) |
 | `tool-gates hooks json` | Output Claude hooks JSON only |
-| `tool-gates hooks json --gemini` | Output Gemini hooks JSON only |
 | `tool-gates hooks json --codex` | Output Codex hooks JSON only |
+| `tool-gates hooks json --antigravity` | Output Antigravity hooks JSON only |
+| `tool-gates hooks json --gemini` | Output Gemini hooks JSON only (deprecated) |
 | `tool-gates approve <pattern> -s <scope>` | Add permission rule to settings |
 | `tool-gates rules list` | List all permission rules |
 | `tool-gates rules remove <pattern> -s <scope>` | Remove a permission rule |

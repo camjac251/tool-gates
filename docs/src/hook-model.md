@@ -1,6 +1,6 @@
   <p class="breadcrumb"><a href="index.html">Core Concepts</a> / Hook Model</p>
   <h1 id="hook-h1">Hook Model</h1>
-  <p class="page-lede">Claude Code exposes many hook points; tool-gates registers on the four that gate tool calls. Each one closes a gap the others can't. Gemini CLI and Codex CLI expose fewer of them; the engine routes around what's missing.</p>
+  <p class="page-lede">Claude Code exposes many hook points; tool-gates registers on the four that gate tool calls. Each one closes a gap the others can't. Codex CLI and Antigravity CLI expose fewer of them; the engine routes around what's missing. Gemini CLI is supported but deprecated, since Google sunsets the consumer Gemini CLI on 2026-06-18 in favor of Antigravity.</p>
   <p class="note">This page shows when each hook runs. Mode-specific policy lives one layer up in <a href="modes.html">Permission Modes</a>.</p>
   <div class="lifecycle" aria-label="Tool-call lifecycle through tool-gates on Claude Code">
     <div class="lc-bar">
@@ -52,8 +52,9 @@
     </div>
   </div>
   <div class="sec-head" style="margin-top:var(--s-7)">
-    <p class="lbl">Gemini CLI</p>
+    <p class="lbl">Gemini CLI · deprecated</p>
     <h2>Two hooks. No subagent, no classifier.</h2>
+    <p>Google sunsets the consumer Gemini CLI on 2026-06-18. tool-gates keeps this client working through the transition; new setups should use Antigravity, Google's successor CLI, below.</p>
   </div>
   <div class="lifecycle" aria-label="Tool-call lifecycle on Gemini CLI">
     <div class="lc-bar">
@@ -138,6 +139,40 @@
     <span><b>On Codex, a tool-gates <code>ask</code> only becomes a prompt under <code>approval_policy = "untrusted"</code>.</b> Codex's built-in safe-read list, the execpolicy lever that routes those reads through tool-gates, and the two settings that silently disable prompting are covered in the <a href="codex.html">Codex approval model</a>.</span>
   </p>
   <div class="sec-head" style="margin-top:var(--s-7)">
+    <p class="lbl">Antigravity CLI (agy)</p>
+    <h2>One hook. Distinct payload shape; flat decision.</h2>
+  </div>
+  <div class="lifecycle" aria-label="Tool-call lifecycle on Antigravity CLI">
+    <div class="lc-bar">
+      <span class="lights"><i></i><i></i><i></i></span>
+      <span class="lc-label">tool-call lifecycle · Antigravity CLI · agy</span>
+    </div>
+    <div class="lc-track">
+      <div class="lc-node start">
+        <span class="lc-icon">●</span>
+        <div class="lc-title">Tool call</div>
+        <div class="lc-sub"><code>run_command</code>, <code>view_file</code>, <code>write_to_file</code>, <code>replace_file_content</code>, <code>multi_replace_file_content</code>, <code>grep_search</code>, <code>find_by_name</code>. The payload nests the tool under <code>toolCall.name</code> with PascalCase args (the command lives at <code>toolCall.args.CommandLine</code>) and carries no <code>hook_event_name</code>. Selected via <code>--client antigravity</code> baked into the hook command; tool-gates normalizes the payload into its canonical shape before the engine runs.</div>
+      </div>
+      <div class="lc-edge"></div>
+      <div class="lc-node hook">
+        <span class="lc-icon">▸</span>
+        <span class="lc-tag">PreToolUse</span>
+        <div class="lc-title">Decide</div>
+        <div class="lc-sub">Same engine as Claude's PreToolUse: tree-sitter parse, gate dispatch, file guards on reads/writes, and Tier 1 source-file secret denies on write content. Wire format: a flat <code>{decision, reason}</code> object where <code>decision</code> is <code>allow</code>, <code>ask</code>, or <code>deny</code>. The hard-ask floor (pipe-to-shell, <code>eval</code>) emits <code>force_ask</code> so it always prompts, even past an "Always Allow" grant. "No opinion" emits nothing so Antigravity's own permission engine decides, so tool-gates never auto-allows a command it does not recognize (the schema marks <code>decision</code> required; deferring via empty output is currently-undocumented behavior).</div>
+      </div>
+      <div class="lc-edge"></div>
+      <div class="lc-node exec">
+        <span class="lc-icon">▷</span>
+        <div class="lc-title">Execute</div>
+        <div class="lc-sub">The tool call runs.</div>
+      </div>
+    </div>
+  </div>
+  <p class="note">
+    <svg class="alert" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+    <span><b>Antigravity drives the whole gate from one PreToolUse hook.</b> It also exposes <code>PostToolUse</code>, <code>PreInvocation</code>, <code>PostInvocation</code>, and <code>Stop</code>, but its post payload carries no tool name or input and it has no PermissionRequest event, so PreToolUse is the entire gate. Its <code>hooks.json</code> is a top-level object keyed by hook name (<code>{"tool-gates": {"PreToolUse": [...]}}</code>), unlike the flat event map the other clients use.</span>
+  </p>
+  <div class="sec-head" style="margin-top:var(--s-7)">
     <p class="lbl">Reference</p>
     <h2>Why four hooks?</h2>
     <p>Each one closes a specific gap the others leave open. None is redundant.</p>
@@ -170,5 +205,5 @@
   </p>
   <p class="note">
     <svg class="alert" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
-    <span><b>Gemini CLI has only BeforeTool and AfterTool.</b> Codex CLI has no PermissionDenied event (no auto-mode classifier yet). The engine routes around what's missing. Gemini carries modern-CLI hints and Tier 3 warnings on BeforeTool; Codex moves them to PostToolUse because tool-gates emits empty stdout for non-deny PreToolUse decisions.</span>
+    <span><b>Gemini CLI has only BeforeTool and AfterTool; Antigravity CLI has only PreToolUse for tool-gates.</b> Codex CLI has no PermissionDenied event (no auto-mode classifier yet). The engine routes around what's missing. Gemini carries modern-CLI hints and Tier 3 warnings on BeforeTool; Codex moves them to PostToolUse because tool-gates emits empty stdout for non-deny PreToolUse decisions. Antigravity's Pre output has no additionalContext field, so hints and Tier 3 warnings are dropped there and deny remediation is folded into the reason.</span>
   </p>

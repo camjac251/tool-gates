@@ -10,7 +10,7 @@
       <div class="lc-node start">
         <span class="lc-icon">●</span>
         <div class="lc-title">Tool-call JSON on stdin</div>
-        <div class="lc-sub">Client auto-detected from <code>hook_event_name</code> (or <code>--client codex</code> CLI flag). Routes by <code>tool_name</code>: Bash/Monitor to the gate engine, Write/Edit to file guards + security reminders, MCP to block rules + accept-edits, Skill to auto-approval rules.</div>
+        <div class="lc-sub">Client auto-detected from <code>hook_event_name</code> (or the <code>--client codex</code> / <code>--client antigravity</code> flag; Antigravity payloads are normalized into the canonical shape first). Routes by <code>tool_name</code>: Bash/Monitor to the gate engine, Write/Edit to file guards + security reminders, MCP to block rules + accept-edits, Skill to auto-approval rules.</div>
       </div>
       <div class="lc-edge"></div>
       <div class="lc-node hook">
@@ -44,7 +44,7 @@
       <div class="lc-node exec">
         <span class="lc-icon">▷</span>
         <div class="lc-title">Decision on stdout</div>
-        <div class="lc-sub">Serialised per client. Claude: nested <code>hookSpecificOutput.permissionDecision</code>. Gemini: flat <code>decision</code> + <code>reason</code> (tool-gates emits <code>"block"</code> for hard blocks; Gemini also accepts <code>"deny"</code>, and exit code 2 blocks). Codex: empty stdout for allow/ask, nested <code>permissionDecision: "deny"</code> for blocks. Modern-CLI hints ride on <code>additionalContext</code>.</div>
+        <div class="lc-sub">Serialised per client. Claude: nested <code>hookSpecificOutput.permissionDecision</code>. Codex: empty stdout for allow/ask, nested <code>permissionDecision: "deny"</code> for blocks. Antigravity: flat <code>{decision, reason}</code> (<code>allow</code>/<code>ask</code>/<code>deny</code>), empty stdout for no-opinion. Gemini (deprecated): flat <code>decision</code> + <code>reason</code> (tool-gates emits <code>"block"</code> for hard blocks; Gemini also accepts <code>"deny"</code>, and exit code 2 blocks). Modern-CLI hints ride on <code>additionalContext</code>.</div>
       </div>
     </div>
   </div>

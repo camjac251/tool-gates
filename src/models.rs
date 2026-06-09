@@ -118,6 +118,7 @@ pub enum Client {
     Claude,
     Gemini,
     Codex,
+    Antigravity,
 }
 
 impl Client {
@@ -128,6 +129,10 @@ impl Client {
     /// explicit `--client codex` CLI flag in `main`, which overrides whatever
     /// this returns. Without the flag, Codex inputs default-resolve to Claude
     /// here; the flag is required to flip the wire format.
+    ///
+    /// Antigravity (`agy`) sends no `hook_event_name` at all (its payload keys
+    /// the event by which hooks.json array fired), so it likewise relies on the
+    /// `--client antigravity` flag and never resolves through this function.
     pub fn from_hook_event(event: &str) -> Self {
         match event {
             "BeforeTool" | "AfterTool" => Client::Gemini,
@@ -141,6 +146,7 @@ impl Client {
             "claude" => Some(Client::Claude),
             "gemini" => Some(Client::Gemini),
             "codex" => Some(Client::Codex),
+            "antigravity" | "agy" => Some(Client::Antigravity),
             _ => None,
         }
     }
@@ -151,12 +157,16 @@ impl Client {
             Client::Claude => "Bash",
             Client::Gemini => "run_shell_command",
             Client::Codex => "Bash",
+            Client::Antigravity => "run_command",
         }
     }
 
     /// Check if a tool_name represents a shell command tool
     pub fn is_shell_tool(tool_name: &str) -> bool {
-        tool_name == "Bash" || tool_name == "Monitor" || tool_name == "run_shell_command"
+        tool_name == "Bash"
+            || tool_name == "Monitor"
+            || tool_name == "run_shell_command"
+            || tool_name == "run_command"
     }
 
     /// Check if a tool_name represents a file operation tool (read, write, edit).
@@ -174,12 +184,19 @@ impl Client {
                 | "write_file"
                 | "replace"
                 | "apply_patch"
+                | "view_file"
+                | "write_to_file"
+                | "replace_file_content"
+                | "multi_replace_file_content"
         )
     }
 
     /// Check if a tool_name is a read-only file tool
     pub fn is_read_tool(tool_name: &str) -> bool {
-        matches!(tool_name, "Read" | "read_file" | "read_many_files")
+        matches!(
+            tool_name,
+            "Read" | "read_file" | "read_many_files" | "view_file"
+        )
     }
 
     /// Check if a tool_name is a write/edit file tool.
@@ -188,7 +205,14 @@ impl Client {
     pub fn is_write_tool(tool_name: &str) -> bool {
         matches!(
             tool_name,
-            "Write" | "Edit" | "write_file" | "replace" | "apply_patch"
+            "Write"
+                | "Edit"
+                | "write_file"
+                | "replace"
+                | "apply_patch"
+                | "write_to_file"
+                | "replace_file_content"
+                | "multi_replace_file_content"
         )
     }
 
@@ -199,7 +223,7 @@ impl Client {
 
     /// Check if a tool_name is a glob/search tool
     pub fn is_glob_tool(tool_name: &str) -> bool {
-        tool_name == "Glob" || tool_name == "glob"
+        tool_name == "Glob" || tool_name == "glob" || tool_name == "find_by_name"
     }
 
     /// Check if a tool_name is a grep/search tool
@@ -394,6 +418,13 @@ pub struct HookOutput {
     /// not, to avoid UI noise from frequent blocks the agent already knows
     /// the rule for.
     pub surface_to_user: bool,
+    /// When true and the decision is `Ask`, the Antigravity serializer emits
+    /// `force_ask` instead of `ask`, so the prompt fires even when the user has
+    /// an "Always Allow" grant for the tool. Set by `.forced()` for the
+    /// hard-ask safety floor (pipe-to-shell, eval, dangerous substitution).
+    /// The Claude/Codex/Gemini serializers ignore it: their `ask` is already
+    /// authoritative per invocation and cannot be permanently granted away.
+    pub force: bool,
 }
 
 impl HookOutput {
@@ -406,6 +437,7 @@ impl HookOutput {
             context: None,
             updated_command: None,
             surface_to_user: false,
+            force: false,
         }
     }
 
@@ -417,6 +449,7 @@ impl HookOutput {
             context: None,
             updated_command: None,
             surface_to_user: false,
+            force: false,
         }
     }
 
@@ -428,6 +461,7 @@ impl HookOutput {
             context: Some(context.to_string()),
             updated_command: None,
             surface_to_user: false,
+            force: false,
         }
     }
 
@@ -439,6 +473,7 @@ impl HookOutput {
             context: None,
             updated_command: None,
             surface_to_user: false,
+            force: false,
         }
     }
 
@@ -450,6 +485,7 @@ impl HookOutput {
             context: Some(context.to_string()),
             updated_command: None,
             surface_to_user: false,
+            force: false,
         }
     }
 
@@ -464,6 +500,7 @@ impl HookOutput {
             context,
             updated_command: None,
             surface_to_user: false,
+            force: false,
         }
     }
 
@@ -479,6 +516,7 @@ impl HookOutput {
             context: context.map(String::from),
             updated_command: Some(new_command.to_string()),
             surface_to_user: false,
+            force: false,
         }
     }
 
@@ -494,6 +532,7 @@ impl HookOutput {
             context: None,
             updated_command: None,
             surface_to_user: false,
+            force: false,
         }
     }
 
@@ -508,6 +547,7 @@ impl HookOutput {
             context: Some(context.to_string()),
             updated_command: None,
             surface_to_user: false,
+            force: false,
         }
     }
 
@@ -518,6 +558,17 @@ impl HookOutput {
     /// silent agent retries would mask the issue.
     pub fn user_visible(mut self) -> Self {
         self.surface_to_user = true;
+        self
+    }
+
+    /// Mark an ask as a forced prompt for the Antigravity client. The hard-ask
+    /// safety floor (pipe-to-shell, eval, dangerous substitution) must always
+    /// prompt and can never be suppressed by an Antigravity "Always Allow"
+    /// grant, so the serializer emits `force_ask` instead of `ask`. No effect
+    /// unless the decision is `Ask`; no effect on Claude/Codex/Gemini, whose
+    /// `ask` is already authoritative per invocation.
+    pub fn forced(mut self) -> Self {
+        self.force = true;
         self
     }
 
@@ -532,6 +583,7 @@ impl HookOutput {
             Client::Claude => self.to_claude_json(),
             Client::Gemini => self.to_gemini_json(),
             Client::Codex => self.to_codex_json(),
+            Client::Antigravity => self.to_antigravity_json(),
         }
     }
 
@@ -713,6 +765,88 @@ impl HookOutput {
             serde_json::json!(reason),
         );
         serde_json::json!({ "hookSpecificOutput": serde_json::Value::Object(hso) })
+    }
+
+    /// Serialize to Antigravity CLI (`agy`) wire format.
+    ///
+    /// Antigravity PreToolUse hooks return a FLAT JSON object on stdout:
+    /// `{"decision":"allow|deny|ask|force_ask","reason":"...","permissionOverrides":[...]}`.
+    /// `decision` is the only required field. Unlike Codex, Antigravity has no
+    /// documented "emit nothing = pass through" value, but a hook that produces
+    /// no decision falls back to Antigravity's own fine-grained permission
+    /// engine (the `action(target)` allow/deny/ask lists). tool-gates uses that
+    /// fallback for "no opinion" so it never auto-allows a command it does not
+    /// explicitly recognize.
+    ///
+    /// Mapping:
+    /// - `Approve` (no opinion) -> `Value::Null` (emit nothing; Antigravity's permission engine decides)
+    /// - `Allow`                -> `{"decision":"allow","reason":...}` (auto-approve known-safe)
+    /// - `Ask`                  -> `{"decision":"ask","reason":...}` (prompt; respects "Always Allow" grants)
+    /// - `Ask` + `force`        -> `{"decision":"force_ask","reason":...}` (hard-ask floor: always prompts, ignores "Always Allow")
+    /// - `Defer`                -> `{"decision":"ask",...}` (no Antigravity equivalent of CC's resolver)
+    /// - `Deny`                 -> `{"decision":"deny","reason":...}` (hard block)
+    ///
+    /// The hard-ask floor (pipe-to-shell, eval, dangerous substitution) is `Ask`
+    /// with `force` set, NOT `Deny`, so it must map to `force_ask`: Antigravity's
+    /// plain `ask` honors a prior "Always Allow" grant, which would let a granted
+    /// command silently bypass the floor, while `force_ask` always prompts.
+    /// `permissionOverrides` (scope widening) is not emitted. The Antigravity Pre
+    /// output has no `additionalContext` field, so hints and Tier-3 warnings
+    /// carried in `context` are dropped on allow/ask; on `deny` the context is
+    /// folded into the reason (a blocked tool fires no later turn to carry it),
+    /// mirroring the Codex deny path.
+    fn to_antigravity_json(&self) -> serde_json::Value {
+        if self.decision == PermissionDecision::Approve {
+            return serde_json::Value::Null;
+        }
+
+        // Defer collapses to "ask": Antigravity has no equivalent of Claude's
+        // resolver-driven prefix-suggestion path, so the end-user experience is
+        // the same prompt an ask-tier command already gets. The hard-ask safety
+        // floor sets force=true and maps to "force_ask" so it always prompts,
+        // even when the user has an "Always Allow" grant ("ask" would honor it).
+        let decision = match self.decision {
+            PermissionDecision::Deny => "deny",
+            PermissionDecision::Ask if self.force => "force_ask",
+            PermissionDecision::Defer | PermissionDecision::Ask => "ask",
+            PermissionDecision::Allow => "allow",
+            // Handled by the early return above.
+            PermissionDecision::Approve => return serde_json::Value::Null,
+        };
+
+        let mut out = serde_json::Map::new();
+        out.insert("decision".to_string(), serde_json::json!(decision));
+
+        // On deny, fold any context (hints / Tier-3 remediation) into the
+        // reason since the Pre output has no separate field for it and a
+        // blocked tool produces no follow-up turn to attach it to.
+        let reason = if self.decision == PermissionDecision::Deny {
+            let mut r = self
+                .reason
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .unwrap_or("Blocked by tool-gates")
+                .to_string();
+            if let Some(ctx) = self
+                .context
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
+                r.push_str("\n\n");
+                r.push_str(ctx);
+            }
+            Some(r)
+        } else {
+            self.reason.clone()
+        };
+
+        if let Some(r) = reason {
+            out.insert("reason".to_string(), serde_json::json!(r));
+        }
+
+        serde_json::Value::Object(out)
     }
 }
 
@@ -1184,6 +1318,7 @@ mod tests {
             context: None,
             updated_command: None,
             surface_to_user: true,
+            force: false,
         };
         let value = output.to_claude_json();
         assert_eq!(value["systemMessage"], "Blocked by tool-gates");
@@ -1574,6 +1709,7 @@ mod tests {
             context: None,
             updated_command: None,
             surface_to_user: false,
+            force: false,
         };
         let value = output.serialize(Client::Codex);
         let reason = &value["hookSpecificOutput"]["permissionDecisionReason"];
@@ -1592,6 +1728,7 @@ mod tests {
             context: Some("Also: weak hash (MD5)".to_string()),
             updated_command: None,
             surface_to_user: false,
+            force: false,
         };
         let value = output.serialize(Client::Codex);
         let reason = value["hookSpecificOutput"]["permissionDecisionReason"]
@@ -1659,5 +1796,143 @@ mod tests {
         let parsed: HookInput = serde_json::from_str(raw).expect("null transcript_path parses");
         assert_eq!(parsed.transcript_path, "");
         assert_eq!(parsed.tool_name, "Bash");
+    }
+
+    // === Antigravity CLI (agy) output tests ===
+
+    #[test]
+    fn test_antigravity_from_cli_name() {
+        assert_eq!(
+            Client::from_cli_name("antigravity"),
+            Some(Client::Antigravity)
+        );
+        // `agy` (the binary name) is accepted as an alias.
+        assert_eq!(Client::from_cli_name("agy"), Some(Client::Antigravity));
+        assert_eq!(Client::from_cli_name("Antigravity"), None);
+        assert_eq!(Client::from_cli_name("gravity"), None);
+    }
+
+    #[test]
+    fn test_antigravity_shell_tool_name() {
+        assert_eq!(Client::Antigravity.shell_tool_name(), "run_command");
+    }
+
+    #[test]
+    fn test_antigravity_tool_classifiers() {
+        // Shell
+        assert!(Client::is_shell_tool("run_command"));
+        // Read
+        assert!(Client::is_read_tool("view_file"));
+        assert!(Client::is_file_tool("view_file"));
+        assert!(!Client::is_write_tool("view_file"));
+        // Write / edit
+        for t in [
+            "write_to_file",
+            "replace_file_content",
+            "multi_replace_file_content",
+        ] {
+            assert!(Client::is_file_tool(t), "{t} should be a file tool");
+            assert!(Client::is_write_tool(t), "{t} should be a write tool");
+            assert!(!Client::is_read_tool(t), "{t} is not a read tool");
+        }
+        // Glob / grep
+        assert!(Client::is_glob_tool("find_by_name"));
+        assert!(Client::is_grep_tool("grep_search"));
+    }
+
+    #[test]
+    fn test_antigravity_approve_emits_null() {
+        // No opinion: emit nothing so Antigravity's own permission engine decides.
+        let value = HookOutput::no_opinion().serialize(Client::Antigravity);
+        assert!(
+            value.is_null(),
+            "Antigravity no-opinion must serialize to Null, got: {value}"
+        );
+    }
+
+    #[test]
+    fn test_antigravity_allow_output() {
+        let value = HookOutput::allow(Some("Read-only")).serialize(Client::Antigravity);
+        assert_eq!(value["decision"], "allow");
+        assert_eq!(value["reason"], "Read-only");
+        assert!(value.get("hookSpecificOutput").is_none());
+        assert!(value.get("permissionDecision").is_none());
+    }
+
+    #[test]
+    fn test_antigravity_ask_output() {
+        let value = HookOutput::ask("Needs approval").serialize(Client::Antigravity);
+        assert_eq!(value["decision"], "ask");
+        assert_eq!(value["reason"], "Needs approval");
+    }
+
+    #[test]
+    fn test_antigravity_defer_maps_to_ask() {
+        // Antigravity has no equivalent of Claude's resolver path; Defer -> ask.
+        let value = HookOutput::defer("Unknown", None).serialize(Client::Antigravity);
+        assert_eq!(value["decision"], "ask");
+    }
+
+    #[test]
+    fn test_antigravity_deny_output() {
+        let value = HookOutput::deny("Dangerous command").serialize(Client::Antigravity);
+        assert_eq!(value["decision"], "deny");
+        assert_eq!(value["reason"], "Dangerous command");
+    }
+
+    #[test]
+    fn test_antigravity_deny_folds_context_into_reason() {
+        // On deny, context (hints / Tier-3 remediation) is folded into the
+        // reason since the Antigravity Pre output has no additionalContext field.
+        let value = HookOutput::deny_with_context("Blocked", "Use rg instead")
+            .serialize(Client::Antigravity);
+        assert_eq!(value["decision"], "deny");
+        let reason = value["reason"].as_str().unwrap();
+        assert!(reason.contains("Blocked"), "reason: {reason}");
+        assert!(reason.contains("Use rg instead"), "reason: {reason}");
+    }
+
+    #[test]
+    fn test_antigravity_no_nested_claude_fields() {
+        let s =
+            serde_json::to_string(&HookOutput::deny("x").serialize(Client::Antigravity)).unwrap();
+        assert!(
+            !s.contains("hookSpecificOutput"),
+            "Antigravity output is flat: {s}"
+        );
+        assert!(
+            !s.contains("permissionDecision"),
+            "Antigravity uses `decision`, not `permissionDecision`: {s}"
+        );
+    }
+
+    #[test]
+    fn test_antigravity_serialize_dispatches() {
+        // Antigravity gets its own flat serializer arm distinct from the others.
+        let output = HookOutput::deny("nope");
+        let antigravity = output.serialize(Client::Antigravity);
+        assert_eq!(antigravity["decision"], "deny");
+        assert!(antigravity.get("hookSpecificOutput").is_none());
+    }
+
+    #[test]
+    fn test_antigravity_forced_ask_emits_force_ask() {
+        // The hard-ask safety floor (pipe-to-shell, eval) marks the output
+        // forced so Antigravity emits force_ask, which ignores "Always Allow".
+        let forced = HookOutput::ask("pipe-to-shell").forced();
+        assert_eq!(
+            forced.serialize(Client::Antigravity)["decision"],
+            "force_ask"
+        );
+        // A plain (soft) ask stays "ask", which respects Always-Allow grants.
+        let plain = HookOutput::ask("git push");
+        assert_eq!(plain.serialize(Client::Antigravity)["decision"], "ask");
+        // forced() is a no-op for the other clients: Claude's ask is already
+        // authoritative per invocation, so it still serializes as "ask".
+        let claude = HookOutput::ask("x").forced().serialize(Client::Claude);
+        assert_eq!(
+            claude["hookSpecificOutput"]["permissionDecision"], "ask",
+            "forced() must not change non-Antigravity wire output: {claude}"
+        );
     }
 }

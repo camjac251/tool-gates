@@ -1,10 +1,10 @@
   <p class="breadcrumb"><a href="index.html">Reference</a> / Security reminders</p>
   <h1 id="secrems-h1">Security reminders</h1>
-  <p class="page-lede">tool-gates scans write/edit bodies for 28 anti-patterns organised into three tiers, including Claude <code>Write</code>/<code>Edit</code>, Gemini <code>write_file</code>/<code>replace</code> before-tool checks, and Codex <code>apply_patch</code> added lines. The hard floor denies source writes before the file ever lands, while documentation files get a post-write warning. The middle tier nudges the assistant after a write so the next action can self-correct. The top tier informs without blocking.</p>
+  <p class="page-lede">tool-gates scans write/edit bodies for 28 anti-patterns organised into three tiers, including Claude <code>Write</code>/<code>Edit</code>, Codex <code>apply_patch</code> added lines, Antigravity <code>write_to_file</code>/<code>replace_file_content</code>/<code>multi_replace_file_content</code>, and Gemini <code>write_file</code>/<code>replace</code> before-tool checks. The hard floor denies source writes before the file ever lands, while documentation files get a post-write warning. The middle tier nudges the assistant after a write so the next action can self-correct. The top tier informs without blocking.</p>
   <div class="sec-head" style="margin-top: var(--s-6)">
     <p class="lbl">Why Tier 2 nudges after the write</p>
     <h2>Self-correction beats re-prompting.</h2>
-    <p>Tier 2 patterns let the write succeed, then attach a <code>&lt;system-reminder&gt;</code> on <code>additionalContext</code>. Claude and Codex see the warning in the next turn and can edit the file before doing anything else; Gemini AfterTool output is not plumbed for Tier 2 yet. No wasted Write call from blocking-then-retrying. Each (file, rule) pair fires at most once per session.</p>
+    <p>Tier 2 patterns let the write succeed, then attach a <code>&lt;system-reminder&gt;</code> on <code>additionalContext</code>. Claude and Codex see the warning in the next turn and can edit the file before doing anything else; Gemini AfterTool output is not plumbed for Tier 2 yet, and Antigravity has no post hook, so on Antigravity only the Tier 1 secret deny (at PreToolUse) applies. No wasted Write call from blocking-then-retrying. Each (file, rule) pair fires at most once per session.</p>
   </div>
   <div class="rule-card">
     <header>

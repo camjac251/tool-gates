@@ -14,7 +14,7 @@
       <tbody>
         <tr>
           <td><code>default</code></td>
-          <td>Claude Code, Gemini CLI, Codex CLI</td>
+          <td>Claude Code, Codex CLI, Antigravity CLI, Gemini CLI</td>
           <td>Normal gate flow. Known-safe commands can allow, dangerous commands deny, and unknown or mutating commands ask or defer. On Codex, whether an ask becomes a visible prompt also depends on <code>approval_policy</code>.</td>
         </tr>
         <tr>

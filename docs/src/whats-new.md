@@ -3,6 +3,25 @@
   <p class="page-lede">Release cadence is fast. Below is a curated set of recent versions and what shipped. Full history at <a href="https://github.com/camjac251/tool-gates/blob/main/CHANGELOG.md" target="_blank" rel="noopener">CHANGELOG.md</a>.</p>
   <div class="config-block">
     <header>
+      <h3>Unreleased</h3>
+      <span class="src-tag">Antigravity CLI &amp; Gemini sunset</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  Antigravity CLI (agy) support: --client antigravity, single PreToolUse hook
+  hooks add / status / json --antigravity (named-hook hooks.json)
+  Antigravity tool-name mapping + payload normalization
+<span class="sec other">Changed</span>
+  Gemini CLI marked deprecated (Google sunsets it 2026-06-18)</pre>
+      </div>
+      <div class="config-prose">
+        <p>Adds Antigravity CLI (Google's <code>agy</code>, the Gemini CLI successor) as a first-class client. Antigravity uses a distinct wire format: a payload nesting the tool under <code>toolCall</code> with PascalCase args, a flat <code>{decision, reason}</code> output, and a <code>hooks.json</code> keyed by hook name. tool-gates normalizes the payload, installs a single PreToolUse hook via <code>tool-gates hooks add --antigravity</code>, and gates shell, file, grep, and glob tools. The Gemini CLI client is marked deprecated across the docs because Google sunsets the consumer Gemini CLI on 2026-06-18; it keeps working through the transition.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
       <h3>v1.23.0 · June 6, 2026</h3>
       <span class="src-tag">docs &amp; approvals · <a href="https://github.com/camjac251/tool-gates/commit/673bd49" target="_blank" rel="noopener">673bd49</a></span>
     </header>

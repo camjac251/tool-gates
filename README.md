@@ -10,7 +10,7 @@
 [![Rust](https://img.shields.io/badge/rust-1.86+-orange.svg)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A hook for [Claude Code](https://code.claude.com/docs/en/hooks), [Gemini CLI](https://github.com/google-gemini/gemini-cli), and [Codex CLI](https://github.com/openai/codex) that gates Bash commands, file operations, and tool invocations using AST parsing. Determines whether to allow, ask, or block based on potential impact.
+A hook for [Claude Code](https://code.claude.com/docs/en/hooks), [Codex CLI](https://github.com/openai/codex), [Antigravity CLI](https://antigravity.google/docs/cli-overview), and the deprecated [Gemini CLI](https://github.com/google-gemini/gemini-cli) that gates Bash commands, file operations, and tool invocations using AST parsing. Determines whether to allow, ask, or block based on potential impact.
 
 ### 📚 [Read the Live Documentation](https://camjac251.github.io/tool-gates/)
 
@@ -42,11 +42,14 @@ Install the hooks automatically for your preferred CLI tool:
 # For Claude Code (recommended)
 tool-gates hooks add -s user
 
-# For Gemini CLI
-tool-gates hooks add --gemini
-
 # For Codex CLI
 tool-gates hooks add --codex
+
+# For Antigravity CLI (agy)
+tool-gates hooks add --antigravity
+
+# For Gemini CLI (deprecated; Google sunsets it 2026-06-18)
+tool-gates hooks add --gemini
 ```
 
 Verify your installation using the doctor command:
@@ -191,5 +194,6 @@ Security reminder patterns were built on and informed by:
 - [Live Documentation Website](https://camjac251.github.io/tool-gates/)
 - [13 Gates Reference](https://camjac251.github.io/tool-gates/gates/git.html)
 - [Claude Code Hooks Guide](https://code.claude.com/docs/en/hooks)
+- [Antigravity CLI Hooks](https://antigravity.google/docs/hooks)
 - [Gemini CLI Repository](https://github.com/google-gemini/gemini-cli)
 - [tree-sitter-bash](https://github.com/tree-sitter/tree-sitter-bash)

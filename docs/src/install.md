@@ -1,6 +1,6 @@
   <p class="breadcrumb"><a href="index.html">Getting Started</a> / Installation</p>
   <h1 id="install-h1">Installation</h1>
-  <p class="page-lede">tool-gates is a single Rust binary. Install it, then point your assistant's settings at it. The same binary serves Claude Code, Gemini CLI, and Codex CLI. Claude Code and Gemini CLI are auto-detected from the hook payload; Codex is selected by the <code>--client codex</code> flag the installer bakes into its hook command.</p>
+  <p class="page-lede">tool-gates is a single Rust binary. Install it, then point your assistant's settings at it. The same binary serves Claude Code, Codex CLI, Antigravity CLI, and the deprecated Gemini CLI. Claude Code and Gemini CLI are auto-detected from the hook payload; Codex and Antigravity are selected by the <code>--client codex</code> / <code>--client antigravity</code> flag the installer bakes into the hook command.</p>
   <div class="step">
     <p class="step-label">Step 1 · Install the binary</p>
     <div class="tabs">
@@ -54,7 +54,7 @@
           <h3>Gemini CLI</h3>
           <span class="hooks-count">2 hooks</span>
         </header>
-        <p>Requires Gemini CLI v0.36.0+ for <code>ask</code>-decision support on BeforeTool hooks.</p>
+        <p><b>Deprecated:</b> Google sunsets the consumer Gemini CLI on 2026-06-18; use Antigravity for new setups. Requires Gemini CLI v0.36.0+ for <code>ask</code>-decision support on BeforeTool hooks.</p>
 <pre class="code-block"><span class="prompt">$</span> tool-gates hooks add --gemini</pre>
         <ul class="hook-list">
           <li><code>BeforeTool</code>: gates every tool call</li>
@@ -76,6 +76,18 @@
         </ul>
         <p class="settings-path">~/.codex/hooks.json</p>
       </article>
+      <article class="install-client">
+        <header>
+          <h3>Antigravity CLI</h3>
+          <span class="hooks-count">1 hook</span>
+        </header>
+        <p>Google's successor to the Gemini CLI (<code>agy</code>). The installer bakes <code>--client antigravity</code> into the hook command so the wire format routes correctly.</p>
+<pre class="code-block"><span class="prompt">$</span> tool-gates hooks add --antigravity</pre>
+        <ul class="hook-list">
+          <li><code>PreToolUse</code>: command safety, file guards, secret scanning</li>
+        </ul>
+        <p class="settings-path">~/.gemini/antigravity-cli/hooks.json</p>
+      </article>
     </div>
     <p class="step-prose">Preview what would change with <code>--dry-run</code>:</p>
     <p class="step-prose">Claude Code:</p>
@@ -84,6 +96,8 @@
     <pre class="code-block"><span class="prompt">$</span> tool-gates hooks add --gemini --dry-run</pre>
     <p class="step-prose">Codex CLI:</p>
     <pre class="code-block"><span class="prompt">$</span> tool-gates hooks add --codex --dry-run</pre>
+    <p class="step-prose">Antigravity CLI:</p>
+    <pre class="code-block"><span class="prompt">$</span> tool-gates hooks add --antigravity --dry-run</pre>
   </div>
   <div class="step">
     <p class="step-label">Step 3 · Verify</p>

@@ -23,6 +23,9 @@ use std::sync::OnceLock;
 /// - Codex `apply_patch`: parse the unified-diff body in `command` and emit
 ///   one `(path, added_lines)` pair per Add/Update section. Delete sections
 ///   are skipped (no content to scan).
+/// - Antigravity `write_to_file` / `replace_file_content` /
+///   `multi_replace_file_content`: top-level `file_path` + `content`, populated
+///   by main()'s Antigravity payload normalization.
 fn extract_content(
     tool_name: &str,
     map: &serde_json::Map<String, serde_json::Value>,
@@ -87,6 +90,17 @@ fn extract_content(
                             results.push((top_file_path.clone(), ns.to_string()));
                         }
                     }
+                }
+            }
+        }
+        // Antigravity write/edit tools. main()'s payload normalization flattens
+        // the PascalCase args (CodeContent / ReplacementContent / chunked
+        // ReplacementChunks[].ReplacementContent) into the canonical `content`
+        // key before this runs, so a single content read covers all three.
+        "write_to_file" | "replace_file_content" | "multi_replace_file_content" => {
+            if let Some(content) = map.get("content").and_then(|v| v.as_str()) {
+                if !content.is_empty() {
+                    results.push((top_file_path, content.to_string()));
                 }
             }
         }

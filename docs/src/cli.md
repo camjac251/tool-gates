@@ -23,6 +23,10 @@
         <td>Wire PreToolUse, PermissionRequest, PostToolUse into <code>~/.codex/hooks.json</code>. The installer bakes <code>--client codex</code> into each command so the wire format routes correctly.</td>
       </tr>
       <tr>
+        <td><code>tool-gates hooks add --antigravity</code></td>
+        <td>Wire a single PreToolUse hook into <code>~/.gemini/antigravity-cli/hooks.json</code> (global-only; the sole path agy reads hooks from). The installer bakes <code>--client antigravity</code> into the command. Antigravity (<code>agy</code>) is Google's successor to the Gemini CLI.</td>
+      </tr>
+      <tr>
         <td><code>tool-gates hooks add … --dry-run</code></td>
         <td>Print what would change without writing. Works on every <code>hooks add</code> variant.</td>
       </tr>
@@ -31,8 +35,8 @@
         <td>Report which clients have hooks installed and at which scope. Green / red status per hook.</td>
       </tr>
       <tr>
-        <td><code>tool-gates hooks json</code></td>
-        <td>Emit the canonical hook configuration as JSON. Useful for diffing against an existing settings file.</td>
+        <td><code>tool-gates hooks json [--codex|--antigravity|--gemini]</code></td>
+        <td>Emit the canonical hook configuration as JSON (Claude shape by default; pass a client flag for that client's shape). Useful for diffing against an existing settings file.</td>
       </tr>
     </tbody>
   </table>

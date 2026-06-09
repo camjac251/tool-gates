@@ -9,8 +9,9 @@
 <span class="comment">✓ binary: ~/.local/bin/tool-gates (vX.Y.Z)</span>
 <span class="comment">✓ config: ~/.config/tool-gates/config.toml (6 features, defaults)</span>
 <span class="comment">✓ hooks · claude:    user + project (4 hooks each)</span>
-<span class="comment">✓ hooks · gemini:    user (2 hooks)</span>
-<span class="comment">✓ hooks · codex:     user (3 hooks)</span>
+<span class="comment">✓ hooks · codex:       user (3 hooks)</span>
+<span class="comment">✓ hooks · antigravity: user (1 hook)</span>
+<span class="comment">✓ hooks · gemini:      user (2 hooks, deprecated)</span>
 <span class="comment">✓ cache: ~/.cache/tool-gates (4 files, 18 KB)</span>
 <span class="comment">✓ legacy: no bash-gates remnants in settings files</span>
 <span class="comment">All checks passed.</span></pre>
@@ -25,7 +26,7 @@
     <tbody>
       <tr><td>binary</td><td>Resolves <code>tool-gates</code> on PATH and prints the version. Flags a mismatch if the version embedded in the hook command differs from what's installed.</td></tr>
       <tr><td>config</td><td>Reads <code>~/.config/tool-gates/config.toml</code> if present and reports which features are toggled off.</td></tr>
-      <tr><td>hooks</td><td>Walks every settings file (Claude, Gemini, Codex; user and project scopes) and confirms each expected hook is present with the correct matcher and timeout. Reports missing or stale hook commands.</td></tr>
+      <tr><td>hooks</td><td>Walks every settings file (Claude, Codex, Antigravity, Gemini; user and project scopes) and confirms each expected hook is present with the correct matcher and timeout. Reports missing or stale hook commands.</td></tr>
       <tr><td>cache</td><td>Lists <code>~/.cache/tool-gates/</code> contents (pending queue, available-tools cache, hint-tracker, and ask-tracking caches). Warns if any file is unreadable.</td></tr>
       <tr><td>legacy</td><td>Scans settings.json for hook commands referencing the old <code>bash-gates</code> binary. Suggests <code>tool-gates hooks add</code> to fix.</td></tr>
     </tbody>

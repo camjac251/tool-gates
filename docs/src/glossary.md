@@ -16,7 +16,8 @@
       <tr><td><code>Glob</code> / <code>Grep</code></td><td>Claude Code's file-search tools. Default tool-blocks redirect to <code>fd</code> / <code>rg</code>.</td></tr>
       <tr><td><code>Skill</code> / <code>activate_skill</code></td><td>Slash-command activation. Auto-approved via <code>[[auto_approve_skills]]</code> with project-directory conditions.</td></tr>
       <tr><td><code>apply_patch</code></td><td>Codex CLI's canonical edit tool. Payload is a unified diff in <code>tool_input.command</code>; tool-gates parses out each <code>*** Add/Update/Delete File:</code> header.</td></tr>
-      <tr><td><code>run_shell_command</code></td><td>Gemini CLI's shell tool. Same engine as <code>Bash</code> on Claude.</td></tr>
+      <tr><td><code>run_command</code> / <code>view_file</code> / <code>write_to_file</code> / <code>replace_file_content</code></td><td>Antigravity CLI (<code>agy</code>) tool names for shell, read, write, and edit. tool-gates maps them onto its <code>Bash</code> / <code>Read</code> / <code>Write</code> / <code>Edit</code> engine.</td></tr>
+      <tr><td><code>run_shell_command</code></td><td>Gemini CLI's shell tool (deprecated). Same engine as <code>Bash</code> on Claude.</td></tr>
       <tr><td><code>mcp__&lt;server&gt;__&lt;tool&gt;</code></td><td>MCP tool name. Double underscore separator on Claude / Codex; single on Gemini (<code>mcp_*</code>).</td></tr>
     </tbody>
   </table>
@@ -33,7 +34,8 @@
       <tr><td><code>PermissionRequest</code></td><td>Claude Code's subagent gate. Subagents ignore PreToolUse's <code>allow</code>; this hook re-applies the same policy.</td></tr>
       <tr><td><code>PermissionDenied</code></td><td>Auto-mode classifier denied a command; tool-gates checks if its own engine would have allowed it, returns <code>retry: true</code> if so.</td></tr>
       <tr><td><code>PostToolUse</code></td><td>Fires after execution. Tracks successful asks into the pending queue; scans Write/Edit bodies for Tier 2 anti-patterns.</td></tr>
-      <tr><td><code>BeforeTool</code> / <code>AfterTool</code></td><td>Gemini CLI's two hooks. BeforeTool covers the main gate path; AfterTool is installed for post-execution context, but current code returns early for tracking and Tier 2 security scanning on Gemini.</td></tr>
+      <tr><td>Antigravity <code>PreToolUse</code></td><td>Antigravity CLI's single gate hook. No PermissionRequest event and no usable post payload, so PreToolUse runs the whole gate. Selected via <code>--client antigravity</code>.</td></tr>
+      <tr><td><code>BeforeTool</code> / <code>AfterTool</code></td><td>Gemini CLI's two hooks (deprecated). BeforeTool covers the main gate path; AfterTool is installed for post-execution context, but current code returns early for tracking and Tier 2 security scanning on Gemini.</td></tr>
     </tbody>
   </table>
   <div class="sec-head">
@@ -98,8 +100,9 @@
     </thead>
     <tbody>
       <tr><td><code>~/.claude/settings.json</code></td><td>Claude Code permission rules. tool-gates respects every explicit allow / deny / ask before applying its own gate decision.</td></tr>
-      <tr><td><code>~/.gemini/settings.json</code></td><td>Gemini CLI hook configuration.</td></tr>
       <tr><td><code>~/.codex/hooks.json</code></td><td>Codex CLI hook configuration.</td></tr>
+      <tr><td><code>~/.gemini/antigravity-cli/hooks.json</code></td><td>Antigravity CLI (<code>agy</code>) hook configuration (global-only; the single path agy reads hooks from). Keyed by hook name; tool-gates owns the <code>tool-gates</code> entry.</td></tr>
+      <tr><td><code>~/.gemini/settings.json</code></td><td>Gemini CLI hook configuration (deprecated).</td></tr>
       <tr><td><code>~/.config/tool-gates/config.toml</code></td><td>User configuration for feature toggles, tool blocking, MCP / Skill auto-approval, file guards, hints, cache, git aliases.</td></tr>
       <tr><td><code>~/.cache/tool-gates/pending.jsonl</code></td><td>The pending-approval queue. Successful asks land here for promotion via <code>tool-gates review</code>.</td></tr>
       <tr><td><code>~/.cache/tool-gates/tracking.json</code></td><td>PreToolUse → PostToolUse correlation (24h TTL).</td></tr>

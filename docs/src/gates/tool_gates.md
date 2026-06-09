@@ -100,7 +100,7 @@
 <div class="rule-row" data-decision="ask" id="tool_gates-tool-gates-approve">
   <div class="rule-cmd"><span class="prog">tool-gates</span> approve</div>
   <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
-  <div class="rule-reason">Adds a permanent permission rule to a Claude/Gemini/Codex settings file. Future matching tool calls auto-allow without prompting.</div>
+  <div class="rule-reason">Adds a permanent permission rule to your settings.json. Future matching tool calls auto-allow without prompting.</div>
 </div>
 <div class="rule-row" data-decision="ask" id="tool_gates-tool-gates-rules-remove">
   <div class="rule-cmd"><span class="prog">tool-gates</span> rules remove</div>
@@ -115,7 +115,7 @@
 <div class="rule-row" data-decision="ask" id="tool_gates-tool-gates-hooks-add">
   <div class="rule-cmd"><span class="prog">tool-gates</span> hooks add</div>
   <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
-  <div class="rule-reason">Writes tool-gates hook entries into a Claude/Gemini/Codex settings file. Changes how every future tool call in that scope is gated.</div>
+  <div class="rule-reason">Writes tool-gates hook entries into the client's settings.json (Claude/Gemini) or hooks.json (Codex/Antigravity). Changes how every future tool call in that scope is gated.</div>
 </div>
 <div class="rule-row" data-decision="ask" id="tool_gates-tool-gates-review">
   <div class="rule-cmd"><span class="prog">tool-gates</span> review</div>

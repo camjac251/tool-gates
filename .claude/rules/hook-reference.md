@@ -8,10 +8,11 @@ paths:
 
 # Hook Input/Output Reference
 
-tool-gates supports three clients:
+tool-gates supports four clients:
 - **Claude Code**: `PreToolUse` / `PermissionRequest` / `PermissionDenied` / `PostToolUse` events. Detected from `hook_event_name`.
-- **Gemini CLI**: `BeforeTool` / `AfterTool` events. Detected from `hook_event_name`.
 - **Codex CLI**: `PreToolUse` / `PermissionRequest` / `PostToolUse` events. **Cannot** be detected from `hook_event_name` (Codex shares Claude's event names verbatim). Selected via the explicit `--client codex` argv flag, which the installer bakes into the hook command.
+- **Antigravity CLI** (`agy`): a single `PreToolUse` hook. Sends **no** `hook_event_name` and uses a distinct payload shape (`toolCall.name` + PascalCase args). Selected via the explicit `--client antigravity` argv flag, which the installer bakes into the hook command.
+- **Gemini CLI** (deprecated): `BeforeTool` / `AfterTool` events. Detected from `hook_event_name`. Google sunsets the consumer Gemini CLI on 2026-06-18; use Antigravity for new setups.
 
 The `Client` enum in `models.rs` maps the chosen client to the appropriate serialization format, tool name mapping, and exit code behavior.
 
@@ -245,3 +246,55 @@ Key differences from Claude (rejected by Codex's parser, dropped silently by too
 - Codex PermissionRequest input does not include `agent_id`; `apply_patch` worktree approval uses the worktree path boundary instead.
 - No PermissionDenied event in Codex (no auto-mode classifier).
 - `transcript_path` is nullable in Codex's schema -> `HookInput` uses a `deserialize_null_string` helper to coerce null to empty string.
+
+## Antigravity CLI Hooks
+
+Antigravity (`agy`) is Google's successor to the Gemini CLI. tool-gates supports it through a single `PreToolUse` hook selected via the explicit `--client antigravity` argv flag. Antigravity sends **no** `hook_event_name`, so it cannot be detected by event name (and `from_hook_event()` is never consulted for it); the flag is mandatory.
+
+**Hook config file**: `~/.gemini/antigravity-cli/hooks.json` (global-only). Binary-validated via strace of agy v1.0.6 (from both an unregistered dir and a registered project): the CLI loads hooks solely from this path. The published docs also list `.agents/` and `~/.gemini/config/`, but the v1.0.6 CLI does not read hooks from either (those dirs are probed for `skills.txt` / `plugins.txt` only), and there is no per-project hooks.json. Unlike the other clients, the file is a top-level object **keyed by hook name**, not a flat `{event: [...]}` map or a `{"hooks": {...}}` wrapper:
+
+```json
+{ "tool-gates": { "PreToolUse": [ { "matcher": "run_command|view_file|...", "hooks": [ { "type": "command", "command": "/path/to/tool-gates --client antigravity", "timeout": 30 } ] } ] } }
+```
+
+The installer (`install_antigravity_hooks`) owns only the `tool-gates` named entry and leaves any other named hooks untouched. Only `PreToolUse` is installed: Antigravity also exposes `PostToolUse`, `PreInvocation`, `PostInvocation`, and `Stop`, but its post payload carries no tool name or input and it has no `PermissionRequest` event, so PreToolUse is the entire gate.
+
+**Payload normalization**: Antigravity's PreToolUse stdin nests the tool under `toolCall` (camelCase envelope) with PascalCase argument keys. `normalize_antigravity_pre_tool_use` in `main.rs` rewrites it into the canonical `HookInput` shape before the engine runs, layering the lowercase `command` / `file_path` / `content` keys the pipeline reads on top of the preserved original args. A payload without `toolCall` (a Post/Stop event) returns `None` and tool-gates emits nothing.
+
+**Input fields (stdin)**:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `toolCall.name` | `string` | The tool being executed (e.g. `run_command`). |
+| `toolCall.args` | `object` | Tool arguments, PascalCase. Command at `args.CommandLine`; write target at `args.TargetFile`; read path at `args.AbsolutePath`. |
+| `stepIdx` | `integer` | 0-based trajectory step index. |
+| `conversationId` | `string` | Conversation UUID (mapped to `session_id`). |
+| `workspacePaths` | `array<string>` | Mounted workspace roots (first element mapped to `cwd`). |
+| `transcriptPath` | `string` | Path to `transcript.jsonl`. |
+| `artifactDirectoryPath` | `string` | Conversation artifact directory. |
+
+**Tool name mapping** (Antigravity -> Claude equivalents):
+| Antigravity | Claude | Source key |
+|-------------|--------|------------|
+| `run_command` | `Bash` | `args.CommandLine` |
+| `view_file` | `Read` | `args.AbsolutePath` |
+| `write_to_file` | `Write` | `args.TargetFile` + `args.CodeContent` |
+| `replace_file_content` | `Edit` | `args.TargetFile` + `args.ReplacementContent` |
+| `multi_replace_file_content` | `Edit` | `args.TargetFile` + concatenated `args.ReplacementChunks[].ReplacementContent` |
+| `grep_search` | `Grep` | `args.Query` |
+| `find_by_name` | `Glob` | `args.Pattern` |
+
+**Output format** (flat object on stdout, exit 0):
+```json
+{ "decision": "allow|ask|deny|force_ask", "reason": "Human-readable reason", "permissionOverrides": ["..."] }
+```
+
+Mapping from tool-gates' internal decision:
+- `Approve` (no opinion) -> empty stdout. Antigravity's own fine-grained permission engine (the `action(target)` allow/deny/ask lists) decides; tool-gates never auto-allows an unrecognized command. (`decision` is required by the schema; emitting none relies on the currently-undocumented behavior that Antigravity defers to its own engine.)
+- `Allow` -> `{"decision":"allow"}` (auto-approve known-safe).
+- `Ask` (soft) -> `{"decision":"ask"}` (prompts, respecting the user's "Always Allow" grants).
+- `Ask` (hard floor: pipe-to-shell, `eval`) -> `{"decision":"force_ask"}` (always prompts, ignoring "Always Allow", set via `HookOutput::forced()`).
+- `Defer` -> `{"decision":"ask"}` (no Antigravity equivalent of Claude's resolver-suggestion path).
+- `Deny` -> `{"decision":"deny"}` (hard block; remediation context is folded into `reason`).
+
+The hard-ask floor maps to `force_ask`, not `ask`, because pipe-to-shell and `eval` are ask-tier (never deny) and Antigravity's plain `ask` honors a prior "Always Allow" grant, which would let a granted command silently bypass the floor. tool-gates does not emit `permissionOverrides` (scope widening): a single gate decision needs no scope widening. The Pre output has no `additionalContext` field, so modern-CLI hints and Tier-3 warnings are dropped on allow/ask. MCP is not wired for Antigravity yet (its MCP tool-name format for hook matchers is undocumented).

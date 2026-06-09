@@ -1,5 +1,5 @@
   <div class="hero">
-    <span class="eyebrow reveal" style="--i:0"><span class="dot"></span> Rust · tree-sitter · Claude Code · Gemini CLI · Codex CLI</span>
+    <span class="eyebrow reveal" style="--i:0"><span class="dot"></span> Rust · tree-sitter · Claude Code · Codex CLI · Antigravity CLI</span>
     <h1 id="home-h1" class="reveal" style="--i:1">Decide what your agent is allowed to <span class="hl">run</span>.</h1>
     <p class="lede reveal" style="--i:2">tool-gates is a permission hook for AI coding assistants. On the hook surfaces each client exposes, it gates shell commands, file edits, MCP calls, and Skill activations, parses commands with a real <code>tree-sitter</code> AST, and resolves them against thirteen declarative gates covering 400+ command patterns. One result per call: <b>allow</b>, <b>ask</b>, <b>defer</b>, or <b>block</b>.</p>
     <div class="cta-row reveal" style="--i:3">
@@ -163,12 +163,12 @@
       </div>
     </div>
   </div>
-  <!-- ===== Three clients ===== -->
+  <!-- ===== Four clients ===== -->
   <div class="reveal" style="--i:8">
     <div class="sec-head">
       <p class="lbl">Multi-client</p>
-      <h2>Three clients, one engine.</h2>
-      <p>The same Rust binary serves Claude Code, Gemini CLI, and Codex CLI. The client is auto-detected from the hook payload (or selected with <code style="font-family:var(--font-mono);font-size:0.92em">--client codex</code> where event names collide). Each gets exactly the wire format it expects.</p>
+      <h2>Four clients, one engine.</h2>
+      <p>The same Rust binary serves Claude Code, Codex CLI, Antigravity CLI, and the deprecated Gemini CLI. The client is auto-detected from the hook payload, or selected with <code style="font-family:var(--font-mono);font-size:0.92em">--client codex</code> / <code style="font-family:var(--font-mono);font-size:0.92em">--client antigravity</code> where event names collide or are absent. Each gets exactly the wire format it expects.</p>
     </div>
     <div class="clients">
       <article class="client">
@@ -183,12 +183,12 @@
         <p class="pathline"><code>~/.claude/settings.json</code></p>
       </article>
       <article class="client">
-        <h4>Gemini CLI <span class="count">· 2 hooks</span></h4>
+        <h4>Gemini CLI <span class="count">· 2 hooks · deprecated</span></h4>
         <ul>
           <li><i></i>BeforeTool</li>
           <li><i></i>AfterTool</li>
         </ul>
-        <p class="client-note">Requires v0.36.0+ for <code>ask</code> support. No PermissionRequest, no approval tracking; tool-gates emits <code>"block"</code> for hard blocks, and Gemini also accepts <code>"deny"</code>.</p>
+        <p class="client-note"><b>Deprecated:</b> Google sunsets the consumer Gemini CLI on 2026-06-18; use Antigravity for new setups. Requires v0.36.0+ for <code>ask</code> support. No PermissionRequest, no approval tracking; tool-gates emits <code>"block"</code> for hard blocks, and Gemini also accepts <code>"deny"</code>.</p>
         <p class="pathline"><code>~/.gemini/settings.json</code></p>
       </article>
       <article class="client">
@@ -201,8 +201,16 @@
         <p class="client-note"><code>apply_patch</code> is the canonical edit tool; tool-gates parses the unified diff so file-guards and secret scans run per affected path.</p>
         <p class="pathline"><code>~/.codex/hooks.json</code></p>
       </article>
+      <article class="client">
+        <h4>Antigravity CLI <span class="count">· 1 hook</span></h4>
+        <ul>
+          <li><i></i>PreToolUse</li>
+        </ul>
+        <p class="client-note">Google's Gemini CLI successor (<code>agy</code>). Selected via <code>--client antigravity</code>; a flat <code>decision</code> output and a <code>hooks.json</code> keyed by hook name. PreToolUse drives the whole gate.</p>
+        <p class="pathline"><code>~/.gemini/antigravity-cli/hooks.json</code></p>
+      </article>
     </div>
-    <p class="clients-foot"><b>One binary.</b> Routing is via <code style="font-family:var(--font-mono);font-size:0.92em">hook_event_name</code>; the same gate engine returns the right shape for the right client.</p>
+    <p class="clients-foot"><b>One binary.</b> Routing is via <code style="font-family:var(--font-mono);font-size:0.92em">hook_event_name</code>, or the <code style="font-family:var(--font-mono);font-size:0.92em">--client</code> flag where event names collide or are absent; the same gate engine returns the right shape for the right client.</p>
   </div>
   <!-- ===== TOML proof ===== -->
   <div class="reveal" style="--i:9">

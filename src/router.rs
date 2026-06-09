@@ -242,7 +242,9 @@ pub fn check_command_for_session(command_string: &str, session_id: &str) -> Hook
     // Check for patterns at the raw string level
     // These require approval regardless of how they're parsed
     let (hard_ask, soft_ask) = check_raw_string_patterns(scan_string);
-    if let Some(result) = hard_ask.or(soft_ask) {
+    // The hard-ask floor must be force-promptable on Antigravity (force_ask),
+    // never suppressible by an "Always Allow" grant; soft asks stay overridable.
+    if let Some(result) = hard_ask.map(HookOutput::forced).or(soft_ask) {
         return result;
     }
 
@@ -564,8 +566,9 @@ fn check_command_with_settings_and_session_inner(
     if let Some(output) = check_hard_deny_patterns(scan_string) {
         return output;
     }
+    // hard-ask is force-promptable (force_ask on Antigravity); soft asks stay overridable.
     let (hard_ask, soft_ask) = check_raw_string_patterns(scan_string);
-    if let Some(result) = hard_ask {
+    if let Some(result) = hard_ask.map(HookOutput::forced) {
         if is_auto_mode(permission_mode) {
             return HookOutput::deny(
                 &result
@@ -935,8 +938,9 @@ fn check_command_expanded(command_string: &str, cwd: &str, permission_mode: &str
     if let Some(output) = check_hard_deny_patterns(scan_string) {
         return output;
     }
+    // hard-ask is force-promptable (force_ask on Antigravity); soft asks stay overridable.
     let (hard_ask, soft_ask) = check_raw_string_patterns(scan_string);
-    if let Some(output) = hard_ask {
+    if let Some(output) = hard_ask.map(HookOutput::forced) {
         if is_auto_mode(permission_mode) {
             return HookOutput::deny(
                 &output

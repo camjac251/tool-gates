@@ -5,10 +5,12 @@
 //! - **Read/Write/Edit**: Symlink guard for AI config files
 //! - **Glob/Grep/MCP tools**: Configurable tool blocking
 //!
-//! Supports Claude Code, Gemini CLI, and Codex CLI hook systems:
+//! Supports Claude Code, Codex CLI, and Antigravity CLI hook systems, plus
+//! deprecated Gemini CLI:
 //! - Claude Code: `PreToolUse`, `PermissionRequest`, `PermissionDenied`, `PostToolUse` (Bash, Monitor, Write, Edit)
-//! - Gemini CLI:  `BeforeTool`, `AfterTool` (tool_name: "run_shell_command")
 //! - Codex CLI:   `PreToolUse`, `PermissionRequest`, `PostToolUse` (Bash, apply_patch, mcp__*). Selected via `--client codex`.
+//! - Antigravity CLI (`agy`): `PreToolUse` (run_command, view_file, write_to_file, replace_file_content, ...). Selected via `--client antigravity`.
+//! - Gemini CLI:  `BeforeTool`, `AfterTool` (tool_name: "run_shell_command"). Deprecated; Google sunsets the consumer Gemini CLI on 2026-06-18. Use Antigravity instead.
 //!
 //! Configuration: `~/.config/tool-gates/config.toml`
 //!
@@ -18,9 +20,10 @@
 //!   `echo '{"tool_name": "Glob", "tool_input": {"pattern": "*.rs"}}' | tool-gates`
 //!
 //! Install:
-//!   `tool-gates hooks add -s user`      # Claude Code
-//!   `tool-gates hooks add --gemini`     # Gemini CLI
-//!   `tool-gates hooks add --codex`      # Codex CLI
+//!   `tool-gates hooks add -s user`         # Claude Code
+//!   `tool-gates hooks add --codex`         # Codex CLI
+//!   `tool-gates hooks add --antigravity`   # Antigravity CLI (agy)
+//!   `tool-gates hooks add --gemini`        # Gemini CLI (deprecated)
 
 use std::env;
 use std::io::{self, Read};
@@ -153,6 +156,30 @@ fn main() {
     let client = client_override
         .unwrap_or_else(|| Client::from_hook_event(hook_event.as_deref().unwrap_or("PreToolUse")));
 
+    // Antigravity (agy) PreToolUse payloads use a different shape: `toolCall.name`
+    // + `toolCall.args` (PascalCase keys), a camelCase envelope, and no
+    // `hook_event_name`. Normalize into the canonical PreToolUse HookInput shape
+    // so the rest of the pipeline stays client-agnostic. tool-gates installs only
+    // a PreToolUse hook for Antigravity, so a payload without `toolCall` (a
+    // Post/Stop event) has nothing to gate and we emit nothing.
+    let (input, hook_event) = if client == Client::Antigravity {
+        match normalize_antigravity_pre_tool_use(&input) {
+            AntigravityPayload::PreToolUse(normalized) => {
+                (normalized, Some("PreToolUse".to_string()))
+            }
+            // No toolCall: a Post/Stop event. Emit nothing; agy's engine proceeds.
+            AntigravityPayload::NotGateable => return,
+            // toolCall present but unparseable: fail closed rather than silently
+            // allow (mirrors the Codex malformed-input deny).
+            AntigravityPayload::Malformed => print_deny_and_exit(
+                Client::Antigravity,
+                "tool-gates: malformed Antigravity PreToolUse payload",
+            ),
+        }
+    } else {
+        (input, hook_event)
+    };
+
     // Route based on hook event type
     match hook_event.as_deref() {
         Some("PermissionRequest") => {
@@ -191,7 +218,7 @@ fn extract_client_override(args: Vec<String>) -> (Option<Client>, Vec<String>) {
                     Some(c) => chosen = Some(c),
                     None => {
                         eprintln!(
-                            "Error: --client expects 'claude', 'gemini', or 'codex' (got '{name}')"
+                            "Error: --client expects 'claude', 'codex', 'antigravity', or 'gemini' (got '{name}')"
                         );
                         std::process::exit(2);
                     }
@@ -206,7 +233,7 @@ fn extract_client_override(args: Vec<String>) -> (Option<Client>, Vec<String>) {
                 Some(c) => chosen = Some(c),
                 None => {
                     eprintln!(
-                        "Error: --client expects 'claude', 'gemini', or 'codex' (got '{rest}')"
+                        "Error: --client expects 'claude', 'codex', 'antigravity', or 'gemini' (got '{rest}')"
                     );
                     std::process::exit(2);
                 }
@@ -224,6 +251,208 @@ fn extract_client_override(args: Vec<String>) -> (Option<Client>, Vec<String>) {
         }
     }
     (chosen, out)
+}
+
+/// Outcome of normalizing an Antigravity (`agy`) PreToolUse payload.
+enum AntigravityPayload {
+    /// A gateable PreToolUse call, normalized into canonical `HookInput` JSON.
+    PreToolUse(String),
+    /// No `toolCall` present (a Post/Stop/invocation event). Nothing to gate;
+    /// the caller emits nothing and Antigravity's own engine proceeds.
+    NotGateable,
+    /// A `toolCall` was present but could not be parsed (bad JSON, missing or
+    /// non-string name, or wrong-typed args). Fail closed instead of silently
+    /// allowing, mirroring the Codex malformed-input deny.
+    Malformed,
+}
+
+/// Translate an Antigravity (`agy`) PreToolUse payload into the canonical
+/// `HookInput` JSON shape the rest of tool-gates consumes.
+///
+/// Antigravity's stdin schema (camelCase envelope, PascalCase tool args):
+///   {"toolCall":{"name":"run_command","args":{"CommandLine":"...","Cwd":"..."}},
+///    "stepIdx":N,"conversationId":"...","workspacePaths":["/ws"],
+///    "transcriptPath":"...","artifactDirectoryPath":"..."}
+///
+/// Produces the canonical form (tool_name + tool_input with the lowercase keys
+/// the pipeline reads: `command`, `file_path`, `content`); the original
+/// PascalCase args are preserved alongside. Distinguishes "no toolCall" (a
+/// non-gateable Post/Stop event) from "toolCall present but unparseable" so the
+/// caller emits nothing in the first case and fails closed in the second.
+fn normalize_antigravity_pre_tool_use(input: &str) -> AntigravityPayload {
+    // Antigravity hook payloads are always JSON; unparseable input is a
+    // malformed payload, not a missing event -> fail closed.
+    let v: serde_json::Value = match serde_json::from_str(input) {
+        Ok(v) => v,
+        Err(_) => return AntigravityPayload::Malformed,
+    };
+    // No toolCall at all: a Post/Stop/invocation event, nothing to gate.
+    let tool_call = match v.get("toolCall") {
+        Some(tc) => tc,
+        None => return AntigravityPayload::NotGateable,
+    };
+    // toolCall present but no usable name -> malformed, fail closed.
+    let tool_name = match tool_call.get("name").and_then(|n| n.as_str()) {
+        Some(n) => n.to_string(),
+        None => return AntigravityPayload::Malformed,
+    };
+    // `args` may be absent, but a present non-object `args` would silently drop
+    // the command/path and fail open. Reject it as malformed instead.
+    if let Some(args) = tool_call.get("args") {
+        if !args.is_object() {
+            return AntigravityPayload::Malformed;
+        }
+    }
+
+    // Start from the raw args so nothing is lost, then layer the canonical keys
+    // the gate pipeline reads on top.
+    let mut tool_input = tool_call
+        .get("args")
+        .and_then(|a| a.as_object())
+        .cloned()
+        .unwrap_or_default();
+
+    match tool_name.as_str() {
+        "run_command" => {
+            if let Some(cmd) = tool_input
+                .get("CommandLine")
+                .and_then(|x| x.as_str())
+                .map(str::to_string)
+            {
+                tool_input.insert("command".to_string(), serde_json::json!(cmd));
+            }
+        }
+        "view_file" => {
+            if let Some(p) = tool_input
+                .get("AbsolutePath")
+                .and_then(|x| x.as_str())
+                .map(str::to_string)
+            {
+                tool_input.insert("file_path".to_string(), serde_json::json!(p));
+            }
+        }
+        "write_to_file" => {
+            if let Some(p) = tool_input
+                .get("TargetFile")
+                .and_then(|x| x.as_str())
+                .map(str::to_string)
+            {
+                tool_input.insert("file_path".to_string(), serde_json::json!(p));
+            }
+            if let Some(c) = tool_input
+                .get("CodeContent")
+                .and_then(|x| x.as_str())
+                .map(str::to_string)
+            {
+                tool_input.insert("content".to_string(), serde_json::json!(c));
+            }
+        }
+        "replace_file_content" => {
+            if let Some(p) = tool_input
+                .get("TargetFile")
+                .and_then(|x| x.as_str())
+                .map(str::to_string)
+            {
+                tool_input.insert("file_path".to_string(), serde_json::json!(p));
+            }
+            if let Some(c) = tool_input
+                .get("ReplacementContent")
+                .and_then(|x| x.as_str())
+                .map(str::to_string)
+            {
+                tool_input.insert("content".to_string(), serde_json::json!(c));
+            }
+        }
+        "multi_replace_file_content" => {
+            if let Some(p) = tool_input
+                .get("TargetFile")
+                .and_then(|x| x.as_str())
+                .map(str::to_string)
+            {
+                tool_input.insert("file_path".to_string(), serde_json::json!(p));
+            }
+            // Concatenate every chunk's replacement so the secret scanner sees
+            // all newly-written bytes. Joined with no separator so a secret
+            // deliberately split across a chunk boundary (e.g. an AWS key ending
+            // one chunk and continuing the next) still forms a contiguous match.
+            // Best-effort: chunks land at different file offsets, so this models
+            // neither the on-disk layout nor catches every reordered split.
+            let joined: String = tool_input
+                .get("ReplacementChunks")
+                .and_then(|c| c.as_array())
+                .map(|chunks| {
+                    chunks
+                        .iter()
+                        .filter_map(|ch| ch.get("ReplacementContent").and_then(|x| x.as_str()))
+                        .collect::<String>()
+                })
+                .unwrap_or_default();
+            if !joined.is_empty() {
+                tool_input.insert("content".to_string(), serde_json::json!(joined));
+            }
+        }
+        "find_by_name" => {
+            if let Some(p) = tool_input
+                .get("Pattern")
+                .and_then(|x| x.as_str())
+                .map(str::to_string)
+            {
+                tool_input.insert("pattern".to_string(), serde_json::json!(p));
+            }
+        }
+        "grep_search" => {
+            if let Some(q) = tool_input
+                .get("Query")
+                .and_then(|x| x.as_str())
+                .map(str::to_string)
+            {
+                tool_input.insert("query".to_string(), serde_json::json!(q));
+            }
+        }
+        _ => {}
+    }
+
+    // Settings.json rule resolution keys off cwd. Prefer the command's own
+    // working directory (run_command carries args.Cwd) so project-local rules
+    // resolve against the real directory; fall back to the first workspace root.
+    let cwd = tool_input
+        .get("Cwd")
+        .and_then(|c| c.as_str())
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .or_else(|| {
+            v.get("workspacePaths")
+                .and_then(|w| w.as_array())
+                .and_then(|a| a.first())
+                .and_then(|p| p.as_str())
+                .map(str::to_string)
+        })
+        .unwrap_or_default();
+    let transcript_path = v
+        .get("transcriptPath")
+        .and_then(|t| t.as_str())
+        .unwrap_or("");
+    let session_id = v
+        .get("conversationId")
+        .and_then(|c| c.as_str())
+        .unwrap_or("");
+
+    let canonical = serde_json::json!({
+        "hook_event_name": "PreToolUse",
+        "tool_name": tool_name,
+        "tool_input": tool_input,
+        "cwd": cwd,
+        "transcript_path": transcript_path,
+        "session_id": session_id,
+        // Antigravity's hook payload carries no permission mode; "default" keeps
+        // the acceptEdits and auto-only branches inert for Antigravity.
+        "permission_mode": "default",
+    });
+
+    match serde_json::to_string(&canonical) {
+        Ok(s) => AntigravityPayload::PreToolUse(s),
+        Err(_) => AntigravityPayload::Malformed,
+    }
 }
 
 /// Handle PermissionDenied hook (Claude auto mode only).
@@ -1043,6 +1272,39 @@ fn generate_gemini_hooks_json(binary_path: &str) -> serde_json::Value {
     })
 }
 
+/// Antigravity (`agy`) PreToolUse matcher. The matcher is a regex over tool
+/// names; this lists every tool tool-gates has gate logic for (shell, file
+/// read/write/edit, grep, glob). Antigravity's MCP tool-name format is not
+/// documented for hook matchers, so MCP block rules are not wired for
+/// Antigravity yet.
+const ANTIGRAVITY_PRE_TOOL_USE_MATCHER: &str = "run_command|view_file|write_to_file|replace_file_content|multi_replace_file_content|grep_search|find_by_name";
+
+/// Build the Antigravity hooks.json fragment for the installer.
+///
+/// Antigravity's hooks.json is a top-level object keyed by hook NAME (not the
+/// flat `{event: [...]}` shape Claude/Gemini/Codex use), so tool-gates owns a
+/// single named entry `tool-gates` and any other named hooks are preserved. The
+/// installed command embeds `--client antigravity` so tool-gates emits the
+/// Antigravity wire format when `agy` spawns it. The path is shell-quoted
+/// because Antigravity runs the command through a shell.
+///
+/// Only PreToolUse is installed: Antigravity has no PermissionRequest event,
+/// and its PostToolUse payload carries no tool name or input, so there is
+/// nothing for tool-gates to track or scan after the fact.
+fn generate_antigravity_hooks_json(binary_path: &str) -> serde_json::Value {
+    let command = format!("{} --client antigravity", shell_single_quote(binary_path));
+    serde_json::json!({
+        "tool-gates": {
+            "PreToolUse": [
+                {
+                    "matcher": ANTIGRAVITY_PRE_TOOL_USE_MATCHER,
+                    "hooks": [{"type": "command", "command": command, "timeout": 30}]
+                }
+            ]
+        }
+    })
+}
+
 /// Get the settings file path based on scope
 /// - "user" → ~/.claude/settings.json (or CLAUDE_CONFIG_DIR/settings.json)
 /// - "project" → .claude/settings.json (committed, shared with team)
@@ -1505,6 +1767,117 @@ fn install_codex_hooks(scope: &str, dry_run: bool) {
     }
 }
 
+/// Get Antigravity (`agy`) hooks file path.
+///
+/// Binary-validated (strace of agy v1.0.6, from both an unregistered dir and a
+/// registered project): the CLI loads hooks from a SINGLE global file,
+/// `~/.gemini/antigravity-cli/hooks.json`. It does NOT read a per-project
+/// hooks.json. Workspace and per-conversation `.agents/` dotdirs are probed only
+/// for `skills.txt` / `plugins.txt`, never `hooks.json`, and `~/.gemini/config/`
+/// (which the published docs list for hooks) is opened for `skills.txt` /
+/// `plugins.txt` / `mcp_config.json` but never `hooks.json`. So Antigravity
+/// hooks are global-only; only `-s user` (the default) is valid.
+fn get_antigravity_hooks_path(scope: &str) -> std::path::PathBuf {
+    if scope != "user" {
+        eprintln!(
+            "Error: Antigravity hooks are global-only. agy loads only ~/.gemini/antigravity-cli/hooks.json, so use -s user (the default), not '{scope}'."
+        );
+        std::process::exit(1);
+    }
+    dirs::home_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join(".gemini")
+        .join("antigravity-cli")
+        .join("hooks.json")
+}
+
+/// Install hooks into Antigravity's `hooks.json`.
+///
+/// Antigravity's hooks.json is a top-level object keyed by hook NAME, not the
+/// flat `{event: [...]}` / `{"hooks": {...}}` shape the other installers use, so
+/// this does a targeted merge: it overwrites only the `tool-gates` named entry
+/// and leaves any other named hooks untouched.
+fn install_antigravity_hooks(scope: &str, dry_run: bool) {
+    let binary_path = get_binary_path();
+    let hooks_path = get_antigravity_hooks_path(scope);
+
+    eprintln!("tool-gates installer (Antigravity CLI)");
+    eprintln!("Binary: {}", binary_path);
+    eprintln!("Target: {} ({})", hooks_path.display(), scope);
+    eprintln!();
+
+    let mut root: serde_json::Value = if hooks_path.exists() {
+        match std::fs::read_to_string(&hooks_path) {
+            // A fresh Antigravity install can leave an empty hooks.json; treat
+            // it as an empty object rather than a parse error.
+            Ok(content) if content.trim().is_empty() => serde_json::json!({}),
+            Ok(content) => serde_json::from_str(&content).unwrap_or_else(|e| {
+                eprintln!("Error: Failed to parse {}: {}", hooks_path.display(), e);
+                std::process::exit(1);
+            }),
+            Err(e) => {
+                eprintln!("Error: Failed to read {}: {}", hooks_path.display(), e);
+                std::process::exit(1);
+            }
+        }
+    } else {
+        serde_json::json!({})
+    };
+
+    if !root.is_object() {
+        eprintln!(
+            "Error: {} root must be a JSON object, found {}",
+            hooks_path.display(),
+            json_value_kind(&root)
+        );
+        std::process::exit(1);
+    }
+
+    let generated = generate_antigravity_hooks_json(&binary_path);
+    let desired = &generated["tool-gates"];
+
+    if root.get("tool-gates") == Some(desired) {
+        eprintln!("✓ tool-gates PreToolUse hook up to date");
+        eprintln!("\nAll hooks up to date.");
+        return;
+    }
+
+    root["tool-gates"] = desired.clone();
+
+    if dry_run {
+        eprintln!("\n--dry-run: Would write to {}", hooks_path.display());
+        eprintln!("\nResulting hooks configuration:");
+        println!("{}", serde_json::to_string_pretty(&root).unwrap());
+        return;
+    }
+
+    if let Some(parent) = hooks_path.parent() {
+        if !parent.exists() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                eprintln!("Error: Failed to create {}: {}", parent.display(), e);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    match std::fs::write(
+        &hooks_path,
+        serde_json::to_string_pretty(&root).unwrap() + "\n",
+    ) {
+        Ok(_) => {
+            eprintln!("\n✓ Installed to {}", hooks_path.display());
+            eprintln!("\nAntigravity CLI hooks:");
+            eprintln!(
+                "  - PreToolUse: Command safety (allow / deny / ask), file guards, secret scanning"
+            );
+        }
+        Err(e) => {
+            eprintln!("Error: Failed to write {}: {}", hooks_path.display(), e);
+            std::process::exit(1);
+        }
+    }
+}
+
 /// One-word kind label for a serde_json Value, for clearer error messages
 /// when an installer sees a config file with the wrong root shape.
 fn json_value_kind(v: &serde_json::Value) -> &'static str {
@@ -1594,9 +1967,10 @@ fn handle_hooks_add(args: &[String]) {
     let dry_run = args.iter().any(|a| a == "--dry-run" || a == "-n");
     let gemini = args.iter().any(|a| a == "--gemini");
     let codex = args.iter().any(|a| a == "--codex");
+    let antigravity = args.iter().any(|a| a == "--antigravity" || a == "--agy");
 
-    if gemini && codex {
-        eprintln!("Error: --gemini and --codex are mutually exclusive");
+    if [gemini, codex, antigravity].iter().filter(|&&x| x).count() > 1 {
+        eprintln!("Error: --gemini, --codex, and --antigravity are mutually exclusive");
         std::process::exit(1);
     }
 
@@ -1618,6 +1992,13 @@ fn handle_hooks_add(args: &[String]) {
         // Codex: scope defaults to "user" (~/.codex/hooks.json)
         let scope = scope.unwrap_or("user");
         install_codex_hooks(scope, dry_run);
+        return;
+    }
+
+    if antigravity {
+        // Antigravity: global-only, scope is always "user" (~/.gemini/antigravity-cli/hooks.json)
+        let scope = scope.unwrap_or("user");
+        install_antigravity_hooks(scope, dry_run);
         return;
     }
 
@@ -1677,6 +2058,38 @@ fn check_settings_hooks(scope: &str, path: &std::path::Path, hook_names: &[&str]
     }
 }
 
+/// Status check for Antigravity's named-hook `hooks.json`. The file is a
+/// top-level object keyed by hook name, so the tool-gates entry lives at
+/// `["tool-gates"]["PreToolUse"]` rather than under a `hooks` object, and the
+/// generic `check_settings_hooks` (which reads a `hooks` object) does not apply.
+fn check_antigravity_hooks(scope: &str, path: &std::path::Path) {
+    eprint!("{:8} {} ", scope, path.display());
+
+    if !path.exists() {
+        eprintln!("(not found)");
+        return;
+    }
+
+    match std::fs::read_to_string(path) {
+        Ok(content) => match serde_json::from_str::<serde_json::Value>(&content) {
+            Ok(root) => {
+                let installed = root
+                    .get("tool-gates")
+                    .and_then(|h| h.get("PreToolUse"))
+                    .map(has_tool_gates_hook)
+                    .unwrap_or(false);
+                if installed {
+                    eprintln!("✓ installed (PreToolUse)");
+                } else {
+                    eprintln!("- not installed");
+                }
+            }
+            Err(_) => eprintln!("(parse error)"),
+        },
+        Err(_) => eprintln!("(read error)"),
+    }
+}
+
 /// Handle `tool-gates hooks status`
 fn handle_hooks_status() {
     eprintln!("tool-gates hook status\n");
@@ -1697,16 +2110,6 @@ fn handle_hooks_status() {
         check_settings_hooks(scope, path, &claude_hooks);
     }
 
-    eprintln!("\nGemini CLI:");
-    let gemini_scopes = [
-        ("user", get_gemini_settings_path("user")),
-        ("project", get_gemini_settings_path("project")),
-    ];
-    let gemini_hooks = ["BeforeTool", "AfterTool"];
-    for (scope, path) in &gemini_scopes {
-        check_settings_hooks(scope, path, &gemini_hooks);
-    }
-
     eprintln!("\nCodex CLI:");
     let codex_scopes = [
         ("user", get_codex_hooks_path("user")),
@@ -1716,6 +2119,20 @@ fn handle_hooks_status() {
     for (scope, path) in &codex_scopes {
         check_settings_hooks(scope, path, &codex_hooks);
     }
+
+    eprintln!("\nAntigravity CLI:");
+    // Global-only: agy loads hooks solely from ~/.gemini/antigravity-cli/hooks.json.
+    check_antigravity_hooks("user", &get_antigravity_hooks_path("user"));
+
+    eprintln!("\nGemini CLI (deprecated, sunsetting 2026-06-18):");
+    let gemini_scopes = [
+        ("user", get_gemini_settings_path("user")),
+        ("project", get_gemini_settings_path("project")),
+    ];
+    let gemini_hooks = ["BeforeTool", "AfterTool"];
+    for (scope, path) in &gemini_scopes {
+        check_settings_hooks(scope, path, &gemini_hooks);
+    }
 }
 
 /// Print hooks JSON only
@@ -1723,14 +2140,17 @@ fn print_hooks_json(args: &[String]) {
     let binary_path = get_binary_path();
     let gemini = args.iter().any(|a| a == "--gemini");
     let codex = args.iter().any(|a| a == "--codex");
-    if gemini && codex {
-        eprintln!("Error: --gemini and --codex are mutually exclusive");
+    let antigravity = args.iter().any(|a| a == "--antigravity" || a == "--agy");
+    if [gemini, codex, antigravity].iter().filter(|&&x| x).count() > 1 {
+        eprintln!("Error: --gemini, --codex, and --antigravity are mutually exclusive");
         std::process::exit(1);
     }
     let hooks = if gemini {
         generate_gemini_hooks_json(&binary_path)
     } else if codex {
         generate_codex_hooks_json(&binary_path)
+    } else if antigravity {
+        generate_antigravity_hooks_json(&binary_path)
     } else {
         generate_hooks_json(&binary_path)
     };
@@ -1743,9 +2163,11 @@ fn print_main_help() {
     eprintln!("USAGE:");
     eprintln!("  tool-gates                   Read hook input from stdin (default)");
     eprintln!(
-        "  tool-gates --client <name>   Force client (claude|gemini|codex); used in hook commands"
+        "  tool-gates --client <name>   Force client (claude|codex|antigravity|gemini); used in hook commands"
     );
-    eprintln!("  tool-gates hooks <command>   Manage Claude Code / Gemini CLI / Codex CLI hooks");
+    eprintln!(
+        "  tool-gates hooks <command>   Manage Claude Code / Codex / Antigravity / Gemini hooks"
+    );
     eprintln!("  tool-gates approve <pattern> Add permission rule to settings");
     eprintln!("  tool-gates rules <command>   List/remove permission rules");
     eprintln!("  tool-gates pending <command> Manage pending approval queue");
@@ -1758,8 +2180,9 @@ fn print_main_help() {
     eprintln!();
     eprintln!("COMMANDS:");
     eprintln!("  hooks add -s <scope>         Add hooks to Claude Code settings");
-    eprintln!("  hooks add --gemini           Add hooks to Gemini CLI settings");
     eprintln!("  hooks add --codex            Add hooks to Codex CLI hooks.json");
+    eprintln!("  hooks add --antigravity      Add hooks to Antigravity CLI (agy)");
+    eprintln!("  hooks add --gemini           Add hooks to Gemini CLI (deprecated)");
     eprintln!("  hooks status                 Show hook installation status");
     eprintln!("  approve <pattern> -s <scope> Add allow rule for command pattern");
     eprintln!("  rules list                   List all permission rules");
@@ -1779,22 +2202,23 @@ fn print_main_help() {
     eprintln!();
     eprintln!("EXAMPLES:");
     eprintln!("  tool-gates hooks add -s user          # Install Claude Code hooks");
-    eprintln!("  tool-gates hooks add --gemini         # Install Gemini CLI hooks");
     eprintln!("  tool-gates hooks add --codex          # Install Codex CLI hooks");
+    eprintln!("  tool-gates hooks add --antigravity    # Install Antigravity CLI hooks");
     eprintln!("  tool-gates approve 'npm:*' -s local   # Allow npm commands");
     eprintln!("  tool-gates rules list                 # Show all rules");
     eprintln!("  tool-gates pending list               # Show pending approvals");
 }
 
 fn print_hooks_help() {
-    eprintln!("tool-gates hooks - Manage Claude Code / Gemini CLI / Codex CLI hooks");
+    eprintln!("tool-gates hooks - Manage Claude Code / Codex / Antigravity / Gemini hooks");
     eprintln!();
     eprintln!("USAGE:");
     eprintln!("  tool-gates hooks add -s <scope>     Add hooks to Claude Code settings");
-    eprintln!("  tool-gates hooks add --gemini       Add hooks to Gemini CLI settings");
     eprintln!("  tool-gates hooks add --codex        Add hooks to Codex CLI hooks.json");
+    eprintln!("  tool-gates hooks add --antigravity  Add hooks to Antigravity CLI (agy)");
+    eprintln!("  tool-gates hooks add --gemini       Add hooks to Gemini CLI (deprecated)");
     eprintln!("  tool-gates hooks status             Show hook installation status (all clients)");
-    eprintln!("  tool-gates hooks json [--gemini|--codex]   Output hooks JSON only");
+    eprintln!("  tool-gates hooks json [--codex|--antigravity|--gemini]   Output hooks JSON only");
     eprintln!();
     eprintln!("CLAUDE CODE SCOPES:");
     eprintln!("  user     ~/.claude/settings.json (global user settings)");
@@ -1809,32 +2233,42 @@ fn print_hooks_help() {
     eprintln!("  user     ~/.codex/hooks.json (default)");
     eprintln!("  project  .codex/hooks.json");
     eprintln!();
+    eprintln!("ANTIGRAVITY CLI SCOPE:");
+    eprintln!(
+        "  user     ~/.gemini/antigravity-cli/hooks.json (global-only; the only scope agy reads)"
+    );
+    eprintln!();
     eprintln!("EXAMPLES:");
     eprintln!("  tool-gates hooks add -s user          # Claude Code (recommended)");
-    eprintln!("  tool-gates hooks add --gemini         # Gemini CLI");
     eprintln!("  tool-gates hooks add --codex          # Codex CLI");
+    eprintln!("  tool-gates hooks add --antigravity    # Antigravity CLI (agy)");
     eprintln!("  tool-gates hooks add -s user --dry-run  # Preview changes");
 }
 
 fn print_hooks_add_help() {
     eprintln!("USAGE:");
     eprintln!("  tool-gates hooks add -s <scope> [--dry-run]");
-    eprintln!("  tool-gates hooks add --gemini [-s <scope>] [--dry-run]");
     eprintln!("  tool-gates hooks add --codex [-s <scope>] [--dry-run]");
+    eprintln!("  tool-gates hooks add --antigravity [-s <scope>] [--dry-run]");
+    eprintln!("  tool-gates hooks add --gemini [-s <scope>] [--dry-run]");
     eprintln!();
     eprintln!("CLAUDE CODE SCOPES:");
     eprintln!("  user     ~/.claude/settings.json");
     eprintln!("  project  .claude/settings.json");
     eprintln!("  local    .claude/settings.local.json");
     eprintln!();
-    eprintln!("GEMINI CLI / CODEX CLI SCOPES:");
+    eprintln!("CODEX / GEMINI SCOPES:");
     eprintln!("  user     (default)");
     eprintln!("  project");
     eprintln!();
+    eprintln!("ANTIGRAVITY SCOPE:");
+    eprintln!("  user     only scope; agy loads ~/.gemini/antigravity-cli/hooks.json (global)");
+    eprintln!();
     eprintln!("OPTIONS:");
     eprintln!("  -s, --scope <scope>   Target settings/hooks file (required for Claude Code)");
-    eprintln!("  --gemini              Install for Gemini CLI");
     eprintln!("  --codex               Install for Codex CLI");
+    eprintln!("  --antigravity         Install for Antigravity CLI (agy)");
+    eprintln!("  --gemini              Install for Gemini CLI (deprecated)");
     eprintln!("  -n, --dry-run         Preview changes without writing");
 }
 
@@ -3031,6 +3465,40 @@ fn handle_doctor_subcommand() {
         }
     }
 
+    // Check Antigravity (named-hook wrapper: root["tool-gates"]["PreToolUse"],
+    // not a flat `hooks` object like the other clients). Global-only: agy loads
+    // hooks solely from ~/.gemini/antigravity-cli/hooks.json (binary-validated).
+    let antigravity_scopes = [("user", get_antigravity_hooks_path("user"))];
+    for (scope, path) in &antigravity_scopes {
+        if !path.exists() {
+            continue;
+        }
+        let content = match std::fs::read_to_string(path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        let root: serde_json::Value = match serde_json::from_str(&content) {
+            Ok(v) => v,
+            Err(_) => {
+                let msg = format!("Antigravity hooks parse error: {}", path.display());
+                eprintln!("  ✗ Hooks (antigravity {}): parse error", scope);
+                issues.push(msg);
+                continue;
+            }
+        };
+        let has_pre = root
+            .get("tool-gates")
+            .and_then(|h| h.get("PreToolUse"))
+            .map(has_tool_gates_hook)
+            .unwrap_or(false);
+        if !has_pre {
+            continue;
+        }
+        any_installed = true;
+        eprintln!("  ✓ Hooks (antigravity {}): PreToolUse installed", scope);
+        ok_count += 1;
+    }
+
     if !any_installed {
         let msg = "No tool-gates hooks installed in any settings file".to_string();
         eprintln!("  ✗ Hooks: not installed");
@@ -3309,6 +3777,14 @@ fn print_deny_and_exit(client: Client, reason: &str) -> ! {
                 serde_json::to_string(reason)
                     .unwrap_or_else(|_| "\"tool-gates internal error\"".to_string())
             ),
+            // Antigravity reads a flat {"decision","reason"} object from stdout;
+            // "deny" is the hard block, and the decision is authoritative so no
+            // special exit code is needed.
+            Client::Antigravity => format!(
+                r#"{{"decision":"deny","reason":{}}}"#,
+                serde_json::to_string(reason)
+                    .unwrap_or_else(|_| "\"tool-gates internal error\"".to_string())
+            ),
             // Future Client variants: assume the Claude shape is the safest
             // last-resort deny since most new variants emerge as Claude-compatible.
             _ => format!(
@@ -3319,7 +3795,9 @@ fn print_deny_and_exit(client: Client, reason: &str) -> ! {
         };
         println!("{fallback}");
     }
-    if client == Client::Codex {
+    // Codex and Antigravity read the deny from stdout JSON (exit 0); Claude and
+    // Gemini also accept exit code 2 as a hard-block signal.
+    if matches!(client, Client::Codex | Client::Antigravity) {
         std::process::exit(0);
     }
     std::process::exit(2);
@@ -3529,6 +4007,161 @@ mod tests {
         let (client, rest) = extract_client_override(vec_strs(&["tool-gates", "hooks", "status"]));
         assert!(client.is_none());
         assert_eq!(rest, vec_strs(&["tool-gates", "hooks", "status"]));
+    }
+
+    // === Antigravity CLI (agy) integration tests ===
+
+    #[test]
+    fn extract_client_override_antigravity() {
+        let (client, rest) =
+            extract_client_override(vec_strs(&["tool-gates", "--client", "antigravity"]));
+        assert_eq!(client, Some(Client::Antigravity));
+        assert_eq!(rest, vec_strs(&["tool-gates"]));
+    }
+
+    #[test]
+    fn extract_client_override_agy_alias() {
+        let (client, _rest) = extract_client_override(vec_strs(&["tool-gates", "--client=agy"]));
+        assert_eq!(client, Some(Client::Antigravity));
+    }
+
+    #[test]
+    fn antigravity_hooks_json_uses_named_wrapper_and_client_flag() {
+        let hooks = generate_antigravity_hooks_json("/path/to/tool-gates");
+        // Top-level is keyed by hook NAME, not by event (Antigravity's shape).
+        let entry = &hooks["tool-gates"];
+        assert!(entry.is_object(), "named-hook wrapper expected: {hooks}");
+        // Only PreToolUse is installed for Antigravity.
+        let pre = entry["PreToolUse"].as_array().unwrap();
+        assert_eq!(pre.len(), 1);
+        assert!(entry.get("PostToolUse").is_none());
+        assert!(entry.get("PermissionRequest").is_none());
+        // The command carries `--client antigravity` so the wire format routes.
+        let cmd = pre[0]["hooks"][0]["command"].as_str().unwrap();
+        assert!(cmd.contains("--client antigravity"), "cmd: {cmd}");
+        // Matcher covers the gateable Antigravity tool names.
+        let matcher = pre[0]["matcher"].as_str().unwrap();
+        assert!(matcher.contains("run_command"), "matcher: {matcher}");
+        assert!(matcher.contains("write_to_file"), "matcher: {matcher}");
+    }
+
+    #[test]
+    fn antigravity_hooks_path_is_global_only() {
+        // strace of agy v1.0.6 confirms hooks load only from
+        // ~/.gemini/antigravity-cli/hooks.json (not config/ or .agents/).
+        let p = get_antigravity_hooks_path("user");
+        assert!(
+            p.to_string_lossy()
+                .ends_with(".gemini/antigravity-cli/hooks.json"),
+            "user path: {}",
+            p.display()
+        );
+        // Non-user scopes exit the process (global-only), so they are not
+        // unit-tested here; the message is asserted manually via the CLI.
+    }
+
+    #[test]
+    fn normalize_antigravity_run_command_to_canonical() {
+        let raw = r#"{
+            "toolCall": {"name": "run_command", "args": {"CommandLine": "git status", "Cwd": "/ws"}},
+            "stepIdx": 3,
+            "conversationId": "c1",
+            "workspacePaths": ["/ws"],
+            "transcriptPath": "/ws/.gemini/antigravity/transcript.jsonl"
+        }"#;
+        let norm = match normalize_antigravity_pre_tool_use(raw) {
+            AntigravityPayload::PreToolUse(s) => s,
+            _ => panic!("expected PreToolUse"),
+        };
+        let hi: HookInput = serde_json::from_str(&norm).unwrap();
+        assert_eq!(hi.tool_name, "run_command");
+        assert_eq!(hi.get_command(), "git status");
+        assert_eq!(hi.cwd, "/ws");
+        assert_eq!(hi.session_id, "c1");
+        assert!(Client::is_shell_tool(&hi.tool_name));
+    }
+
+    #[test]
+    fn normalize_antigravity_write_to_file_carries_content() {
+        let raw = r#"{
+            "toolCall": {"name": "write_to_file", "args": {"TargetFile": "/ws/a.py", "CodeContent": "x = 1"}},
+            "workspacePaths": ["/ws"]
+        }"#;
+        let norm = match normalize_antigravity_pre_tool_use(raw) {
+            AntigravityPayload::PreToolUse(s) => s,
+            _ => panic!("expected PreToolUse"),
+        };
+        let hi: HookInput = serde_json::from_str(&norm).unwrap();
+        assert_eq!(hi.tool_name, "write_to_file");
+        assert_eq!(hi.get_file_path(), "/ws/a.py");
+        // The canonical `content` key is what the secret scanner reads.
+        let v: serde_json::Value = serde_json::from_str(&norm).unwrap();
+        assert_eq!(v["tool_input"]["content"], "x = 1");
+    }
+
+    #[test]
+    fn normalize_antigravity_multi_replace_concatenates_chunks() {
+        let raw = r#"{
+            "toolCall": {"name": "multi_replace_file_content", "args": {
+                "TargetFile": "/ws/a.py",
+                "ReplacementChunks": [
+                    {"ReplacementContent": "line one"},
+                    {"ReplacementContent": "line two"}
+                ]
+            }},
+            "workspacePaths": ["/ws"]
+        }"#;
+        let norm = match normalize_antigravity_pre_tool_use(raw) {
+            AntigravityPayload::PreToolUse(s) => s,
+            _ => panic!("expected PreToolUse"),
+        };
+        let v: serde_json::Value = serde_json::from_str(&norm).unwrap();
+        let content = v["tool_input"]["content"].as_str().unwrap();
+        // Chunks join with NO separator so a secret split across a chunk
+        // boundary stays contiguous for the scanner. Asserting the exact join
+        // (not just substring presence) guards against a separator regression
+        // that would reopen the boundary-split evasion.
+        assert_eq!(content, "line oneline two", "content: {content}");
+    }
+
+    #[test]
+    fn normalize_antigravity_without_tool_call_is_not_gateable() {
+        // A Post/Stop payload carries no toolCall; nothing to gate -> emit nothing.
+        let raw = r#"{"stepIdx": 5, "error": "", "conversationId": "c1"}"#;
+        assert!(matches!(
+            normalize_antigravity_pre_tool_use(raw),
+            AntigravityPayload::NotGateable
+        ));
+    }
+
+    #[test]
+    fn normalize_antigravity_malformed_payload_fails_closed() {
+        // Truncated JSON with a toolCall is malformed, not a missing event: it
+        // must fail closed (the embedded command is never silently allowed).
+        let truncated = r#"{"toolCall":{"name":"run_command","args":{"CommandLine":"rm -rf /""#;
+        assert!(matches!(
+            normalize_antigravity_pre_tool_use(truncated),
+            AntigravityPayload::Malformed
+        ));
+        // A well-formed envelope whose args is the wrong JSON type would drop
+        // the command silently; reject it as malformed instead.
+        let wrong_args = r#"{"toolCall":{"name":"run_command","args":"CommandLine=rm -rf /"},"workspacePaths":["/ws"]}"#;
+        assert!(matches!(
+            normalize_antigravity_pre_tool_use(wrong_args),
+            AntigravityPayload::Malformed
+        ));
+    }
+
+    #[test]
+    fn normalize_antigravity_prefers_args_cwd() {
+        // run_command carries its own Cwd; settings resolution should key off it.
+        let raw = r#"{"toolCall":{"name":"run_command","args":{"CommandLine":"ls","Cwd":"/ws/pkg"}},"workspacePaths":["/ws"]}"#;
+        let norm = match normalize_antigravity_pre_tool_use(raw) {
+            AntigravityPayload::PreToolUse(s) => s,
+            _ => panic!("expected PreToolUse"),
+        };
+        let hi: HookInput = serde_json::from_str(&norm).unwrap();
+        assert_eq!(hi.cwd, "/ws/pkg");
     }
 
     #[test]

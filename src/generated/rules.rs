@@ -5605,10 +5605,10 @@ pub fn check_bd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 pub static TOOL_GATES_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("approve", "Adds a permanent permission rule to a Claude/Gemini/Codex settings file. Future matching tool calls auto-allow without prompting."),
+        ("approve", "Adds a permanent permission rule to your settings.json. Future matching tool calls auto-allow without prompting."),
         ("rules remove", "Removes a permission rule from a settings file. Future matching tool calls revert to the default gate decision."),
         ("pending clear", "Empties `~/.cache/tool-gates/pending.jsonl`. Drops every queued approval; cannot be undone."),
-        ("hooks add", "Writes tool-gates hook entries into a Claude/Gemini/Codex settings file. Changes how every future tool call in that scope is gated."),
+        ("hooks add", "Writes tool-gates hook entries into the client's settings.json (Claude/Gemini) or hooks.json (Codex/Antigravity). Changes how every future tool call in that scope is gated."),
         ("review", "Opens the interactive approval TUI. Selecting Approve writes a permanent permission rule to a settings file."),
     ].into_iter().collect()
 });

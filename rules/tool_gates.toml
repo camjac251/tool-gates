@@ -97,7 +97,7 @@ reason = "Info flags."
 
 [[programs.ask]]
 subcommand = "approve"
-reason = "Adds a permanent permission rule to a Claude/Gemini/Codex settings file. Future matching tool calls auto-allow without prompting."
+reason = "Adds a permanent permission rule to your settings.json. Future matching tool calls auto-allow without prompting."
 
 # -----------------------------------------------------------------------------
 # Rules Management
@@ -121,7 +121,7 @@ reason = "Empties `~/.cache/tool-gates/pending.jsonl`. Drops every queued approv
 
 [[programs.ask]]
 subcommand = "hooks add"
-reason = "Writes tool-gates hook entries into a Claude/Gemini/Codex settings file. Changes how every future tool call in that scope is gated."
+reason = "Writes tool-gates hook entries into the client's settings.json (Claude/Gemini) or hooks.json (Codex/Antigravity). Changes how every future tool call in that scope is gated."
 
 # -----------------------------------------------------------------------------
 # Interactive TUI
