@@ -183,15 +183,6 @@
         <p class="pathline"><code>~/.claude/settings.json</code></p>
       </article>
       <article class="client">
-        <h4>Gemini CLI <span class="count">· 2 hooks · deprecated</span></h4>
-        <ul>
-          <li><i></i>BeforeTool</li>
-          <li><i></i>AfterTool</li>
-        </ul>
-        <p class="client-note"><b>Deprecated:</b> Google sunsets the consumer Gemini CLI on 2026-06-18; use Antigravity for new setups. Requires v0.36.0+ for <code>ask</code> support. No PermissionRequest, no approval tracking; tool-gates emits <code>"block"</code> for hard blocks, and Gemini also accepts <code>"deny"</code>.</p>
-        <p class="pathline"><code>~/.gemini/settings.json</code></p>
-      </article>
-      <article class="client">
         <h4>Codex CLI <span class="count">· 3 hooks</span></h4>
         <ul>
           <li><i></i>PreToolUse</li>
@@ -208,6 +199,15 @@
         </ul>
         <p class="client-note">Google's Gemini CLI successor (<code>agy</code>). Selected via <code>--client antigravity</code>; a flat <code>decision</code> output and a <code>hooks.json</code> keyed by hook name. PreToolUse drives the whole gate.</p>
         <p class="pathline"><code>~/.gemini/antigravity-cli/hooks.json</code></p>
+      </article>
+      <article class="client">
+        <h4>Gemini CLI <span class="count">· 2 hooks · deprecated</span></h4>
+        <ul>
+          <li><i></i>BeforeTool</li>
+          <li><i></i>AfterTool</li>
+        </ul>
+        <p class="client-note"><b>Deprecated:</b> Google sunsets the consumer Gemini CLI on 2026-06-18; use Antigravity for new setups. Requires v0.36.0+ for <code>ask</code> support. No PermissionRequest, no approval tracking; tool-gates emits <code>"block"</code> for hard blocks, and Gemini also accepts <code>"deny"</code>.</p>
+        <p class="pathline"><code>~/.gemini/settings.json</code></p>
       </article>
     </div>
     <p class="clients-foot"><b>One binary.</b> Routing is via <code style="font-family:var(--font-mono);font-size:0.92em">hook_event_name</code>, or the <code style="font-family:var(--font-mono);font-size:0.92em">--client</code> flag where event names collide or are absent; the same gate engine returns the right shape for the right client.</p>

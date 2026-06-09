@@ -1280,10 +1280,10 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
   white-space: nowrap;
 }
 
-/* Clients (three columns) */
+/* Clients (two-by-two grid) */
 .clients {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: var(--s-3);
   margin-top: var(--s-5);
 }
@@ -1366,14 +1366,16 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
   margin-top: var(--s-3);
   font-family: var(--font-mono);
   font-size: 12px;
+  line-height: 1.7;
   color: var(--text-3);
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
 }
 .clients-foot b {
   color: var(--text-2);
   font-weight: 500;
+}
+.clients-foot code {
+  white-space: nowrap;
+  color: var(--text-2);
 }
 
 /* TOML proof panel */
