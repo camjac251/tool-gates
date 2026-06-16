@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.24.1](https://github.com/camjac251/tool-gates/compare/v1.24.0...v1.24.1) - 2026-06-16
+
+### Fixed
+
+- update hook config path handling
+
+### Other
+
+- fix four-client grid layout and footer wrapping on index
+
 ## [1.24.0](https://github.com/camjac251/tool-gates/compare/v1.23.0...v1.24.0) - 2026-06-09
 
 ### Added
