@@ -36,7 +36,7 @@
     </thead>
     <tbody>
       <tr><td>No opinion</td><td>empty stdout</td><td>Antigravity's own fine-grained permission engine decides. tool-gates never auto-allows a command it does not recognize. (<code>decision</code> is required by the schema; this relies on the currently-undocumented behavior that emitting none defers to Antigravity's engine.)</td></tr>
-      <tr><td>Allow (known-safe)</td><td><code>{"decision":"allow"}</code></td><td>Auto-approved, no prompt.</td></tr>
+      <tr><td>Allow (known-safe)</td><td><code>{"decision":"allow"}</code></td><td>Uses Antigravity's documented allow shape. Prompt suppression depends on Antigravity's native permission engine.</td></tr>
       <tr><td>Ask (soft)</td><td><code>{"decision":"ask"}</code></td><td>Prompts, respecting the user's "Always Allow" grants. Used for routine mutations and unknown commands.</td></tr>
       <tr><td>Ask (hard floor)</td><td><code>{"decision":"force_ask"}</code></td><td>Pipe-to-shell, <code>eval</code>, and dangerous substitution. Always prompts, ignoring any "Always Allow" grant, so the floor can never be permanently granted away.</td></tr>
       <tr><td>Deny</td><td><code>{"decision":"deny"}</code></td><td>Hard block. Remediation text is folded into <code>reason</code> since the Pre output has no <code>additionalContext</code> field.</td></tr>
@@ -68,18 +68,21 @@
   <div class="config-block">
     <header>
       <h3>Install</h3>
-      <span class="src-tag">~/.gemini/antigravity-cli/hooks.json</span>
+      <span class="src-tag">~/.gemini/config/hooks.json</span>
     </header>
     <div class="config-body">
       <div class="config-toml">
-<pre><span class="c"># global (the only scope agy reads hooks from)</span>
+<pre><span class="c"># shared user/global path (recommended, default)</span>
 $ tool-gates hooks add --antigravity
 <span class="c"># preview without writing</span>
-$ tool-gates hooks add --antigravity --dry-run</pre>
+$ tool-gates hooks add --antigravity --dry-run
+<span class="c"># project scope</span>
+$ tool-gates hooks add --antigravity -s project</pre>
       </div>
       <div class="config-prose">
-        <p>Antigravity hooks are <b>global-only</b>. The installer writes <code>~/.gemini/antigravity-cli/hooks.json</code>, the single path the <code>agy</code> CLI loads hooks from (verified by tracing the binary). The published Antigravity docs also list <code>.agents/</code> and <code>~/.gemini/config/</code>, but the v1.0.6 CLI does not read hooks from either, so there is no <code>-s project</code> scope. The matcher covers <code>run_command</code>, <code>view_file</code>, <code>write_to_file</code>, <code>replace_file_content</code>, <code>multi_replace_file_content</code>, <code>grep_search</code>, and <code>find_by_name</code>.</p>
-        <p>Confirm with <code>tool-gates hooks status</code>, which lists the Antigravity hook alongside the other clients.</p>
+        <p>Antigravity user hooks live at <code>~/.gemini/config/hooks.json</code>, which is the installer default and the path shared by the CLI backend. Project hooks live at <code>.agents/hooks.json</code> and are available with <code>-s project</code>. The matcher covers <code>run_command</code>, <code>view_file</code>, <code>write_to_file</code>, <code>replace_file_content</code>, <code>multi_replace_file_content</code>, <code>grep_search</code>, and <code>find_by_name</code>.</p>
+        <p>Plugin-packaged hooks are useful for distribution, but they are not required for hook installs. Treat plugin support as a separate global-install path that should be verified with <code>agy plugin validate</code> and a deny probe before relying on it.</p>
+        <p>Confirm with <code>tool-gates hooks status</code>, which lists the Antigravity shared user and project hook paths alongside the other clients.</p>
       </div>
     </div>
   </div>

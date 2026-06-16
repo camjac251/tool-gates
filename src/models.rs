@@ -780,7 +780,7 @@ impl HookOutput {
     ///
     /// Mapping:
     /// - `Approve` (no opinion) -> `Value::Null` (emit nothing; Antigravity's permission engine decides)
-    /// - `Allow`                -> `{"decision":"allow","reason":...}` (auto-approve known-safe)
+    /// - `Allow`                -> `{"decision":"allow","reason":...}` (documented allow shape; prompt suppression depends on native permissions)
     /// - `Ask`                  -> `{"decision":"ask","reason":...}` (prompt; respects "Always Allow" grants)
     /// - `Ask` + `force`        -> `{"decision":"force_ask","reason":...}` (hard-ask floor: always prompts, ignores "Always Allow")
     /// - `Defer`                -> `{"decision":"ask",...}` (no Antigravity equivalent of CC's resolver)

@@ -24,7 +24,7 @@
       </tr>
       <tr>
         <td><code>tool-gates hooks add --antigravity</code></td>
-        <td>Wire a single PreToolUse hook into <code>~/.gemini/antigravity-cli/hooks.json</code> (global-only; the sole path agy reads hooks from). The installer bakes <code>--client antigravity</code> into the command. Antigravity (<code>agy</code>) is Google's successor to the Gemini CLI.</td>
+        <td>Wire a single PreToolUse hook into the shared user path at <code>~/.gemini/config/hooks.json</code> by default. The installer bakes <code>--client antigravity</code> into the command. The <code>-s project</code> scope writes <code>.agents/hooks.json</code>. Antigravity (<code>agy</code>) is Google's successor to the Gemini CLI.</td>
       </tr>
       <tr>
         <td><code>tool-gates hooks add … --dry-run</code></td>

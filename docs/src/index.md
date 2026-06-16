@@ -198,7 +198,7 @@
           <li><i></i>PreToolUse</li>
         </ul>
         <p class="client-note">Google's Gemini CLI successor (<code>agy</code>). Selected via <code>--client antigravity</code>; a flat <code>decision</code> output and a <code>hooks.json</code> keyed by hook name. PreToolUse drives the whole gate.</p>
-        <p class="pathline"><code>~/.gemini/antigravity-cli/hooks.json</code></p>
+        <p class="pathline"><code>~/.gemini/config/hooks.json</code></p>
       </article>
       <article class="client">
         <h4>Gemini CLI <span class="count">· 2 hooks · deprecated</span></h4>

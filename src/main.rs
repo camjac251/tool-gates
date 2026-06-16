@@ -1357,8 +1357,8 @@ fn has_tool_gates_hook(hooks_array: &serde_json::Value) -> bool {
 
 /// Sync tool-gates hook entries for a hook event.
 /// Replaces existing tool-gates entries with expected ones if any managed
-/// field differs. Matcher-only comparisons miss stale hook commands, such as
-/// older Codex installs that lack `--client codex`.
+/// field differs. Matcher-only comparisons miss managed command changes such
+/// as required client-routing flags.
 /// Returns None if unchanged, or a description of what changed.
 fn sync_hook_entries(
     hooks_array: &mut serde_json::Value,
@@ -1769,26 +1769,26 @@ fn install_codex_hooks(scope: &str, dry_run: bool) {
 
 /// Get Antigravity (`agy`) hooks file path.
 ///
-/// Binary-validated (strace of agy v1.0.6, from both an unregistered dir and a
-/// registered project): the CLI loads hooks from a SINGLE global file,
-/// `~/.gemini/antigravity-cli/hooks.json`. It does NOT read a per-project
-/// hooks.json. Workspace and per-conversation `.agents/` dotdirs are probed only
-/// for `skills.txt` / `plugins.txt`, never `hooks.json`, and `~/.gemini/config/`
-/// (which the published docs list for hooks) is opened for `skills.txt` /
-/// `plugins.txt` / `mcp_config.json` but never `hooks.json`. So Antigravity
-/// hooks are global-only; only `-s user` (the default) is valid.
+/// Project scope uses workspace customization; user scope uses the shared
+/// Antigravity configuration directory.
 fn get_antigravity_hooks_path(scope: &str) -> std::path::PathBuf {
-    if scope != "user" {
-        eprintln!(
-            "Error: Antigravity hooks are global-only. agy loads only ~/.gemini/antigravity-cli/hooks.json, so use -s user (the default), not '{scope}'."
-        );
-        std::process::exit(1);
+    match scope {
+        "user" => dirs::home_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join(".gemini")
+            .join("config")
+            .join("hooks.json"),
+        "project" => std::env::current_dir()
+            .unwrap_or_else(|_| std::path::PathBuf::from("."))
+            .join(".agents")
+            .join("hooks.json"),
+        _ => {
+            eprintln!(
+                "Error: unsupported Antigravity hook scope '{scope}'. Use -s user (recommended) or -s project."
+            );
+            std::process::exit(1);
+        }
     }
-    dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join(".gemini")
-        .join("antigravity-cli")
-        .join("hooks.json")
 }
 
 /// Install hooks into Antigravity's `hooks.json`.
@@ -1996,7 +1996,8 @@ fn handle_hooks_add(args: &[String]) {
     }
 
     if antigravity {
-        // Antigravity: global-only, scope is always "user" (~/.gemini/antigravity-cli/hooks.json)
+        // Antigravity defaults to shared user configuration; `-s project`
+        // targets workspace hooks.
         let scope = scope.unwrap_or("user");
         install_antigravity_hooks(scope, dry_run);
         return;
@@ -2121,8 +2122,13 @@ fn handle_hooks_status() {
     }
 
     eprintln!("\nAntigravity CLI:");
-    // Global-only: agy loads hooks solely from ~/.gemini/antigravity-cli/hooks.json.
-    check_antigravity_hooks("user", &get_antigravity_hooks_path("user"));
+    let antigravity_scopes = [
+        ("user", get_antigravity_hooks_path("user")),
+        ("project", get_antigravity_hooks_path("project")),
+    ];
+    for (scope, path) in &antigravity_scopes {
+        check_antigravity_hooks(scope, path);
+    }
 
     eprintln!("\nGemini CLI (deprecated, sunsetting 2026-06-18):");
     let gemini_scopes = [
@@ -2233,10 +2239,9 @@ fn print_hooks_help() {
     eprintln!("  user     ~/.codex/hooks.json (default)");
     eprintln!("  project  .codex/hooks.json");
     eprintln!();
-    eprintln!("ANTIGRAVITY CLI SCOPE:");
-    eprintln!(
-        "  user     ~/.gemini/antigravity-cli/hooks.json (global-only; the only scope agy reads)"
-    );
+    eprintln!("ANTIGRAVITY CLI SCOPES:");
+    eprintln!("  user     ~/.gemini/config/hooks.json (shared global, default)");
+    eprintln!("  project  .agents/hooks.json");
     eprintln!();
     eprintln!("EXAMPLES:");
     eprintln!("  tool-gates hooks add -s user          # Claude Code (recommended)");
@@ -2261,8 +2266,9 @@ fn print_hooks_add_help() {
     eprintln!("  user     (default)");
     eprintln!("  project");
     eprintln!();
-    eprintln!("ANTIGRAVITY SCOPE:");
-    eprintln!("  user     only scope; agy loads ~/.gemini/antigravity-cli/hooks.json (global)");
+    eprintln!("ANTIGRAVITY SCOPES:");
+    eprintln!("  user     ~/.gemini/config/hooks.json (shared global, default)");
+    eprintln!("  project  .agents/hooks.json");
     eprintln!();
     eprintln!("OPTIONS:");
     eprintln!("  -s, --scope <scope>   Target settings/hooks file (required for Claude Code)");
@@ -3254,7 +3260,7 @@ fn handle_doctor_subcommand() {
             issues.push(msg);
         }
 
-        // Check for stale external hooks (old Python scripts)
+        // Check for external hook commands that tool-gates should replace.
         if let Some(hook_entries) = hooks.as_object() {
             for (_event, matchers) in hook_entries {
                 if let Some(arr) = matchers.as_array() {
@@ -3343,7 +3349,7 @@ fn handle_doctor_subcommand() {
             issues.push(msg);
         }
 
-        // Check for stale external hooks (old Python scripts)
+        // Check for external hook commands that tool-gates should replace.
         if let Some(hook_entries) = hooks.as_object() {
             for (_event, matchers) in hook_entries {
                 if let Some(arr) = matchers.as_array() {
@@ -3439,7 +3445,7 @@ fn handle_doctor_subcommand() {
             issues.push(msg);
         }
 
-        // Check for stale external hooks (old Python scripts)
+        // Check for external hook commands that tool-gates should replace.
         if let Some(hook_entries) = hooks.as_object() {
             for (_event, matchers) in hook_entries {
                 if let Some(arr) = matchers.as_array() {
@@ -3466,9 +3472,11 @@ fn handle_doctor_subcommand() {
     }
 
     // Check Antigravity (named-hook wrapper: root["tool-gates"]["PreToolUse"],
-    // not a flat `hooks` object like the other clients). Global-only: agy loads
-    // hooks solely from ~/.gemini/antigravity-cli/hooks.json (binary-validated).
-    let antigravity_scopes = [("user", get_antigravity_hooks_path("user"))];
+    // not a flat `hooks` object like the other clients).
+    let antigravity_scopes = [
+        ("user", get_antigravity_hooks_path("user")),
+        ("project", get_antigravity_hooks_path("project")),
+    ];
     for (scope, path) in &antigravity_scopes {
         if !path.exists() {
             continue;
@@ -3503,6 +3511,7 @@ fn handle_doctor_subcommand() {
         let msg = "No tool-gates hooks installed in any settings file".to_string();
         eprintln!("  ✗ Hooks: not installed");
         eprintln!("    Run: tool-gates hooks add -s user");
+        eprintln!("    Or:  tool-gates hooks add --antigravity");
         issues.push(msg);
     }
 
@@ -3753,10 +3762,8 @@ fn print_no_opinion_for(client: Client) {
 /// structured stdout path so a fallback deny remains fail-closed.
 ///
 /// If serialization itself fails, fall through to a hardcoded last-resort
-/// deny payload so the gate never silently passes through. The previous
-/// behavior of `eprintln + return` left Codex with empty stdout = pass-through,
-/// turning a serialization error into a silent allow of an explicitly-denied
-/// command.
+/// deny payload so the gate never silently passes through. Codex treats empty
+/// stdout as pass-through, so deny fallbacks must write a structured payload.
 fn print_deny_and_exit(client: Client, reason: &str) -> ! {
     let output = HookOutput::deny(reason);
     let value = output.serialize(client);
@@ -4046,18 +4053,20 @@ mod tests {
     }
 
     #[test]
-    fn antigravity_hooks_path_is_global_only() {
-        // strace of agy v1.0.6 confirms hooks load only from
-        // ~/.gemini/antigravity-cli/hooks.json (not config/ or .agents/).
+    fn antigravity_hooks_path_supports_project_and_user() {
+        let p = get_antigravity_hooks_path("project");
+        assert!(
+            p.to_string_lossy().ends_with(".agents/hooks.json"),
+            "project path: {}",
+            p.display()
+        );
+
         let p = get_antigravity_hooks_path("user");
         assert!(
-            p.to_string_lossy()
-                .ends_with(".gemini/antigravity-cli/hooks.json"),
+            p.to_string_lossy().ends_with(".gemini/config/hooks.json"),
             "user path: {}",
             p.display()
         );
-        // Non-user scopes exit the process (global-only), so they are not
-        // unit-tested here; the message is asserted manually via the CLI.
     }
 
     #[test]

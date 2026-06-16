@@ -86,7 +86,7 @@
         <ul class="hook-list">
           <li><code>PreToolUse</code>: command safety, file guards, secret scanning</li>
         </ul>
-        <p class="settings-path">~/.gemini/antigravity-cli/hooks.json</p>
+        <p class="settings-path">~/.gemini/config/hooks.json</p>
       </article>
     </div>
     <p class="step-prose">Preview what would change with <code>--dry-run</code>:</p>

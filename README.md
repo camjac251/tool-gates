@@ -46,7 +46,8 @@ tool-gates hooks add -s user
 tool-gates hooks add --codex
 
 # For Antigravity CLI (agy)
-tool-gates hooks add --antigravity
+tool-gates hooks add --antigravity  # ~/.gemini/config/hooks.json
+tool-gates hooks add --antigravity -s project  # .agents/hooks.json
 
 # For Gemini CLI (deprecated; Google sunsets it 2026-06-18)
 tool-gates hooks add --gemini
