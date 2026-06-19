@@ -4,7 +4,7 @@
   <div class="config-block">
     <header>
       <h3>v1.27.0 · June 19, 2026</h3>
-      <span class="src-tag">scratch <a href="https://github.com/camjac251/tool-gates/commit/a29afbc" target="_blank" rel="noopener">a29afbc</a> · awk hints <a href="https://github.com/camjac251/tool-gates/commit/8a57e0a" target="_blank" rel="noopener">8a57e0a</a></span>
+      <span class="src-tag">scratch + awk hints · <a href="https://github.com/camjac251/tool-gates/commit/2a5b993" target="_blank" rel="noopener">2a5b993</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -21,7 +21,7 @@
   <div class="config-block">
     <header>
       <h3>v1.26.0 · June 19, 2026</h3>
-      <span class="src-tag">risk gating · <a href="https://github.com/camjac251/tool-gates/commit/28b90f9" target="_blank" rel="noopener">28b90f9</a></span>
+      <span class="src-tag">risk gating · <a href="https://github.com/camjac251/tool-gates/commit/4ec9a59" target="_blank" rel="noopener">4ec9a59</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -36,7 +36,7 @@
   <div class="config-block">
     <header>
       <h3>v1.25.0 · June 19, 2026</h3>
-      <span class="src-tag">review TUI · <a href="https://github.com/camjac251/tool-gates/commit/926c630" target="_blank" rel="noopener">926c630</a></span>
+      <span class="src-tag">review TUI · <a href="https://github.com/camjac251/tool-gates/commit/c62f858" target="_blank" rel="noopener">c62f858</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -56,7 +56,7 @@
   <div class="config-block">
     <header>
       <h3>v1.24.1 · June 16, 2026</h3>
-      <span class="src-tag">Antigravity scopes · <a href="https://github.com/camjac251/tool-gates/commit/a22733a" target="_blank" rel="noopener">a22733a</a></span>
+      <span class="src-tag">Antigravity scopes · <a href="https://github.com/camjac251/tool-gates/commit/2237a64" target="_blank" rel="noopener">2237a64</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -73,7 +73,7 @@
   <div class="config-block">
     <header>
       <h3>v1.24.0 · June 9, 2026</h3>
-      <span class="src-tag">Antigravity CLI · <a href="https://github.com/camjac251/tool-gates/commit/5afcc3b" target="_blank" rel="noopener">5afcc3b</a></span>
+      <span class="src-tag">Antigravity CLI · <a href="https://github.com/camjac251/tool-gates/commit/f12e0a0" target="_blank" rel="noopener">f12e0a0</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -92,7 +92,7 @@
   <div class="config-block">
     <header>
       <h3>v1.23.0 · June 6, 2026</h3>
-      <span class="src-tag">docs &amp; approvals · <a href="https://github.com/camjac251/tool-gates/commit/673bd49" target="_blank" rel="noopener">673bd49</a></span>
+      <span class="src-tag">docs &amp; approvals · <a href="https://github.com/camjac251/tool-gates/commit/a43ee4a" target="_blank" rel="noopener">a43ee4a</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -777,7 +777,7 @@
   <div class="config-block">
     <header>
       <h3>v1.5.0 · March 13, 2026</h3>
-      <span class="src-tag">safeties · <a href="https://github.com/camjac251/tool-gates/commit/b5e3a1d" target="_blank" rel="noopener">b5e3a1d</a></span>
+      <span class="src-tag">safeties · <a href="https://github.com/camjac251/tool-gates/commit/f1cd14f" target="_blank" rel="noopener">f1cd14f</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
