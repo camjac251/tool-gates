@@ -779,10 +779,61 @@ fn hint_httpie(cmd: &CommandInfo) -> Option<ModernHint> {
 }
 
 fn hint_awk(cmd: &CommandInfo) -> Option<ModernHint> {
-    // Check for simple field extraction patterns
-    let has_print = cmd.args.iter().any(|a| a.contains("print $"));
+    // The awk program text (and any flags) live in args; join once so multi-token
+    // idioms like `END{print NR}` survive substring checks.
+    let prog = cmd.args.join(" ");
+    let has_sum = prog.contains("+=");
+    let has_unit_div = ["/1024", "/1048576", "/1073741824", "/1000000"]
+        .iter()
+        .any(|d| prog.contains(d));
+    let has_print_field = prog.contains("print $");
 
-    if has_print {
+    // Byte/size arithmetic -> numbat (unit-aware). When the program also sums a
+    // column, numbat alone won't reduce it, so point at jq for the reduction too.
+    if has_unit_div {
+        let hint = if has_sum {
+            "Use `numbat` for byte/size math (e.g. `numbat '12884901888 bytes -> GB'`); reduce the column first with `jq -Rn '[inputs|tonumber]|add'`. Avoids awk printf division."
+        } else {
+            "Use `numbat` for byte/size math, e.g. `numbat '12884901888 bytes -> GB'`, instead of awk printf division."
+        };
+        return Some(ModernHint {
+            legacy_command: "awk",
+            modern_command: "numbat",
+            hint: hint.to_string(),
+        });
+    }
+
+    // Column reduction (sum) -> jq slurp. No autoapproved peer does stream math;
+    // `jq -Rn` reads raw lines and adds them.
+    if has_sum {
+        return Some(ModernHint {
+            legacy_command: "awk",
+            modern_command: "jq",
+            hint: "Sum a column with `... | jq -Rn '[inputs|tonumber]|add'` instead of awk '{s+=$1} END{print s}'.".to_string(),
+        });
+    }
+
+    // Line count (END{print NR}, no field refs) -> rg -c.
+    if prog.contains("NR") && prog.contains("END") && !prog.contains('$') {
+        return Some(ModernHint {
+            legacy_command: "awk",
+            modern_command: "rg",
+            hint: "Count lines with `rg -c '.' <file>` instead of awk 'END{print NR}'.".to_string(),
+        });
+    }
+
+    // Positional row+field from tabular command output -> jc | jq. Robust to
+    // column shifts, unlike awk's NR/$N indexing.
+    if prog.contains("NR==") && has_print_field {
+        return Some(ModernHint {
+            legacy_command: "awk",
+            modern_command: "jc",
+            hint: "Extract a row/field from structured command output with `<cmd> | jc --<parser> | jq` (robust to column shifts), e.g. `df / | jc --df | jq '.[0].available'`, instead of awk NR/$N indexing.".to_string(),
+        });
+    }
+
+    // Plain field selection -> choose.
+    if has_print_field {
         return Some(ModernHint {
             legacy_command: "awk",
             modern_command: "choose",
@@ -1523,6 +1574,63 @@ mod tests {
         let hint = hint_sed(&cmd("sed", &["-i", "s/old/new/g", "file.txt"]));
         assert!(hint.is_some());
         assert!(hint.unwrap().hint.contains("sd"));
+    }
+
+    #[test]
+    fn test_awk_field_extraction_routes_to_choose() {
+        let hint = hint_awk(&cmd("awk", &["{print $1}"])).unwrap();
+        assert_eq!(hint.modern_command, "choose");
+    }
+
+    #[test]
+    fn test_awk_sum_routes_to_jq() {
+        let hint = hint_awk(&cmd("awk", &["{s+=$1} END{print s}"])).unwrap();
+        assert_eq!(hint.modern_command, "jq");
+        assert!(hint.hint.contains("jq -Rn"), "got: {}", hint.hint);
+    }
+
+    #[test]
+    fn test_awk_byte_math_routes_to_numbat() {
+        let hint = hint_awk(&cmd("awk", &["{printf \"%.1f GB\", $1/1073741824}"])).unwrap();
+        assert_eq!(hint.modern_command, "numbat");
+    }
+
+    #[test]
+    fn test_awk_sum_with_unit_division_prefers_numbat_and_mentions_jq() {
+        let hint = hint_awk(&cmd(
+            "awk",
+            &["{sum+=$1} END {printf \"%.1f GB\", sum/1073741824}"],
+        ))
+        .unwrap();
+        assert_eq!(hint.modern_command, "numbat");
+        assert!(hint.hint.contains("jq -Rn"), "got: {}", hint.hint);
+    }
+
+    #[test]
+    fn test_awk_line_count_routes_to_rg() {
+        let hint = hint_awk(&cmd("awk", &["END{print NR}"])).unwrap();
+        assert_eq!(hint.modern_command, "rg");
+        assert!(hint.hint.contains("rg -c"), "got: {}", hint.hint);
+    }
+
+    #[test]
+    fn test_awk_row_field_routes_to_jc() {
+        let hint = hint_awk(&cmd("awk", &["NR==2{print $4}"])).unwrap();
+        assert_eq!(hint.modern_command, "jc");
+    }
+
+    #[test]
+    fn test_awk_range_extraction_no_hint() {
+        // Stateful range extraction has no autoapproved peer, so it must not nudge.
+        let hint = hint_awk(&cmd("awk", &["/^---$/{c++; next} c==1"]));
+        assert!(hint.is_none());
+    }
+
+    #[test]
+    fn test_awk_bare_filter_no_hint() {
+        // A field-comparison filter with no print/sum/count idiom gets no hint.
+        let hint = hint_awk(&cmd("awk", &["-F\t", "$2 > 5000"]));
+        assert!(hint.is_none());
     }
 
     #[test]
