@@ -3,8 +3,60 @@
   <p class="page-lede">Release cadence is fast. Below is a curated set of recent versions and what shipped. Full history at <a href="https://github.com/camjac251/tool-gates/blob/main/CHANGELOG.md" target="_blank" rel="noopener">CHANGELOG.md</a>.</p>
   <div class="config-block">
     <header>
-      <h3>Unreleased</h3>
-      <span class="src-tag">Antigravity CLI &amp; Gemini sunset</span>
+      <h3>v1.26.0 · June 19, 2026</h3>
+      <span class="src-tag">risk gating · <a href="https://github.com/camjac251/tool-gates/commit/28b90f9" target="_blank" rel="noopener">28b90f9</a></span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  require an explicit confirm for shared high-stakes family globs in the review TUI</pre>
+      </div>
+      <div class="config-prose">
+        <p>Tightens the review TUI blast-radius model. A scoped family glob over a high-stakes program (<code>docker run:*</code>, <code>aws s3:*</code>, <code>ssh</code>, <code>rm</code>, ...) written to project or global settings is a team- or machine-wide standing grant to run arbitrary subcommands of a high-blast-radius tool, so approving one now requires an explicit <code>y</code> confirm. Local-only grants and non-high-stakes programs are unchanged.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.25.0 · June 19, 2026</h3>
+      <span class="src-tag">review TUI · <a href="https://github.com/camjac251/tool-gates/commit/926c630" target="_blank" rel="noopener">926c630</a></span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  redesign review TUI with a flat keyboard model and rules manager
+  Pending / Approved / Denied views with allow/deny rule removal
+  blast-radius risk model that confirms before a dangerous write
+  project switcher grouped by parent, plus undo for the last action
+<span class="sec other">Other</span>
+  Review TUI reference page</pre>
+      </div>
+      <div class="config-prose">
+        <p>Replaces the focus-mode three-panel layout with a flat keyboard model: arrows always navigate, letter keys act (<code>a</code> approve, <code>d</code> deny, <code>x</code> remove, <code>y</code> confirm). Adds Pending, Approved, and Denied views; the two rule views read <code>settings.json</code> and remove existing allow/deny rules behind a confirmation. A new blast-radius risk model (pattern breadth, scope reach, and whether the program is high-stakes) colors the panel and forces an explicit confirm before a dangerous write, and a compound segment with no safe suggested pattern is refused instead of fabricating a broad glob for the wrong program. Walkthrough and keymap live on the new <a href="review-tui.html">Review TUI</a> page.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.24.1 · June 16, 2026</h3>
+      <span class="src-tag">Antigravity scopes · <a href="https://github.com/camjac251/tool-gates/commit/a22733a" target="_blank" rel="noopener">a22733a</a></span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec fixed">Fixed</span>
+  Antigravity hooks: default to ~/.gemini/config/hooks.json, add -s project
+<span class="sec other">Other</span>
+  fix four-client grid layout and footer wrapping on the index page</pre>
+      </div>
+      <div class="config-prose">
+        <p>Corrects the Antigravity hook install model. v1.24.0 shipped Antigravity as global-only at <code>~/.gemini/antigravity-cli/hooks.json</code>; this release moves the default to the shared user path <code>~/.gemini/config/hooks.json</code> and adds a <code>-s project</code> scope that writes <code>.agents/hooks.json</code>. <code>tool-gates hooks status</code> and <code>tool-gates doctor</code> now report both scopes. Also fixes the four-client install grid layout and footer wrapping on the documentation index.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.24.0 · June 9, 2026</h3>
+      <span class="src-tag">Antigravity CLI · <a href="https://github.com/camjac251/tool-gates/commit/5afcc3b" target="_blank" rel="noopener">5afcc3b</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
