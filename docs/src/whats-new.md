@@ -777,7 +777,7 @@
   <div class="config-block">
     <header>
       <h3>v1.5.0 · March 13, 2026</h3>
-      <span class="src-tag">safeties · <a href="https://github.com/camjac251/tool-gates/commit/f1cd14f" target="_blank" rel="noopener">f1cd14f</a></span>
+      <span class="src-tag">safeties · <a href="https://github.com/camjac251/tool-gates/commit/b5e3a1d" target="_blank" rel="noopener">b5e3a1d</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
