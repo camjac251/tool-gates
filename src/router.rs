@@ -6020,16 +6020,23 @@ run = "mytool42 verify"
 
         #[test]
         fn test_awk_skip_still_surfaces_modern_hint() {
-            // awk stays ask (unknown -> Skip), but the modern-CLI hint must still
-            // reach the agent via additionalContext so it learns the autoapproved
-            // alternative and stops reaching for awk.
+            // awk stays ask (unknown -> Skip). When rg is installed, the modern-CLI
+            // hint must reach the agent via additionalContext so it learns the
+            // autoapproved alternative. The hint is correctly gated on rg being
+            // available (we never nudge toward an uninstalled tool), so assert
+            // conditionally to stay hermetic on CI runners that lack rg. The
+            // routing itself is covered unconditionally by the hint_awk unit tests.
             let result = check_command("awk 'END{print NR}' file.txt");
             assert_eq!(get_decision(&result), "ask");
             let ctx = result.context.unwrap_or_default();
-            assert!(
-                ctx.contains("rg -c"),
-                "expected rg line-count hint, got: {ctx}"
-            );
+            if crate::tool_cache::get_cache().is_available("rg") {
+                assert!(
+                    ctx.contains("rg -c"),
+                    "expected rg line-count hint, got: {ctx}"
+                );
+            } else {
+                assert!(ctx.is_empty(), "no hint expected without rg, got: {ctx}");
+            }
         }
 
         #[test]
