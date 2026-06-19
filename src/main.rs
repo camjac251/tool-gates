@@ -32,7 +32,7 @@ use tool_gates::file_guards::check_file_guard;
 use tool_gates::models::{
     Client, HookInput, HookOutput, PermissionDecision, PermissionDeniedInput,
     PermissionDeniedOutput, PermissionRequestDecision, PermissionRequestInput,
-    PermissionRequestOutput, PostToolUseInput, is_auto_mode,
+    PermissionRequestOutput, PostToolUseInput, is_auto_mode, is_plan_mode,
 };
 use tool_gates::patterns::suggest_patterns;
 use tool_gates::pending::{clear_pending, pending_count, read_pending};
@@ -661,6 +661,29 @@ fn handle_pre_tool_use_hook(input: &str, client: Client) {
                     }
                     return;
                 }
+            }
+        }
+
+        // Scratch directory: auto-allow writes whose targets all resolve under
+        // the session scratch base, so agents get a friction-free temp space
+        // instead of /tmp. Runs after file guards (a symlink into a guarded
+        // AI-config file is still caught there) and is skipped in plan mode,
+        // which is read-only. The allow is scoped to the scratch subtree only:
+        // a symlink or `..` that escapes it resolves outside the base and is
+        // not matched, so writes to real project/system files are untouched.
+        if Client::is_write_tool(tool_name) && !is_plan_mode(&hook_input.permission_mode) {
+            let file_paths = extract_file_paths_from_map(&hook_input.tool_name, &tool_input_map);
+            if !file_paths.is_empty()
+                && file_paths
+                    .iter()
+                    .all(|p| tool_gates::router::is_under_scratch(p))
+            {
+                let output = HookOutput::allow(Some("Scratch directory write (auto-allowed)"));
+                let value = output.serialize(client);
+                if !emit_hook_value(&value) && !value.is_null() {
+                    print_no_opinion_for(client);
+                }
+                return;
             }
         }
 

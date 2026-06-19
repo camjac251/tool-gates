@@ -274,7 +274,7 @@ fn check_command_for_session_with_commands(
     for cmd in commands {
         let result = check_single_command(cmd);
 
-        if result.decision == Decision::Allow {
+        if result.decision != Decision::Block {
             if let Some(hint) = get_modern_hint(cmd) {
                 hints.push(hint);
             }
@@ -1639,8 +1639,9 @@ fn check_raw_string_patterns(command_string: &str) -> (Option<HookOutput>, Optio
     for cap in REDIRECT_RE.captures_iter(&unquoted) {
         if let Some(target) = cap.get(2) {
             let target_str = target.as_str();
-            // Skip /dev/null - it's just discarding output
-            if target_str != "/dev/null" {
+            // Skip /dev/null (discarding output) and the session scratch dir,
+            // which is a friction-free temp space agents write to instead of /tmp.
+            if target_str != "/dev/null" && !is_under_scratch(target_str) {
                 return (
                     None,
                     Some(HookOutput::ask(
@@ -1653,7 +1654,7 @@ fn check_raw_string_patterns(command_string: &str) -> (Option<HookOutput>, Optio
     for cap in AMP_REDIRECT_RE.captures_iter(&unquoted) {
         if let Some(target) = cap.get(1) {
             let target_str = target.as_str();
-            if target_str != "/dev/null" {
+            if target_str != "/dev/null" && !is_under_scratch(target_str) {
                 return (
                     None,
                     Some(HookOutput::ask(
@@ -1979,6 +1980,55 @@ pub(crate) fn is_under_any_dir(path: &str, allowed_dirs: &[String]) -> bool {
         }
     }
     false
+}
+
+/// Resolve the session scratch base directory.
+///
+/// Order: `$TOOL_GATES_SCRATCH` (with `~`/`$HOME`/`$USER` expansion) when set
+/// and non-empty, otherwise the default `~/.cache/tool-gates-scratch`. The
+/// result is lexically normalized with no trailing slash. Returns `None` only
+/// when the override contains an unresolvable variable, or no home directory is
+/// available, in which case callers treat nothing as scratch (fail closed).
+pub fn scratch_base() -> Option<String> {
+    let raw = match std::env::var("TOOL_GATES_SCRATCH") {
+        Ok(v) if !v.trim().is_empty() => crate::gates::helpers::expand_path_vars(v.trim())?,
+        _ => dirs::home_dir()?
+            .join(".cache")
+            .join("tool-gates-scratch")
+            .to_string_lossy()
+            .into_owned(),
+    };
+    Some(
+        crate::gates::helpers::normalize_path(&raw)
+            .trim_end_matches('/')
+            .to_string(),
+    )
+}
+
+/// True when `path` resolves under the session scratch base directory.
+///
+/// Accepts the surface forms an agent actually produces, since tool-gates does
+/// not expand arbitrary environment variables out of a raw command string:
+/// - the literal `$TOOL_GATES_SCRATCH/...` / `${TOOL_GATES_SCRATCH}/...` token,
+/// - the `~/.cache/tool-gates-scratch/...` tilde form,
+/// - an already-absolute path.
+///
+/// The target is canonicalized (`resolve_path`) before the prefix check, so a
+/// symlink inside the scratch tree that points elsewhere, or a `..` escape,
+/// does not match.
+pub fn is_under_scratch(path: &str) -> bool {
+    let Some(base) = scratch_base() else {
+        return false;
+    };
+    // Substitute the literal TOOL_GATES_SCRATCH token (braced first) before the
+    // generic ~/$HOME expansion: the agent's env sets it, but the gate only ever
+    // sees the unexpanded token in a command string.
+    let substituted = path
+        .replace("${TOOL_GATES_SCRATCH}", &base)
+        .replace("$TOOL_GATES_SCRATCH", &base);
+    let expanded = crate::gates::helpers::expand_path_vars_lossy(&substituted);
+    let resolved = resolve_path(&expanded);
+    is_under_any_dir(&resolved, std::slice::from_ref(&base))
 }
 
 // File-editing detection is now generated from TOML rules with accept_edits_auto_allow = true.
@@ -2478,6 +2528,79 @@ mod tests {
             .and_then(|hso| hso.get("permissionDecision"))
             .and_then(|decision| decision.as_str())
             .map(str::to_owned)
+    }
+
+    // === scratch dir recognition ===
+
+    #[serial_test::serial]
+    #[test]
+    fn test_is_under_scratch_recognizes_forms() {
+        let saved = std::env::var("TOOL_GATES_SCRATCH").ok();
+        // SAFETY: serialized via #[serial], so no concurrent env access.
+        unsafe {
+            std::env::set_var("TOOL_GATES_SCRATCH", "/tmp/cc-scratch-test");
+        }
+
+        assert!(is_under_scratch("/tmp/cc-scratch-test")); // the base itself
+        assert!(is_under_scratch("/tmp/cc-scratch-test/p/s/f.txt"));
+        assert!(is_under_scratch("$TOOL_GATES_SCRATCH/p/s/f.txt"));
+        assert!(is_under_scratch("${TOOL_GATES_SCRATCH}/f.txt"));
+
+        assert!(!is_under_scratch("/tmp/other/f.txt"));
+        assert!(!is_under_scratch("/etc/passwd"));
+        // `..` escaping the base is not scratch.
+        assert!(!is_under_scratch("/tmp/cc-scratch-test/../escape/f"));
+        // Sibling sharing the prefix string but not an actual child.
+        assert!(!is_under_scratch("/tmp/cc-scratch-test-evil/f"));
+
+        unsafe {
+            match saved {
+                Some(v) => std::env::set_var("TOOL_GATES_SCRATCH", v),
+                None => std::env::remove_var("TOOL_GATES_SCRATCH"),
+            }
+        }
+    }
+
+    #[serial_test::serial]
+    #[test]
+    fn test_redirect_into_scratch_skips_soft_ask() {
+        let saved = std::env::var("TOOL_GATES_SCRATCH").ok();
+        // SAFETY: serialized via #[serial], so no concurrent env access.
+        unsafe {
+            std::env::set_var("TOOL_GATES_SCRATCH", "/tmp/cc-scratch-test");
+        }
+
+        // Redirect into scratch: soft-ask suppressed, echo is safe -> allow.
+        let into = check_command_with_settings(
+            "echo hi > /tmp/cc-scratch-test/out.log",
+            "/home/user/project",
+            "default",
+        );
+        assert_eq!(
+            get_decision(&into),
+            "allow",
+            "redirect into scratch should allow, got: {}",
+            get_reason(&into)
+        );
+
+        // Redirect elsewhere still asks.
+        let elsewhere = check_command_with_settings(
+            "echo hi > /tmp/other/out.log",
+            "/home/user/project",
+            "default",
+        );
+        assert_eq!(
+            get_decision(&elsewhere),
+            "ask",
+            "redirect outside scratch should ask"
+        );
+
+        unsafe {
+            match saved {
+                Some(v) => std::env::set_var("TOOL_GATES_SCRATCH", v),
+                None => std::env::remove_var("TOOL_GATES_SCRATCH"),
+            }
+        }
     }
 
     // === WASM simulator instrumentation ===
@@ -5892,6 +6015,33 @@ run = "mytool42 verify"
                 get_decision(&result),
                 "ask",
                 "Unknown commands should ask for approval"
+            );
+        }
+
+        #[test]
+        fn test_awk_skip_still_surfaces_modern_hint() {
+            // awk stays ask (unknown -> Skip), but the modern-CLI hint must still
+            // reach the agent via additionalContext so it learns the autoapproved
+            // alternative and stops reaching for awk.
+            let result = check_command("awk 'END{print NR}' file.txt");
+            assert_eq!(get_decision(&result), "ask");
+            let ctx = result.context.unwrap_or_default();
+            assert!(
+                ctx.contains("rg -c"),
+                "expected rg line-count hint, got: {ctx}"
+            );
+        }
+
+        #[test]
+        fn test_awk_range_extraction_gets_no_hint() {
+            // Pattern-delimited range extraction has no autoapproved peer, so it
+            // must not be nudged toward a worse tool.
+            let result = check_command("awk '/^---$/{c++; next} c==1' file.md");
+            assert_eq!(get_decision(&result), "ask");
+            assert!(
+                result.context.is_none(),
+                "range extraction should get no hint, got: {:?}",
+                result.context
             );
         }
     }

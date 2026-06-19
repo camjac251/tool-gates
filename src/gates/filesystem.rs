@@ -23,13 +23,11 @@ pub fn check_filesystem(cmd: &CommandInfo) -> GateResult {
     match program {
         "rm" => check_rm(cmd),
         "mv" => check_mv_declarative(cmd).unwrap_or_else(|| GateResult::ask("mv: Moving files")),
-        "cp" => check_cp_declarative(cmd).unwrap_or_else(|| GateResult::ask("cp: Copying files")),
-        "mkdir" => check_mkdir_declarative(cmd)
-            .unwrap_or_else(|| GateResult::ask("mkdir: Creating directory")),
+        "cp" => check_cp(cmd),
+        "mkdir" => check_mkdir(cmd),
         "rmdir" => check_rmdir_declarative(cmd)
             .unwrap_or_else(|| GateResult::ask("rmdir: Removing directory (if empty)")),
-        "touch" => check_touch_declarative(cmd)
-            .unwrap_or_else(|| GateResult::ask("touch: Creating/updating file")),
+        "touch" => check_touch(cmd),
         "chmod" | "chown" | "chgrp" => check_chmod_declarative(cmd)
             .unwrap_or_else(|| GateResult::ask(format!("{program}: Changing permissions"))),
         "ln" => check_ln_declarative(cmd).unwrap_or_else(|| GateResult::ask("ln: Creating link")),
@@ -42,6 +40,66 @@ pub fn check_filesystem(cmd: &CommandInfo) -> GateResult {
         "zip" => check_zip(cmd),
         _ => GateResult::skip(),
     }
+}
+
+/// Non-flag path arguments, with one layer of surrounding quotes stripped
+/// (the bash parser can hand back quoted tokens for paths containing `$VAR`).
+fn path_args(cmd: &CommandInfo) -> Vec<&str> {
+    cmd.args
+        .iter()
+        .filter(|a| !a.starts_with('-'))
+        .map(|a| a.trim_matches(|c| c == '"' || c == '\'').trim())
+        .filter(|a| !a.is_empty())
+        .collect()
+}
+
+/// True when every path argument resolves under the session scratch base.
+fn all_path_args_under_scratch(cmd: &CommandInfo) -> bool {
+    let paths = path_args(cmd);
+    !paths.is_empty() && paths.iter().all(|p| crate::router::is_under_scratch(p))
+}
+
+/// Upgrade an `Ask` result to `Allow` when the scratch condition holds; leaves
+/// `Block`/`Skip`/`Allow` results untouched so a future block rule still wins.
+fn upgrade_to_scratch_allow(base: GateResult, under_scratch: bool, reason: &str) -> GateResult {
+    if base.decision == Decision::Ask && under_scratch {
+        return GateResult::allow_with_reason(reason);
+    }
+    base
+}
+
+/// `mkdir` into the session scratch dir is friction-free (agents create their
+/// per-session scratch subtree there instead of `/tmp`); anything else asks.
+fn check_mkdir(cmd: &CommandInfo) -> GateResult {
+    let base = check_mkdir_declarative(cmd)
+        .unwrap_or_else(|| GateResult::ask("mkdir: Creating directory"));
+    upgrade_to_scratch_allow(
+        base,
+        all_path_args_under_scratch(cmd),
+        "mkdir into scratch directory",
+    )
+}
+
+/// `touch` into the session scratch dir is friction-free; anything else asks.
+fn check_touch(cmd: &CommandInfo) -> GateResult {
+    let base = check_touch_declarative(cmd)
+        .unwrap_or_else(|| GateResult::ask("touch: Creating/updating file"));
+    upgrade_to_scratch_allow(
+        base,
+        all_path_args_under_scratch(cmd),
+        "touch into scratch directory",
+    )
+}
+
+/// `cp` is allowed only when the destination (last path arg) is under scratch.
+/// Reading a source elsewhere is harmless; `cp scratch/x /etc/y` must still ask.
+fn check_cp(cmd: &CommandInfo) -> GateResult {
+    let base = check_cp_declarative(cmd).unwrap_or_else(|| GateResult::ask("cp: Copying files"));
+    let dest_under_scratch = path_args(cmd)
+        .last()
+        .map(|p| crate::router::is_under_scratch(p))
+        .unwrap_or(false);
+    upgrade_to_scratch_allow(base, dest_under_scratch, "cp into scratch directory")
 }
 
 /// Check rm command - requires custom path normalization.
@@ -222,6 +280,73 @@ mod tests {
     use super::*;
     use crate::gates::test_utils::cmd;
     use crate::models::Decision;
+
+    // === scratch dir auto-allow (mkdir / touch / cp) ===
+
+    #[serial_test::serial]
+    #[test]
+    fn test_filesystem_scratch_auto_allow() {
+        let saved = std::env::var("TOOL_GATES_SCRATCH").ok();
+        // SAFETY: serialized via #[serial], so no concurrent env access.
+        unsafe {
+            std::env::set_var("TOOL_GATES_SCRATCH", "/tmp/cc-scratch-test");
+        }
+
+        // mkdir / touch into scratch -> allow (absolute, token, and braced forms).
+        for c in [
+            cmd("mkdir", &["-p", "/tmp/cc-scratch-test/p/s"]),
+            cmd("mkdir", &["-p", "$TOOL_GATES_SCRATCH/p/s"]),
+            cmd("mkdir", &["${TOOL_GATES_SCRATCH}/p"]),
+            cmd("touch", &["/tmp/cc-scratch-test/p/note.txt"]),
+        ] {
+            assert_eq!(
+                check_filesystem(&c).decision,
+                Decision::Allow,
+                "scratch target should auto-allow: {:?}",
+                c.args
+            );
+        }
+
+        // Same programs outside scratch -> still ask.
+        for c in [
+            cmd("mkdir", &["-p", "/tmp/other/p"]),
+            cmd("touch", &["/etc/note.txt"]),
+        ] {
+            assert_eq!(
+                check_filesystem(&c).decision,
+                Decision::Ask,
+                "non-scratch target should ask: {:?}",
+                c.args
+            );
+        }
+
+        // A `..` escape out of scratch must not be treated as scratch.
+        assert_eq!(
+            check_filesystem(&cmd("mkdir", &["-p", "/tmp/cc-scratch-test/../escape"])).decision,
+            Decision::Ask,
+            "path escaping scratch via .. should ask"
+        );
+
+        // cp: destination under scratch allows; source under scratch with an
+        // outside destination must still ask.
+        assert_eq!(
+            check_filesystem(&cmd("cp", &["/etc/hosts", "/tmp/cc-scratch-test/hosts"])).decision,
+            Decision::Allow,
+            "cp into scratch should allow"
+        );
+        assert_eq!(
+            check_filesystem(&cmd("cp", &["/tmp/cc-scratch-test/hosts", "/etc/evil"])).decision,
+            Decision::Ask,
+            "cp out of scratch should ask"
+        );
+
+        unsafe {
+            match saved {
+                Some(v) => std::env::set_var("TOOL_GATES_SCRATCH", v),
+                None => std::env::remove_var("TOOL_GATES_SCRATCH"),
+            }
+        }
+    }
 
     // === rm ===
 
