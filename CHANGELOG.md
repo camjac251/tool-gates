@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.27.0](https://github.com/camjac251/tool-gates/compare/v1.26.0...v1.27.0) - 2026-06-19
+
+### Added
+
+- *(hints)* route awk idioms to specific modern tools
+- *(scratch)* auto-allow writes under the session scratch directory
+
+### Other
+
+- *(router)* gate awk rg-hint assertion on rg availability
+- add v1.27.0 to recent releases
+- fix TUI mockup alignment with full-coverage monospace
+- fix review TUI project-switcher mockup alignment
+- refresh recent releases through v1.26.0
+
 ## [1.26.0](https://github.com/camjac251/tool-gates/compare/v1.25.0...v1.26.0) - 2026-06-19
 
 ### Added
