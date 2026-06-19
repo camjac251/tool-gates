@@ -161,25 +161,29 @@
 <div class="terminal-title">tool-gates review · switch project</div>
 </div>
 <div class="terminal-body">
-<pre class="tui-screen"> tool-gates · gamma    3 pending across 3 project(s)
+<pre class="tui-screen"> tool-gates · beta    3 pending across 3 project(s)
  Pending 1    Approved 0    Denied 0
-┌ Pending · gamma ─────────────────────────────────────────────────────────────────────────────────┐
-│ › <span class="k">?</span> go test ./...   1×                                                                           │
+┌ Pending · beta ──────────────────────────────────────────────────────────────────────────────────┐
+│ › <span class="k">?</span> npm test   1×                                                                                │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
 │                                                                                                  │
 │                      ┌ Switch project ────────────────────────────────────┐                      │
 │                      │ /srv/projects/                                     │                      │
 │                      │     alpha (1)                                      │                      │
-└──────────────────────│     beta (1)                                       │──────────────────────┘
+└──────────────────────│   › beta (1)                                       │──────────────────────┘
 ┌ Decision ────────────│ /srv/work/                                         │──────────────────────┐
-│ <span class="k">?</span> go test ./...      │   › gamma (1)                                      │                      │
+│ <span class="k">?</span> npm test           │     gamma (1)                                      │                      │
 │   Recursively force-d│   ───────                                          │                      │
 │                      │   All projects (3)                                 │                      │
-│ Pattern   All "go tes└────────────────────────────────────────────────────┘                      │
+│ Pattern   All "npm te└────────────────────────────────────────────────────┘                      │
 │ Scope     ‹ This project · shared ›                                                              │
-│           → /srv/work/gamma/.claude/settings.json                                                │
+│           → /srv/projects/beta/.claude/settings.json                                             │
 │ Blast radius  reach   ▰▰▱ everyone on this project                                               │
 │               breadth ▰▰▱ a family of commands                                                   │
 │  a Approve     d Deny     Del dismiss                                                            │
+│                                                                                                  │
 │                                                                                                  │
 └──────────────────────────────────────────────────────────────────────────────────────────────────┘
  ↑↓ move  ←→ pattern  s scope  a approve  d deny  Del dismiss  Tab view  p project  q quit</pre>
