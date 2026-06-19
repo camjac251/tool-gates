@@ -92,96 +92,9 @@
   </div>
   <div class="sec-head">
     <p class="lbl">Review TUI</p>
-    <h2>Three-panel dashboard.</h2>
-    <p>Run <code>tool-gates review</code> for an interactive view. Project list on the left, pending commands in the middle (with allow / ask / block segments coloured), detail and actions on the right.</p>
+    <h2>Or promote interactively.</h2>
+    <p>Run <code>tool-gates review</code> for a keyboard-first dashboard: pending commands with colour-and-symbol-coded segments, a blast-radius meter that escalates friction as a rule widens, and tabs for managing the <code>allow</code> / <code>deny</code> rules you already have. Full walkthrough and keymap live on the <a href="review-tui.html">Review TUI</a> page.</p>
   </div>
-<div class="terminal-window">
-<div class="terminal-header">
-<div class="terminal-dots">
-<span class="dot dot-close"></span>
-<span class="dot dot-minimize"></span>
-<span class="dot dot-maximize"></span>
-</div>
-<div class="terminal-title">tool-gates review</div>
-</div>
-<div class="terminal-body">
-<div class="tui-mockup" aria-label="TUI Dashboard Mockup">
-<!-- Panel 1: Projects -->
-<div class="tui-panel tui-projects">
-<div class="tui-panel-title">PROJECTS</div>
-<div class="tui-row is-selected">
-<span class="tui-indicator">▸</span>
-<span class="tui-name">tool-gates</span>
-<span class="tui-count">7</span>
-</div>
-<div class="tui-row">
-<span class="tui-indicator">&nbsp;</span>
-<span class="tui-name">my-app</span>
-<span class="tui-count">3</span>
-</div>
-<div class="tui-row">
-<span class="tui-indicator">&nbsp;</span>
-<span class="tui-name">website</span>
-<span class="tui-count">1</span>
-</div>
-</div>
-
-<!-- Panel 2: Commands -->
-<div class="tui-panel tui-commands">
-<div class="tui-panel-title">COMMANDS · tool-gates</div>
-<div class="tui-row is-selected">
-<span class="tui-indicator">▸</span>
-<span class="tui-cmd">git status && npm install</span>
-</div>
-<div class="tui-row">
-<span class="tui-indicator">&nbsp;</span>
-<span class="tui-cmd">cargo build --release</span>
-</div>
-<div class="tui-row">
-<span class="tui-indicator">&nbsp;</span>
-<span class="tui-cmd">pytest -k slow</span>
-</div>
-<div class="tui-row">
-<span class="tui-indicator">&nbsp;</span>
-<span class="tui-cmd">gh pr create</span>
-</div>
-<div class="tui-row">
-<span class="tui-indicator">&nbsp;</span>
-<span class="tui-cmd">uv add httpx</span>
-</div>
-</div>
-
-<!-- Panel 3: Details -->
-<div class="tui-panel tui-detail">
-<div class="tui-panel-title">DETAIL</div>
-<div class="tui-detail-content">
-<div class="tui-detail-item"><strong>pattern:</strong> <code>npm inst*</code></div>
-<div class="tui-detail-item"><strong>scope:</strong> <code>local</code></div>
-<div class="tui-actions">
-<span class="tui-btn tui-btn-approve">[ Approve ]</span>
-<span class="tui-btn tui-btn-skip">[ Skip ]</span>
-<span class="tui-btn tui-btn-deny">[ Deny ]</span>
-</div>
-</div>
-</div>
-</div>
-</div>
-</div>
-  <table class="data-table" style="margin-top: var(--s-4)">
-    <thead>
-      <tr><th>Key</th><th>Action</th></tr>
-    </thead>
-    <tbody>
-      <tr><td>Tab</td><td>Cycle panel focus (Sidebar → Commands → Detail)</td></tr>
-      <tr><td>↑ / ↓ · j / k</td><td>Navigate within focused panel</td></tr>
-      <tr><td>← / → · h / l</td><td>Cycle pattern or scope (in detail panel)</td></tr>
-      <tr><td>Space</td><td>Toggle multi-select on command</td></tr>
-      <tr><td>Enter</td><td>Approve selected command(s)</td></tr>
-      <tr><td>d</td><td>Skip (remove from pending)</td></tr>
-      <tr><td>D</td><td>Deny (add to settings.json deny list)</td></tr>
-      <tr><td>q · Esc</td><td>Quit</td></tr>
-    </tbody>
-  </table>
   <p class="note">
     <svg class="alert" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
     <span><b>Only human approvals queue.</b> Under auto mode the classifier decides silently; nothing it approves goes into <code>pending.jsonl</code>. The review queue stays focused on patterns you explicitly clicked through.</span>

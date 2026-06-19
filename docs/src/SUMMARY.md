@@ -42,6 +42,7 @@
 
 - [Configuration](configuration.md)
 - [CLI Reference](cli.md)
+- [Review TUI](review-tui.md)
 - [Tool Gates Doctor](doctor.md)
 - [Security Floor](security-floor.md)
 - [Security Reminders](security-reminders.md)

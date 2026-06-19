@@ -57,7 +57,7 @@
       <tr><td><code>tool-gates rules ask-audit</code></td><td>List <code>permissions.ask</code> rules in settings.json categorised by what tool-gates would do without them (gate-covered, safety floor, indeterminate).</td></tr>
       <tr><td><code>tool-gates rules ask-audit --apply</code></td><td>Multi-select TUI for removing redundant ask rules. The third "don't ask again" button reappears for everything removed.</td></tr>
       <tr><td><code>tool-gates rules export --format md [--out PATH] [--rules-dir PATH]</code></td><td>Regenerate <code>gates/*.md</code>, <code>security-floor.md</code>, and <code>hints.md</code> from <code>rules/*.toml</code> and the hint catalog. <code>--out</code> defaults to <code>docs/src</code>.</td></tr>
-      <tr><td><code>tool-gates review</code></td><td>Open the interactive three-panel dashboard. <code>--all</code> shows every project; the default is the current project.</td></tr>
+      <tr><td><code>tool-gates review</code></td><td>Open the interactive review TUI to promote, deny, or dismiss pending commands and manage existing rules. <code>--all</code> spans every project; the default is the current project. See <a href="review-tui.html">Review TUI</a>.</td></tr>
     </tbody>
   </table>
   <div class="sec-head">

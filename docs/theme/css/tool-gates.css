@@ -3770,3 +3770,85 @@ pre.code-block {
   margin: 0;
   background: transparent;
 }
+
+/* Faithful monospace render of an actual TUI frame. Box-drawing alignment must
+   be preserved, so this never wraps; on narrow viewports it scrolls sideways. */
+.tui-screen {
+  display: block;
+  margin: 0;
+  padding: var(--s-2) var(--s-3);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-2);
+  background: var(--surface-1);
+  white-space: pre;
+  overflow-x: auto;
+  tab-size: 2;
+}
+
+/* Semantic encoding from the TUI, mirrored into the docs render. Spans never
+   change a cell's width, so the box art stays aligned. */
+.tui-screen .a {
+  color: var(--allow);
+}
+.tui-screen .k {
+  color: var(--ask);
+}
+.tui-screen .b {
+  color: var(--block);
+}
+.tui-screen .c {
+  color: var(--accent);
+  font-weight: 600;
+}
+.tui-screen .dim {
+  color: var(--text-3);
+}
+.tui-screen .danger {
+  color: var(--block);
+  font-weight: 700;
+}
+.tui-screen .ok {
+  color: var(--allow);
+  font-weight: 600;
+}
+
+/* Inline glyphs + risk chips for legend tables on the Review TUI page. */
+.gly {
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+.gly-allow {
+  color: var(--allow);
+}
+.gly-ask {
+  color: var(--ask);
+}
+.gly-block {
+  color: var(--block);
+}
+.risk-chip {
+  display: inline-block;
+  padding: 1px var(--s-2);
+  border-radius: var(--r-1);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid;
+}
+.risk-safe {
+  color: var(--allow);
+  border-color: color-mix(in oklab, var(--allow) 45%, transparent);
+  background: color-mix(in oklab, var(--allow) 12%, transparent);
+}
+.risk-caution {
+  color: var(--ask);
+  border-color: color-mix(in oklab, var(--ask) 45%, transparent);
+  background: color-mix(in oklab, var(--ask) 12%, transparent);
+}
+.risk-danger {
+  color: var(--block);
+  border-color: color-mix(in oklab, var(--block) 50%, transparent);
+  background: color-mix(in oklab, var(--block) 14%, transparent);
+}
