@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.25.0](https://github.com/camjac251/tool-gates/compare/v1.24.1...v1.25.0) - 2026-06-19
+
+### Added
+
+- *(review)* redesign review TUI with a rules manager and risk gating
+
+### Other
+
+- add Review TUI reference page
+
 ## [1.24.1](https://github.com/camjac251/tool-gates/compare/v1.24.0...v1.24.1) - 2026-06-16
 
 ### Fixed
