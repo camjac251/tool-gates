@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.26.0](https://github.com/camjac251/tool-gates/compare/v1.25.0...v1.26.0) - 2026-06-19
+
+### Added
+
+- *(review)* require confirm for shared high-stakes family globs
+
 ## [1.25.0](https://github.com/camjac251/tool-gates/compare/v1.24.1...v1.25.0) - 2026-06-19
 
 ### Added
