@@ -140,7 +140,8 @@ pub fn pattern_breadth(pattern: &str) -> Breadth {
 }
 
 /// How far the rule reaches: just you, the whole team, or the whole machine.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Variant order is ascending reach, so `Local < Project < Global`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Reach {
     Local,
     Project,
@@ -229,11 +230,13 @@ pub fn assess_risk(pattern: &str, scope: Scope, program: &str) -> Risk {
     let reach = scope_reach(scope);
     let stakes = is_high_stakes(program);
 
-    // Danger floor: anything wider than one command applied to every project,
-    // a high-stakes command reaching every project, or a whole-program glob
-    // over a high-stakes tool.
+    // Danger floor: any glob (or high-stakes command) written machine-wide, a
+    // whole-program glob over a high-stakes tool at any scope, or a high-stakes
+    // command family shared with the team or machine. These carry enough blast
+    // radius to warrant an explicit confirm.
     let danger = (reach == Reach::Global && (breadth != Breadth::Exact || stakes))
-        || (stakes && breadth == Breadth::Broad);
+        || (stakes && breadth == Breadth::Broad)
+        || (stakes && breadth == Breadth::Scoped && reach >= Reach::Project);
     if danger {
         return Risk::Danger;
     }
@@ -302,6 +305,22 @@ mod tests {
         );
         assert_eq!(
             assess_risk("cargo:*", Scope::Project, "cargo"),
+            Risk::Caution
+        );
+    }
+
+    #[test]
+    fn high_stakes_family_glob_shared_is_danger() {
+        // A family glob over a high-stakes tool written to shared (project or
+        // global) settings is a team-wide standing grant, so it must confirm.
+        assert_eq!(
+            assess_risk("docker run:*", Scope::Project, "docker"),
+            Risk::Danger
+        );
+        assert_eq!(assess_risk("aws s3:*", Scope::Project, "aws"), Risk::Danger);
+        // Local-only stays Caution: the grant only affects you.
+        assert_eq!(
+            assess_risk("docker run:*", Scope::Local, "docker"),
             Risk::Caution
         );
     }
