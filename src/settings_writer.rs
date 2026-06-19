@@ -249,6 +249,39 @@ pub fn add_rule_to_project(
     })
 }
 
+/// Remove a permission rule from a specific project's settings file.
+/// Mirror of `add_rule_to_project` for undo: strips `pattern` from every rule
+/// array (allow/ask/deny) at the project-scoped path.
+pub fn remove_rule_from_project(
+    scope: Scope,
+    project_path: &str,
+    pattern: &str,
+) -> std::io::Result<bool> {
+    let formatted = format_pattern(pattern);
+    let path = scope.path_for_project(project_path);
+
+    with_exclusive_settings_path(&path, |settings| {
+        let Some(permissions) = settings.get_mut("permissions") else {
+            return false;
+        };
+
+        let mut removed = false;
+        for rule_type in ["allow", "ask", "deny"] {
+            if let Some(arr) = permissions
+                .get_mut(rule_type)
+                .and_then(|v| v.as_array_mut())
+            {
+                let len_before = arr.len();
+                arr.retain(|r| r.as_str() != Some(&formatted));
+                if arr.len() < len_before {
+                    removed = true;
+                }
+            }
+        }
+        removed
+    })
+}
+
 /// Remove a permission rule from settings.json
 pub fn remove_rule(scope: Scope, pattern: &str) -> std::io::Result<bool> {
     let formatted = format_pattern(pattern);
@@ -276,15 +309,12 @@ pub fn remove_rule(scope: Scope, pattern: &str) -> std::io::Result<bool> {
     })
 }
 
-/// List all permission rules from a scope
-pub fn list_rules(scope: Scope) -> Vec<PermissionRule> {
-    let settings = load_settings(scope);
+/// Pull the rule arrays out of a parsed settings object.
+fn extract_rules(settings: &Value, scope: Scope) -> Vec<PermissionRule> {
     let mut rules = Vec::new();
-
     let Some(permissions) = settings.get("permissions") else {
         return rules;
     };
-
     for (rule_type, key) in [
         (RuleType::Allow, "allow"),
         (RuleType::Ask, "ask"),
@@ -302,8 +332,31 @@ pub fn list_rules(scope: Scope) -> Vec<PermissionRule> {
             }
         }
     }
-
     rules
+}
+
+/// Load settings from a specific path, returning an empty object if absent.
+fn load_settings_path(path: &std::path::Path) -> Value {
+    if !path.exists() {
+        return json!({});
+    }
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_else(|| json!({}))
+}
+
+/// List all permission rules from a scope (cwd-relative for project/local)
+pub fn list_rules(scope: Scope) -> Vec<PermissionRule> {
+    extract_rules(&load_settings(scope), scope)
+}
+
+/// List permission rules for a specific project directory (not cwd-relative).
+pub fn list_rules_for_project(scope: Scope, project_path: &str) -> Vec<PermissionRule> {
+    extract_rules(
+        &load_settings_path(&scope.path_for_project(project_path)),
+        scope,
+    )
 }
 
 /// List all rules from all scopes

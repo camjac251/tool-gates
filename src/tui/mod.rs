@@ -2,6 +2,7 @@
 
 mod app;
 mod ask_audit;
+mod theme;
 mod ui;
 
 pub use app::run_review;

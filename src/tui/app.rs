@@ -3,10 +3,13 @@
 use crate::models::CommandInfo;
 use crate::patterns::suggest_patterns;
 use crate::pending::{
-    PendingApproval, ProjectInfo, category_weight, derive_projects, read_pending,
+    PendingApproval, ProjectInfo, append_pending, category_weight, derive_projects, read_pending,
     remove_pending_many,
 };
-use crate::settings_writer::{RuleType, Scope, add_rule, add_rule_to_project};
+use crate::settings_writer::{
+    RuleType, Scope, add_rule, add_rule_to_project, list_rules, list_rules_for_project,
+    parse_pattern, remove_rule, remove_rule_from_project,
+};
 use crate::tracking::CommandPart;
 use crossterm::{
     event::{
@@ -17,26 +20,19 @@ use crossterm::{
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::{Terminal, backend::CrosstermBackend, layout::Rect, widgets::ListState};
-use std::collections::HashSet;
 use std::io;
 use std::panic::AssertUnwindSafe;
 
+use super::theme::{self, Risk};
 use super::ui;
 
-/// Which panel has keyboard focus
+/// Which list the review is showing. Tab cycles between them; arrows only ever
+/// move within the active list, so a key never changes meaning by focus.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Panel {
-    Sidebar,
-    CommandList,
-    Detail,
-}
-
-/// Which row is focused within the detail panel
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DetailRow {
-    Segments,
-    Pattern,
-    Scope,
+pub enum View {
+    Pending,
+    Approved,
+    Denied,
 }
 
 /// Status message type
@@ -47,12 +43,67 @@ pub enum MessageKind {
     Info,
 }
 
+/// A consequential action armed and waiting for an explicit `y`. Routing
+/// removal through here means a stray keypress while navigating can't delete a
+/// rule: any key other than `y` cancels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConfirmKind {
+    Approve,
+    Deny,
+    RemoveRule,
+}
+
+/// One rendered row of the project-switcher tree.
+#[derive(Debug, Clone)]
+pub enum SwitcherRow {
+    /// Parent directory grouping label; not selectable.
+    Header(String),
+    /// A project, indexed into `projects`.
+    Project(usize),
+    /// Visual divider before "All".
+    Separator,
+    /// The "all projects" entry.
+    All,
+}
+
+/// An existing permission rule shown in the Approved / Denied views.
+#[derive(Debug, Clone)]
+pub struct RuleRow {
+    /// Unwrapped pattern (no `Bash(...)`).
+    pub pattern: String,
+    pub rule_type: RuleType,
+    pub scope: Scope,
+    /// Project directory for project/local rules; `None` for global.
+    pub project_cwd: Option<String>,
+}
+
+/// Enough state to reverse the last action.
+#[derive(Debug, Clone)]
+enum LastAction {
+    Wrote {
+        entry: PendingApproval,
+        pattern: String,
+        scope: Scope,
+        rule_type: RuleType,
+    },
+    Dismissed {
+        entry: PendingApproval,
+    },
+    RemovedRule {
+        pattern: String,
+        rule_type: RuleType,
+        scope: Scope,
+        project_cwd: Option<String>,
+    },
+}
+
 /// Rendered layout areas for mouse hit-testing
 #[derive(Debug, Clone, Copy, Default)]
 pub struct LayoutAreas {
-    pub sidebar: Rect,
     pub commands: Rect,
     pub detail: Rect,
+    /// The project-switcher popup, when open.
+    pub switcher: Rect,
 }
 
 /// Application state
@@ -60,32 +111,38 @@ pub struct App {
     // Data
     pub entries: Vec<PendingApproval>,
     pub projects: Vec<ProjectInfo>,
-
-    // Sidebar
-    /// Index into projects; projects.len() means "All"
+    /// Index into projects; projects.len() means "All".
     pub project_cursor: usize,
 
-    // Command list
-    /// Indices into entries for the currently visible (filtered) commands
+    /// Active list.
+    pub view: View,
+
+    // Pending list
     pub visible: Vec<usize>,
     pub command_cursor: usize,
-    pub multi_selected: HashSet<usize>,
-
-    // Detail panel
     pub selected_segment: usize,
     pub selected_pattern: usize,
     pub scope: Scope,
-    pub detail_row: DetailRow,
 
-    // Scroll state
-    pub sidebar_state: ListState,
+    // Rules list (Approved / Denied)
+    pub rules: Vec<RuleRow>,
+    pub rule_cursor: usize,
+    pub approved_count: usize,
+    pub denied_count: usize,
+    /// Scope filter for the rules views; `None` shows every scope.
+    pub rule_scope_filter: Option<Scope>,
+
+    // Scroll state (command_state drives both the pending and rule lists)
     pub command_state: ListState,
+    pub sidebar_state: ListState,
 
     // UI state
-    pub panel: Panel,
     pub should_quit: bool,
     pub message: Option<(String, MessageKind)>,
     pub layout: LayoutAreas,
+    pub show_switcher: bool,
+    pub confirm: Option<ConfirmKind>,
+    last_action: Option<LastAction>,
 }
 
 impl App {
@@ -93,46 +150,49 @@ impl App {
         let entries = read_pending(None);
         let projects = derive_projects(&entries);
 
-        // Auto-detect current project
         let project_cursor = if show_all || projects.is_empty() {
-            projects.len() // "All" position
+            projects.len()
         } else {
             detect_current_project(&projects).unwrap_or(projects.len())
         };
 
-        // Default scope: project if viewing a specific project, user if "All"
         let scope = if project_cursor < projects.len() {
             Scope::Project
         } else {
             Scope::User
         };
 
-        let sidebar_state = ListState::default();
-
         let mut app = Self {
             entries,
             projects,
             project_cursor,
+            view: View::Pending,
             visible: Vec::new(),
             command_cursor: 0,
-            multi_selected: HashSet::new(),
             selected_segment: 0,
             selected_pattern: 0,
             scope,
-            detail_row: DetailRow::Pattern,
-            sidebar_state,
+            rules: Vec::new(),
+            rule_cursor: 0,
+            approved_count: 0,
+            denied_count: 0,
+            rule_scope_filter: None,
             command_state: ListState::default(),
-            panel: Panel::CommandList,
+            sidebar_state: ListState::default(),
             should_quit: false,
             message: None,
             layout: LayoutAreas::default(),
+            show_switcher: false,
+            confirm: None,
+            last_action: None,
         };
         app.sync_sidebar_state();
         app.update_visible();
+        app.reload_rules();
         app
     }
 
-    /// Recompute visible commands based on selected project
+    /// Recompute visible pending commands based on the selected project.
     pub fn update_visible(&mut self) {
         let filter_display = if self.project_cursor < self.projects.len() {
             Some(self.projects[self.project_cursor].display_path.clone())
@@ -152,7 +212,6 @@ impl App {
             .map(|(i, _)| i)
             .collect();
 
-        // Sort: category weight ascending, then count descending
         indices.sort_by(|&a, &b| {
             let ea = &self.entries[a];
             let eb = &self.entries[b];
@@ -163,29 +222,45 @@ impl App {
 
         self.visible = indices;
         self.command_cursor = 0;
-        self.command_state.select(if self.visible.is_empty() {
-            None
-        } else {
-            Some(0)
-        });
-        self.multi_selected.clear();
+        if self.view == View::Pending {
+            self.command_state.select(if self.visible.is_empty() {
+                None
+            } else {
+                Some(0)
+            });
+        }
         self.reset_detail();
     }
 
     fn reset_detail(&mut self) {
         self.selected_segment = 0;
-        self.selected_pattern = 0;
-        self.detail_row = if self.current_entry().is_some_and(|e| e.breakdown.len() > 1) {
-            DetailRow::Segments
-        } else {
-            DetailRow::Pattern
-        };
+        self.selected_pattern = self.default_pattern_index();
+    }
+
+    /// Smartest-by-risk default: narrowest pattern for high-stakes programs,
+    /// the tightest family glob for safe tools.
+    fn default_pattern_index(&self) -> usize {
+        let patterns = self.current_patterns();
+        if patterns.is_empty() {
+            return 0;
+        }
+        if theme::is_high_stakes(&self.current_program()) {
+            return 0;
+        }
+        patterns
+            .iter()
+            .position(|p| theme::pattern_breadth(p) == theme::Breadth::Scoped)
+            .unwrap_or(0)
     }
 
     pub fn current_entry(&self) -> Option<&PendingApproval> {
         self.visible
             .get(self.command_cursor)
             .and_then(|&idx| self.entries.get(idx))
+    }
+
+    pub fn current_rule(&self) -> Option<&RuleRow> {
+        self.rules.get(self.rule_cursor)
     }
 
     pub fn is_all_view(&self) -> bool {
@@ -196,7 +271,16 @@ impl App {
         self.entries.len()
     }
 
-    /// Get actionable segment indices for the current entry
+    pub fn project_name(&self) -> String {
+        if self.is_all_view() {
+            "all projects".to_string()
+        } else if let Some(p) = self.projects.get(self.project_cursor) {
+            p.name.clone()
+        } else {
+            "unknown".to_string()
+        }
+    }
+
     pub fn actionable_segments(&self) -> Vec<usize> {
         self.current_entry()
             .map(|e| {
@@ -210,17 +294,13 @@ impl App {
             .unwrap_or_default()
     }
 
-    /// Get patterns for the currently selected segment/command
     pub fn current_patterns(&self) -> Vec<String> {
         let Some(entry) = self.current_entry() else {
             return Vec::new();
         };
-
         if entry.breakdown.len() <= 1 {
             return entry.patterns.clone();
         }
-
-        // Compound: get patterns for selected segment
         let actionable = self.actionable_segments();
         if let Some(&seg_idx) = actionable.get(self.selected_segment) {
             if let Some(part) = entry.breakdown.get(seg_idx) {
@@ -230,7 +310,6 @@ impl App {
         entry.patterns.clone()
     }
 
-    /// Get the reason string for the currently focused segment
     pub fn current_reason(&self) -> Option<String> {
         let entry = self.current_entry()?;
         if entry.breakdown.len() <= 1 {
@@ -250,7 +329,42 @@ impl App {
         })
     }
 
-    /// Get the target file path for display
+    /// Program that drives the risk of the rule about to be written.
+    fn current_program(&self) -> String {
+        let Some(entry) = self.current_entry() else {
+            return String::new();
+        };
+        if entry.breakdown.len() > 1 {
+            let actionable = self.actionable_segments();
+            if let Some(&idx) = actionable.get(self.selected_segment) {
+                if let Some(part) = entry.breakdown.get(idx) {
+                    return part.program.clone();
+                }
+            }
+        }
+        entry
+            .breakdown
+            .first()
+            .map(|p| p.program.clone())
+            .unwrap_or_else(|| {
+                entry
+                    .command
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or("")
+                    .to_string()
+            })
+    }
+
+    pub fn current_risk(&self) -> Risk {
+        let patterns = self.current_patterns();
+        let Some(pattern) = patterns.get(self.selected_pattern) else {
+            return Risk::Caution;
+        };
+        theme::assess_risk(pattern, self.scope, &self.current_program())
+    }
+
+    /// Target settings file for the current scope, home-collapsed.
     pub fn target_path(&self) -> String {
         match self.scope {
             Scope::User => {
@@ -278,7 +392,6 @@ impl App {
         }
     }
 
-    /// Contextual tip for compound commands
     pub fn compound_tip(&self) -> Option<String> {
         let entry = self.current_entry()?;
         if entry.breakdown.len() <= 1 {
@@ -302,7 +415,7 @@ impl App {
                 .map(|p| format!("\"{}\"", p.program))
                 .collect();
             Some(format!(
-                "Approving this covers the full command since {} already allowed.",
+                "Approving covers the whole command since {} already allowed.",
                 allowed_names.join(", ")
             ))
         } else if ask_count > 1 {
@@ -315,253 +428,365 @@ impl App {
         }
     }
 
-    // === Navigation ===
+    // === Navigation (flat: arrows always move within the active list) ===
 
-    pub fn next_panel(&mut self) {
-        self.panel = match self.panel {
-            Panel::Sidebar => Panel::CommandList,
-            Panel::CommandList => Panel::Detail,
-            Panel::Detail => Panel::Sidebar,
-        };
-    }
-
-    pub fn prev_panel(&mut self) {
-        self.panel = match self.panel {
-            Panel::Sidebar => Panel::Detail,
-            Panel::CommandList => Panel::Sidebar,
-            Panel::Detail => Panel::CommandList,
-        };
-    }
-
-    pub fn nav_down(&mut self) {
-        match self.panel {
-            Panel::Sidebar => {
-                let total = self.projects.len() + 1;
-                self.project_cursor = (self.project_cursor + 1) % total;
-                self.sync_sidebar_state();
-                self.on_project_changed();
-            }
-            Panel::CommandList => {
-                if !self.visible.is_empty() {
-                    self.command_cursor = (self.command_cursor + 1) % self.visible.len();
-                    self.command_state.select(Some(self.command_cursor));
-                    self.reset_detail();
+    pub fn move_cursor(&mut self, down: bool) {
+        match self.view {
+            View::Pending => {
+                if self.visible.is_empty() {
+                    return;
                 }
+                self.command_cursor = step(self.command_cursor, self.visible.len(), down);
+                self.command_state.select(Some(self.command_cursor));
+                self.reset_detail();
             }
-            Panel::Detail => {
-                let has_segments = self.current_entry().is_some_and(|e| e.breakdown.len() > 1);
-                self.detail_row = match self.detail_row {
-                    DetailRow::Segments => DetailRow::Pattern,
-                    DetailRow::Pattern => DetailRow::Scope,
-                    DetailRow::Scope => {
-                        if has_segments {
-                            DetailRow::Segments
-                        } else {
-                            DetailRow::Pattern
-                        }
-                    }
-                };
+            View::Approved | View::Denied => {
+                if self.rules.is_empty() {
+                    return;
+                }
+                self.rule_cursor = step(self.rule_cursor, self.rules.len(), down);
+                self.command_state.select(Some(self.rule_cursor));
             }
         }
     }
 
-    pub fn nav_up(&mut self) {
-        match self.panel {
-            Panel::Sidebar => {
-                let total = self.projects.len() + 1;
-                self.project_cursor = if self.project_cursor == 0 {
-                    total - 1
-                } else {
-                    self.project_cursor - 1
-                };
-                self.sync_sidebar_state();
-                self.on_project_changed();
-            }
-            Panel::CommandList => {
-                if !self.visible.is_empty() {
-                    self.command_cursor = if self.command_cursor == 0 {
-                        self.visible.len() - 1
-                    } else {
-                        self.command_cursor - 1
-                    };
-                    self.command_state.select(Some(self.command_cursor));
-                    self.reset_detail();
-                }
-            }
-            Panel::Detail => {
-                let has_segments = self.current_entry().is_some_and(|e| e.breakdown.len() > 1);
-                self.detail_row = match self.detail_row {
-                    DetailRow::Segments => DetailRow::Scope,
-                    DetailRow::Pattern => {
-                        if has_segments {
-                            DetailRow::Segments
-                        } else {
-                            DetailRow::Scope
-                        }
-                    }
-                    DetailRow::Scope => DetailRow::Pattern,
-                };
-            }
-        }
-    }
-
-    pub fn nav_left(&mut self) {
-        if self.panel != Panel::Detail {
+    /// Change the pattern breadth for the selected pending command.
+    pub fn cycle_pattern(&mut self, forward: bool) {
+        if self.view != View::Pending {
             return;
         }
-        match self.detail_row {
-            DetailRow::Segments => {
-                let actionable = self.actionable_segments();
-                if !actionable.is_empty() {
-                    self.selected_segment = if self.selected_segment == 0 {
-                        actionable.len() - 1
-                    } else {
-                        self.selected_segment - 1
-                    };
-                    self.selected_pattern = 0;
-                }
-            }
-            DetailRow::Pattern => {
-                let count = self.current_patterns().len();
-                if count > 0 {
-                    self.selected_pattern = if self.selected_pattern == 0 {
-                        count - 1
-                    } else {
-                        self.selected_pattern - 1
-                    };
-                }
-            }
-            DetailRow::Scope => {
-                self.scope = match self.scope {
-                    Scope::User => Scope::Local,
-                    Scope::Project => Scope::User,
-                    Scope::Local => Scope::Project,
-                };
-            }
-        }
-    }
-
-    pub fn nav_right(&mut self) {
-        if self.panel != Panel::Detail {
+        let count = self.current_patterns().len();
+        if count == 0 {
             return;
         }
-        match self.detail_row {
-            DetailRow::Segments => {
-                let actionable = self.actionable_segments();
-                if !actionable.is_empty() {
-                    self.selected_segment = (self.selected_segment + 1) % actionable.len();
-                    self.selected_pattern = 0;
-                }
-            }
-            DetailRow::Pattern => {
-                let count = self.current_patterns().len();
-                if count > 0 {
-                    self.selected_pattern = (self.selected_pattern + 1) % count;
-                }
-            }
-            DetailRow::Scope => {
-                self.scope = match self.scope {
-                    Scope::User => Scope::Project,
-                    Scope::Project => Scope::Local,
-                    Scope::Local => Scope::User,
-                };
-            }
-        }
+        self.selected_pattern = step(self.selected_pattern, count, forward);
     }
 
-    pub fn toggle_select(&mut self) {
-        if self.panel == Panel::CommandList && !self.visible.is_empty() {
-            let idx = self.command_cursor;
-            if self.multi_selected.contains(&idx) {
-                self.multi_selected.remove(&idx);
-            } else {
-                self.multi_selected.insert(idx);
-            }
+    /// Cycle the write scope (local / project / global).
+    pub fn cycle_scope(&mut self, forward: bool) {
+        if self.view != View::Pending {
+            return;
         }
-    }
-
-    fn on_project_changed(&mut self) {
-        // Update default scope to match view
-        self.scope = if self.is_all_view() {
-            Scope::User
+        self.scope = if forward {
+            match self.scope {
+                Scope::User => Scope::Project,
+                Scope::Project => Scope::Local,
+                Scope::Local => Scope::User,
+            }
         } else {
-            Scope::Project
+            match self.scope {
+                Scope::User => Scope::Local,
+                Scope::Project => Scope::User,
+                Scope::Local => Scope::Project,
+            }
         };
-        self.update_visible();
+    }
+
+    /// Cycle which segment of a compound command is being approved.
+    pub fn cycle_segment(&mut self, forward: bool) {
+        if self.view != View::Pending {
+            return;
+        }
+        let actionable = self.actionable_segments();
+        if actionable.len() <= 1 {
+            return;
+        }
+        self.selected_segment = step(self.selected_segment, actionable.len(), forward);
+        self.selected_pattern = self.default_pattern_index();
+    }
+
+    // === Views ===
+
+    pub fn set_view(&mut self, view: View) {
+        if self.view == view {
+            return;
+        }
+        self.view = view;
+        self.rule_cursor = 0;
+        match view {
+            View::Pending => {
+                self.command_state.select(if self.visible.is_empty() {
+                    None
+                } else {
+                    Some(self.command_cursor)
+                });
+            }
+            View::Approved | View::Denied => {
+                self.reload_rules();
+            }
+        }
+    }
+
+    pub fn cycle_view(&mut self, forward: bool) {
+        let next = match (self.view, forward) {
+            (View::Pending, true) => View::Approved,
+            (View::Approved, true) => View::Denied,
+            (View::Denied, true) => View::Pending,
+            (View::Pending, false) => View::Denied,
+            (View::Approved, false) => View::Pending,
+            (View::Denied, false) => View::Approved,
+        };
+        self.set_view(next);
+    }
+
+    /// Cycle the rules-view scope filter: all → global → project → local.
+    pub fn cycle_rule_filter(&mut self) {
+        if self.view == View::Pending {
+            return;
+        }
+        self.rule_scope_filter = match self.rule_scope_filter {
+            None => Some(Scope::User),
+            Some(Scope::User) => Some(Scope::Project),
+            Some(Scope::Project) => Some(Scope::Local),
+            Some(Scope::Local) => None,
+        };
+        self.rule_cursor = 0;
+        self.reload_rules();
+    }
+
+    pub fn rule_filter_label(&self) -> &'static str {
+        match self.rule_scope_filter {
+            None => "all scopes",
+            Some(Scope::User) => "global",
+            Some(Scope::Project) => "this project",
+            Some(Scope::Local) => "local",
+        }
+    }
+
+    fn selected_project_cwd(&self) -> Option<String> {
+        self.projects
+            .get(self.project_cursor)
+            .map(|p| p.cwd.clone())
+    }
+
+    /// Read every reachable rule (global + selected project) once.
+    fn gather_all_rules(&self) -> Vec<RuleRow> {
+        let mut rows = Vec::new();
+        for r in list_rules(Scope::User) {
+            if r.rule_type != RuleType::Ask {
+                rows.push(RuleRow {
+                    pattern: parse_pattern(&r.pattern),
+                    rule_type: r.rule_type,
+                    scope: Scope::User,
+                    project_cwd: None,
+                });
+            }
+        }
+        if let Some(cwd) = self.selected_project_cwd() {
+            for scope in [Scope::Project, Scope::Local] {
+                for r in list_rules_for_project(scope, &cwd) {
+                    if r.rule_type != RuleType::Ask {
+                        rows.push(RuleRow {
+                            pattern: parse_pattern(&r.pattern),
+                            rule_type: r.rule_type,
+                            scope,
+                            project_cwd: Some(cwd.clone()),
+                        });
+                    }
+                }
+            }
+        }
+        rows
+    }
+
+    fn reload_rules(&mut self) {
+        let all = self.gather_all_rules();
+        self.approved_count = all
+            .iter()
+            .filter(|r| r.rule_type == RuleType::Allow)
+            .count();
+        self.denied_count = all.iter().filter(|r| r.rule_type == RuleType::Deny).count();
+
+        let want = match self.view {
+            View::Approved => Some(RuleType::Allow),
+            View::Denied => Some(RuleType::Deny),
+            View::Pending => None,
+        };
+        let mut rows: Vec<RuleRow> = match want {
+            Some(t) => all.into_iter().filter(|r| r.rule_type == t).collect(),
+            None => Vec::new(),
+        };
+        if let Some(filter) = self.rule_scope_filter {
+            rows.retain(|r| r.scope == filter);
+        }
+        // Group by scope (global, then project, then local), pattern within.
+        rows.sort_by(|a, b| {
+            scope_order(a.scope)
+                .cmp(&scope_order(b.scope))
+                .then_with(|| a.pattern.cmp(&b.pattern))
+        });
+        self.rules = rows;
+
+        if self.rule_cursor >= self.rules.len() {
+            self.rule_cursor = self.rules.len().saturating_sub(1);
+        }
+        if self.view != View::Pending {
+            self.command_state.select(if self.rules.is_empty() {
+                None
+            } else {
+                Some(self.rule_cursor)
+            });
+        }
     }
 
     // === Actions ===
 
     pub fn approve(&mut self) {
-        if self.multi_selected.is_empty() {
-            self.approve_single(RuleType::Allow);
+        if self.view != View::Pending || self.current_entry().is_none() {
+            return;
+        }
+        if theme::requires_confirm(self.current_risk()) {
+            self.confirm = Some(ConfirmKind::Approve);
         } else {
-            self.approve_multi();
+            self.do_approve(RuleType::Allow);
         }
     }
 
     pub fn deny(&mut self) {
-        if self.multi_selected.is_empty() {
-            self.approve_single(RuleType::Deny);
+        if self.view == View::Pending && self.current_entry().is_some() {
+            self.confirm = Some(ConfirmKind::Deny);
         }
-        // Deny doesn't support multi-select (too dangerous)
     }
 
-    pub fn skip(&mut self) {
-        let ids: Vec<String> = if self.multi_selected.is_empty() {
-            self.current_entry()
-                .map(|e| vec![e.id.clone()])
-                .unwrap_or_default()
-        } else {
-            self.multi_selected
-                .iter()
-                .filter_map(|&idx| {
-                    self.visible
-                        .get(idx)
-                        .and_then(|&ei| self.entries.get(ei))
-                        .map(|e| e.id.clone())
-                })
-                .collect()
-        };
-
-        if ids.is_empty() {
+    /// Clear a command from the queue without writing any rule.
+    pub fn dismiss(&mut self) {
+        if self.view != View::Pending {
             return;
         }
-
-        let count = ids.len();
-        if let Err(e) = remove_pending_many(&ids) {
-            self.message = Some((
-                format!("Failed to remove from queue: {e}"),
-                MessageKind::Error,
-            ));
-            return;
-        }
-        self.message = Some((format!("Skipped {count} command(s)"), MessageKind::Info));
-        self.multi_selected.clear();
-        self.refresh();
-    }
-
-    fn approve_single(&mut self, rule_type: RuleType) {
         let Some(entry) = self.current_entry().cloned() else {
             return;
         };
+        if let Err(e) = remove_pending_many(std::slice::from_ref(&entry.id)) {
+            self.message = Some((format!("Failed to dismiss: {e}"), MessageKind::Error));
+            return;
+        }
+        self.last_action = Some(LastAction::Dismissed { entry });
+        self.message = Some(("Dismissed · u to undo".to_string(), MessageKind::Info));
+        self.refresh();
+    }
 
-        let patterns = self.current_patterns();
-        let pattern = patterns
-            .get(self.selected_pattern)
-            .cloned()
-            .unwrap_or_else(|| {
+    /// Arm the remove-rule confirmation for the selected rule.
+    pub fn remove_selected_rule(&mut self) {
+        if self.view != View::Pending && self.current_rule().is_some() {
+            self.confirm = Some(ConfirmKind::RemoveRule);
+        }
+    }
+
+    fn do_remove_rule(&mut self) {
+        let Some(rule) = self.current_rule().cloned() else {
+            return;
+        };
+        let res = match (rule.scope, &rule.project_cwd) {
+            (Scope::User, _) => remove_rule(Scope::User, &rule.pattern),
+            (scope, Some(cwd)) => remove_rule_from_project(scope, cwd, &rule.pattern),
+            (scope, None) => remove_rule(scope, &rule.pattern),
+        };
+        match res {
+            Ok(_) => {
+                let verb = if rule.rule_type == RuleType::Allow {
+                    "approval"
+                } else {
+                    "deny rule"
+                };
+                self.message = Some((
+                    format!("Removed {verb} {} · u to undo", rule.pattern),
+                    MessageKind::Info,
+                ));
+                self.last_action = Some(LastAction::RemovedRule {
+                    pattern: rule.pattern,
+                    rule_type: rule.rule_type,
+                    scope: rule.scope,
+                    project_cwd: rule.project_cwd,
+                });
+                self.reload_rules();
+            }
+            Err(e) => self.message = Some((format!("Remove failed: {e}"), MessageKind::Error)),
+        }
+    }
+
+    pub fn confirm_yes(&mut self) {
+        match self.confirm.take() {
+            Some(ConfirmKind::Approve) => self.do_approve(RuleType::Allow),
+            Some(ConfirmKind::Deny) => self.do_approve(RuleType::Deny),
+            Some(ConfirmKind::RemoveRule) => self.do_remove_rule(),
+            None => {}
+        }
+    }
+
+    pub fn confirm_cancel(&mut self) {
+        if self.confirm.take().is_some() {
+            self.message = Some(("Cancelled".to_string(), MessageKind::Info));
+        }
+    }
+
+    pub fn can_undo(&self) -> bool {
+        self.last_action.is_some()
+    }
+
+    pub fn confirm_summary(&self) -> String {
+        match self.confirm {
+            Some(ConfirmKind::Approve) => {
+                let patterns = self.current_patterns();
+                let pattern = patterns
+                    .get(self.selected_pattern)
+                    .cloned()
+                    .unwrap_or_default();
                 format!(
-                    "{}:*",
-                    entry.command.split_whitespace().next().unwrap_or("")
+                    "Approve {} for {}",
+                    pattern,
+                    theme::scope_reach(self.scope).label()
                 )
-            });
+            }
+            Some(ConfirmKind::Deny) => {
+                let patterns = self.current_patterns();
+                let pattern = patterns
+                    .get(self.selected_pattern)
+                    .cloned()
+                    .unwrap_or_default();
+                format!("Deny (block) {}", pattern)
+            }
+            Some(ConfirmKind::RemoveRule) => match self.current_rule() {
+                Some(rule) => {
+                    let verb = if rule.rule_type == RuleType::Allow {
+                        "approval"
+                    } else {
+                        "deny rule"
+                    };
+                    format!(
+                        "Remove {verb} {} ({})",
+                        rule.pattern,
+                        scope_label(rule.scope)
+                    )
+                }
+                None => String::new(),
+            },
+            None => String::new(),
+        }
+    }
+
+    fn do_approve(&mut self, rule_type: RuleType) {
+        let Some(entry) = self.current_entry().cloned() else {
+            return;
+        };
+        let patterns = self.current_patterns();
+        let Some(pattern) = patterns.get(self.selected_pattern).cloned() else {
+            // A segment with no suggested pattern (e.g. a bare, argless program
+            // that has no safe glob) must not be auto-approved. Refusing keeps
+            // the written rule identical to what the panel showed and stops a
+            // broad `program:*` grant from being fabricated and skipping the
+            // risk confirm.
+            self.message = Some((
+                "No suggested pattern for this segment; use `tool-gates approve` if intended"
+                    .to_string(),
+                MessageKind::Error,
+            ));
+            return;
+        };
 
         if let Err(msg) = self.write_rule(&pattern, &entry, rule_type) {
             self.message = Some((msg, MessageKind::Error));
             return;
         }
-
         if let Err(e) = remove_pending_many(std::slice::from_ref(&entry.id)) {
             self.message = Some((
                 format!("Failed to remove from queue: {e}"),
@@ -575,75 +800,19 @@ impl App {
         } else {
             "Denied"
         };
-        let scope_name = scope_label(self.scope);
+        self.last_action = Some(LastAction::Wrote {
+            entry,
+            pattern: pattern.clone(),
+            scope: self.scope,
+            rule_type,
+        });
         self.message = Some((
-            format!("{} {} -> {}", action, pattern, scope_name),
+            format!(
+                "{action} {pattern} → {} · u to undo",
+                scope_label(self.scope)
+            ),
             MessageKind::Success,
         ));
-        self.refresh();
-    }
-
-    fn approve_multi(&mut self) {
-        let entries: Vec<PendingApproval> = self
-            .multi_selected
-            .iter()
-            .filter_map(|&idx| {
-                self.visible
-                    .get(idx)
-                    .and_then(|&ei| self.entries.get(ei))
-                    .cloned()
-            })
-            .collect();
-
-        let mut approved_ids = Vec::new();
-        let mut errors = Vec::new();
-
-        for entry in &entries {
-            let pattern = entry.patterns.first().cloned().unwrap_or_else(|| {
-                format!(
-                    "{}:*",
-                    entry.command.split_whitespace().next().unwrap_or("")
-                )
-            });
-
-            match self.write_rule(&pattern, entry, RuleType::Allow) {
-                Ok(()) => approved_ids.push(entry.id.clone()),
-                Err(msg) => errors.push(msg),
-            }
-        }
-
-        if !approved_ids.is_empty() {
-            if let Err(e) = remove_pending_many(&approved_ids) {
-                self.message = Some((
-                    format!("Failed to remove from queue: {e}"),
-                    MessageKind::Error,
-                ));
-                self.multi_selected.clear();
-                self.refresh();
-                return;
-            }
-        }
-
-        let count = approved_ids.len();
-        if errors.is_empty() {
-            let scope_name = scope_label(self.scope);
-            self.message = Some((
-                format!("Approved {} command(s) -> {}", count, scope_name),
-                MessageKind::Success,
-            ));
-        } else {
-            self.message = Some((
-                format!(
-                    "Approved {} but {} failed: {}",
-                    count,
-                    errors.len(),
-                    errors.first().map(|s| s.as_str()).unwrap_or("unknown")
-                ),
-                MessageKind::Error,
-            ));
-        }
-
-        self.multi_selected.clear();
         self.refresh();
     }
 
@@ -669,6 +838,66 @@ impl App {
         }
     }
 
+    pub fn undo(&mut self) {
+        let Some(action) = self.last_action.take() else {
+            self.message = Some(("Nothing to undo".to_string(), MessageKind::Info));
+            return;
+        };
+        match action {
+            LastAction::Wrote {
+                entry,
+                pattern,
+                scope,
+                rule_type,
+            } => {
+                let removed = match scope {
+                    Scope::User => remove_rule(Scope::User, &pattern),
+                    s @ (Scope::Project | Scope::Local) => {
+                        let cwd = if entry.cwd.is_empty() {
+                            entry.project_id.clone()
+                        } else {
+                            entry.cwd.clone()
+                        };
+                        remove_rule_from_project(s, &cwd, &pattern)
+                    }
+                };
+                if let Err(e) = removed {
+                    self.message = Some((format!("Undo failed: {e}"), MessageKind::Error));
+                    return;
+                }
+                let _ = append_pending(entry);
+                let verb = if rule_type == RuleType::Deny {
+                    "deny"
+                } else {
+                    "approval"
+                };
+                self.message = Some((format!("Reverted {verb} of {pattern}"), MessageKind::Info));
+            }
+            LastAction::Dismissed { entry } => {
+                let _ = append_pending(entry);
+                self.message = Some(("Restored dismissed command".to_string(), MessageKind::Info));
+            }
+            LastAction::RemovedRule {
+                pattern,
+                rule_type,
+                scope,
+                project_cwd,
+            } => {
+                let res = match (scope, &project_cwd) {
+                    (Scope::User, _) => add_rule(Scope::User, &pattern, rule_type),
+                    (s, Some(cwd)) => add_rule_to_project(s, cwd, &pattern, rule_type),
+                    (s, None) => add_rule(s, &pattern, rule_type),
+                };
+                if let Err(e) = res {
+                    self.message = Some((format!("Undo failed: {e}"), MessageKind::Error));
+                    return;
+                }
+                self.message = Some((format!("Restored rule {pattern}"), MessageKind::Info));
+            }
+        }
+        self.refresh();
+    }
+
     fn refresh(&mut self) {
         let old_project = if self.project_cursor < self.projects.len() {
             Some(self.projects[self.project_cursor].display_path.clone())
@@ -679,7 +908,6 @@ impl App {
         self.entries = read_pending(None);
         self.projects = derive_projects(&self.entries);
 
-        // Try to keep the same project selected
         if let Some(old_dp) = old_project {
             self.project_cursor = self
                 .projects
@@ -689,54 +917,219 @@ impl App {
         }
 
         self.update_visible();
+        self.reload_rules();
+        self.sync_sidebar_state();
     }
 
-    /// Sync sidebar ListState, accounting for the separator row
     fn sync_sidebar_state(&mut self) {
-        let list_index = if self.project_cursor >= self.projects.len() && !self.projects.is_empty()
-        {
-            self.project_cursor + 1 // skip over separator
-        } else {
-            self.project_cursor
-        };
-        self.sidebar_state.select(Some(list_index));
+        // Point the list at the rendered row of the selected project so it
+        // scrolls into view; headers and the separator shift the index.
+        let rows = self.switcher_rows();
+        let idx = rows
+            .iter()
+            .position(|r| match r {
+                SwitcherRow::Project(i) => *i == self.project_cursor,
+                SwitcherRow::All => self.project_cursor >= self.projects.len(),
+                _ => false,
+            })
+            .unwrap_or(0);
+        self.sidebar_state.select(Some(idx));
     }
 
-    /// Handle mouse click
+    // === Project switcher overlay ===
+
+    pub fn open_switcher(&mut self) {
+        self.show_switcher = true;
+        self.sync_sidebar_state();
+    }
+
+    pub fn close_switcher(&mut self) {
+        self.show_switcher = false;
+    }
+
+    /// Projects grouped by parent directory into a tree of rendered rows.
+    pub fn switcher_rows(&self) -> Vec<SwitcherRow> {
+        let mut order: Vec<usize> = (0..self.projects.len()).collect();
+        order.sort_by(|&a, &b| {
+            let pa = parent_of(&self.projects[a].display_path);
+            let pb = parent_of(&self.projects[b].display_path);
+            pa.cmp(&pb)
+                .then_with(|| self.projects[a].name.cmp(&self.projects[b].name))
+        });
+
+        let mut rows = Vec::new();
+        let mut last_parent: Option<String> = None;
+        for &i in &order {
+            let parent = parent_of(&self.projects[i].display_path);
+            if last_parent.as_deref() != Some(parent.as_str()) {
+                rows.push(SwitcherRow::Header(parent.clone()));
+                last_parent = Some(parent);
+            }
+            rows.push(SwitcherRow::Project(i));
+        }
+        if !self.projects.is_empty() {
+            rows.push(SwitcherRow::Separator);
+        }
+        rows.push(SwitcherRow::All);
+        rows
+    }
+
+    /// `project_cursor` values for the selectable rows, in display order.
+    fn switcher_selectables(&self) -> Vec<usize> {
+        self.switcher_rows()
+            .iter()
+            .filter_map(|r| match r {
+                SwitcherRow::Project(i) => Some(*i),
+                SwitcherRow::All => Some(self.projects.len()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    pub fn switcher_nav(&mut self, down: bool) {
+        let sels = self.switcher_selectables();
+        if sels.is_empty() {
+            return;
+        }
+        let cur = sels
+            .iter()
+            .position(|&p| p == self.project_cursor)
+            .unwrap_or(0);
+        self.project_cursor = sels[step(cur, sels.len(), down)];
+        self.sync_sidebar_state();
+        self.on_project_changed();
+    }
+
+    fn on_project_changed(&mut self) {
+        self.scope = if self.is_all_view() {
+            Scope::User
+        } else {
+            Scope::Project
+        };
+        self.update_visible();
+        self.reload_rules();
+    }
+
     pub fn handle_mouse_click(&mut self, col: u16, row: u16) {
         let la = self.layout;
 
-        if in_rect(la.sidebar, col, row) {
-            self.panel = Panel::Sidebar;
-            let clicked =
-                (row.saturating_sub(la.sidebar.y + 1)) as usize + self.sidebar_state.offset();
-            let separator_offset = if self.projects.is_empty() { 0 } else { 1 };
-            if clicked < self.projects.len() {
-                self.project_cursor = clicked;
-                self.sync_sidebar_state();
-                self.on_project_changed();
-            } else if clicked == self.projects.len() + separator_offset {
-                self.project_cursor = self.projects.len();
-                self.sync_sidebar_state();
-                self.on_project_changed();
+        if self.show_switcher {
+            if in_rect(la.switcher, col, row) {
+                let clicked =
+                    (row.saturating_sub(la.switcher.y + 1)) as usize + self.sidebar_state.offset();
+                let rows = self.switcher_rows();
+                match rows.get(clicked) {
+                    Some(SwitcherRow::Project(i)) => {
+                        self.project_cursor = *i;
+                        self.sync_sidebar_state();
+                        self.on_project_changed();
+                        self.show_switcher = false;
+                    }
+                    Some(SwitcherRow::All) => {
+                        self.project_cursor = self.projects.len();
+                        self.sync_sidebar_state();
+                        self.on_project_changed();
+                        self.show_switcher = false;
+                    }
+                    // Header / separator / out of range: ignore.
+                    _ => {}
+                }
+            } else {
+                self.show_switcher = false;
             }
-            // Else: clicked the separator, ignore
-        } else if in_rect(la.commands, col, row) {
-            self.panel = Panel::CommandList;
+            return;
+        }
+
+        if in_rect(la.commands, col, row) {
             let clicked =
                 (row.saturating_sub(la.commands.y + 1)) as usize + self.command_state.offset();
-            if clicked < self.visible.len() {
-                self.command_cursor = clicked;
-                self.command_state.select(Some(clicked));
-                self.reset_detail();
+            match self.view {
+                View::Pending => {
+                    if clicked < self.visible.len() {
+                        self.command_cursor = clicked;
+                        self.command_state.select(Some(clicked));
+                        self.reset_detail();
+                    }
+                }
+                View::Approved | View::Denied => {
+                    if clicked < self.rules.len() {
+                        self.rule_cursor = clicked;
+                        self.command_state.select(Some(clicked));
+                    }
+                }
             }
-        } else if in_rect(la.detail, col, row) {
-            self.panel = Panel::Detail;
         }
     }
 }
 
 // === Helpers ===
+
+/// Parent directory of a display path, for grouping projects in the switcher.
+/// `~/projects/alpha` -> `~/projects`. A path with no parent returns itself.
+fn parent_of(display_path: &str) -> String {
+    match display_path.rsplit_once('/') {
+        Some((parent, _)) if !parent.is_empty() => parent.to_string(),
+        _ => display_path.to_string(),
+    }
+}
+
+/// Sort order for grouping rules by scope: global, then project, then local.
+fn scope_order(scope: Scope) -> u8 {
+    match scope {
+        Scope::User => 0,
+        Scope::Project => 1,
+        Scope::Local => 2,
+    }
+}
+
+/// Step a wrapping cursor in a list of `len`.
+fn step(cursor: usize, len: usize, down: bool) -> usize {
+    if len == 0 {
+        return 0;
+    }
+    if down {
+        (cursor + 1) % len
+    } else if cursor == 0 {
+        len - 1
+    } else {
+        cursor - 1
+    }
+}
+
+#[cfg(test)]
+impl App {
+    /// Build an App from in-memory entries without touching disk. Test-only.
+    pub(crate) fn with_entries(entries: Vec<PendingApproval>) -> Self {
+        let projects = derive_projects(&entries);
+        let mut app = Self {
+            entries,
+            projects,
+            project_cursor: 0,
+            view: View::Pending,
+            visible: Vec::new(),
+            command_cursor: 0,
+            selected_segment: 0,
+            selected_pattern: 0,
+            scope: Scope::Project,
+            rules: Vec::new(),
+            rule_cursor: 0,
+            approved_count: 0,
+            denied_count: 0,
+            rule_scope_filter: None,
+            command_state: ListState::default(),
+            sidebar_state: ListState::default(),
+            should_quit: false,
+            message: None,
+            layout: LayoutAreas::default(),
+            show_switcher: false,
+            confirm: None,
+            last_action: None,
+        };
+        app.sync_sidebar_state();
+        app.update_visible();
+        app
+    }
+}
 
 fn detect_current_project(projects: &[ProjectInfo]) -> Option<usize> {
     let cwd = std::env::current_dir().ok()?;
@@ -771,7 +1164,7 @@ fn in_rect(rect: Rect, col: u16, row: u16) -> bool {
     col >= rect.x && col < rect.x + rect.width && row >= rect.y && row < rect.y + rect.height
 }
 
-/// Describe a pattern in plain language (action-neutral wording)
+/// Describe a pattern in plain language (action-neutral wording).
 pub fn describe_pattern(pattern: &str) -> String {
     if let Some(base) = pattern.strip_suffix(":*") {
         format!("All \"{}\" commands", base)
@@ -815,8 +1208,8 @@ pub fn extract_operators(raw: &str) -> Vec<&str> {
 pub fn run_review(show_all: bool) -> io::Result<()> {
     let mut app = App::new(show_all);
 
-    if app.entries.is_empty() {
-        eprintln!("No pending approvals to review.");
+    if app.entries.is_empty() && app.approved_count == 0 && app.denied_count == 0 {
+        eprintln!("No pending approvals and no rules to manage.");
         return Ok(());
     }
 
@@ -867,10 +1260,6 @@ where
     loop {
         terminal.draw(|f| ui::draw(f, app))?;
 
-        if app.visible.is_empty() && app.entries.is_empty() {
-            app.should_quit = true;
-        }
-
         if app.should_quit {
             return Ok(());
         }
@@ -878,53 +1267,82 @@ where
         if event::poll(std::time::Duration::from_millis(100))? {
             match event::read()? {
                 Event::Key(key) if key.kind == event::KeyEventKind::Press => {
-                    app.message = None;
-
-                    match key.code {
-                        KeyCode::Char('q') | KeyCode::Esc => app.should_quit = true,
-                        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            app.should_quit = true;
+                    if app.confirm.is_some() {
+                        // y commits the armed action; any other key cancels.
+                        match key.code {
+                            KeyCode::Char('y') | KeyCode::Char('Y') => app.confirm_yes(),
+                            _ => app.confirm_cancel(),
                         }
-
-                        // Panel switching
-                        KeyCode::Tab => {
-                            if key.modifiers.contains(KeyModifiers::SHIFT) {
-                                app.prev_panel();
-                            } else {
-                                app.next_panel();
+                    } else if app.show_switcher {
+                        match key.code {
+                            KeyCode::Down | KeyCode::Char('j') => app.switcher_nav(true),
+                            KeyCode::Up | KeyCode::Char('k') => app.switcher_nav(false),
+                            KeyCode::Enter
+                            | KeyCode::Char(' ')
+                            | KeyCode::Esc
+                            | KeyCode::Char('p')
+                            | KeyCode::Char('q') => app.close_switcher(),
+                            _ => {}
+                        }
+                    } else {
+                        match key.code {
+                            KeyCode::Char('q') | KeyCode::Esc => app.should_quit = true,
+                            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                                app.should_quit = true;
                             }
-                        }
-                        KeyCode::BackTab => app.prev_panel(),
 
-                        // Navigation
-                        KeyCode::Down | KeyCode::Char('j') => app.nav_down(),
-                        KeyCode::Up | KeyCode::Char('k') => app.nav_up(),
-                        KeyCode::Left | KeyCode::Char('h') => app.nav_left(),
-                        KeyCode::Right | KeyCode::Char('l') => app.nav_right(),
+                            // Views
+                            KeyCode::Tab => app.cycle_view(true),
+                            KeyCode::BackTab => app.cycle_view(false),
+                            KeyCode::Char('1') => app.set_view(View::Pending),
+                            KeyCode::Char('2') => app.set_view(View::Approved),
+                            KeyCode::Char('3') => app.set_view(View::Denied),
 
-                        // Multi-select
-                        KeyCode::Char(' ') if app.panel == Panel::CommandList => {
-                            app.toggle_select();
-                        }
+                            // Project switcher
+                            KeyCode::Char('p') => app.open_switcher(),
 
-                        // Actions (only from command list or detail panel)
-                        KeyCode::Enter
-                            if app.panel == Panel::CommandList || app.panel == Panel::Detail =>
-                        {
-                            app.approve();
-                        }
-                        KeyCode::Char('d')
-                            if app.panel == Panel::CommandList || app.panel == Panel::Detail =>
-                        {
-                            app.skip();
-                        }
-                        KeyCode::Char('D')
-                            if app.panel == Panel::CommandList || app.panel == Panel::Detail =>
-                        {
-                            app.deny();
-                        }
+                            // Scope filter (rules views)
+                            KeyCode::Char('f') => app.cycle_rule_filter(),
 
-                        _ => {}
+                            // Navigation (arrows always move within the active list)
+                            KeyCode::Down | KeyCode::Char('j') => app.move_cursor(true),
+                            KeyCode::Up | KeyCode::Char('k') => app.move_cursor(false),
+
+                            // Pattern breadth (pending)
+                            KeyCode::Left | KeyCode::Char('h') => app.cycle_pattern(false),
+                            KeyCode::Right | KeyCode::Char('l') => app.cycle_pattern(true),
+
+                            // Scope (pending)
+                            KeyCode::Char('s') => app.cycle_scope(true),
+                            KeyCode::Char('S') => app.cycle_scope(false),
+
+                            // Compound segment (pending)
+                            KeyCode::Char('[') => app.cycle_segment(false),
+                            KeyCode::Char(']') => app.cycle_segment(true),
+
+                            // Undo
+                            KeyCode::Char('u') => app.undo(),
+
+                            // Actions (letter keys; Enter kept as an approve alias)
+                            KeyCode::Char('a') => app.approve(),
+                            KeyCode::Enter => {
+                                if app.view == View::Pending {
+                                    app.approve();
+                                } else {
+                                    app.remove_selected_rule();
+                                }
+                            }
+                            KeyCode::Char('d') => app.deny(),
+                            KeyCode::Char('x') | KeyCode::Delete | KeyCode::Backspace => {
+                                if app.view == View::Pending {
+                                    app.dismiss();
+                                } else {
+                                    app.remove_selected_rule();
+                                }
+                            }
+
+                            _ => {}
+                        }
                     }
                 }
                 Event::Mouse(mouse) if mouse.kind == MouseEventKind::Down(MouseButton::Left) => {
