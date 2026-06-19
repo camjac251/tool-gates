@@ -3772,12 +3772,21 @@ pre.code-block {
 }
 
 /* Faithful monospace render of an actual TUI frame. Box-drawing alignment must
-   be preserved, so this never wraps; on narrow viewports it scrolls sideways. */
+   be preserved, so this never wraps; on narrow viewports it scrolls sideways.
+   It deliberately does NOT use the brand --font-mono: that JetBrains Mono
+   @font-face is a Latin-only subset (its unicode-range excludes U+2500 box-
+   drawing, U+25xx block/geometric shapes like the blast meter, and the U+2190/
+   U+2192 arrows), so those glyphs fall back to a system font whose advance width
+   differs from the ASCII cells and the column grid shears. A single full-
+   coverage monospace renders every cell at one width, keeping the borders
+   square. */
 .tui-screen {
   display: block;
   margin: 0;
   padding: var(--s-2) var(--s-3);
-  font-family: var(--font-mono);
+  font-family:
+    "DejaVu Sans Mono", "Cascadia Mono", "Liberation Mono", ui-monospace, "Menlo", "Consolas",
+    monospace;
   font-size: 12px;
   line-height: 1.45;
   color: var(--text-2);
