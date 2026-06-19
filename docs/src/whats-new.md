@@ -4,7 +4,7 @@
   <div class="config-block">
     <header>
       <h3>v1.27.0 · June 19, 2026</h3>
-      <span class="src-tag">session scratch dir · <a href="https://github.com/camjac251/tool-gates/commit/a29afbc" target="_blank" rel="noopener">a29afbc</a></span>
+      <span class="src-tag">scratch <a href="https://github.com/camjac251/tool-gates/commit/a29afbc" target="_blank" rel="noopener">a29afbc</a> · awk hints <a href="https://github.com/camjac251/tool-gates/commit/8a57e0a" target="_blank" rel="noopener">8a57e0a</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
