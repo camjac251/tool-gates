@@ -193,7 +193,7 @@ Most gate behavior is defined in TOML; custom handlers in Rust cover cases TOML 
 3. **Configurable block rules**: Check `[[block_tools]]` rules against all tool types. Blocks matching tools with a deny message
 4. **Route by tool_name**:
    - **Bash/Monitor** -> Bash gate engine (steps 5-13 below)
-   - **Read/Write/Edit** -> File guards (symlink detection for AI config files)
+   - **Read/Write/Edit** -> File guards (symlink detection for AI config files), then scratch auto-allow for write targets under `$TOOL_GATES_SCRATCH` (see Scratch Directory)
    - **Glob/Grep** -> Handled by block rules in step 3; pass through if not blocked
    - **MCP tools** -> If `permission_mode == "acceptEdits"`, consult `[[accept_edits_mcp]]` rules and auto-allow on match; otherwise pass through to `permissions.allow`
    - **Skill** -> Auto-approve based on `[[auto_approve_skills]]` config rules
@@ -314,6 +314,8 @@ When `permission_mode` is `acceptEdits`, file-editing commands are auto-allowed 
 
 Non-file-editing commands (package managers, git, network) still require approval even in acceptEdits mode.
 
+Writes under the scratch directory auto-allow in all permission modes, not just acceptEdits (see Scratch Directory).
+
 ### Auto Mode (Claude Code 2.1.88+)
 
 _The `PermissionDenied` hook shipped in 2.1.88. Earlier auto-mode-capable builds still benefit from hard-ask -> deny promotion, pattern narrowing, and the pending queue guard; only the classifier retry hint needs 2.1.88+._
@@ -351,6 +353,15 @@ Claude Code also strips broad "allow" rules from `settings.json` on auto mode en
 
 `allow` defines classifier exceptions, `soft_deny` and `hard_deny` add block rules. Inspect the merged config with `claude auto-mode {defaults,config,critique}`.
 
+## Scratch Directory
+
+Writes whose target resolves under `$TOOL_GATES_SCRATCH` (default `~/.cache/tool-gates-scratch`) are auto-allowed:
+
+- `Write` / `Edit` / `apply_patch` targets (the file-tool branch in `main.rs`, after file guards).
+- Bash `mkdir` / `touch` / `cp` destinations and output redirects (`router.rs` redirect skip + `check_mkdir`/`check_touch`/`check_cp` in `gates/filesystem.rs`).
+
+Unlike `acceptEdits`, this fires in **all** permission modes (skipped only in plan mode). Targets are canonicalized first (`is_under_scratch`/`scratch_base` in `router.rs`), so a symlink or `..` that escapes the base does not match, and sensitive or guarded paths still gate. Always-on with no `config.toml` toggle; set the `TOOL_GATES_SCRATCH` env var to relocate the base. Cross-client: a true `allow` on Claude; on Codex (deny-only PreToolUse) it falls through to Codex's approval policy; inert beyond wire format on Gemini/Antigravity.
+
 ## Security Checks
 
 Before AST parsing, `router.rs` runs raw string checks on the command (after stripping comments). These catch patterns like pipe-to-shell (`| bash`), `eval`, `source`, `xargs rm`, destructive `find`/`fd`, dangerous command substitution, semicolon injection, and output redirection. See `check_raw_string_patterns()` in `router.rs` for the full list.
@@ -370,7 +381,7 @@ When allowed commands use legacy tools, tool-gates adds hints suggesting modern 
 | File viewing | `cat`/`head`/`tail`/`less` -> `bat` (with line-range for head/tail; `tail -f` skipped) |
 | Code search | `grep` -> `sg` for code patterns or `rg` for text. `rg` on code paths -> Probe / ChunkHound / Serena / `sg` per the system-prompt rule, routed by pattern shape (identifier / structural / natural-language / -A body capture) |
 | File find | `find -name P -type T` -> `fd -t T P .` |
-| Text processing | `sed s/.../.../ ` -> `sd`; `awk '{print $N}'` -> `choose`; `wc -l <file>` -> `rg -c '.' file` |
+| Text processing | `sed s/.../.../ ` -> `sd`; `awk` by idiom -> `choose` (field), `jq` (sum), `rg -c` (line count), `numbat` (byte math), `jc` (row/field); `wc -l <file>` -> `rg -c '.' file` |
 | Listing & disk | `ls -la` -> `eza -la`; `du` -> `dust` (skips `-sh`); `tree` -> `eza -T`; `ps -e`/aux -> `procs` |
 | HTTP | `curl`/`wget` against GitHub content URLs -> `gh api`; otherwise JSON/verbose -> `xh` |
 | Python | `pip`/`pip3` and `python -m pip` -> `uv pip`; `python -m venv` -> `uv venv` |
@@ -614,6 +625,7 @@ cargo test -- --ignored                 # Slow tests only
 | File | Purpose |
 |------|---------|
 | `~/.config/tool-gates/config.toml` | User configuration (feature toggles, block rules, skill approval, file guard settings) |
+| `~/.cache/tool-gates-scratch/` | Default agent scratch directory (override with `$TOOL_GATES_SCRATCH`); writes under it auto-allow |
 
 Cache files under `~/.cache/tool-gates/`:
 

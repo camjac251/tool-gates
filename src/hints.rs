@@ -120,7 +120,7 @@ pub fn hint_catalog() -> &'static [HintCatalogEntry] {
         HintCatalogEntry {
             legacy: "awk '{print $N}'",
             modern: "choose",
-            why: "Field selection without awk syntax.",
+            why: "Field selection routes to choose; column sums to jq; line counts to rg -c; byte math to numbat; positional row/field to jc.",
             program_level: None,
         },
         HintCatalogEntry {

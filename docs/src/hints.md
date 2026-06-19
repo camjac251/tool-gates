@@ -65,7 +65,7 @@
   <div class="old"><span class="prog">$</span> <s>awk '{print $N}'</s></div>
   <div class="arrow">→</div>
   <div class="new"><span class="prog">$</span> choose</div>
-  <div class="why"><b>Tip from tool-gates:</b> Field selection without awk syntax.</div>
+  <div class="why"><b>Tip from tool-gates:</b> Field selection routes to choose; column sums to jq; line counts to rg -c; byte math to numbat; positional row/field to jc.</div>
 </div>
 <div class="hint-row">
   <div class="old"><span class="prog">$</span> <s>wc -l &lt;file&gt;</s></div>
