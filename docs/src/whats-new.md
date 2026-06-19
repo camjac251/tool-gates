@@ -3,6 +3,23 @@
   <p class="page-lede">Release cadence is fast. Below is a curated set of recent versions and what shipped. Full history at <a href="https://github.com/camjac251/tool-gates/blob/main/CHANGELOG.md" target="_blank" rel="noopener">CHANGELOG.md</a>.</p>
   <div class="config-block">
     <header>
+      <h3>v1.27.0 · June 19, 2026</h3>
+      <span class="src-tag">session scratch dir · <a href="https://github.com/camjac251/tool-gates/commit/a29afbc" target="_blank" rel="noopener">a29afbc</a></span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  auto-allow writes under a session scratch dir ($TOOL_GATES_SCRATCH)
+  awk idiom hints route to numbat / jq / rg / jc / choose</pre>
+      </div>
+      <div class="config-prose">
+        <p>Adds a friction-free session scratch directory so agents stop reaching for <code>/tmp</code>. When <code>$TOOL_GATES_SCRATCH</code> is set (default <code>~/.cache/tool-gates-scratch</code>), <code>Write</code>/<code>Edit</code> targets and shell <code>mkdir</code>/<code>touch</code>/<code>cp</code>/redirect destinations that resolve under it are auto-allowed in every permission mode. Targets are canonicalized first, so a symlink or <code>..</code> that escapes the base is not matched, and sensitive or guarded paths still gate. On Claude this is a true allow; on Codex (deny-only PreToolUse) it falls through.</p>
+        <p>Also replaces the single generic <code>awk</code> suggestion with idiom-aware routing: byte/size math points at <code>numbat</code>, column sums at <code>jq -Rn</code>, line counts at <code>rg -c</code>, positional row/field extraction at <code>jc | jq</code>, and plain field selection at <code>choose</code>. Stateful range extraction and bare filters get no nudge.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
       <h3>v1.26.0 · June 19, 2026</h3>
       <span class="src-tag">risk gating · <a href="https://github.com/camjac251/tool-gates/commit/28b90f9" target="_blank" rel="noopener">28b90f9</a></span>
     </header>
