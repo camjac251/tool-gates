@@ -33,12 +33,13 @@ jobs:
         run: npx --yes @biomejs/biome@2.4.16 ci
 
       - name: prettier (md/yaml)
-        # .prettierignore handles excludes; CLAUDE.md/GEMINI.md are symlinks that
-        # prettier errors on when passed explicitly, so filter them out here.
+        # .prettierignore decides which files skip formatting. prettier errors on
+        # any symlink passed to it explicitly, so drop all symlinks from the list
+        # before handing it to prettier.
         run: |
           git ls-files '*.md' '*.yml' '*.yaml' \
-            | grep -vE '^(CLAUDE|GEMINI)\.md$' \
-            | xargs npx --yes prettier@3.8.3 --check
+            | while IFS= read -r f; do [ -L "$f" ] || printf '%s\n' "$f"; done \
+            | xargs -r npx --yes prettier@3.8.3 --check
 
       - name: taplo (toml)
         run: git ls-files '*.toml' | xargs taplo fmt --check
