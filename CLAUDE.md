@@ -102,7 +102,7 @@ Codex `apply_patch` payloads put the unified-diff body in `tool_input.command`. 
 ## Project Structure
 
 ```
-├── AGENTS.md        # Shared project docs (CLAUDE.md and GEMINI.md are symlinks)
+├── CLAUDE.md        # Agent + project instructions
 ├── build.rs         # Code generation: rules/*.toml -> src/generated/
 ├── Cargo.toml
 ├── .claude-plugin/  # Marketplace catalog (root-level pointer)
@@ -617,8 +617,6 @@ cargo test -- --ignored                 # Slow tests only
 **Documentation Triggers & Commit Prefixes**: Both CI and Release workflows ignore changes inside `docs/**` and `**/*.md`. Pure documentation-only updates (including styles, layout tweaks, or markdown files) must use the `docs:` commit prefix (or `chore:`, `ci:`). Avoid using `feat:` or `fix:` prefixes for doc-only edits, as they will cause `release-plz` to generate premature version bumps and releases.
 
 **MSRV**: 1.86. Do not use language features or dependencies requiring a newer Rust version.
-
-**CLAUDE.md** and **GEMINI.md** are symlinks to AGENTS.md. Always edit AGENTS.md directly.
 
 ## Runtime Files
 
