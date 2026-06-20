@@ -4,7 +4,7 @@
   <div class="config-block">
     <header>
       <h3>v1.28.0 · June 20, 2026</h3>
-      <span class="src-tag">scratch coverage + awk gate · <a href="https://github.com/camjac251/tool-gates/commit/0000000" target="_blank" rel="noopener">0000000</a></span>
+      <span class="src-tag">scratch coverage + awk gate · <a href="https://github.com/camjac251/tool-gates/commit/368a1da" target="_blank" rel="noopener">368a1da</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
