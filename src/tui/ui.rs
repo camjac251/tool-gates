@@ -264,7 +264,7 @@ fn scope_tag(scope: Scope) -> &'static str {
     }
 }
 
-// === Decision panel (Pending) — the focal surface ===
+// === Decision panel (Pending): the focal surface ===
 
 fn draw_decision(f: &mut Frame, app: &App, area: Rect) {
     // The decision is what the user came here to make, so this panel always
