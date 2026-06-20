@@ -1638,7 +1638,17 @@ fn check_raw_string_patterns(command_string: &str) -> (Option<HookOutput>, Optio
     let unquoted = strip_quoted_strings(command_string);
     for cap in REDIRECT_RE.captures_iter(&unquoted) {
         if let Some(target) = cap.get(2) {
-            let target_str = target.as_str();
+            // Recover the real target from the original command. A QUOTED target
+            // (`> "$TOOL_GATES_SCRATCH/.../f"`) is blanked to `_` in `unquoted`,
+            // so checking the blanked text would miss a scratch destination.
+            // strip_quoted_strings is char-length-preserving, so the byte span
+            // lines up for ASCII paths; if earlier multi-byte quoted content
+            // shifts it, `get` returns None and we fall back to the blanked text,
+            // which is never under scratch (fail closed, never a false allow).
+            let raw = command_string
+                .get(target.start()..target.end())
+                .unwrap_or(target.as_str());
+            let target_str = raw.trim_matches(|c| c == '"' || c == '\'');
             // Skip /dev/null (discarding output) and the session scratch dir,
             // which is a friction-free temp space agents write to instead of /tmp.
             if target_str != "/dev/null" && !is_under_scratch(target_str) {
@@ -1653,7 +1663,10 @@ fn check_raw_string_patterns(command_string: &str) -> (Option<HookOutput>, Optio
     }
     for cap in AMP_REDIRECT_RE.captures_iter(&unquoted) {
         if let Some(target) = cap.get(1) {
-            let target_str = target.as_str();
+            let raw = command_string
+                .get(target.start()..target.end())
+                .unwrap_or(target.as_str());
+            let target_str = raw.trim_matches(|c| c == '"' || c == '\'');
             if target_str != "/dev/null" && !is_under_scratch(target_str) {
                 return (
                     None,
@@ -2593,6 +2606,37 @@ mod tests {
             get_decision(&elsewhere),
             "ask",
             "redirect outside scratch should ask"
+        );
+
+        // QUOTED redirect targets under scratch must also allow. strip_quoted_strings
+        // blanks the quoted path to `_`, so the real target is recovered from the
+        // original command before the scratch check. Covers the `>`, `>>`, and `&>`
+        // forms and the literal-token + absolute spellings.
+        for q in [
+            "echo hi > \"$TOOL_GATES_SCRATCH/out.log\"",
+            "echo hi >> \"$TOOL_GATES_SCRATCH/sess/out.log\"",
+            "echo hi > \"/tmp/cc-scratch-test/abs.log\"",
+            "echo hi &> \"$TOOL_GATES_SCRATCH/both.log\"",
+        ] {
+            let r = check_command_with_settings(q, "/home/user/project", "default");
+            assert_eq!(
+                get_decision(&r),
+                "allow",
+                "quoted scratch redirect should allow: {q} -> {}",
+                get_reason(&r)
+            );
+        }
+
+        // A QUOTED non-scratch target still asks (the fix must not over-allow).
+        let quoted_other = check_command_with_settings(
+            "echo hi > \"/tmp/other/out.log\"",
+            "/home/user/project",
+            "default",
+        );
+        assert_eq!(
+            get_decision(&quoted_other),
+            "ask",
+            "quoted non-scratch redirect should still ask"
         );
 
         unsafe {
@@ -6019,15 +6063,15 @@ run = "mytool42 verify"
         }
 
         #[test]
-        fn test_awk_skip_still_surfaces_modern_hint() {
-            // awk stays ask (unknown -> Skip). When rg is installed, the modern-CLI
-            // hint must reach the agent via additionalContext so it learns the
-            // autoapproved alternative. The hint is correctly gated on rg being
-            // available (we never nudge toward an uninstalled tool), so assert
-            // conditionally to stay hermetic on CI runners that lack rg. The
-            // routing itself is covered unconditionally by the hint_awk unit tests.
+        fn test_awk_safe_idiom_allows_and_surfaces_modern_hint() {
+            // A line-count idiom has no exec/write marker, so check_awk allows it.
+            // The modern-CLI hint still rides the allow via additionalContext so
+            // the agent learns the autoapproved alternative. The hint is gated on
+            // rg being available (we never nudge toward an uninstalled tool), so
+            // assert conditionally to stay hermetic on CI runners that lack rg.
+            // The routing itself is covered unconditionally by the hint_awk tests.
             let result = check_command("awk 'END{print NR}' file.txt");
-            assert_eq!(get_decision(&result), "ask");
+            assert_eq!(get_decision(&result), "allow");
             let ctx = result.context.unwrap_or_default();
             if crate::tool_cache::get_cache().is_available("rg") {
                 assert!(
@@ -6040,11 +6084,12 @@ run = "mytool42 verify"
         }
 
         #[test]
-        fn test_awk_range_extraction_gets_no_hint() {
-            // Pattern-delimited range extraction has no autoapproved peer, so it
-            // must not be nudged toward a worse tool.
+        fn test_awk_range_extraction_allows_with_no_hint() {
+            // Pattern-delimited range extraction has no exec/write marker (allow)
+            // and no autoapproved peer, so it must not be nudged toward a worse
+            // tool either.
             let result = check_command("awk '/^---$/{c++; next} c==1' file.md");
-            assert_eq!(get_decision(&result), "ask");
+            assert_eq!(get_decision(&result), "allow");
             assert!(
                 result.context.is_none(),
                 "range extraction should get no hint, got: {:?}",

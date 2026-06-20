@@ -2,7 +2,10 @@
 //!
 //! Uses declarative rules for simple cases, custom logic for complex flag parsing.
 
-use crate::gates::helpers::{find_http_url, get_flag_value, has_any_flag, is_github_content_url};
+use crate::gates::helpers::{
+    find_http_url, flag_value_under_scratch, get_flag_value, has_any_flag, is_github_content_url,
+    upgrade_to_scratch_allow,
+};
 use crate::generated::rules::{
     check_curl_declarative, check_nc_declarative, check_nmap_declarative, check_rsync_declarative,
     check_scp_declarative, check_sftp_declarative, check_socat_declarative, check_ssh_declarative,
@@ -87,7 +90,15 @@ fn check_curl(cmd: &CommandInfo) -> GateResult {
 
     // Downloading to file
     if has_any_flag(args, &["-o", "--output", "-O", "--remote-name"]) {
-        return GateResult::ask("curl: Downloading file");
+        // A download whose -o/--output destination is under scratch is
+        // friction-free: the GET is the same risk as an allowed plain GET, only
+        // the write target moved. -O/--remote-name names the file in cwd (no
+        // path to vet), so it keeps asking.
+        return upgrade_to_scratch_allow(
+            GateResult::ask("curl: Downloading file"),
+            flag_value_under_scratch(cmd, &["-o", "--output"]),
+            "curl download into scratch directory",
+        );
     }
 
     // GitHub raw/API content - nudge toward `gh api` before falling through
@@ -122,7 +133,14 @@ fn check_wget(cmd: &CommandInfo) -> GateResult {
     for arg in args {
         match arg.as_str() {
             "-O" | "--output-document" | "-P" | "--directory-prefix" => {
-                return GateResult::ask("wget: Downloading file");
+                return upgrade_to_scratch_allow(
+                    GateResult::ask("wget: Downloading file"),
+                    flag_value_under_scratch(
+                        cmd,
+                        &["-O", "--output-document", "-P", "--directory-prefix"],
+                    ),
+                    "wget download into scratch directory",
+                );
             }
             "-r" | "--recursive" => return GateResult::ask("wget: Recursive download"),
             "-m" | "--mirror" => return GateResult::ask("wget: Mirroring site"),

@@ -3,6 +3,26 @@
   <p class="page-lede">Release cadence is fast. Below is a curated set of recent versions and what shipped. Full history at <a href="https://github.com/camjac251/tool-gates/blob/main/CHANGELOG.md" target="_blank" rel="noopener">CHANGELOG.md</a>.</p>
   <div class="config-block">
     <header>
+      <h3>v1.28.0 · June 20, 2026</h3>
+      <span class="src-tag">scratch coverage + awk gate · <a href="https://github.com/camjac251/tool-gates/commit/0000000" target="_blank" rel="noopener">0000000</a></span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  scratch auto-allow extended to mv / tee / chmod / sd
+  quoted redirect targets, curl -o / wget -O
+  MultiEdit / NotebookEdit writes under the scratch dir
+  awk gate: auto-allow read-only awk, ask on exec / write / opaque programs</pre>
+      </div>
+      <div class="config-prose">
+        <p>Broadens the v1.27.0 session scratch auto-allow from <code>Write</code>/<code>Edit</code> plus <code>mkdir</code>/<code>touch</code>/<code>cp</code>/redirect to the rest of the common write surface, so agents stop being prompted for routine throwaway work. New scratch-aware upgrades: <code>mv</code> (destination), <code>tee</code> output, <code>chmod</code>/<code>chown</code>/<code>chgrp</code>, <code>curl -o</code>/<code>wget -O</code> downloads, <code>sd</code> in-place edits, and <code>MultiEdit</code>/<code>NotebookEdit</code> file writes.</p>
+        <p>Also fixes a quoted-redirect gap: a quoted scratch target like <code>&gt; "$TOOL_GATES_SCRATCH/..."</code> previously prompted because the quoted path was blanked before the scratch check, so the real target is now recovered from the original command. The safety model: each gate flips Ask to Allow only when the write target resolves under the scratch base (symlink or <code>..</code> escapes still gate), and every non-scratch write still prompts. Tools whose sublanguage can run shell or write outside the named target (<code>sed -i</code>, <code>sqlite3</code>, <code>zip</code>, <code>tar</code>) are deliberately left asking, since a scratch target does not bound what they do.</p>
+        <p>Also adds a guarded <code>awk</code>/<code>gawk</code>/<code>mawk</code> gate so common read-only idioms (field selection, column sums, line counts, range extraction) auto-allow instead of prompting, while any awk that runs a command or writes a file still asks. A program auto-allows only as a static, inline, single-quoted literal with none of the exec/write markers (<code>system</code>, <code>getline</code>, a real <code>|</code> pipe, an <code>@</code> indirect call, or a <code>&gt;</code> redirect); <code>||</code> and <code>&gt;=</code> are exempt so logical-or and range comparisons still allow. A program built from a shell variable, command substitution, ANSI-C quoting, or a later <code>-e</code>/<code>--source</code> chunk is opaque and asks since its text cannot be inspected, and <code>-f</code>/<code>-i</code>/<code>-l</code>/<code>-E</code> external-program flags ask. Dynamic filenames and <code>-v</code> values still allow because awk never executes them. Measured against the real session corpus, a clear majority of routine awk now auto-allows, with no file-writing or command-running awk allowed.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
       <h3>v1.27.0 · June 19, 2026</h3>
       <span class="src-tag">scratch + awk hints · <a href="https://github.com/camjac251/tool-gates/commit/2a5b993" target="_blank" rel="noopener">2a5b993</a></span>
     </header>

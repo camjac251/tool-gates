@@ -9,14 +9,14 @@
   </div>
 
   <div class="summary" aria-label="Rule counts at a glance">
-    <div class="seg-bar" role="img" aria-label="80 allow, 69 ask, 0 block">
+    <div class="seg-bar" role="img" aria-label="80 allow, 70 ask, 0 block">
       <div class="seg allow" style="flex: 80"></div>
-      <div class="seg ask"   style="flex: 69"></div>
+      <div class="seg ask"   style="flex: 70"></div>
       <div class="seg block" style="flex: 0"></div>
     </div>
     <div class="counts">
       <span class="ca"><i></i><b>80</b> allow</span>
-      <span class="cas"><i></i><b>69</b> ask</span>
+      <span class="cas"><i></i><b>70</b> ask</span>
       <span class="cb"><i></i><b>0</b> block</span>
     </div>
   </div>
@@ -25,9 +25,9 @@
 </div>
 
 <div class="chips" role="group" aria-label="Filter rules by decision">
-  <button class="chip all"   data-filter="all"   aria-pressed="true"><i></i>All <span class="n">149</span></button>
+  <button class="chip all"   data-filter="all"   aria-pressed="true"><i></i>All <span class="n">150</span></button>
   <button class="chip allow" data-filter="allow" aria-pressed="false"><i></i>Allow <span class="n">80</span></button>
-  <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">69</span></button>
+  <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">70</span></button>
   <button class="chip block" data-filter="block" aria-pressed="false"><i></i>Block <span class="n">0</span></button>
 </div>
 
@@ -450,7 +450,7 @@
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
       rules/devtools.toml#ask
     </a>
-    <span class="count">69 patterns</span>
+    <span class="count">70 patterns</span>
   </header>
 
 <div class="rule-row" data-decision="ask" id="devtools-ast-grep-u-update-all">
@@ -467,6 +467,11 @@
   <div class="rule-cmd"><span class="prog">autopep8</span> <span class="flag">-i</span> <span class="flag">--in-place</span></div>
   <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
   <div class="rule-reason">Formatting files in-place</div>
+</div>
+<div class="rule-row" data-decision="ask" id="devtools-awk">
+  <div class="rule-cmd"><span class="prog">awk</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">awk program uses a shell-exec or file-write construct (system, getline, |, @, or a &gt; redirect), or reads its program from a file. Plain field/print/arithmetic awk auto-allows.</div>
 </div>
 <div class="rule-row" data-decision="ask" id="devtools-biome-check-write-fix-fix-unsafe">
   <div class="rule-cmd"><span class="prog">biome</span> check <span class="flag">--write</span> <span class="flag">--fix</span> <span class="flag">--fix-unsafe</span></div>

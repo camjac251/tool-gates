@@ -169,7 +169,7 @@ src/
     ├── cloud.rs         # AWS, gcloud, terraform, kubectl, docker, helm, pulumi, az
     ├── network.rs       # curl, wget, ssh, scp, sftp, rsync, netcat, httpie, nmap, socat, telnet
     ├── filesystem.rs    # rm, rmdir, mv, cp, mkdir, chmod, chown, ln, tar, zip
-    ├── devtools.rs      # sd, ast-grep, semgrep, biome, prettier, eslint, ruff, pytest, mypy, playwright, cypress, tsx, webpack
+    ├── devtools.rs      # sd, awk (safe-idiom allow / exec-write ask), ast-grep, semgrep, biome, prettier, eslint, ruff, pytest, mypy, playwright, cypress, tsx, webpack
     ├── package_managers.rs  # npm, pnpm, yarn, pip, uv, cargo, rustc, rustup, go, bun, conda, poetry, pipx, mise
     ├── runtimes.rs      # python3, node, ruby, deno, php, lua, java, dotnet, swift, elixir
     └── system.rs        # psql, mysql, make, sudo, systemctl, kill, crontab, openssl, gpg, ssh-keygen

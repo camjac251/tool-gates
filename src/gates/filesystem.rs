@@ -5,7 +5,9 @@
 //! - tar flag parsing (combined flags like -xzf)
 
 use crate::gates::helpers::{
-    BLOCKED_SECURITY_DIRS_UNDER_HOME, expand_path_vars, is_suspicious_path, normalize_path,
+    BLOCKED_SECURITY_DIRS_UNDER_HOME, all_path_args_under_scratch, expand_path_vars,
+    is_suspicious_path, last_path_arg_under_scratch, normalize_path, path_args,
+    upgrade_to_scratch_allow,
 };
 use crate::generated::rules::{
     check_chmod_declarative, check_cp_declarative, check_ln_declarative, check_mkdir_declarative,
@@ -22,15 +24,17 @@ pub fn check_filesystem(cmd: &CommandInfo) -> GateResult {
 
     match program {
         "rm" => check_rm(cmd),
-        "mv" => check_mv_declarative(cmd).unwrap_or_else(|| GateResult::ask("mv: Moving files")),
+        "mv" => check_mv(cmd),
         "cp" => check_cp(cmd),
         "mkdir" => check_mkdir(cmd),
         "rmdir" => check_rmdir_declarative(cmd)
             .unwrap_or_else(|| GateResult::ask("rmdir: Removing directory (if empty)")),
         "touch" => check_touch(cmd),
-        "chmod" | "chown" | "chgrp" => check_chmod_declarative(cmd)
-            .unwrap_or_else(|| GateResult::ask(format!("{program}: Changing permissions"))),
+        "chmod" | "chown" | "chgrp" => check_chmod_perms(cmd, program),
         "ln" => check_ln_declarative(cmd).unwrap_or_else(|| GateResult::ask("ln: Creating link")),
+        // sed -i is NOT scratch-upgraded: the script sublanguage can execute
+        // shell (`e`) and write to arbitrary files (`w`/`W`), so "target under
+        // scratch" does not bound what it writes.
         "sed" if args.iter().any(|a| a == "-i") => GateResult::ask("sed -i: In-place edit"),
         // perl can execute arbitrary code even without -i (via -e, system(), etc.)
         "perl" => check_perl_declarative(cmd)
@@ -38,34 +42,30 @@ pub fn check_filesystem(cmd: &CommandInfo) -> GateResult {
         "tar" => check_tar(cmd),
         "unzip" => check_unzip(cmd),
         "zip" => check_zip(cmd),
+        "tee" => check_tee(cmd),
         _ => GateResult::skip(),
     }
 }
 
-/// Non-flag path arguments, with one layer of surrounding quotes stripped
-/// (the bash parser can hand back quoted tokens for paths containing `$VAR`).
-fn path_args(cmd: &CommandInfo) -> Vec<&str> {
-    cmd.args
-        .iter()
-        .filter(|a| !a.starts_with('-'))
-        .map(|a| a.trim_matches(|c| c == '"' || c == '\'').trim())
-        .filter(|a| !a.is_empty())
-        .collect()
+/// `mv` is allowed only when the destination (last path arg) is under scratch;
+/// `mv scratch/x /etc/y` must still ask. Mirrors `check_cp`.
+fn check_mv(cmd: &CommandInfo) -> GateResult {
+    let base = check_mv_declarative(cmd).unwrap_or_else(|| GateResult::ask("mv: Moving files"));
+    upgrade_to_scratch_allow(
+        base,
+        last_path_arg_under_scratch(cmd),
+        "mv into scratch directory",
+    )
 }
 
-/// True when every path argument resolves under the session scratch base.
-fn all_path_args_under_scratch(cmd: &CommandInfo) -> bool {
-    let paths = path_args(cmd);
-    !paths.is_empty() && paths.iter().all(|p| crate::router::is_under_scratch(p))
-}
-
-/// Upgrade an `Ask` result to `Allow` when the scratch condition holds; leaves
-/// `Block`/`Skip`/`Allow` results untouched so a future block rule still wins.
-fn upgrade_to_scratch_allow(base: GateResult, under_scratch: bool, reason: &str) -> GateResult {
-    if base.decision == Decision::Ask && under_scratch {
-        return GateResult::allow_with_reason(reason);
-    }
-    base
+/// `tee` writing only into scratch is friction-free (its non-flag args are the
+/// output files). `cmd | tee scratch/log` is a common save-and-review pattern.
+fn check_tee(cmd: &CommandInfo) -> GateResult {
+    upgrade_to_scratch_allow(
+        GateResult::ask("tee: Writing to file(s)"),
+        all_path_args_under_scratch(cmd),
+        "tee into scratch directory",
+    )
 }
 
 /// `mkdir` into the session scratch dir is friction-free (agents create their
@@ -95,11 +95,11 @@ fn check_touch(cmd: &CommandInfo) -> GateResult {
 /// Reading a source elsewhere is harmless; `cp scratch/x /etc/y` must still ask.
 fn check_cp(cmd: &CommandInfo) -> GateResult {
     let base = check_cp_declarative(cmd).unwrap_or_else(|| GateResult::ask("cp: Copying files"));
-    let dest_under_scratch = path_args(cmd)
-        .last()
-        .map(|p| crate::router::is_under_scratch(p))
-        .unwrap_or(false);
-    upgrade_to_scratch_allow(base, dest_under_scratch, "cp into scratch directory")
+    upgrade_to_scratch_allow(
+        base,
+        last_path_arg_under_scratch(cmd),
+        "cp into scratch directory",
+    )
 }
 
 /// Check rm command - requires custom path normalization.
@@ -271,8 +271,22 @@ fn check_unzip(cmd: &CommandInfo) -> GateResult {
 /// Check zip command.
 /// Note: -l flag converts line endings (CR-LF to Unix), it does NOT list contents.
 /// Use zipinfo to list zip contents (which is in basics safe_commands).
+/// Not scratch-upgraded: `zip -O`/`--out` redirects output to a different file,
+/// so a scratch first arg does not bound where it writes.
 fn check_zip(_cmd: &CommandInfo) -> GateResult {
     GateResult::ask("zip: Creating/modifying archive")
+}
+
+/// `chmod`/`chown`/`chgrp` whose every target file is under scratch is
+/// friction-free. The first positional is the mode/owner spec (not a path);
+/// the rest are the files. is_under_scratch resolves symlinks, so a scratch
+/// link pointing outside still asks.
+fn check_chmod_perms(cmd: &CommandInfo, program: &str) -> GateResult {
+    let base = check_chmod_declarative(cmd)
+        .unwrap_or_else(|| GateResult::ask(format!("{program}: Changing permissions")));
+    let targets: Vec<&str> = path_args(cmd).into_iter().skip(1).collect();
+    let under = !targets.is_empty() && targets.iter().all(|p| crate::router::is_under_scratch(p));
+    upgrade_to_scratch_allow(base, under, "chmod on scratch file(s)")
 }
 
 #[cfg(test)]
@@ -339,6 +353,61 @@ mod tests {
             Decision::Ask,
             "cp out of scratch should ask"
         );
+
+        unsafe {
+            match saved {
+                Some(v) => std::env::set_var("TOOL_GATES_SCRATCH", v),
+                None => std::env::remove_var("TOOL_GATES_SCRATCH"),
+            }
+        }
+    }
+
+    #[serial_test::serial]
+    #[test]
+    fn test_filesystem_scratch_writers() {
+        let saved = std::env::var("TOOL_GATES_SCRATCH").ok();
+        // SAFETY: serialized via #[serial], so no concurrent env access.
+        unsafe {
+            std::env::set_var("TOOL_GATES_SCRATCH", "/tmp/cc-scratch-test");
+        }
+
+        // mv / tee / chmod: destination under scratch allows, elsewhere asks.
+        // sed -i / zip / ouch / sqlite3 are intentionally NOT here: their
+        // sublanguages can exec or write outside the named target.
+        let allow_cases = [
+            cmd("mv", &["/etc/hosts", "/tmp/cc-scratch-test/hosts"]),
+            cmd("mv", &["a", "$TOOL_GATES_SCRATCH/a"]),
+            cmd("tee", &["/tmp/cc-scratch-test/log"]),
+            cmd("tee", &["-a", "/tmp/cc-scratch-test/log"]),
+            cmd("chmod", &["+x", "/tmp/cc-scratch-test/f"]),
+        ];
+        for c in allow_cases {
+            assert_eq!(
+                check_filesystem(&c).decision,
+                Decision::Allow,
+                "scratch writer should allow: {} {:?}",
+                c.program,
+                c.args
+            );
+        }
+
+        let ask_cases = [
+            cmd("mv", &["/tmp/cc-scratch-test/hosts", "/etc/evil"]),
+            cmd("tee", &["/etc/log"]),
+            cmd("chmod", &["+x", "/etc/passwd"]),
+            // sublanguage tools stay ask even when the named target is scratch.
+            cmd("sed", &["-i", "1e id", "/tmp/cc-scratch-test/f"]),
+            cmd("zip", &["/tmp/cc-scratch-test/a.zip", "src"]),
+        ];
+        for c in ask_cases {
+            assert_eq!(
+                check_filesystem(&c).decision,
+                Decision::Ask,
+                "non-scratch writer should ask: {} {:?}",
+                c.program,
+                c.args
+            );
+        }
 
         unsafe {
             match saved {

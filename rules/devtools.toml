@@ -49,6 +49,23 @@ handler = "check_sd"
 description = "sd without file args is a stdin→stdout pipe filter (safe); with file args it modifies in-place (ask)"
 
 # =============================================================================
+# AWK (safe field/print/arithmetic auto-allows; shell-exec / file-write asks)
+# =============================================================================
+
+[[programs]]
+name = "awk"
+aliases = ["gawk", "mawk"]
+unknown_action = "ask"
+
+[[programs.ask]]
+reason = "awk program uses a shell-exec or file-write construct (system, getline, |, @, or a > redirect), or reads its program from a file. Plain field/print/arithmetic awk auto-allows."
+
+[[custom_handlers]]
+program = "awk"
+handler = "check_awk"
+description = "awk auto-allows when the inline program has no exec/write marker (| > @ getline system) and no -f/-i/-l/-E external-program flag; asks otherwise"
+
+# =============================================================================
 # SAD (preview mode safe, --commit asks)
 # =============================================================================
 

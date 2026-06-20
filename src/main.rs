@@ -771,9 +771,12 @@ fn extract_file_paths_from_map(
     }
 
     let mut paths = Vec::new();
-    if let Some(fp) = map.get("file_path").and_then(|v| v.as_str()) {
-        if !fp.is_empty() {
-            paths.push(fp.to_string());
+    // file_path: Write/Edit/MultiEdit. notebook_path: NotebookEdit.
+    for key in ["file_path", "notebook_path"] {
+        if let Some(fp) = map.get(key).and_then(|v| v.as_str()) {
+            if !fp.is_empty() {
+                paths.push(fp.to_string());
+            }
         }
     }
     paths

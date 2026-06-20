@@ -5733,6 +5733,31 @@ pub fn check_sd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     ))
 }
 
+// === AWK (from devtools.toml) ===
+
+/// Check awk commands declaratively
+pub fn check_awk_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["awk", "gawk", "mawk"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    // Bare ask rule - any awk invocation asks
+    Some(GateResult::ask(
+        "awk: awk program uses a shell-exec or file-write construct (system, getline, |, @, or a > redirect), or reads its program from a file. Plain field/print/arithmetic awk auto-allows.",
+    ))
+}
+
 // === SAD (from devtools.toml) ===
 
 /// Check sad commands declaratively
@@ -14027,6 +14052,9 @@ pub fn check_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if let Some(result) = check_sd_declarative(cmd) {
         return Some(result);
     }
+    if let Some(result) = check_awk_declarative(cmd) {
+        return Some(result);
+    }
     if let Some(result) = check_sad_declarative(cmd) {
         return Some(result);
     }
@@ -14787,11 +14815,12 @@ pub fn check_tool_gates_gate(cmd: &CommandInfo) -> GateResult {
 /// Programs handled by the tool_gates gate
 pub static TOOL_GATES_PROGRAMS: &[&str] = &["tool-gates", "bash-gates"];
 
-/// Generated gate for devtools - handles: sd, sad, ast-grep, sg, yq, jq, semgrep, comby, grit, watchexec, biome, prettier, eslint, ruff, black, isort, shellcheck, hadolint, golangci-lint, gci, air, actionlint, gitleaks, lefthook, vite, vitest, jest, mocha, tsc, tsup, esbuild, turbo, nx, knip, oxlint, gofmt, gofumpt, goimports, shfmt, rustfmt, stylua, clang-format, autopep8, rubocop, standardrb, patch, dos2unix, unix2dos, stylelint, mix, perltidy, dartfmt, dart, elm-format, scalafmt, ktlint, swiftformat, buf, pytest, py.test, mypy, pyright, basedpyright, pylint, flake8, bandit, coverage, tox, nox, autoflake, tsx, ts-node, webpack, webpack-cli, rollup, swc, parcel, playwright, cypress, wrangler, ty, markdownlint, ffprobe, d2, ffmpeg
-/// Custom handlers needed for: ["sd"]
+/// Generated gate for devtools - handles: sd, awk, gawk, mawk, sad, ast-grep, sg, yq, jq, semgrep, comby, grit, watchexec, biome, prettier, eslint, ruff, black, isort, shellcheck, hadolint, golangci-lint, gci, air, actionlint, gitleaks, lefthook, vite, vitest, jest, mocha, tsc, tsup, esbuild, turbo, nx, knip, oxlint, gofmt, gofumpt, goimports, shfmt, rustfmt, stylua, clang-format, autopep8, rubocop, standardrb, patch, dos2unix, unix2dos, stylelint, mix, perltidy, dartfmt, dart, elm-format, scalafmt, ktlint, swiftformat, buf, pytest, py.test, mypy, pyright, basedpyright, pylint, flake8, bandit, coverage, tox, nox, autoflake, tsx, ts-node, webpack, webpack-cli, rollup, swc, parcel, playwright, cypress, wrangler, ty, markdownlint, ffprobe, d2, ffmpeg
+/// Custom handlers needed for: ["awk", "sd"]
 pub fn check_devtools_gate(cmd: &CommandInfo) -> GateResult {
     match cmd.program.as_str() {
-        "sd" => GateResult::skip(), // custom handler: check_sd
+        "sd" => GateResult::skip(),                    // custom handler: check_sd
+        "awk" | "gawk" | "mawk" => GateResult::skip(), // custom handler: check_awk
         "sad" => check_sad_declarative(cmd).unwrap_or_else(GateResult::skip),
         "ast-grep" | "sg" => check_ast_grep_declarative(cmd).unwrap_or_else(GateResult::skip),
         "yq" => check_yq_declarative(cmd).unwrap_or_else(GateResult::skip),
@@ -14883,6 +14912,9 @@ pub fn check_devtools_gate(cmd: &CommandInfo) -> GateResult {
 /// Programs handled by the devtools gate
 pub static DEVTOOLS_PROGRAMS: &[&str] = &[
     "sd",
+    "awk",
+    "gawk",
+    "mawk",
     "sad",
     "ast-grep",
     "sg",

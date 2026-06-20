@@ -196,6 +196,9 @@ fn check_mysql(cmd: &CommandInfo) -> GateResult {
 }
 
 fn check_database_generic(cmd: &CommandInfo) -> GateResult {
+    // sqlite3 is NOT scratch-upgraded even when the db file is under scratch: its
+    // dot-commands (`.shell`/`.system`/`.load`) execute shell and `.output`/`.import`
+    // read/write arbitrary files, so "db under scratch" does not bound its effects.
     if cmd.program == "mongosh" || cmd.program == "mongo" {
         check_mongosh_declarative(cmd)
             .unwrap_or_else(|| GateResult::ask("mongosh: Database connection"))

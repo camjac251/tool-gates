@@ -2,6 +2,8 @@
 //!
 //! These helpers extract common patterns that can't be expressed declaratively.
 
+use crate::models::{CommandInfo, Decision, GateResult};
+
 /// Security-critical paths under the home directory. A recursive `rm` targeting
 /// any of these is treated as catastrophic (hard block) rather than just "ask".
 ///
@@ -205,6 +207,62 @@ pub fn get_flag_value<'a>(args: &'a [String], flags: &[&str]) -> Option<&'a str>
         i += 1;
     }
     None
+}
+
+// === Session scratch-dir auto-allow helpers ===
+//
+// Shared by the filesystem/network/system/devtools gates so a single vetted
+// implementation answers "is this write destined for the session scratch dir".
+// These only ever upgrade an `Ask` to `Allow` (never relax a `Block`), and only
+// when the WRITE target is under the scratch base, so source reads elsewhere
+// stay gated. The scratch base recognition (literal `$TOOL_GATES_SCRATCH` token,
+// `~`/`$HOME` expansion, symlink/`..` resolution) lives in
+// `crate::router::is_under_scratch`.
+
+/// One layer of surrounding quotes stripped, then trimmed. The bash parser can
+/// hand back a quoted token for a path containing `$VAR`.
+pub fn strip_one_quote_layer(s: &str) -> &str {
+    s.trim_matches(|c| c == '"' || c == '\'').trim()
+}
+
+/// Non-flag path arguments, quote-stripped and de-emptied.
+pub fn path_args(cmd: &CommandInfo) -> Vec<&str> {
+    cmd.args
+        .iter()
+        .filter(|a| !a.starts_with('-'))
+        .map(|a| strip_one_quote_layer(a))
+        .filter(|a| !a.is_empty())
+        .collect()
+}
+
+/// True when every path argument resolves under the session scratch base.
+pub fn all_path_args_under_scratch(cmd: &CommandInfo) -> bool {
+    let paths = path_args(cmd);
+    !paths.is_empty() && paths.iter().all(|p| crate::router::is_under_scratch(p))
+}
+
+/// True when the last path argument (a destination) resolves under scratch.
+pub fn last_path_arg_under_scratch(cmd: &CommandInfo) -> bool {
+    path_args(cmd)
+        .last()
+        .is_some_and(|p| crate::router::is_under_scratch(p))
+}
+
+/// True when the value of any of `flags` (e.g. `-o`/`--output`) resolves under
+/// scratch. For download/write gates whose destination is a flag value.
+pub fn flag_value_under_scratch(cmd: &CommandInfo, flags: &[&str]) -> bool {
+    get_flag_value(&cmd.args, flags)
+        .map(strip_one_quote_layer)
+        .is_some_and(crate::router::is_under_scratch)
+}
+
+/// Upgrade an `Ask` result to `Allow` when the scratch condition holds; leaves
+/// `Block`/`Skip`/`Allow` untouched so a future block rule still wins.
+pub fn upgrade_to_scratch_allow(base: GateResult, under_scratch: bool, reason: &str) -> GateResult {
+    if base.decision == Decision::Ask && under_scratch {
+        return GateResult::allow_with_reason(reason);
+    }
+    base
 }
 
 /// Normalize a path for security checking.

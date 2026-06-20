@@ -179,6 +179,8 @@ impl Client {
             "Read"
                 | "Write"
                 | "Edit"
+                | "MultiEdit"
+                | "NotebookEdit"
                 | "read_file"
                 | "read_many_files"
                 | "write_file"
@@ -207,6 +209,8 @@ impl Client {
             tool_name,
             "Write"
                 | "Edit"
+                | "MultiEdit"
+                | "NotebookEdit"
                 | "write_file"
                 | "replace"
                 | "apply_patch"
