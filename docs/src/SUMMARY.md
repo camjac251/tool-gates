@@ -17,6 +17,7 @@
 - [Antigravity CLI](antigravity.md)
 - [Settings Precedence](settings-precedence.md)
 - [Approval Learning](approval-learning.md)
+- [Scratch Directory](scratch.md)
 
 ---
 
