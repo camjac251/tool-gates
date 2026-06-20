@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.28.0](https://github.com/camjac251/tool-gates/compare/v1.27.0...v1.28.0) - 2026-06-20
+
+### Added
+
+- *(gates)* awk safety gate and broader scratch auto-allow
+
+### Other
+
+- align v1.5.0 whats-new src-tag with its release tag
+- document scratch directory and awk hint routing
+- point whats-new src-tags at release commits, not feature/merge
+- link both v1.27.0 feature commits in whats-new
+
 ## [1.27.0](https://github.com/camjac251/tool-gates/compare/v1.26.0...v1.27.0) - 2026-06-19
 
 ### Added
