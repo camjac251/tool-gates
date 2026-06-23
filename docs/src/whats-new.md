@@ -3,6 +3,42 @@
   <p class="page-lede">Release cadence is fast. Below is a curated set of recent versions and what shipped. Full history at <a href="https://github.com/camjac251/tool-gates/blob/main/CHANGELOG.md" target="_blank" rel="noopener">CHANGELOG.md</a>.</p>
   <div class="config-block">
     <header>
+      <h3>v1.30.0 · June 23, 2026</h3>
+      <span class="src-tag">design lint cleanset · release pending</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  design-lint: extend the catalog from 17 to 22 rules
+  typography/script-font, color/maxed-saturation
+  motion/transition-all, motion/scale-hover
+  content/emoji-decoration</pre>
+      </div>
+      <div class="config-prose">
+        <p>Extends the opt-in design-lint catalog from 17 rules to 22. The new rules flag decorative script display fonts (Pacifico, Caveat, Comic Sans, Lobster, Dancing Script), pure-channel hex colors like <code>#f00</code> or <code>#00ff00</code> used outside <code>:root</code> token definitions, <code>transition: all</code> and the <code>transition-all</code> utility, default <code>scale(1.05)</code> and <code>scale(1.1)</code> hover effects, and emoji placed inside headings or buttons. Each rule ships with positive and false-positive tests, and the <a href="design-lint.html">Design Lint</a> reference page documents the full set.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.29.0 · June 23, 2026</h3>
+      <span class="src-tag">design lint · <a href="https://github.com/camjac251/tool-gates/commit/805bcf3" target="_blank" rel="noopener">805bcf3</a></span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  design-lint: opt-in PostToolUse content gate for UI writes
+  17 rules: generic gradients/palettes, default fonts, filler copy
+  OKLCH hue-based violet/purple gradient detection
+  off by default (features.design_lint), exempts :root tokens</pre>
+      </div>
+      <div class="config-prose">
+        <p>Adds an opt-in PostToolUse content gate that scans UI file writes and edits for generic, templated design and missing UI-quality basics. It catches the overused <code>#667eea</code>/<code>#764ba2</code> gradient, beige and brass "premium" palettes, default Tailwind indigo, Inter as the display font, placeholder names and fabricated stats, marketing filler copy, em and en dashes in rendered text, hardcoded Tailwind palette classes, raw hex in inline styles, hotlinked images, and interactive elements with no visible focus style. Violet and purple gradients are matched by OKLCH hue rather than a fixed hex list, so arbitrary violets are caught too. Findings attach as <code>additionalContext</code> next to the security reminders so the assistant can self-correct on the next turn. The gate is off by default (<code>features.design_lint</code>), raw color values inside <code>:root</code> token definitions are exempt, and individual rules disable by id. See the <a href="design-lint.html">Design Lint</a> reference page.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
       <h3>v1.28.0 · June 20, 2026</h3>
       <span class="src-tag">scratch coverage + awk gate · <a href="https://github.com/camjac251/tool-gates/commit/368a1da" target="_blank" rel="noopener">368a1da</a></span>
     </header>
