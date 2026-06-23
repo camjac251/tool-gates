@@ -109,6 +109,6 @@ jobs:
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 
       - name: Merge release PR
-        run: gh pr merge ${{ github.event.pull_request.number }} --merge --repo ${{ github.repository }}
+        run: gh pr merge ${{ github.event.pull_request.number }} --rebase --repo ${{ github.repository }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
