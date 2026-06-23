@@ -5544,7 +5544,7 @@ run = "mytool42 verify"
             use crate::config::Features;
             let on = Features::default();
             assert!(on.head_tail_pipe_block);
-            // Use a hard-deny producer (gh): soft producers now pass through.
+            // Any non-exempt producer denies; gh is a representative one.
             let output = check_hard_deny_patterns_with_features("gh pr list | head -5", &on)
                 .expect("toggle-on must produce a deny");
             assert!(

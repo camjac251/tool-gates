@@ -365,9 +365,10 @@ fn hint_head(cmd: &CommandInfo) -> Option<ModernHint> {
         }
     }
 
-    // Pipe usage (command | head): the head/tail deny path hard-blocks only
-    // build/gh producers; low-harm caps pass through. Ride a self-correct hint
-    // so the next call caps at the source instead of truncating the stream.
+    // Pipe usage (command | head): with head_tail_pipe_block enabled the deny
+    // path blocks this for every producer before hints run, so this hint is the
+    // fallback when that block is disabled. Cap at the source instead of
+    // truncating the stream.
     if file.is_empty() {
         return Some(ModernHint {
             legacy_command: "head",
@@ -414,8 +415,9 @@ fn hint_tail(cmd: &CommandInfo) -> Option<ModernHint> {
         return None;
     }
 
-    // Pipe usage (command | tail): mirror hint_head. Low-harm caps pass through
-    // the deny path; ride a self-correct hint toward a source-side cap.
+    // Pipe usage (command | tail): mirror hint_head. With the block enabled the
+    // deny path covers every producer, so this hint is the fallback when it is
+    // disabled. Suggest a source-side cap.
     if file.is_empty() {
         return Some(ModernHint {
             legacy_command: "tail",

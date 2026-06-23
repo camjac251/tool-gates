@@ -691,7 +691,7 @@ bash_gates = true            # Enable Bash command gate engine (default: true)
 file_guards = true           # Enable symlink guards for Read/Write/Edit (default: true)
 hints = true                 # Enable modern CLI hints, e.g. cat->bat, grep->rg, etc. (default: true)
 security_reminders = true    # Scan Write/Edit for security anti-patterns (default: true)
-head_tail_pipe_block = true  # Deny head/tail truncation pipes on build/test/gh output (default: true)
+head_tail_pipe_block = true  # Deny head/tail truncation pipes for every producer (default: true)
 git_aliases = true           # Resolve user-defined git aliases against ~/.gitconfig (default: true)
 ```
 
