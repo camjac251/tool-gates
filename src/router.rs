@@ -1947,35 +1947,46 @@ fn targets_outside_allowed_dirs(cmd: &CommandInfo, allowed_dirs: &[String]) -> b
     false
 }
 
-/// Resolve a path by canonicalizing symlinks, `.` and `..` components.
-/// Uses std::fs::canonicalize() when the path exists to resolve symlinks.
-/// For non-existent paths, tries to canonicalize the parent directory.
-/// Falls back to manual resolution if canonicalization fails.
 fn resolve_path(path: &str) -> String {
     use std::path::Path;
 
     let path_obj = Path::new(path);
 
-    // First, try to canonicalize the full path (resolves symlinks)
+    // Whole path exists: canonicalize resolves all symlinks, `.`, and `..`.
     if let Ok(canonical) = std::fs::canonicalize(path_obj) {
         return canonical.to_string_lossy().to_string();
     }
 
-    // If full path doesn't exist, try to canonicalize the parent directory
-    // This handles cases like `/home/user/project/symlink/newfile` where
-    // `symlink` exists but `newfile` doesn't
-    if let Some(parent) = path_obj.parent() {
-        if let Ok(canonical_parent) = std::fs::canonicalize(parent) {
-            if let Some(filename) = path_obj.file_name() {
-                return canonical_parent
-                    .join(filename)
-                    .to_string_lossy()
-                    .to_string();
-            }
+    // The path does not fully exist yet (the common case for a write that
+    // creates files/dirs). Canonicalize the LONGEST existing ancestor, which
+    // resolves any symlink anywhere in that real prefix, then re-attach the
+    // remaining not-yet-existing components and collapse them lexically.
+    //
+    // The old behavior canonicalized only the immediate parent, which missed a
+    // symlink followed by >=2 missing segments (the `mkdir -p` /
+    // Write-creates-parents shape): both the full path and its immediate parent
+    // fail to exist, so the symlink stayed an unresolved literal and a write
+    // could escape the scratch base undetected. Walking to the longest existing
+    // ancestor closes that gap. The stripped tail components do not exist on
+    // disk, so none of them is a symlink, which makes the `..` collapse in
+    // `resolve_path_manual` safe (no symlink can sit before a `..`).
+    for ancestor in path_obj.ancestors().skip(1) {
+        if ancestor.as_os_str().is_empty() {
+            continue;
+        }
+        if let Ok(canonical_ancestor) = std::fs::canonicalize(ancestor) {
+            return match path_obj.strip_prefix(ancestor) {
+                Ok(tail) => {
+                    let joined = canonical_ancestor.join(tail);
+                    resolve_path_manual(&joined.to_string_lossy())
+                }
+                Err(_) => canonical_ancestor.to_string_lossy().to_string(),
+            };
         }
     }
 
-    // Fall back to manual resolution (handles . and .. but not symlinks)
+    // No ancestor exists (e.g. a relative path with no real prefix): fall back
+    // to pure lexical resolution (handles `.` and `..` but not symlinks).
     resolve_path_manual(path)
 }
 
@@ -2022,13 +2033,34 @@ pub(crate) fn is_under_any_dir(path: &str, allowed_dirs: &[String]) -> bool {
     false
 }
 
-/// Resolve the session scratch base directory.
-///
-/// Order: `$TOOL_GATES_SCRATCH` (with `~`/`$HOME`/`$USER` expansion) when set
-/// and non-empty, otherwise the default `~/.cache/tool-gates-scratch`. The
-/// result is lexically normalized with no trailing slash. Returns `None` only
-/// when the override contains an unresolvable variable, or no home directory is
-/// available, in which case callers treat nothing as scratch (fail closed).
+/// True when a normalized scratch base is too broad to auto-allow writes under.
+/// `scratch_base` rejects such a base (returns `None`, fail closed) so a
+/// misconfigured `TOOL_GATES_SCRATCH` cannot turn the scratch exemption into a
+/// universal write allowance via `is_under_any_dir`'s prefix match. The default
+/// `~/.cache/tool-gates-scratch` is nested deeply enough to always pass.
+fn is_unsafe_scratch_base(base: &str) -> bool {
+    use std::path::{Component, Path};
+
+    // Empty (what `/` normalizes-and-trims to) or an explicit root.
+    if base.is_empty() || base == "/" {
+        return true;
+    }
+    // The user's home directory itself: a base of `/home/<user>` would
+    // auto-allow ~/.ssh, ~/.aws, ~/.config, etc.
+    if let Some(home) = dirs::home_dir() {
+        if Path::new(base) == home.as_path() {
+            return true;
+        }
+    }
+    // Too shallow to be a real scratch dir: depth < 2 covers every bare
+    // top-level dir (`/home`, `/etc`, `/usr`, `/var`, `/tmp`, ...).
+    Path::new(base)
+        .components()
+        .filter(|c| matches!(c, Component::Normal(_)))
+        .count()
+        < 2
+}
+
 pub fn scratch_base() -> Option<String> {
     let raw = match std::env::var("TOOL_GATES_SCRATCH") {
         Ok(v) if !v.trim().is_empty() => crate::gates::helpers::expand_path_vars(v.trim())?,
@@ -2038,11 +2070,17 @@ pub fn scratch_base() -> Option<String> {
             .to_string_lossy()
             .into_owned(),
     };
-    Some(
-        crate::gates::helpers::normalize_path(&raw)
-            .trim_end_matches('/')
-            .to_string(),
-    )
+    let normalized = crate::gates::helpers::normalize_path(&raw)
+        .trim_end_matches('/')
+        .to_string();
+    // Fail closed on a base too broad to safely auto-allow writes under (`/`,
+    // `/home`, the home dir, a bare system root). Otherwise is_under_scratch
+    // would match nearly every absolute path and bypass the credential /
+    // file-guard floor.
+    if is_unsafe_scratch_base(&normalized) {
+        return None;
+    }
+    Some(normalized)
 }
 
 /// True when `path` resolves under the session scratch base directory.
@@ -2693,6 +2731,89 @@ mod tests {
                 None => std::env::remove_var("TOOL_GATES_SCRATCH"),
             }
         }
+    }
+
+    /// An over-broad `TOOL_GATES_SCRATCH` (`/`, a bare top-level dir, or the
+    /// home dir) must fail closed: `scratch_base` returns `None` so the scratch
+    /// exemption cannot match credentials / system paths via prefix.
+    #[serial_test::serial]
+    #[test]
+    fn test_scratch_base_rejects_overbroad() {
+        let saved = std::env::var("TOOL_GATES_SCRATCH").ok();
+        // SAFETY: serialized via #[serial], so no concurrent env access.
+        let set = |v: &str| unsafe { std::env::set_var("TOOL_GATES_SCRATCH", v) };
+
+        set("/");
+        assert_eq!(scratch_base(), None, "/ must be rejected");
+        assert!(!is_under_scratch("/etc/passwd"));
+        assert!(!is_under_scratch("/home/u/.ssh/authorized_keys"));
+
+        set("/home");
+        assert_eq!(scratch_base(), None, "/home must be rejected");
+        set("/etc");
+        assert_eq!(scratch_base(), None, "/etc must be rejected");
+
+        if let Some(home) = dirs::home_dir() {
+            set(&home.to_string_lossy());
+            assert_eq!(scratch_base(), None, "home dir itself must be rejected");
+        }
+
+        // A nested, specific base is accepted.
+        set("/tmp/cc-scratch-test");
+        assert_eq!(scratch_base().as_deref(), Some("/tmp/cc-scratch-test"));
+        assert!(is_under_scratch("/tmp/cc-scratch-test/f"));
+
+        unsafe {
+            match saved {
+                Some(v) => std::env::set_var("TOOL_GATES_SCRATCH", v),
+                None => std::env::remove_var("TOOL_GATES_SCRATCH"),
+            }
+        }
+    }
+
+    /// A symlink inside the scratch base pointing outside, followed by two or
+    /// more not-yet-existing segments (the `mkdir -p` shape), must not resolve
+    /// as scratch: `resolve_path` canonicalizes the longest existing ancestor,
+    /// resolving the symlink, so the real (outside) target is seen.
+    #[cfg(unix)]
+    #[serial_test::serial]
+    #[test]
+    fn test_deep_symlink_does_not_escape_scratch() {
+        let saved = std::env::var("TOOL_GATES_SCRATCH").ok();
+
+        let base = std::env::temp_dir().join("tg-symlink-escape-base");
+        let outside = std::env::temp_dir().join("tg-symlink-escape-outside");
+        let _ = std::fs::remove_dir_all(&base);
+        let _ = std::fs::remove_dir_all(&outside);
+        std::fs::create_dir_all(&base).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::os::unix::fs::symlink(&outside, base.join("link")).unwrap();
+
+        // SAFETY: serialized via #[serial], so no concurrent env access.
+        unsafe {
+            std::env::set_var("TOOL_GATES_SCRATCH", base.to_string_lossy().as_ref());
+        }
+        let base_s = base.to_string_lossy().into_owned();
+
+        assert!(
+            !is_under_scratch(&format!("{base_s}/link/a/b")),
+            "symlink + 2 missing segments must not resolve as scratch"
+        );
+        assert!(
+            !is_under_scratch(&format!("{base_s}/link/a/b/c/d")),
+            "symlink + deep missing segments must not resolve as scratch"
+        );
+        // A real (non-symlinked) path under the base is still scratch.
+        assert!(is_under_scratch(&format!("{base_s}/real/x")));
+
+        unsafe {
+            match saved {
+                Some(v) => std::env::set_var("TOOL_GATES_SCRATCH", v),
+                None => std::env::remove_var("TOOL_GATES_SCRATCH"),
+            }
+        }
+        let _ = std::fs::remove_dir_all(&base);
+        let _ = std::fs::remove_dir_all(&outside);
     }
 
     #[serial_test::serial]
