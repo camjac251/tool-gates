@@ -154,14 +154,29 @@ static DOLLAR_SUBST_RE: LazyLock<Regex> =
 static BACKTICK_SUBST_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"`[^`]+`").expect("BACKTICK_SUBST_RE must compile"));
 
-/// Output redirection pattern (> / >>).
+/// Output redirection to a file (`>`, `>>`, including fd-prefixed forms like
+/// `2>`, `9>>`). The optional `[0-9]*` after the boundary consumes the fd
+/// number so it cannot hide the redirect: a bare `[^0-9...]` boundary skips
+/// `1>`/`2>`, which writes stderr/stdout to a file just like `>`. fd
+/// duplications (`2>&1`, `>&2`) do not match because the target class stops at
+/// `&`; the `>&FILE` write form is handled by `FD_AMP_REDIRECT_RE`. Group 2 is
+/// the file target.
 static REDIRECT_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(^|[^0-9&=/$])>{1,2}\s*([^>&\s]+)").expect("REDIRECT_RE must compile")
+    Regex::new(r"(^|[^0-9&=/$])[0-9]*>{1,2}\s*([^>&\s]+)").expect("REDIRECT_RE must compile")
 });
 
-/// &> redirection pattern.
+/// `&> file` redirection pattern (both streams to a file).
 static AMP_REDIRECT_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"&>\s*([^\s]+)").expect("AMP_REDIRECT_RE must compile"));
+
+/// `>& file` / `N>& file` / `>>& file` redirection (both streams to a file).
+/// Distinct from fd duplication (`2>&1`, `>&2`, `2>&-`): the target class
+/// rejects a leading digit or `-`, so only a real path matches and a dup is
+/// left alone. Group 2 is the file target.
+static FD_AMP_REDIRECT_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(^|[^0-9&=/$])[0-9]*>{1,2}&\s*([^\s0-9>&|-][^\s>&]*)")
+        .expect("FD_AMP_REDIRECT_RE must compile")
+});
 
 /// `| head` / `| tail` pipe pattern (hard deny).
 /// Captures the offending segment up to the next pipe/and/or/semicolon/newline boundary so
@@ -1619,10 +1634,13 @@ fn check_raw_string_patterns(command_string: &str) -> (Option<HookOutput>, Optio
     }
 
     // Output redirections (file writes)
-    // Matches: > file, >> file, &> file, but not 2> (stderr only)
+    // Matches: > file, >> file, fd-prefixed N> / N>> file (incl. 2> to a file),
+    //          &> file, and the >& file / N>& file forms. fd duplications
+    //          (2>&1, >&2, 2>&-) are NOT writes and are left alone.
     // Excludes /dev/null (discarding output, not writing)
-    // Note: [^0-9&=/$] excludes = for => (arrow operators), / for /> (JSX self-closing tags),
-    //       and $ for ast-grep metavariables like $$>
+    // Note: [^0-9&=/$] boundary excludes = for => (arrow operators), / for />
+    //       (JSX self-closing tags), and $ for ast-grep metavariables like $$>.
+    //       The [0-9]* after it consumes the redirect's fd number.
     //
     // First, strip quoted strings to avoid false positives on patterns like `rg "\s*>\s*" file`
     // where `>` inside quotes is part of a regex, not a shell redirection
@@ -1654,6 +1672,24 @@ fn check_raw_string_patterns(command_string: &str) -> (Option<HookOutput>, Optio
     }
     for cap in AMP_REDIRECT_RE.captures_iter(&unquoted) {
         if let Some(target) = cap.get(1) {
+            let raw = command_string
+                .get(target.start()..target.end())
+                .unwrap_or(target.as_str());
+            let target_str = raw.trim_matches(|c| c == '"' || c == '\'');
+            if target_str != "/dev/null" && !is_under_scratch(target_str) {
+                return (
+                    None,
+                    Some(HookOutput::ask(
+                        "Output redirection (`>`, `>>`, `tee`) writes to a file. Verify the target path; `>` overwrites without warning.",
+                    )),
+                );
+            }
+        }
+    }
+
+    // `>&FILE` / `N>&FILE` / `>>&FILE`: both streams to a file (not an fd dup).
+    for cap in FD_AMP_REDIRECT_RE.captures_iter(&unquoted) {
+        if let Some(target) = cap.get(2) {
             let raw = command_string
                 .get(target.start()..target.end())
                 .unwrap_or(target.as_str());
@@ -2556,6 +2592,100 @@ mod tests {
         assert!(!is_under_scratch("/tmp/cc-scratch-test/../escape/f"));
         // Sibling sharing the prefix string but not an actual child.
         assert!(!is_under_scratch("/tmp/cc-scratch-test-evil/f"));
+
+        unsafe {
+            match saved {
+                Some(v) => std::env::set_var("TOOL_GATES_SCRATCH", v),
+                None => std::env::remove_var("TOOL_GATES_SCRATCH"),
+            }
+        }
+    }
+
+    /// fd-prefixed (`1>`, `2>`, `9>`) and `>&FILE` write redirects to a
+    /// non-scratch file must prompt. Regression guard for the bypass where
+    /// `REDIRECT_RE`'s `[^0-9...]` boundary hid every fd-numbered redirect and
+    /// its `[^>&]` target class hid the `>&FILE` form, so writes to arbitrary
+    /// paths (e.g. `printf x 1> /etc/passwd`) were auto-allowed with no prompt.
+    #[test]
+    fn test_fd_numbered_and_amp_redirects_ask() {
+        for cmd in [
+            "echo x 1> /etc/evil.txt",
+            "echo x 2> /etc/evil.txt",
+            "echo x 3> /etc/evil.txt",
+            "echo x 9> /etc/evil.txt",
+            "printf data 1> /etc/passwd",
+            "echo x 1>> /etc/evil.txt",
+            "echo x >& /etc/evil.txt",
+            "echo x 1>& /etc/evil.txt",
+            "echo x >>& /etc/evil.txt",
+            "echo x >&/etc/evil.txt",
+        ] {
+            assert_eq!(
+                get_decision(&check_command(cmd)),
+                "ask",
+                "fd/amp redirect to a non-scratch file must prompt: {cmd}"
+            );
+        }
+    }
+
+    /// fd duplications (`2>&1`, `>&2`, `2>&-`) move a descriptor; they are not
+    /// file writes and must not be flagged as redirections, so a safe command
+    /// keeps its allow.
+    #[test]
+    fn test_fd_duplications_not_flagged_as_writes() {
+        for cmd in [
+            "echo hello 2>&1",
+            "echo hello >&2",
+            "echo x 2>&-",
+            "echo hello 1>&2",
+        ] {
+            assert_eq!(
+                get_decision(&check_command(cmd)),
+                "allow",
+                "fd duplication must not be flagged as a file write: {cmd}"
+            );
+        }
+    }
+
+    /// `/dev/null` (including fd-prefixed) discards output and is exempt; bare
+    /// `>` and `&>` to a non-scratch file still prompt.
+    #[test]
+    fn test_redirect_devnull_and_controls_unchanged() {
+        assert_eq!(get_decision(&check_command("echo x > /dev/null")), "allow");
+        assert_eq!(get_decision(&check_command("echo x 2> /dev/null")), "allow");
+        assert_eq!(
+            get_decision(&check_command("echo x > /etc/evil.txt")),
+            "ask"
+        );
+        assert_eq!(
+            get_decision(&check_command("echo x &> /etc/evil.txt")),
+            "ask"
+        );
+    }
+
+    /// fd-prefixed and `>&` redirects into the scratch base are friction-free,
+    /// same as a bare `>` into scratch.
+    #[serial_test::serial]
+    #[test]
+    fn test_fd_redirect_into_scratch_allows() {
+        let saved = std::env::var("TOOL_GATES_SCRATCH").ok();
+        // SAFETY: serialized via #[serial], so no concurrent env access.
+        unsafe {
+            std::env::set_var("TOOL_GATES_SCRATCH", "/tmp/cc-scratch-test");
+        }
+
+        assert_eq!(
+            get_decision(&check_command("echo x 1> /tmp/cc-scratch-test/f")),
+            "allow"
+        );
+        assert_eq!(
+            get_decision(&check_command("echo x >& /tmp/cc-scratch-test/f")),
+            "allow"
+        );
+        assert_eq!(
+            get_decision(&check_command("echo x > /tmp/cc-scratch-test/f")),
+            "allow"
+        );
 
         unsafe {
             match saved {
