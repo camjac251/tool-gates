@@ -368,7 +368,7 @@ Unlike `acceptEdits`, this fires in **all** permission modes (skipped only in pl
 
 Before AST parsing, `router.rs` runs raw string checks on the command (after stripping comments). These catch patterns like pipe-to-shell (`| bash`), `eval`, `source`, `xargs rm`, destructive `find`/`fd`, dangerous command substitution, semicolon injection, and output redirection. See `check_raw_string_patterns()` in `router.rs` for the full list.
 
-A separate pre-parse pass (`check_hard_deny_patterns()` in `router.rs`) handles feature-toggleable hard-deny patterns. Today that's `| head` / `| tail` truncation pipes (plus `sed -n '1,Np'` / `awk 'NR<=N'` first-N slices and `| rg .` catch-all filters), gated on `features.head_tail_pipe_block` and hard-denied only when the upstream producer is a build/test runner or `gh`. Runs before `check_raw_string_patterns` in all three entry points (`check_command_for_session`, `check_command_with_settings_and_session`, `check_command_expanded`).
+A separate pre-parse pass (`check_hard_deny_patterns()` in `router.rs`) handles feature-toggleable hard-deny patterns. Today that's `| head` / `| tail` truncation pipes (plus `sed -n '1,Np'` / `awk 'NR<=N'` first-N slices and `| rg .` catch-all filters), gated on `features.head_tail_pipe_block` and hard-denied for every producer (the producer only selects the deny-message wording). Runs before `check_raw_string_patterns` in all three entry points (`check_command_for_session`, `check_command_with_settings_and_session`, `check_command_expanded`).
 
 ## Gate Rules
 
@@ -701,7 +701,7 @@ Set any to `false` to disable that subsystem entirely.
 
 `head_tail_pipe_block` hard-denies output-truncation pipes so the agent caps output at the source with native limits like `rg -m N`, `fd --max-results N`, and `bat -r START:END` instead. It covers `| head` / `| tail`, `sed -n '1,Np'` / `awk 'NR<=N'` first-N slices, and `| rg .` / `| rg -m N .` catch-all fake-filters.
 
-The hard deny fires only when the upstream producer is a build/test runner (`cargo`, `npm`, `pnpm`, `yarn`, `go`, `make`, `pytest`, `jest`, `uv`, ...) or `gh`: their diagnostics and rows live at the end of the stream, so a volume cap drops exactly what you need (and `gh api | head` cuts JSON mid-array). For every other producer the call passes through to normal gating and rides a "cap at the source" hint on its allow, so a recoverable cap is not a hard block. Producer detection sees through launcher wrappers (`timeout`, `nice`, `sudo`, `env`, ...).
+The hard deny fires for every non-exempt truncation cap, regardless of producer; the producer only selects the deny-message wording. Build/test runners (`cargo`, `npm`, `pnpm`, `yarn`, `go`, `make`, `pytest`, `jest`, `uv`, ...) and `gh` get tailored guidance, since their diagnostics and rows live at the end of the stream so a volume cap drops exactly what you need (and `gh api | head` cuts JSON mid-array); every other producer gets a generic cap-at-the-source message. Producer detection sees through launcher wrappers (`timeout`, `nice`, `sudo`, `env`, ...).
 
 Carve-outs that always pass through:
 
