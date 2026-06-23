@@ -189,6 +189,7 @@ pub fn check_git_with_alias_map(
         program: cmd.program.clone(),
         args: vec![subcommand.to_string()],
         raw: cmd.raw.clone(),
+        scratch_vars: Default::default(),
     };
     let known_builtin = check_git_declarative(&subcmd_probe)
         .is_some_and(|r| matches!(r.decision, Decision::Allow | Decision::Block))
@@ -199,6 +200,7 @@ pub fn check_git_with_alias_map(
         program: cmd.program.clone(),
         args: normalized_args.clone(),
         raw: cmd.raw.clone(),
+        scratch_vars: Default::default(),
     };
 
     if !known_builtin {
@@ -211,6 +213,7 @@ pub fn check_git_with_alias_map(
                         program: cmd.program.clone(),
                         args: new_args,
                         raw: cmd.raw.clone(),
+                        scratch_vars: Default::default(),
                     };
                     return check_git_declarative(&rewritten)
                         .unwrap_or_else(|| GateResult::ask(format!("git: alias {subcommand}")));

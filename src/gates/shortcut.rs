@@ -37,6 +37,7 @@ pub fn check_shortcut(cmd: &CommandInfo) -> GateResult {
                 raw: cmd.raw.clone(),
                 program: cmd.program.clone(),
                 args: new_args,
+                scratch_vars: Default::default(),
             }
         } else {
             cmd.clone()

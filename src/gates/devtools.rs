@@ -42,7 +42,10 @@ fn check_sd(cmd: &CommandInfo) -> GateResult {
         // File mode: FIND and REPLACE are the first two positionals; the rest are
         // the files edited in place. Editing only scratch files is friction-free.
         let files: Vec<&str> = path_args(cmd).into_iter().skip(2).collect();
-        let under = !files.is_empty() && files.iter().all(|p| crate::router::is_under_scratch(p));
+        let under = !files.is_empty()
+            && files
+                .iter()
+                .all(|p| crate::router::is_under_scratch_with_vars(p, &cmd.scratch_vars));
         upgrade_to_scratch_allow(
             GateResult::ask("sd: In-place text replacement"),
             under,

@@ -2,7 +2,7 @@
 
 use crate::models::CommandInfo;
 use std::sync::{LazyLock, Mutex};
-use tree_sitter::{Parser, Tree, TreeCursor};
+use tree_sitter::{Node, Parser, Tree, TreeCursor};
 use tree_sitter_bash::LANGUAGE;
 
 static PARSER: LazyLock<Mutex<Parser>> = LazyLock::new(|| {
@@ -41,12 +41,131 @@ pub fn extract_commands(command_string: &str) -> Vec<CommandInfo> {
         return fallback_parse(command_string);
     }
 
+    // Attach the command's top-level scratch-variable assignments to every
+    // sub-command, so a write target reached through a variable resolves the
+    // same as an inline one. Shared (not per-sub-command) because the
+    // assignments live at the whole-command level.
+    let scratch_vars = scratch_var_map_from_tree(&tree, command_string);
+    if !scratch_vars.is_empty() {
+        for cmd in &mut commands {
+            cmd.scratch_vars = scratch_vars.clone();
+        }
+    }
+
     commands
 }
 
 fn extract_from_tree(tree: &Tree, source: &str, commands: &mut Vec<CommandInfo>) {
     let mut cursor = tree.walk();
     visit_node(&mut cursor, source, commands);
+}
+
+/// Extract top-level shell variable assignments that are safe to resolve when
+/// deciding whether a write target is under the scratch base.
+///
+/// Only a SINGLE, UNCONDITIONAL, TOP-LEVEL, non-append `NAME=value` assignment
+/// per name is tracked: the `variable_assignment` must be a direct child of the
+/// root `program` node. That structural rule alone excludes the shapes a naive
+/// tracker would mis-resolve: command-prefix (`S=v cmd`, nested in a `command`),
+/// `export`/`declare`/`local` (nested in `declaration_command`), conditional
+/// `&&`/`||` (nested in a `list`), `if`/`case`, subshell, brace group, and loop
+/// assignments. Append (`+=`) and values containing a command/process
+/// substitution or arithmetic are rejected, and a name assigned more than once
+/// at top level is dropped (its live value is ambiguous).
+///
+/// The recorded value keeps its parameter expansions verbatim; the caller
+/// substitutes `$NAME`/`${NAME}` then runs the existing canonicalize-then-prefix
+/// check, so a tracked value can only promote a write to allow when the final
+/// path is genuinely under the scratch base.
+pub fn extract_scratch_var_map(command_string: &str) -> std::collections::HashMap<String, String> {
+    if command_string.trim().is_empty() {
+        return std::collections::HashMap::new();
+    }
+    let tree = {
+        let mut parser = PARSER.lock().unwrap_or_else(|e| e.into_inner());
+        match parser.parse(command_string, None) {
+            Some(t) => t,
+            None => return std::collections::HashMap::new(),
+        }
+    };
+    scratch_var_map_from_tree(&tree, command_string)
+}
+
+fn scratch_var_map_from_tree(
+    tree: &Tree,
+    source: &str,
+) -> std::collections::HashMap<String, String> {
+    use std::collections::HashMap;
+
+    let src = source.as_bytes();
+    let root = tree.root_node();
+
+    // Gather every direct-program-child assignment with its name and (if a
+    // static, non-append value) its text. Count names so a reassignment drops
+    // the name entirely rather than resolving to a stale first value.
+    let mut counts: HashMap<String, u32> = HashMap::new();
+    let mut candidates: Vec<(String, Option<String>)> = Vec::new();
+    let mut cursor = root.walk();
+    for child in root.children(&mut cursor) {
+        if child.kind() != "variable_assignment" {
+            continue;
+        }
+        let Some(name) = child
+            .child_by_field_name("name")
+            .and_then(|n| n.utf8_text(src).ok())
+        else {
+            continue;
+        };
+        let name = name.to_string();
+        *counts.entry(name.clone()).or_insert(0) += 1;
+
+        let is_append = {
+            let mut ac = child.walk();
+            child.children(&mut ac).any(|c| c.kind() == "+=")
+        };
+        let value = if is_append {
+            None
+        } else {
+            match child.child_by_field_name("value") {
+                Some(val) if value_is_static(&val) => val.utf8_text(src).ok().map(unquote),
+                _ => None,
+            }
+        };
+        candidates.push((name, value));
+    }
+
+    let mut map = HashMap::new();
+    for (name, value) in candidates {
+        if counts.get(&name).copied() != Some(1) {
+            continue; // reassigned at top level: live value is ambiguous
+        }
+        if let Some(v) = value {
+            map.insert(name, v);
+        }
+    }
+    map
+}
+
+/// True when a value node is a static path expression: literal text plus
+/// parameter expansions only, with no command/process substitution or
+/// arithmetic. Such a value is safe to record because its expansions stay
+/// literal in the recorded text, so the only way a substituted use can match
+/// the scratch base is the base tokens the gate already resolves.
+fn value_is_static(value: &Node) -> bool {
+    let mut stack = vec![*value];
+    while let Some(node) = stack.pop() {
+        if matches!(
+            node.kind(),
+            "command_substitution" | "process_substitution" | "arithmetic_expansion"
+        ) {
+            return false;
+        }
+        let mut c = node.walk();
+        for ch in node.children(&mut c) {
+            stack.push(ch);
+        }
+    }
+    true
 }
 
 /// Neutralize heredoc body text so security checks (raw-string regexes,
@@ -289,7 +408,12 @@ fn extract_command(cursor: &mut TreeCursor, source: &str) -> Option<CommandInfo>
 
     let (program, args) = strip_transparent_wrappers(program, args);
 
-    Some(CommandInfo { raw, program, args })
+    Some(CommandInfo {
+        raw,
+        program,
+        args,
+        scratch_vars: std::collections::HashMap::new(),
+    })
 }
 
 /// Known transparent wrapper commands that just execute their arguments.
@@ -468,6 +592,7 @@ fn fallback_parse(command_string: &str) -> Vec<CommandInfo> {
             raw: command_string.to_string(),
             program,
             args,
+            scratch_vars: Default::default(),
         });
     }
 
@@ -795,6 +920,34 @@ mod tests {
     fn test_heredoc() {
         let cmds = extract_commands("cat <<EOF\nhello\nEOF");
         assert!(!cmds.is_empty());
+    }
+
+    #[test]
+    fn test_extract_scratch_var_map() {
+        let get = extract_scratch_var_map;
+
+        // A single, top-level, static assignment is tracked, value kept verbatim.
+        assert_eq!(
+            get("S=$TOOL_GATES_SCRATCH/x; mkdir \"$S\"")
+                .get("S")
+                .map(String::as_str),
+            Some("$TOOL_GATES_SCRATCH/x")
+        );
+        // A quoted value is unquoted.
+        assert_eq!(
+            get("S=\"$TOOL_GATES_SCRATCH/y\"")
+                .get("S")
+                .map(String::as_str),
+            Some("$TOOL_GATES_SCRATCH/y")
+        );
+
+        // Opaque shapes are never tracked.
+        assert!(!get("S=a; S=b").contains_key("S"), "reassignment");
+        assert!(!get("S=a cmd").contains_key("S"), "command-prefix");
+        assert!(!get("export S=a").contains_key("S"), "declaration-wrapped");
+        assert!(!get("S+=a").contains_key("S"), "append");
+        assert!(!get("S=$(pwd)").contains_key("S"), "command-sub value");
+        assert!(!get("cd / && S=a").contains_key("S"), "conditional &&");
     }
 
     // === Heredoc Body Neutralization Tests ===

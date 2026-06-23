@@ -236,16 +236,21 @@ pub fn path_args(cmd: &CommandInfo) -> Vec<&str> {
 }
 
 /// True when every path argument resolves under the session scratch base.
+/// Resolves tracked shell variables (`cmd.scratch_vars`) first, so a write
+/// through `$SCRATCH` is recognized like an inline path.
 pub fn all_path_args_under_scratch(cmd: &CommandInfo) -> bool {
     let paths = path_args(cmd);
-    !paths.is_empty() && paths.iter().all(|p| crate::router::is_under_scratch(p))
+    !paths.is_empty()
+        && paths
+            .iter()
+            .all(|p| crate::router::is_under_scratch_with_vars(p, &cmd.scratch_vars))
 }
 
 /// True when the last path argument (a destination) resolves under scratch.
 pub fn last_path_arg_under_scratch(cmd: &CommandInfo) -> bool {
     path_args(cmd)
         .last()
-        .is_some_and(|p| crate::router::is_under_scratch(p))
+        .is_some_and(|p| crate::router::is_under_scratch_with_vars(p, &cmd.scratch_vars))
 }
 
 /// True when the value of any of `flags` (e.g. `-o`/`--output`) resolves under
@@ -253,7 +258,7 @@ pub fn last_path_arg_under_scratch(cmd: &CommandInfo) -> bool {
 pub fn flag_value_under_scratch(cmd: &CommandInfo, flags: &[&str]) -> bool {
     get_flag_value(&cmd.args, flags)
         .map(strip_one_quote_layer)
-        .is_some_and(crate::router::is_under_scratch)
+        .is_some_and(|p| crate::router::is_under_scratch_with_vars(p, &cmd.scratch_vars))
 }
 
 /// Upgrade an `Ask` result to `Allow` when the scratch condition holds; leaves

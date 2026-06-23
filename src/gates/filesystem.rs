@@ -285,7 +285,10 @@ fn check_chmod_perms(cmd: &CommandInfo, program: &str) -> GateResult {
     let base = check_chmod_declarative(cmd)
         .unwrap_or_else(|| GateResult::ask(format!("{program}: Changing permissions")));
     let targets: Vec<&str> = path_args(cmd).into_iter().skip(1).collect();
-    let under = !targets.is_empty() && targets.iter().all(|p| crate::router::is_under_scratch(p));
+    let under = !targets.is_empty()
+        && targets
+            .iter()
+            .all(|p| crate::router::is_under_scratch_with_vars(p, &cmd.scratch_vars));
     upgrade_to_scratch_allow(base, under, "chmod on scratch file(s)")
 }
 

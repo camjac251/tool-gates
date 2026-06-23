@@ -205,6 +205,7 @@ fn check_command_builtin(cmd: &CommandInfo) -> GateResult {
             program: args[i].clone(),
             args: args[i + 1..].to_vec(),
             raw: cmd.raw.clone(),
+            scratch_vars: Default::default(),
         };
         return check_single_command(&inner);
     }

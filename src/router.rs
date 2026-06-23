@@ -178,6 +178,14 @@ static FD_AMP_REDIRECT_RE: LazyLock<Regex> = LazyLock::new(|| {
         .expect("FD_AMP_REDIRECT_RE must compile")
 });
 
+/// `$NAME` / `${NAME}` parameter-expansion token, for substituting tracked
+/// scratch variables into a write target. Group 1 is the braced name, group 2
+/// the bare name. `${PWD//x/y}` (operator expansion) does not match because no
+/// `}` follows the name, so it is left literal.
+static SCRATCH_VAR_TOKEN_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\$\{(\w+)\}|\$(\w+)").expect("SCRATCH_VAR_TOKEN_RE must compile")
+});
+
 /// `| head` / `| tail` pipe pattern (hard deny).
 /// Captures the offending segment up to the next pipe/and/or/semicolon/newline boundary so
 /// the deny message can echo just the triggering pipe instead of every subsequent line
@@ -1645,6 +1653,9 @@ fn check_raw_string_patterns(command_string: &str) -> (Option<HookOutput>, Optio
     // First, strip quoted strings to avoid false positives on patterns like `rg "\s*>\s*" file`
     // where `>` inside quotes is part of a regex, not a shell redirection
     let unquoted = strip_quoted_strings(command_string);
+    // A tracked scratch variable lets `S=$TOOL_GATES_SCRATCH/x; echo > "$S/f"`
+    // skip the redirect ask, the same as the inline path would.
+    let scratch_vars = crate::parser::extract_scratch_var_map(command_string);
     for cap in REDIRECT_RE.captures_iter(&unquoted) {
         if let Some(target) = cap.get(2) {
             // Recover the real target from the original command. A QUOTED target
@@ -1660,7 +1671,7 @@ fn check_raw_string_patterns(command_string: &str) -> (Option<HookOutput>, Optio
             let target_str = raw.trim_matches(|c| c == '"' || c == '\'');
             // Skip /dev/null (discarding output) and the session scratch dir,
             // which is a friction-free temp space agents write to instead of /tmp.
-            if target_str != "/dev/null" && !is_under_scratch(target_str) {
+            if target_str != "/dev/null" && !is_under_scratch_with_vars(target_str, &scratch_vars) {
                 return (
                     None,
                     Some(HookOutput::ask(
@@ -1676,7 +1687,7 @@ fn check_raw_string_patterns(command_string: &str) -> (Option<HookOutput>, Optio
                 .get(target.start()..target.end())
                 .unwrap_or(target.as_str());
             let target_str = raw.trim_matches(|c| c == '"' || c == '\'');
-            if target_str != "/dev/null" && !is_under_scratch(target_str) {
+            if target_str != "/dev/null" && !is_under_scratch_with_vars(target_str, &scratch_vars) {
                 return (
                     None,
                     Some(HookOutput::ask(
@@ -1694,7 +1705,7 @@ fn check_raw_string_patterns(command_string: &str) -> (Option<HookOutput>, Optio
                 .get(target.start()..target.end())
                 .unwrap_or(target.as_str());
             let target_str = raw.trim_matches(|c| c == '"' || c == '\'');
-            if target_str != "/dev/null" && !is_under_scratch(target_str) {
+            if target_str != "/dev/null" && !is_under_scratch_with_vars(target_str, &scratch_vars) {
                 return (
                     None,
                     Some(HookOutput::ask(
@@ -2109,6 +2120,56 @@ pub fn is_under_scratch(path: &str) -> bool {
     is_under_any_dir(&resolved, std::slice::from_ref(&base))
 }
 
+/// Variable-aware scratch check: substitute tracked `$NAME`/`${NAME}` tokens in
+/// `arg` using `vars`, then run the canonicalize-then-prefix `is_under_scratch`
+/// on the result. Promotes a variable-indirected write
+/// (`S=$TOOL_GATES_SCRATCH/x; mkdir "$S"`) to the same decision as the inline
+/// form. The substituted path still goes through the full canonicalization, so
+/// an escape (`$S/../../etc`) or a value that does not resolve under the base is
+/// never auto-allowed; only the existing guarantees are widened to reach
+/// through a variable.
+pub fn is_under_scratch_with_vars(
+    arg: &str,
+    vars: &std::collections::HashMap<String, String>,
+) -> bool {
+    if vars.is_empty() {
+        return is_under_scratch(arg);
+    }
+    is_under_scratch(&substitute_scratch_vars(arg, vars))
+}
+
+/// Substitute `$NAME` / `${NAME}` tokens in `arg` using `vars`, resolving
+/// transitively (a tracked value may reference another tracked var) with a
+/// small iteration cap that also breaks any reference cycle. Names not in the
+/// map (including `$TOOL_GATES_SCRATCH`, `$HOME`, `$USER`, and operator
+/// expansions like `${PWD//x/y}`) are left intact for `is_under_scratch` to
+/// handle.
+fn substitute_scratch_vars(arg: &str, vars: &std::collections::HashMap<String, String>) -> String {
+    let mut current = arg.to_string();
+    for _ in 0..8 {
+        let next = SCRATCH_VAR_TOKEN_RE
+            .replace_all(&current, |caps: &regex::Captures| {
+                let name = caps
+                    .get(1)
+                    .or_else(|| caps.get(2))
+                    .map(|m| m.as_str())
+                    .unwrap_or("");
+                match vars.get(name) {
+                    Some(v) => v.clone(),
+                    None => caps
+                        .get(0)
+                        .map_or(String::new(), |m| m.as_str().to_string()),
+                }
+            })
+            .into_owned();
+        if next == current {
+            break;
+        }
+        current = next;
+    }
+    current
+}
+
 // File-editing detection is now generated from TOML rules with accept_edits_auto_allow = true.
 // See src/generated/rules.rs for the generated is_file_editing_command function.
 use crate::generated::rules::{FILE_EDITING_PROGRAMS, is_file_editing_command};
@@ -2169,6 +2230,7 @@ fn resolve_wrapper_inner_command(cmd: &CommandInfo) -> Option<CommandInfo> {
                 raw: cmd.raw.clone(),
                 program: cmd.args[idx].clone(),
                 args: cmd.args[idx + 1..].to_vec(),
+                scratch_vars: Default::default(),
             })
         }
         // JS package managers: direct devtool invocation only.
@@ -2192,6 +2254,7 @@ fn resolve_wrapper_inner_command(cmd: &CommandInfo) -> Option<CommandInfo> {
                     raw: cmd.raw.clone(),
                     program: cmd.args[0].clone(),
                     args: cmd.args[1..].to_vec(),
+                    scratch_vars: Default::default(),
                 });
             }
             None
@@ -2814,6 +2877,58 @@ mod tests {
         }
         let _ = std::fs::remove_dir_all(&base);
         let _ = std::fs::remove_dir_all(&outside);
+    }
+
+    /// Variable-tracking: a write through a single, unconditional, top-level,
+    /// static shell variable resolves like the inline path and auto-allows.
+    /// The opaque shapes (reassignment, command-prefix, conditional `&&`,
+    /// append, `export`-wrapped, command-substitution value) and a `..` escape
+    /// must never auto-allow.
+    #[serial_test::serial]
+    #[test]
+    fn test_scratch_variable_tracking() {
+        let saved = std::env::var("TOOL_GATES_SCRATCH").ok();
+        // SAFETY: serialized via #[serial], so no concurrent env access.
+        unsafe {
+            std::env::set_var("TOOL_GATES_SCRATCH", "/tmp/cc-scratch-test");
+        }
+
+        for cmd in [
+            "S=\"$TOOL_GATES_SCRATCH/x\"; mkdir -p \"$S\"",
+            "o=\"$TOOL_GATES_SCRATCH/x\"; echo hi > \"$o/f\"",
+            "D=\"$TOOL_GATES_SCRATCH/x\"; cp /etc/hostname \"$D/h\"",
+            "A=\"$TOOL_GATES_SCRATCH\"; B=\"$A/x\"; mkdir -p \"$B\"",
+        ] {
+            assert_eq!(
+                get_decision(&check_command(cmd)),
+                "allow",
+                "indirect scratch write should auto-allow: {cmd}"
+            );
+        }
+
+        for cmd in [
+            "S=/etc; mkdir -p \"$S/x\"",
+            "S=\"$TOOL_GATES_SCRATCH/x\"; mkdir \"$S/../../etc\"",
+            "S=\"$(pwd)\"; mkdir -p \"$S/x\"",
+            "S=\"$TOOL_GATES_SCRATCH/a\"; S=/etc; mkdir \"$S/v\"",
+            "S=\"$TOOL_GATES_SCRATCH/a\" mkdir \"$S/x\"",
+            "cd / && S=\"$TOOL_GATES_SCRATCH/x\" && mkdir \"$S\"",
+            "S=\"$TOOL_GATES_SCRATCH\"; S+=/x; mkdir \"$S\"",
+            "export S=\"$TOOL_GATES_SCRATCH/x\"; mkdir \"$S\"",
+        ] {
+            assert_ne!(
+                get_decision(&check_command(cmd)),
+                "allow",
+                "opaque/escape variable shape must not auto-allow: {cmd}"
+            );
+        }
+
+        unsafe {
+            match saved {
+                Some(v) => std::env::set_var("TOOL_GATES_SCRATCH", v),
+                None => std::env::remove_var("TOOL_GATES_SCRATCH"),
+            }
+        }
     }
 
     #[serial_test::serial]
@@ -3570,6 +3685,7 @@ mod tests {
                 program: "@evil/prettier".to_string(),
                 args: vec!["--write".to_string(), ".".to_string()],
                 raw: "@evil/prettier --write .".to_string(),
+                scratch_vars: Default::default(),
             };
             assert!(!is_file_editing_command(&cmd));
         }
@@ -3580,6 +3696,7 @@ mod tests {
                 program: "@malicious/biome".to_string(),
                 args: vec!["check".to_string(), "--write".to_string(), ".".to_string()],
                 raw: "@malicious/biome check --write .".to_string(),
+                scratch_vars: Default::default(),
             };
             assert!(!is_file_editing_command(&cmd));
         }
@@ -3601,6 +3718,7 @@ mod tests {
                         .collect::<Vec<_>>()
                         .join(" ")
                 ),
+                scratch_vars: Default::default(),
             }
         }
 
@@ -4125,6 +4243,7 @@ run = "mytool42 verify"
                         .collect::<Vec<_>>()
                         .join(" ")
                 ),
+                scratch_vars: Default::default(),
             }
         }
 
@@ -4436,6 +4555,7 @@ run = "mytool42 verify"
                         .collect::<Vec<_>>()
                         .join(" ")
                 ),
+                scratch_vars: Default::default(),
             }
         }
 

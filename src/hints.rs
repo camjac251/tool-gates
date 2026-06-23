@@ -1471,6 +1471,7 @@ mod tests {
             program: program.to_string(),
             args: args.iter().map(|s| s.to_string()).collect(),
             raw: format!("{} {}", program, args.join(" ")),
+            scratch_vars: Default::default(),
         }
     }
 

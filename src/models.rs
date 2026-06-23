@@ -58,6 +58,11 @@ pub struct CommandInfo {
     pub program: String,
     /// Arguments after the program
     pub args: Vec<String>,
+    /// Top-level shell variable assignments safe to resolve when deciding
+    /// whether a write target is under the scratch base. Populated for the
+    /// whole command (shared across its sub-commands); empty by default and for
+    /// re-wrapped commands. See `parser::extract_scratch_var_map`.
+    pub scratch_vars: std::collections::HashMap<String, String>,
 }
 
 /// Result from a permission gate check

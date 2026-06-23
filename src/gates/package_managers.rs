@@ -99,6 +99,7 @@ fn check_pm_binary_exec(cmd: &CommandInfo, pm_name: &str) -> Option<GateResult> 
         program: underlying_program.clone(),
         args: cmd.args[cmd_start + 1..].to_vec(),
         raw: cmd.raw.clone(),
+        scratch_vars: Default::default(),
     };
 
     // Run through ALL gates to catch dangerous commands
@@ -587,6 +588,7 @@ fn check_mise(cmd: &CommandInfo) -> GateResult {
                     program: underlying_program.clone(),
                     args: cmd.args[cmd_start + 1..].to_vec(),
                     raw: cmd.raw.clone(),
+                    scratch_vars: Default::default(),
                 };
                 // Run through ALL gates (not just devtools) to catch dangerous commands
                 for (_name, gate_fn) in GATES.iter() {
@@ -702,6 +704,7 @@ fn check_python_run_command(cmd: &CommandInfo, pm_name: &str) -> Option<GateResu
         raw: cmd.raw.clone(),
         program: run_cmd.to_string(),
         args: run_args.to_vec(),
+        scratch_vars: Default::default(),
     };
 
     // Run through ALL gates to catch dangerous commands like rm -rf /
@@ -779,6 +782,7 @@ fn check_invoked_devtool(cmd: &CommandInfo, pm_name: &str) -> Option<GateResult>
         raw: cmd.raw.clone(),
         program: tool.to_string(),
         args: cmd.args[1..].to_vec(),
+        scratch_vars: Default::default(),
     };
 
     let result = check_devtools(&tool_cmd);

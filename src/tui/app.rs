@@ -1148,6 +1148,7 @@ fn segment_patterns(part: &CommandPart) -> Vec<String> {
         },
         program: part.program.clone(),
         args: part.args.clone(),
+        scratch_vars: Default::default(),
     };
     suggest_patterns(&cmd)
 }
