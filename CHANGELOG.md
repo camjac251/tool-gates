@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.29.0](https://github.com/camjac251/tool-gates/compare/v1.28.0...v1.29.0) - 2026-06-23
+
+### Added
+
+- *(design-lint)* add opt-in content gate for UI writes
+- *(router)* resolve scratch writes reached through a shell variable
+- *(router)* deny output-truncation pipes for every producer
+
+### Fixed
+
+- *(router)* fail closed on unresolved expansions in scratch paths
+- *(router)* harden scratch resolution against symlink and over-broad base
+- *(router)* close redirect-skip bypass for fd-numbered and >& writes
+
+### Other
+
+- align stale head/tail tiering comments with all-producer deny
+- correct head/tail pipe-block producer tiering
+- drop stale agent-file notes from CLAUDE.md
+- filter symlinks generically in prettier format check
+- make CLAUDE.md canonical, symlink AGENTS.md to it
+- *(tui)* replace an em-dash in a panel header comment
+- add Scratch Directory concept page
+- point v1.28.0 whats-new src-tag at its release commit
+
 ## [1.28.0](https://github.com/camjac251/tool-gates/compare/v1.27.0...v1.28.0) - 2026-06-20
 
 ### Added
