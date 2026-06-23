@@ -186,6 +186,17 @@ static SCRATCH_VAR_TOKEN_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\$\{(\w+)\}|\$(\w+)").expect("SCRATCH_VAR_TOKEN_RE must compile")
 });
 
+/// `$CLAUDE_CODE_SESSION_ID` token in its three surface forms: bare
+/// `$CLAUDE_CODE_SESSION_ID` (word-bounded so a longer name is not partially
+/// consumed), braced `${CLAUDE_CODE_SESSION_ID}`, and the default form
+/// `${CLAUDE_CODE_SESSION_ID:-fallback}` (group 1 captures the literal
+/// fallback). Used to resolve the canonical scratchpad session segment so the
+/// residual-expansion guard does not reject the documented convention path.
+static SESSION_ID_TOKEN_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\$\{CLAUDE_CODE_SESSION_ID(?::-([^}]*))?\}|\$CLAUDE_CODE_SESSION_ID\b")
+        .expect("SESSION_ID_TOKEN_RE must compile")
+});
+
 /// `| head` / `| tail` pipe pattern (hard deny).
 /// Captures the offending segment up to the next pipe/and/or/semicolon/newline boundary so
 /// the deny message can echo just the triggering pipe instead of every subsequent line
@@ -2100,11 +2111,23 @@ pub fn scratch_base() -> Option<String> {
 /// not expand arbitrary environment variables out of a raw command string:
 /// - the literal `$TOOL_GATES_SCRATCH/...` / `${TOOL_GATES_SCRATCH}/...` token,
 /// - the `~/.cache/tool-gates-scratch/...` tilde form,
-/// - an already-absolute path.
+/// - an already-absolute path,
+/// - the canonical scratchpad convention tokens `${PWD//\//-}` and
+///   `$CLAUDE_CODE_SESSION_ID` (resolved below so the convention stays
+///   friction-free).
 ///
 /// The target is canonicalized (`resolve_path`) before the prefix check, so a
 /// symlink inside the scratch tree that points elsewhere, or a `..` escape,
 /// does not match.
+///
+/// Fail-closed guard: any parameter expansion the gate could not resolve to a
+/// concrete value (`$X`, `${X}`, `${X:-..}`, `$(...)`, backticks) is left
+/// literal by the substitutions above. The shell will expand it to something
+/// the gate never saw, possibly climbing out of the base with `..`, while the
+/// lexical/canonical check would treat the literal token as a benign path
+/// segment and wrongly auto-allow. So a candidate that still carries an
+/// unresolved expansion is never reported as scratch; normal gating prompts
+/// instead.
 pub fn is_under_scratch(path: &str) -> bool {
     let Some(base) = scratch_base() else {
         return false;
@@ -2115,7 +2138,18 @@ pub fn is_under_scratch(path: &str) -> bool {
     let substituted = path
         .replace("${TOOL_GATES_SCRATCH}", &base)
         .replace("$TOOL_GATES_SCRATCH", &base);
+    // Resolve the scratch-convention tokens to the same values the shell will:
+    // the gate's own environment carries the session id the Bash subprocess
+    // expands `$CLAUDE_CODE_SESSION_ID` to, and `${PWD//\//-}` is traversal-safe
+    // by construction (a global slash replacement cannot emit `/` or `..`).
+    let session_id = std::env::var("CLAUDE_CODE_SESSION_ID").ok();
+    let pwd = std::env::var("PWD").ok();
+    let substituted =
+        resolve_scratch_convention_tokens(&substituted, session_id.as_deref(), pwd.as_deref());
     let expanded = crate::gates::helpers::expand_path_vars_lossy(&substituted);
+    if path_has_unresolved_expansion(&expanded) {
+        return false;
+    }
     let resolved = resolve_path(&expanded);
     is_under_any_dir(&resolved, std::slice::from_ref(&base))
 }
@@ -2168,6 +2202,94 @@ fn substitute_scratch_vars(arg: &str, vars: &std::collections::HashMap<String, S
         current = next;
     }
     current
+}
+
+/// Resolve the scratch-convention parameter expansions the gate can map to a
+/// concrete, traversal-safe value, so the canonical scratchpad path
+/// `$TOOL_GATES_SCRATCH/${PWD//\//-}/$CLAUDE_CODE_SESSION_ID/...` stays
+/// friction-free even with the residual-expansion guard active.
+///
+/// - `${PWD//\//-}` (and the `_`-replacement and unescaped `${PWD///-}`
+///   variants): a global slash replacement provably cannot emit a `/` or `..`,
+///   so it is traversal-safe regardless of the actual `PWD`. Mapped to the real
+///   per-project slug when `pwd` is known, else a fixed safe placeholder; the
+///   exact text is immaterial to the under-base check since any slash-free
+///   segment stays under the base.
+/// - `$CLAUDE_CODE_SESSION_ID` / `${CLAUDE_CODE_SESSION_ID}` /
+///   `${CLAUDE_CODE_SESSION_ID:-default}`: the session id. The gate's own
+///   environment carries the same value the Bash subprocess expands it to. The
+///   `:-default` form falls back to its literal default when the id is absent;
+///   the bare/braced forms with no id are left intact for the residual guard.
+///
+/// Anything not listed here is deliberately left untouched so the residual
+/// guard in `is_under_scratch` can reject it.
+fn resolve_scratch_convention_tokens(
+    s: &str,
+    session_id: Option<&str>,
+    pwd: Option<&str>,
+) -> String {
+    let mut out = s.to_string();
+
+    if out.contains("${PWD//") {
+        let slug = pwd
+            .map(|p| p.trim_start_matches('/').replace('/', "-"))
+            .filter(|slug| !slug.is_empty())
+            .unwrap_or_else(|| "pwd".to_string());
+        for token in ["${PWD//\\//-}", "${PWD//\\//_}", "${PWD///-}", "${PWD///_}"] {
+            out = out.replace(token, &slug);
+        }
+    }
+
+    if out.contains("CLAUDE_CODE_SESSION_ID") {
+        let sid = session_id.filter(|id| !id.is_empty());
+        out = SESSION_ID_TOKEN_RE
+            .replace_all(&out, |caps: &regex::Captures| match sid {
+                Some(id) => id.to_string(),
+                // No id: only the `${..:-default}` form is resolvable; other
+                // forms stay intact so the residual guard fails closed.
+                None => caps.get(1).map_or_else(
+                    || caps[0].to_string(),
+                    |fallback| fallback.as_str().to_string(),
+                ),
+            })
+            .into_owned();
+    }
+
+    out
+}
+
+/// True when `s` still contains a parameter expansion or command substitution
+/// the gate did not resolve: `$NAME`, `${...}`, `$(...)`, a positional/special
+/// param (`$1`, `$@`, ...), or a backtick. Such a token will be expanded by the
+/// shell to text the gate never inspected, so a scratch-relative path carrying
+/// one cannot be proven to stay under the base and must not auto-allow.
+///
+/// A bare `$` not starting an expansion (e.g. a literal `$` in a filename) does
+/// not count; at worst such a path falls through to a prompt, the safe
+/// direction.
+fn path_has_unresolved_expansion(s: &str) -> bool {
+    if s.contains('`') {
+        return true;
+    }
+    let bytes = s.as_bytes();
+    for (i, &b) in bytes.iter().enumerate() {
+        if b != b'$' {
+            continue;
+        }
+        match bytes.get(i + 1) {
+            Some(&next)
+                if next == b'{'
+                    || next == b'('
+                    || next == b'_'
+                    || next.is_ascii_alphanumeric()
+                    || matches!(next, b'?' | b'@' | b'!' | b'#' | b'*') =>
+            {
+                return true;
+            }
+            _ => {}
+        }
+    }
+    false
 }
 
 // File-editing detection is now generated from TOML rules with accept_edits_auto_allow = true.
@@ -2696,6 +2818,166 @@ mod tests {
 
         unsafe {
             match saved {
+                Some(v) => std::env::set_var("TOOL_GATES_SCRATCH", v),
+                None => std::env::remove_var("TOOL_GATES_SCRATCH"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_path_has_unresolved_expansion() {
+        // Unresolved expansions of every shape -> true (must fail closed).
+        assert!(path_has_unresolved_expansion("/base/$X/y"));
+        assert!(path_has_unresolved_expansion("/base/${X}/y"));
+        assert!(path_has_unresolved_expansion("/base/${X:-../../etc}/y"));
+        assert!(path_has_unresolved_expansion("/base/$(echo ../../etc)/y"));
+        assert!(path_has_unresolved_expansion("/base/$1/y"));
+        assert!(path_has_unresolved_expansion("/base/$@/y"));
+        assert!(path_has_unresolved_expansion("/base/`echo x`/y"));
+        // a$b would have $b expanded by the shell, so it must fail closed too.
+        assert!(path_has_unresolved_expansion("/base/a$b/y"));
+
+        // Fully-resolved paths and a literal `$` not starting an expansion
+        // (followed by `/` or end) are not flagged.
+        assert!(!path_has_unresolved_expansion("/base/sub/f.txt"));
+        assert!(!path_has_unresolved_expansion("/tmp/cc-scratch/p/s/f"));
+        assert!(!path_has_unresolved_expansion("/base/cost$/f"));
+        assert!(!path_has_unresolved_expansion("/base/end$"));
+    }
+
+    #[test]
+    fn test_resolve_scratch_convention_tokens() {
+        let sid = Some("sess-123");
+        let pwd = Some("/home/u/proj");
+
+        // Session id in bare, braced, and default forms all resolve.
+        assert_eq!(
+            resolve_scratch_convention_tokens("/b/$CLAUDE_CODE_SESSION_ID/f", sid, pwd),
+            "/b/sess-123/f"
+        );
+        assert_eq!(
+            resolve_scratch_convention_tokens("/b/${CLAUDE_CODE_SESSION_ID}/f", sid, pwd),
+            "/b/sess-123/f"
+        );
+        assert_eq!(
+            resolve_scratch_convention_tokens("/b/${CLAUDE_CODE_SESSION_ID:-fallback}/f", sid, pwd),
+            "/b/sess-123/f"
+        );
+
+        // PWD slash-replacement slug (the `\/` escaped form the convention uses).
+        assert_eq!(
+            resolve_scratch_convention_tokens("/b/${PWD//\\//-}/f", sid, pwd),
+            "/b/home-u-proj/f"
+        );
+
+        // With no session id: only `:-default` is resolvable; bare/braced stay
+        // intact so the residual guard rejects them.
+        assert_eq!(
+            resolve_scratch_convention_tokens("/b/${CLAUDE_CODE_SESSION_ID:-sess}/f", None, pwd),
+            "/b/sess/f"
+        );
+        assert_eq!(
+            resolve_scratch_convention_tokens("/b/$CLAUDE_CODE_SESSION_ID/f", None, pwd),
+            "/b/$CLAUDE_CODE_SESSION_ID/f"
+        );
+
+        // A longer name is not partially consumed by the bare form, and
+        // unrelated variables are left untouched.
+        assert_eq!(
+            resolve_scratch_convention_tokens("/b/$CLAUDE_CODE_SESSION_IDX/f", sid, pwd),
+            "/b/$CLAUDE_CODE_SESSION_IDX/f"
+        );
+        assert_eq!(
+            resolve_scratch_convention_tokens("/b/$OTHER/f", sid, pwd),
+            "/b/$OTHER/f"
+        );
+
+        // No pwd known -> a safe slash-free placeholder, still no residual `$`.
+        let resolved = resolve_scratch_convention_tokens("/b/${PWD//\\//-}/f", sid, None);
+        assert!(!resolved.contains("${PWD"));
+        assert!(!path_has_unresolved_expansion(&resolved));
+    }
+
+    #[serial_test::serial]
+    #[test]
+    fn test_scratch_fail_closed_on_unresolved_expansion() {
+        let saved_scratch = std::env::var("TOOL_GATES_SCRATCH").ok();
+        let saved_sid = std::env::var("CLAUDE_CODE_SESSION_ID").ok();
+        let saved_pwd = std::env::var("PWD").ok();
+        // SAFETY: serialized via #[serial], so no concurrent env access.
+        unsafe {
+            std::env::set_var("TOOL_GATES_SCRATCH", "/tmp/cc-scratch-test");
+            std::env::set_var("CLAUDE_CODE_SESSION_ID", "sess-xyz");
+            std::env::set_var("PWD", "/home/u/proj");
+        }
+
+        // The canonical scratchpad convention path stays friction-free.
+        assert!(is_under_scratch(
+            "$TOOL_GATES_SCRATCH/${PWD//\\//-}/$CLAUDE_CODE_SESSION_ID/f.txt"
+        ));
+        assert!(is_under_scratch(
+            "$TOOL_GATES_SCRATCH/${CLAUDE_CODE_SESSION_ID:-sess}/f.txt"
+        ));
+
+        // The residual-hole classes now fail closed (not under scratch -> the
+        // write falls through to a prompt instead of silently auto-allowing).
+        assert!(!is_under_scratch("$TOOL_GATES_SCRATCH/$UNDEF/y")); // undefined / env / command-prefix var
+        assert!(!is_under_scratch("$TOOL_GATES_SCRATCH/${UNDEF}/y"));
+        assert!(!is_under_scratch("$TOOL_GATES_SCRATCH/${X:-../../etc}/y")); // operator-default with traversal
+        assert!(!is_under_scratch("$TOOL_GATES_SCRATCH/$(echo ../../etc)/y")); // use-site command substitution
+
+        // A fully-literal in-scratch path is unaffected.
+        assert!(is_under_scratch("$TOOL_GATES_SCRATCH/plain/f.txt"));
+
+        // SAFETY: serialized via #[serial].
+        unsafe {
+            match saved_scratch {
+                Some(v) => std::env::set_var("TOOL_GATES_SCRATCH", v),
+                None => std::env::remove_var("TOOL_GATES_SCRATCH"),
+            }
+            match saved_sid {
+                Some(v) => std::env::set_var("CLAUDE_CODE_SESSION_ID", v),
+                None => std::env::remove_var("CLAUDE_CODE_SESSION_ID"),
+            }
+            match saved_pwd {
+                Some(v) => std::env::set_var("PWD", v),
+                None => std::env::remove_var("PWD"),
+            }
+        }
+    }
+
+    #[serial_test::serial]
+    #[test]
+    fn test_scratch_cmdsub_valued_var_fails_closed() {
+        let saved_scratch = std::env::var("TOOL_GATES_SCRATCH").ok();
+        // SAFETY: serialized via #[serial], so no concurrent env access.
+        unsafe {
+            std::env::set_var("TOOL_GATES_SCRATCH", "/tmp/cc-scratch-test");
+        }
+
+        // Y is assigned from a command substitution, so it is not tracked
+        // (value_is_static rejects cmdsub). The self-contained one-liner that
+        // previously defeated the variable-tracking guard now fails closed: the
+        // use-site `$Y` is an unresolved expansion.
+        let cmd = "Y=$(echo ../../etc); mkdir \"$TOOL_GATES_SCRATCH/$Y/y\"";
+        let vars = crate::parser::extract_scratch_var_map(cmd);
+        assert!(
+            !vars.contains_key("Y"),
+            "cmdsub-valued var must not be tracked"
+        );
+        assert!(!is_under_scratch_with_vars(
+            "$TOOL_GATES_SCRATCH/$Y/y",
+            &vars
+        ));
+
+        // A tracked, static, in-scratch value still resolves to allow.
+        let cmd2 = "S=$TOOL_GATES_SCRATCH/run; mkdir \"$S/y\"";
+        let vars2 = crate::parser::extract_scratch_var_map(cmd2);
+        assert!(is_under_scratch_with_vars("$S/y", &vars2));
+
+        // SAFETY: serialized via #[serial].
+        unsafe {
+            match saved_scratch {
                 Some(v) => std::env::set_var("TOOL_GATES_SCRATCH", v),
                 None => std::env::remove_var("TOOL_GATES_SCRATCH"),
             }
