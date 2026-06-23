@@ -14,12 +14,14 @@
 <span class="k">hints</span>                = <span class="b">true</span>
 <span class="k">security_reminders</span>   = <span class="b">true</span>
 <span class="k">head_tail_pipe_block</span> = <span class="b">true</span>
-<span class="k">git_aliases</span>          = <span class="b">true</span></pre>
+<span class="k">git_aliases</span>          = <span class="b">true</span>
+<span class="k">design_lint</span>          = <span class="b">false</span></pre>
       </div>
       <div class="config-prose">
         <p>Each subsystem can be turned off independently. Toggles merge with defaults; missing keys keep their default value.</p>
         <p><code>head_tail_pipe_block</code> denies <code>| head -N</code> and <code>| tail -N</code> pipes so the agent caps output at the source with <code>rg -m N</code>, <code>fd --max-results N</code>, or <code>bat -r START:END</code>. Streaming <code>tail -f</code>/<code>-F</code> is exempt.</p>
         <p><code>git_aliases</code> resolves user-defined aliases against <code>~/.gitconfig</code> so <code>git st</code> runs through the same allow/ask rules as <code>git status</code>.</p>
+        <p><code>design_lint</code> is the one opt-in subsystem (default <code>false</code>): a frontend design-quality linter for UI writes, not a safety floor. Set it <code>true</code> to enable.</p>
       </div>
     </div>
   </div>
@@ -174,6 +176,24 @@
       <div class="config-prose">
         <p>Disable individual rules by id, including Tier 1 rules, when you have a deliberate local exception. For a broad secret-scan opt-out, set <code>secrets = false</code>.</p>
         <p>Use Tier 1 disables sparingly: they remove the hard-deny floor for that specific secret rule.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>Design lint</h3>
+      <span class="src-tag">documented</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec">[features]</span>
+<span class="k">design_lint</span> = <span class="b">true</span>
+<span class="sec">[design_lint]</span>
+<span class="k">disable_rules</span> = [<span class="s">"color/default-indigo"</span>]</pre>
+      </div>
+      <div class="config-prose">
+        <p>Opt-in (default off). Set <code>design_lint = true</code> under <code>[features]</code> to scan UI file writes and edits for generic, templated design patterns and missing UI-quality basics.</p>
+        <p>Disable individual rules by id (for example <code>color/default-indigo</code> or <code>content/dash</code>) when a project deliberately uses that pattern. CSS custom-property <em>definitions</em> in a <code>:root</code> block are exempt from the raw-color rules, so defining a brand token is never flagged.</p>
       </div>
     </div>
   </div>

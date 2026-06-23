@@ -1101,7 +1101,10 @@ fn handle_post_tool_use_hook(input: &str, client: Client) {
             }
         }
     } else if Client::is_write_tool(tool_name) {
-        // File tools: post-write security scanning (Tier 2 anti-patterns).
+        // File tools: post-write content scanning. Two independent gates ride
+        // here: security reminders (Tier 2 anti-patterns) and, opt-in, design
+        // linting. Codex/Claude parse exactly one JSON object per stdout, so
+        // both gates' findings merge into a single PostToolUseOutput.
         // Gemini's AfterTool wire format is not Claude-shape, so skip there
         // until we plumb a proper Gemini PostToolUseOutput. Codex accepts
         // the same camelCase shape Claude uses, so it goes through here too.
@@ -1109,7 +1112,7 @@ fn handle_post_tool_use_hook(input: &str, client: Client) {
             return;
         }
         let config = config::load();
-        if !config.features.security_reminders {
+        if !config.features.security_reminders && !config.features.design_lint {
             return;
         }
         // Re-extract tool_input as raw map
@@ -1121,17 +1124,54 @@ fn handle_post_tool_use_hook(input: &str, client: Client) {
                 _ => None,
             })
             .unwrap_or_default();
-        if let Some(output) = tool_gates::security_reminders::check_security_reminders_post(
-            &post_input.tool_name,
-            &tool_input_map,
-            &config.security_reminders,
-            &post_input.session_id,
-            client,
-        ) {
+
+        let mut outputs: Vec<tool_gates::models::PostToolUseOutput> = Vec::new();
+        if config.features.security_reminders {
+            if let Some(output) = tool_gates::security_reminders::check_security_reminders_post(
+                &post_input.tool_name,
+                &tool_input_map,
+                &config.security_reminders,
+                &post_input.session_id,
+                client,
+            ) {
+                outputs.push(output);
+            }
+        }
+        if config.features.design_lint {
+            if let Some(output) = tool_gates::design_lint::check_design_lint_post(
+                &post_input.tool_name,
+                &tool_input_map,
+                &config.design_lint,
+            ) {
+                outputs.push(output);
+            }
+        }
+
+        // One source: emit as-is (byte-identical to the prior security-only
+        // path). Multiple: concatenate their additionalContext into one object.
+        let merged = match outputs.len() {
+            0 => None,
+            1 => outputs.into_iter().next(),
+            _ => {
+                let combined = outputs
+                    .iter()
+                    .filter_map(|o| {
+                        o.hook_specific_output
+                            .as_ref()
+                            .and_then(|h| h.additional_context.as_deref())
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n\n");
+                Some(tool_gates::models::PostToolUseOutput::with_context(
+                    &combined,
+                ))
+            }
+        };
+        if let Some(output) = merged {
             if let Ok(json) = serde_json::to_string(&output) {
                 println!("{json}");
             } else {
-                eprintln!("Error: failed to serialize PostToolUse security output");
+                eprintln!("Error: failed to serialize PostToolUse content output");
             }
         }
     }

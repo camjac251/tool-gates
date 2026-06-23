@@ -67,6 +67,7 @@ tool-gates doctor
 - **Approval Learning**: Tracks manually approved commands and uses the review TUI to save patterns to `settings.json`.
 - **Security Floor**: Blocks dangerous shell patterns like pipe-to-shell, command injection, and `eval`. For details, see the [Security Floor documentation](https://camjac251.github.io/tool-gates/security-floor.html).
 - **Security Reminders**: Scans file contents on writes and edits for 28 anti-patterns across three tiers. For details, see the [Security Reminders documentation](https://camjac251.github.io/tool-gates/security-reminders.html).
+- **Design Lint**: Scans UI file writes and edits for generic, templated design patterns and missing UI-quality basics (overused gradients and palettes, the default sans font, placeholder content, em dashes in copy, hardcoded palette colors, missing focus styles). Opt-in. For details, see the [Design Lint documentation](https://camjac251.github.io/tool-gates/design-lint.html).
 - **File Guards**: Protects sensitive AI configuration files (like `CLAUDE.md`, `.cursorrules`) from symlink-based read or write attacks.
 - **Modern CLI Hints**: Recommends modern alternatives like `bat`, `rg`, or `fd` when legacy commands are run.
 - **Auto Mode & Accept Edits**: Adapts behavior dynamically based on the current session permission mode.

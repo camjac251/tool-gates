@@ -15,6 +15,7 @@ use regex::Regex;
 use std::sync::OnceLock;
 
 /// Extract all writable (file_path, content) pairs from a tool_input map.
+/// Shared by the security and design-lint content gates.
 ///
 /// Handles all tool types:
 /// - Claude `Write` / Gemini `write_file`: top-level `file_path` + `content`.
@@ -26,7 +27,7 @@ use std::sync::OnceLock;
 /// - Antigravity `write_to_file` / `replace_file_content` /
 ///   `multi_replace_file_content`: top-level `file_path` + `content`, populated
 ///   by main()'s Antigravity payload normalization.
-fn extract_content(
+pub(crate) fn extract_content(
     tool_name: &str,
     map: &serde_json::Map<String, serde_json::Value>,
 ) -> Vec<(String, String)> {

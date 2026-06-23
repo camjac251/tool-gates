@@ -115,6 +115,9 @@ pub struct Config {
     /// Security reminder customization.
     #[serde(default)]
     pub security_reminders: SecurityRemindersConfig,
+    /// Frontend design-lint customization.
+    #[serde(default)]
+    pub design_lint: DesignLintConfig,
     /// Auto-approve rules for Skill tool calls.
     #[serde(default)]
     pub auto_approve_skills: Vec<SkillApprovalRule>,
@@ -159,6 +162,13 @@ pub struct Features {
     /// the same rules as the underlying subcommand. When disabled, aliases
     /// hit the default ask path.
     pub git_aliases: bool,
+    /// Frontend design linting for UI file Write/Edit on PostToolUse. Flags
+    /// generic, templated design patterns (overused gradients and palettes, the
+    /// default sans font, placeholder content, em-dashes in copy, hardcoded
+    /// palette colors) and missing UI-quality basics (visible focus styles).
+    /// Opt-in: a design-quality convention, not a universal safety floor, so it
+    /// defaults off.
+    pub design_lint: bool,
 }
 
 impl Default for Features {
@@ -170,6 +180,7 @@ impl Default for Features {
             security_reminders: true,
             head_tail_pipe_block: true,
             git_aliases: true,
+            design_lint: false,
         }
     }
 }
@@ -423,6 +434,16 @@ impl Default for SecurityRemindersConfig {
             disable_rules: Vec::new(),
         }
     }
+}
+
+/// Frontend design-lint configuration.
+///
+/// Only takes effect when `features.design_lint` is enabled (default off).
+#[derive(Debug, Deserialize, Clone, Default)]
+#[serde(default)]
+pub struct DesignLintConfig {
+    /// Rule ids to disable, e.g. ["color/default-indigo", "content/dash"].
+    pub disable_rules: Vec<String>,
 }
 
 /// File guard configuration for extending or replacing guarded paths.

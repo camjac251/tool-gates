@@ -47,6 +47,7 @@
 - [Tool Gates Doctor](doctor.md)
 - [Security Floor](security-floor.md)
 - [Security Reminders](security-reminders.md)
+- [Design Lint](design-lint.md)
 - [Modern CLI Hints](hints.md)
 - [Recent Releases](whats-new.md)
 - [Glossary](glossary.md)
