@@ -4,7 +4,7 @@
   <div class="config-block">
     <header>
       <h3>v1.30.0 · June 23, 2026</h3>
-      <span class="src-tag">design lint cleanset · release pending</span>
+      <span class="src-tag">design lint cleanset · <a href="https://github.com/camjac251/tool-gates/commit/2de112f" target="_blank" rel="noopener">2de112f</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
