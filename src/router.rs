@@ -1293,21 +1293,11 @@ fn pipeline_context(unquoted: &str, offset: usize) -> (String, Option<String>) {
     (producer, prior)
 }
 
-/// Producers whose piped output is hard-denied when capped by head/tail:
-/// build/test runners (diagnostics live at the end) and `gh` (rows/JSON the
-/// caller acts on; `gh api | head` breaks JSON mid-array). For these, a hard
-/// block + retry is worth it because truncation destroys context. Every other
-/// producer is low-harm: it passes through to normal gating and rides a
-/// self-correct hint on its allow, so the agent isn't hard-blocked (and forced
-/// into a token-costing retry) over a recoverable cap.
-fn is_hard_deny_producer(producer: &str) -> bool {
-    producer == "gh" || BUILD_PRODUCERS.contains(&producer)
-}
-
-/// Deny message for a hard-denied head/tail cap. Always producer-native: never
+/// Deny message for a non-exempt truncation cap. Always producer-native: never
 /// references `max_output` / `output_tail`, which are not stock Bash tool
-/// params (a public tool-gates install may not be on a patched build). Only
-/// reached for `gh` and build/test producers (see `is_hard_deny_producer`).
+/// params (a public tool-gates install may not be on a patched build). The
+/// producer only selects the wording: `gh` and build/test runners get tailored
+/// guidance; every other producer gets the neutral cap-at-the-source message.
 fn head_tail_message(producer: &str, segment: &str) -> String {
     let trimmed = segment.trim();
     if producer == "gh" {
@@ -1317,21 +1307,29 @@ fn head_tail_message(producer: &str, segment: &str) -> String {
              `gh api ... --jq '.[0:N]'` for JSON."
         );
     }
-    // Build/test producer.
+    if BUILD_PRODUCERS.contains(&producer) {
+        return format!(
+            "`{trimmed}` blocked. Never truncate `{producer}` output: the errors you need are at \
+             the end and a volume cap drops them. Re-run uncapped, or filter at a real match with \
+             `rg 'pattern'`."
+        );
+    }
+    // Any other producer (ls, fd, rg, find, git log, cat, custom scripts).
     format!(
-        "`{trimmed}` blocked. Never truncate `{producer}` output: the errors you need are at \
-         the end and a volume cap drops them. Re-run uncapped, or filter at a real match with \
-         `rg 'pattern'`."
+        "`{trimmed}` blocked. Never truncate output by capping the pipe: it discards everything past \
+         the cap. Cap at the source instead (`rg -m N`, `fd --max-results N`, `git log -n N`), use \
+         Read or `bat -r START:END` for files, or re-run uncapped. Allowed: \
+         `... | sort -rn | head -N` for top-N, `tail -f` for live logs, and head/tail inside \
+         `$(...)` for a programmatic pick."
     )
 }
 
 /// Decide head/tail-pipe handling. Three exemptions pass through silently:
 /// streaming `tail -f`/`-F`; top-N `... | sort ... | head/tail -N` (sort must
 /// consume all input, so the slice is the selection, not a cap); and head/tail
-/// inside `$(...)` / backticks (a programmatic pick feeding a variable). For a
-/// non-exempt cap, only build/test/`gh` producers are hard-denied; every other
-/// producer passes through (None) to normal gating, where a self-correct hint
-/// rides on the allow instead of a hard block.
+/// inside `$(...)` / backticks (a programmatic pick feeding a variable). Every
+/// other non-exempt cap is denied regardless of producer; the producer only
+/// selects the deny message (build/`gh` get tailored wording).
 fn check_head_tail_pipe(command_string: &str) -> Option<HookOutput> {
     // Strip comments and quoted strings so `rg 'foo | head bar' file.txt` is safe.
     let stripped = strip_comments(command_string);
@@ -1357,17 +1355,14 @@ fn check_head_tail_pipe(command_string: &str) -> Option<HookOutput> {
         if prior.as_deref() == Some("sort") {
             continue;
         }
-        // Only builds / gh are hard-denied; everything else passes through to
-        // normal gating + a self-correct hint (see hints::hint_head/hint_tail).
-        if is_hard_deny_producer(&producer) {
-            return Some(HookOutput::deny(&head_tail_message(&producer, segment)));
-        }
+        // Every non-exempt cap is denied; `producer` only selects the message.
+        return Some(HookOutput::deny(&head_tail_message(&producer, segment)));
     }
 
     // Backstop: `| sed -n '1,Np'` / `| awk 'NR<=N'` first-N truncation, denied
-    // on build/gh producers only (mirrors head/tail). Mid-file range reads like
+    // for every producer (mirrors head/tail). Mid-file range reads like
     // `sed -n '2000,2050p'` don't match SED_AWK_TRUNC_RE, so file viewing is
-    // unaffected; soft producers pass through here too.
+    // unaffected.
     //
     // The sed/awk SCRIPT is quoted (`'1,40p'`), so `unquoted` has blanked it to
     // `_`. Scan `comment_stripped` (quotes intact) for the script content.
@@ -1391,16 +1386,14 @@ fn check_head_tail_pipe(command_string: &str) -> Option<HookOutput> {
         if prior.as_deref() == Some("sort") {
             continue;
         }
-        if is_hard_deny_producer(&producer) {
-            return Some(HookOutput::deny(&head_tail_message(
-                &producer,
-                cap.as_str(),
-            )));
-        }
+        return Some(HookOutput::deny(&head_tail_message(
+            &producer,
+            cap.as_str(),
+        )));
     }
 
-    // Backstop: `| rg .` / `| rg -m N .` bare-catch-all fake filter, denied on
-    // build/gh producers only (mirrors head/tail). Scan `stripped` because the
+    // Backstop: `| rg .` / `| rg -m N .` bare-catch-all fake filter, denied for
+    // every producer (mirrors head/tail). Scan `stripped` because the
     // catch-all pattern may be quoted (`rg ''`); the offset is valid in
     // `unquoted` too (length-preserving strip). A real `rg 'pattern'` content
     // filter does not match RG_COUNTER_RE, so legitimate filtering passes.
@@ -1410,12 +1403,10 @@ fn check_head_tail_pipe(command_string: &str) -> Option<HookOutput> {
             continue;
         }
         let (producer, _prior) = pipeline_context(&unquoted, offset);
-        if is_hard_deny_producer(&producer) {
-            return Some(HookOutput::deny(&head_tail_message(
-                &producer,
-                cap.as_str(),
-            )));
-        }
+        return Some(HookOutput::deny(&head_tail_message(
+            &producer,
+            cap.as_str(),
+        )));
     }
     None
 }
@@ -4597,12 +4588,11 @@ run = "mytool42 verify"
         }
 
         #[test]
-        fn test_head_tail_soft_producers_pass_through() {
-            // Low-harm producers are NOT hard-denied for a head/tail cap: they
-            // pass through to normal gating (and ride a self-correct hint), so a
-            // recoverable cap isn't a hard block + token-costing retry. The only
-            // requirement here is that the head/tail deny path does not fire
-            // (signature: a deny whose reason mentions truncation).
+        fn test_head_tail_all_producers_deny() {
+            // Every non-exempt head/tail output cap is denied regardless of
+            // producer (not only build/`gh`). Soft producers get the neutral
+            // cap-at-the-source message. The legit exemptions (sort top-N,
+            // `tail -f`, `$(...)`) keep passing; see their own tests.
             for cmd in [
                 "ls | head",
                 "cat big.log | tail -20",
@@ -4612,10 +4602,15 @@ run = "mytool42 verify"
                 "du -sh * | tail -5",
             ] {
                 let result = check_command(cmd);
-                let reason = get_reason(&result);
+                assert_eq!(
+                    get_decision(&result),
+                    "deny",
+                    "soft-producer head/tail must deny: {cmd}"
+                );
                 assert!(
-                    !reason.contains("truncat"),
-                    "soft producer should not hard-deny head/tail: {cmd}\ngot: {reason}"
+                    get_reason(&result).contains("blocked"),
+                    "expected blocked message: {cmd}\ngot: {}",
+                    get_reason(&result)
                 );
             }
         }
@@ -4691,8 +4686,8 @@ run = "mytool42 verify"
 
         #[test]
         fn test_sed_awk_truncation_backstop() {
-            // Backstop: first-N sed/awk truncation on build/gh producers is
-            // denied (the head/tail rule's side door). Mirrors head/tail tiering.
+            // Backstop: first-N sed/awk truncation is denied for every producer
+            // (the head/tail rule's side door).
             for cmd in [
                 "cargo test 2>&1 | sed -n '1,40p'",
                 "npm test | sed -n 1,20p",
@@ -4700,6 +4695,8 @@ run = "mytool42 verify"
                 "go build ./... 2>&1 | awk 'NR<=50'",
                 "gh pr list | awk 'NR==10'",
                 "gh api repos/o/r | sed -n '1,5p'",
+                "ls | sed -n '1,20p'",
+                "rg foo src/ | awk 'NR<=50'",
             ] {
                 let result = check_command(cmd);
                 assert_eq!(
@@ -4720,11 +4717,10 @@ run = "mytool42 verify"
             // not a from-the-top cap. Must never hit the sed/awk backstop, even
             // on a build producer (here the producer is `cat`/none anyway). A
             // deep mid-file window like `sed -n '2000,2050p' report.csv` is the
-            // canonical case. Also soft producers with first-N sed pass through.
+            // canonical case.
             for cmd in [
                 "sed -n '2000,2050p' report.csv",
                 "cat big.log | sed -n '100,200p'",
-                "rg foo | sed -n '1,20p'",
                 "cargo test | sed -n '2000,2050p'",
                 "cargo build | sed 's/a/b/'",
                 "cargo test | awk '{print $2}'",
@@ -4740,8 +4736,8 @@ run = "mytool42 verify"
 
         #[test]
         fn test_rg_counter_truncation_backstop() {
-            // Backstop: bare-catch-all `rg .` / `rg -m N .` fake filter on
-            // build/gh producers is denied (caps volume with a no-op pattern).
+            // Backstop: bare-catch-all `rg .` / `rg -m N .` fake filter is denied
+            // for every producer (caps volume with a no-op pattern).
             for cmd in [
                 "cargo test | rg -m 20 .",
                 "mise test | rg .",
@@ -4749,6 +4745,8 @@ run = "mytool42 verify"
                 "gh pr list | rg \".*\"",
                 "uv run x | rg -m 5 .",
                 "pnpm test | rg -m 3 '.'",
+                "ls | rg -m 20 .",
+                "find . -type f | rg .",
             ] {
                 let result = check_command(cmd);
                 assert_eq!(
@@ -4767,8 +4765,7 @@ run = "mytool42 verify"
         fn test_rg_real_filter_not_truncation() {
             // A real content filter is NOT a fake counter: `rg 'pattern'` keeps
             // only matching lines, the sanctioned alternative. Must never hit the
-            // rg-counter backstop, even on a build producer. Soft producers with
-            // a bare `rg .` pass through too.
+            // rg-counter backstop, even on a build producer.
             for cmd in [
                 "cargo test | rg 'FAILED'",
                 "cargo test | rg -m 5 error",
@@ -4776,8 +4773,6 @@ run = "mytool42 verify"
                 "cargo test | rg -m 5 '.rs'",
                 "cargo test | rg error.log",
                 "cargo build | rg -v warning",
-                "rg foo | rg -m 5 .",
-                "eza -la | rg -m 20 .",
             ] {
                 let result = check_command(cmd);
                 let reason = get_reason(&result);
