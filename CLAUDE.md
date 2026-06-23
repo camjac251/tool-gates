@@ -620,6 +620,15 @@ cargo test -- --ignored                 # Slow tests only
 
 **MSRV**: 1.86. Do not use language features or dependencies requiring a newer Rust version.
 
+### Recent Releases Page
+
+`docs/src/whats-new.md` is the hand-curated "Recent Releases" page (raw HTML in mdBook), newest version first. release-plz does not generate or touch it; entries are added by hand.
+
+- **Each version's `src-tag` links its `chore: release vX.Y.Z` commit, never the feature or merge commit.** That release commit is what release-plz creates when the release PR merges. Linking the feature or merge commit is the recurring mistake here. Find the hash with `git log --oneline --grep "chore: release vX.Y.Z" origin/main`.
+- A version whose release PR has not merged yet has no `chore:` commit. Use `release pending` as the `src-tag` suffix with no link, then repoint it to the chore commit once the release lands.
+- Match the existing entry shape: an `<h3>vX.Y.Z · Month D, YYYY</h3>` header, a `src-tag` with a short label, an `Added`/`Fixed`/`Other` `<pre>` summary, and a prose paragraph. Newest entry at the top.
+- Edit it under the `docs:` prefix (see Documentation Triggers above) so the change does not cut a release.
+
 ## Runtime Files
 
 | File | Purpose |
