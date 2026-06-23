@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.30.0](https://github.com/camjac251/tool-gates/compare/v1.29.0...v1.30.0) - 2026-06-23
+
+### Added
+
+- *(design-lint)* add five higher-signal UI content rules
+
+### Other
+
+- require whats-new src-tags to link the release commit
+- add v1.29.0 and v1.30.0 to recent releases
+
 ## [1.29.0](https://github.com/camjac251/tool-gates/compare/v1.28.0...v1.29.0) - 2026-06-23
 
 ### Added
