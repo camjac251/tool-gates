@@ -3,8 +3,8 @@
   <p class="page-lede">tool-gates scans UI file write/edit bodies for generic, templated design patterns and missing UI-quality basics. It covers Claude <code>Write</code>/<code>Edit</code>, Codex <code>apply_patch</code> added lines, and Antigravity <code>write_to_file</code>/<code>replace_file_content</code>/<code>multi_replace_file_content</code>, on the same PostToolUse path as security reminders. Findings are a single tier: every match attaches a post-write nudge so the next action can self-correct. Nothing is blocked. The gate is opt-in (default off) and only scans UI extensions (<code>.tsx</code>, <code>.jsx</code>, <code>.vue</code>, <code>.svelte</code>, <code>.astro</code>, <code>.html</code>, <code>.css</code>, <code>.scss</code>, and similar).</p>
   <div class="sec-head" style="margin-top: var(--s-6)">
     <p class="lbl">Why it is opt-in</p>
-    <h2>Design conventions are a quality opinion, not a safety floor.</h2>
-    <p>Unlike security reminders, these rules encode a house style for frontend output: avoid the patterns that read as generic or templated, and keep the accessibility basics. That is a deliberate choice a project opts into, so the gate defaults off. When enabled, each match attaches a <code>&lt;system-reminder&gt;</code> via <code>additionalContext</code> after the write lands. Raw color values inside a <code>:root</code> token <em>definition</em> are exempt: defining a brand token is legitimate; reaching for the same value in markup is what gets flagged.</p>
+    <h2>A design opinion you switch on per project.</h2>
+    <p>Security reminders enforce a safety floor everywhere. These rules encode a house style for frontend output: avoid the patterns that read as generic or templated, and keep the accessibility basics. That is a deliberate choice a project opts into, so the gate defaults off. When enabled, each match attaches a <code>&lt;system-reminder&gt;</code> via <code>additionalContext</code> after the write lands. Raw color values inside a <code>:root</code> token <em>definition</em> are exempt: defining a brand token is legitimate; reaching for the same value in markup is what gets flagged.</p>
   </div>
   <div class="rule-card">
     <header>
@@ -46,6 +46,11 @@
       <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Nudge</span></div>
       <div class="rule-reason"><code>theme(colors.*)</code> in raw CSS. Reference the CSS variable directly, e.g. <code>var(--color-muted)</code>.</div>
     </div>
+    <div class="rule-row" data-decision="ask">
+      <div class="rule-cmd"><code>color/maxed-saturation</code></div>
+      <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Nudge</span></div>
+      <div class="rule-reason">Pure screen-primary color (<code>#f00</code>, <code>#00ff00</code>, ...). Use an OKLCH value with moderate chroma in a safe lightness range.</div>
+    </div>
   </div>
   <div class="rule-card">
     <header>
@@ -61,6 +66,11 @@
       <div class="rule-cmd"><code>typography/small-body-text</code></div>
       <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Nudge</span></div>
       <div class="rule-reason"><code>text-xs</code> / <code>text-sm</code> on a <code>&lt;p&gt;</code>. Body text should be 16px or larger; reserve smaller sizes for metadata.</div>
+    </div>
+    <div class="rule-row" data-decision="ask">
+      <div class="rule-cmd"><code>typography/script-font</code></div>
+      <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Nudge</span></div>
+      <div class="rule-reason">Script or handwriting font as display type (Pacifico, Caveat, Comic Sans, ...). Reserve script faces for genuine handwriting context.</div>
     </div>
   </div>
   <div class="rule-card">
@@ -87,6 +97,27 @@
       <div class="rule-cmd"><code>content/dash</code></div>
       <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Nudge</span></div>
       <div class="rule-reason">Em or en dash in rendered text. Use a period, comma, colon, or parentheses.</div>
+    </div>
+    <div class="rule-row" data-decision="ask">
+      <div class="rule-cmd"><code>content/emoji-decoration</code></div>
+      <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Nudge</span></div>
+      <div class="rule-reason">Emoji decorating a heading or button. Reads casual in most product and editorial UI; remove unless the brand uses emoji deliberately.</div>
+    </div>
+  </div>
+  <div class="rule-card">
+    <header>
+      <h2>Motion</h2>
+      <span class="count">post-write nudge · PostToolUse</span>
+    </header>
+    <div class="rule-row" data-decision="ask">
+      <div class="rule-cmd"><code>motion/transition-all</code></div>
+      <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Nudge</span></div>
+      <div class="rule-reason"><code>transition: all</code> (or the <code>transition-all</code> utility) animates every property, including layout. List the specific properties to transition.</div>
+    </div>
+    <div class="rule-row" data-decision="ask">
+      <div class="rule-cmd"><code>motion/scale-hover</code></div>
+      <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Nudge</span></div>
+      <div class="rule-reason">Default <code>scale(1.05)</code> / <code>scale(1.1)</code> hover. Differentiate hover by element: a color shift for links, a ring for buttons.</div>
     </div>
   </div>
   <div class="rule-card">

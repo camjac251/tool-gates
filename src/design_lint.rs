@@ -169,6 +169,40 @@ fn rules() -> &'static [LintRule] {
                 kind: Kind::Line { pattern: r#"<p[^>]*(class|className)="[^"]*text-(xs|sm)\b"#, skip_if: None },
             },
             LintRule {
+                id: "typography/script-font",
+                message: "Script or handwriting font used as display type (Pacifico, Caveat, Comic Sans, ...). Reserve script faces for genuine handwriting context.",
+                kind: Kind::Line {
+                    pattern: r#"font-family[^;}]*["'](Pacifico|Caveat|Comic Sans|Lobster|Dancing Script)["']"#,
+                    skip_if: None,
+                },
+            },
+            LintRule {
+                id: "color/maxed-saturation",
+                message: "Pure screen-primary color (#f00, #00ff00, ...). Use an OKLCH value with moderate chroma in a safe lightness range.",
+                kind: Kind::Line {
+                    pattern: r"(?i)#(f00|0f0|00f|ff0|0ff|f0f|ff0000|00ff00|0000ff|ffff00|00ffff|ff00ff)\b",
+                    skip_if: Some(TOKEN_DEF_SKIP),
+                },
+            },
+            LintRule {
+                id: "motion/transition-all",
+                message: "transition: all (or the transition-all utility) animates every property, including layout. List the specific properties to transition.",
+                kind: Kind::Line { pattern: r"transition:\s*all\b|\btransition-all\b", skip_if: None },
+            },
+            LintRule {
+                id: "motion/scale-hover",
+                message: "Default scale(1.05) / scale(1.1) hover. Differentiate hover by element: a color shift for links, a ring for buttons.",
+                kind: Kind::Line { pattern: r"scale\(1\.05\)|scale\(1\.1\)", skip_if: None },
+            },
+            LintRule {
+                id: "content/emoji-decoration",
+                message: "Emoji decorating a heading or button. Reads casual in most product and editorial UI; remove unless the brand uses emoji deliberately.",
+                kind: Kind::Line {
+                    pattern: r"<(h[1-6]|button)[^>]*>[^<]*[\x{1F300}-\x{1FAFF}]",
+                    skip_if: None,
+                },
+            },
+            LintRule {
                 id: "a11y/focus-visible",
                 message: "Focus outline removed with no focus-visible replacement. Add a visible focus style.",
                 kind: Kind::OutlineWithoutFocusVisible,
@@ -554,6 +588,50 @@ mod tests {
         assert!(
             out.is_none(),
             "disabling the only matched rule yields no output"
+        );
+    }
+
+    #[test]
+    fn test_cleanset_rules_flag() {
+        let cases = [
+            (r#".x{font-family:"Pacifico"}"#, "typography/script-font"),
+            (".x{color:#ff0000}", "color/maxed-saturation"),
+            (".x{transition: all 0.2s}", "motion/transition-all"),
+            (".x:hover{transform:scale(1.05)}", "motion/scale-hover"),
+            ("<h1>Welcome 🚀</h1>", "content/emoji-decoration"),
+        ];
+        for (content, id) in cases {
+            let got = ids(&scan_content("/tmp/t.tsx", content));
+            assert!(
+                got.contains(&id),
+                "expected {id} for {content:?}, got {got:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_cleanset_no_false_positives() {
+        let clean = concat!(
+            ":root { --alert: #ff0000; }\n",
+            ".x { transition: opacity 0.2s, transform 0.2s; font-family: \"Newsreader\"; }\n",
+            ".x:hover { transform: scale(1.5); }"
+        );
+        let got = ids(&scan_content("/tmp/clean.css", clean));
+        assert!(
+            !got.contains(&"color/maxed-saturation"),
+            "token-def pure primary is exempt: {got:?}"
+        );
+        assert!(
+            !got.contains(&"motion/transition-all"),
+            "explicit transition props are fine: {got:?}"
+        );
+        assert!(
+            !got.contains(&"motion/scale-hover"),
+            "scale(1.5) is not the AI-default value: {got:?}"
+        );
+        assert!(
+            !got.contains(&"typography/script-font"),
+            "Newsreader is not a script font: {got:?}"
         );
     }
 }

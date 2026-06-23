@@ -21,7 +21,7 @@
         <p>Each subsystem can be turned off independently. Toggles merge with defaults; missing keys keep their default value.</p>
         <p><code>head_tail_pipe_block</code> denies <code>| head -N</code> and <code>| tail -N</code> pipes so the agent caps output at the source with <code>rg -m N</code>, <code>fd --max-results N</code>, or <code>bat -r START:END</code>. Streaming <code>tail -f</code>/<code>-F</code> is exempt.</p>
         <p><code>git_aliases</code> resolves user-defined aliases against <code>~/.gitconfig</code> so <code>git st</code> runs through the same allow/ask rules as <code>git status</code>.</p>
-        <p><code>design_lint</code> is the one opt-in subsystem (default <code>false</code>): a frontend design-quality linter for UI writes, not a safety floor. Set it <code>true</code> to enable.</p>
+        <p><code>design_lint</code> is the one opt-in subsystem (default <code>false</code>): a frontend design-quality linter for UI writes. Security reminders cover the safety floor; this one covers style. Set it <code>true</code> to enable.</p>
       </div>
     </div>
   </div>
