@@ -528,8 +528,8 @@ static DEFAULT_BLOCK_RULES: std::sync::LazyLock<Vec<BlockRule>> = std::sync::Laz
             block_domains: vec![],
             requires_tool: Some("fd".to_string()),
         },
-        // Antigravity: find_by_name (its glob equivalent). Kept symmetric with
-        // grep_search, which is already blocked above for Antigravity.
+        // Antigravity: find_by_name (its glob equivalent). Gated the same way as
+        // its grep_search search tool.
         BlockRule {
             tool: "find_by_name".to_string(),
             message: "Glob tool is blocked. Use 'fd' instead.".to_string(),

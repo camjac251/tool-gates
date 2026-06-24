@@ -28,21 +28,21 @@
   <div class="sec-head" style="margin-top: var(--s-7)">
     <p class="lbl">Decision</p>
     <h2>A flat decision, and "no opinion" defers to Antigravity.</h2>
-    <p>The PreToolUse hook returns a flat JSON object on stdout. <code>decision</code> is required and is one of <code>allow</code>, <code>ask</code>, <code>deny</code>, or <code>force_ask</code>.</p>
+    <p>The PreToolUse hook returns a flat JSON object on stdout. <code>decision</code> is required and is one of <code>allow</code>, <code>ask</code>, <code>deny</code>, or <code>force_ask</code>. Antigravity resolves a tool call as the <em>strictest</em> of all candidate decisions (rank order: <code>allow</code> lowest, then <code>ask</code>, <code>force_ask</code>, <code>deny</code> highest), so the hook can only tighten: <code>deny</code>/<code>ask</code>/<code>force_ask</code> win when they outrank agy's native decision, but a hook <code>allow</code> (the floor) never suppresses a prompt agy's own rules would show. Stopping the prompt for safe commands is done with agy's native <code>permissions.allow</code> list (see <a href="#allowlist">Allowlisting safe commands</a>).</p>
   </div>
   <table class="data-table">
     <thead>
       <tr><th>tool-gates result</th><th>Antigravity output</th><th>Effect</th></tr>
     </thead>
     <tbody>
-      <tr><td>No opinion</td><td>empty stdout</td><td>Antigravity's own fine-grained permission engine decides. tool-gates never auto-allows a command it does not recognize. (<code>decision</code> is required by the schema; this relies on the currently-undocumented behavior that emitting none defers to Antigravity's engine.)</td></tr>
-      <tr><td>Allow (known-safe)</td><td><code>{"decision":"allow"}</code></td><td>Uses Antigravity's documented allow shape. Prompt suppression depends on Antigravity's native permission engine.</td></tr>
+      <tr><td>No opinion</td><td>empty stdout</td><td>Antigravity's own fine-grained permission engine decides. tool-gates never speaks for a command it does not recognize. (<code>decision</code> is required by the schema; this relies on the currently-undocumented behavior that emitting none defers to Antigravity's engine.)</td></tr>
+      <tr><td>Allow (known-safe)</td><td>empty stdout</td><td>tool-gates recognizes the command as safe, but a hook <code>allow</code> is the lowest rank and inert on agy, so it emits nothing and lets agy's engine decide. The native <code>permissions.allow</code> list is what stops the prompt.</td></tr>
       <tr><td>Ask (soft)</td><td><code>{"decision":"ask"}</code></td><td>Prompts, respecting the user's "Always Allow" grants. Used for routine mutations and unknown commands.</td></tr>
       <tr><td>Ask (hard floor)</td><td><code>{"decision":"force_ask"}</code></td><td>Pipe-to-shell, <code>eval</code>, and dangerous substitution. Always prompts, ignoring any "Always Allow" grant, so the floor can never be permanently granted away.</td></tr>
       <tr><td>Deny</td><td><code>{"decision":"deny"}</code></td><td>Hard block. Remediation text is folded into <code>reason</code> since the Pre output has no <code>additionalContext</code> field.</td></tr>
     </tbody>
   </table>
-  <p class="sub-note">The hard-ask safety floor maps to <code>force_ask</code>, not <code>ask</code>: pipe-to-shell and <code>eval</code> are ask-tier (never deny), and Antigravity's plain <code>ask</code> honors a prior "Always Allow" grant, which would let a granted command silently bypass the floor. <code>force_ask</code> always prompts. tool-gates does not emit <code>permissionOverrides</code> (scope-widening grants): a single gate decision needs no scope widening.</p>
+  <p class="sub-note">The hard-ask safety floor maps to <code>force_ask</code>, not <code>ask</code>: pipe-to-shell and <code>eval</code> are ask-tier (never deny), and Antigravity's plain <code>ask</code> honors a prior "Always Allow" grant, which would let a granted command silently bypass the floor. <code>force_ask</code> always prompts. tool-gates does not emit <code>permissionOverrides</code>: a hook's <code>permissionOverrides</code> does not suppress the current call's prompt, so it would buy nothing.</p>
   <div class="sec-head" style="margin-top: var(--s-7)">
     <p class="lbl">Scope</p>
     <h2>One hook does the whole gate.</h2>
@@ -83,6 +83,26 @@ $ tool-gates hooks add --antigravity -s project</pre>
         <p>Antigravity user hooks live at <code>~/.gemini/config/hooks.json</code>, which is the installer default and the path shared by the CLI backend. Project hooks live at <code>.agents/hooks.json</code> and are available with <code>-s project</code>. The matcher covers <code>run_command</code>, <code>view_file</code>, <code>write_to_file</code>, <code>replace_file_content</code>, <code>multi_replace_file_content</code>, <code>grep_search</code>, and <code>find_by_name</code>.</p>
         <p>Plugin-packaged hooks are useful for distribution, but they are not required for hook installs. Treat plugin support as a separate global-install path that should be verified with <code>agy plugin validate</code> and a deny probe before relying on it.</p>
         <p>Confirm with <code>tool-gates hooks status</code>, which lists the Antigravity shared user and project hook paths alongside the other clients.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block" id="allowlist">
+    <header>
+      <h3>Allowlisting safe commands</h3>
+      <span class="src-tag">~/.gemini/antigravity-cli/settings.json</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="c"># print a permissions.allow block for safe commands</span>
+$ tool-gates agy allowlist
+<span class="c"># merge it into agy's settings (backs up first), then restart agy</span>
+$ tool-gates agy allowlist --apply
+<span class="c"># preview the merge without writing</span>
+$ tool-gates agy allowlist --apply --dry-run</pre>
+      </div>
+      <div class="config-prose">
+        <p>Because a hook <code>allow</code> is inert, the only thing that stops Antigravity prompting for a read-only command is its native <code>permissions.allow</code> list in <code>~/.gemini/antigravity-cli/settings.json</code> (a different file from the hooks path). <code>tool-gates agy allowlist</code> generates that list from tool-gates' own unconditionally-safe command set, one <code>command(&lt;prog&gt;)</code> rule per program (<code>command(rg)</code>, <code>command(cat)</code>, <code>command(jq)</code>, …).</p>
+        <p>The tool-gates hook still runs on every call and tightens (deny/ask/force_ask) over any dangerous form, so a native <code>command(find)</code> does not let <code>find . -delete</code> through: the hook asks and the stricter decision wins. Interpreters (<code>bash</code>/<code>sh</code>/<code>zsh</code>), <code>curl</code>, and conditionally-gated programs are excluded from the list. Antigravity reads settings at startup, so restart <code>agy</code> after applying.</p>
       </div>
     </div>
   </div>

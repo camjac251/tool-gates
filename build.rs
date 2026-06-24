@@ -440,6 +440,11 @@ fn generate_rust_code(rule_files: &[(String, RuleFile)]) -> String {
         output.push('\n');
     }
 
+    // Antigravity native allowlist source: the programs tool-gates allows
+    // unconditionally, emitted by `tool-gates agy allowlist`.
+    output.push_str(&generate_antigravity_allow_commands(rule_files));
+    output.push('\n');
+
     // Collect all conditional allows
     let mut all_conditionals: Vec<&ConditionalRule> = Vec::new();
     for (_, rules) in rule_files {
@@ -497,6 +502,141 @@ fn generate_safe_commands(commands: &[&str]) -> String {
     output.push_str("        None\n");
     output.push_str("    }\n");
     output.push_str("}\n");
+
+    output
+}
+
+/// Generate `ANTIGRAVITY_ALLOW_COMMANDS`: the programs tool-gates allows
+/// unconditionally (read-only, no dangerous flags or args), used by
+/// `tool-gates agy allowlist` to emit Antigravity native `command(<prog>)` allow
+/// rules. agy resolves a tool call as the strictest of its candidate decisions,
+/// so a native allow here removes the default Ask for these commands while the
+/// tool-gates hook still tightens (deny/ask/force_ask) over any dangerous form.
+fn generate_antigravity_allow_commands(rule_files: &[(String, RuleFile)]) -> String {
+    // Shell builtins / keywords that appear in safe_commands but are not real
+    // binaries. A `command(<builtin>)` agy rule is meaningless, so drop them.
+    const SHELL_BUILTINS: &[&str] = &[
+        "[",
+        "[[",
+        "]]",
+        "test",
+        ":",
+        ".",
+        "cd",
+        "set",
+        "unset",
+        "export",
+        "readonly",
+        "local",
+        "declare",
+        "typeset",
+        "eval",
+        "source",
+        "exec",
+        "trap",
+        "shift",
+        "getopts",
+        "read",
+        "wait",
+        "jobs",
+        "fg",
+        "bg",
+        "pushd",
+        "popd",
+        "dirs",
+        "alias",
+        "unalias",
+        "let",
+        "times",
+        "umask",
+        "ulimit",
+        "type",
+        "hash",
+        "help",
+        "history",
+        "fc",
+        "bind",
+        "caller",
+        "enable",
+        "logout",
+        "mapfile",
+        "readarray",
+        "suspend",
+        "compgen",
+        "complete",
+        "compopt",
+        "true",
+        "false",
+        "return",
+        "break",
+        "continue",
+    ];
+
+    // Exclusions: programs that are conditionally gated anywhere (any ask/block
+    // rule), wrap a custom handler, or carry API-method rules must never be
+    // blanket-allowed natively. Collecting across all gates catches a program
+    // listed as safe in one file but conditional in another (e.g. `yq`, safe in
+    // basics, ask-on-`-i` in devtools). Custom handlers catch the interpreter
+    // entries (`bash`/`sh`/`zsh`/`xargs`/`command`); api_rules catches `curl`.
+    let mut excluded: HashSet<&str> = HashSet::new();
+    for builtin in SHELL_BUILTINS {
+        excluded.insert(*builtin);
+    }
+    for (_, rules) in rule_files {
+        for handler in &rules.custom_handlers {
+            excluded.insert(handler.program.as_str());
+        }
+        for program in &rules.programs {
+            let conditional =
+                !program.ask.is_empty() || !program.block.is_empty() || program.api_rules.is_some();
+            if conditional {
+                excluded.insert(program.name.as_str());
+                for alias in &program.aliases {
+                    excluded.insert(alias.as_str());
+                }
+            }
+        }
+    }
+
+    // Candidates: every safe_command, plus every program that is unconditionally
+    // allowed (unknown_action = allow with no allow/ask/block/api rules).
+    let mut candidates: Vec<&str> = Vec::new();
+    for (_, rules) in rule_files {
+        for cmd in &rules.safe_commands {
+            candidates.push(cmd);
+        }
+        for program in &rules.programs {
+            let unconditional = program.unknown_action == UnknownAction::Allow
+                && program.allow.is_empty()
+                && program.ask.is_empty()
+                && program.block.is_empty()
+                && program.api_rules.is_none();
+            if unconditional {
+                candidates.push(program.name.as_str());
+                for alias in &program.aliases {
+                    candidates.push(alias.as_str());
+                }
+            }
+        }
+    }
+
+    let mut allow: Vec<&str> = candidates
+        .into_iter()
+        .filter(|c| !excluded.contains(c))
+        .collect();
+    allow.sort_unstable();
+    allow.dedup();
+
+    let mut output = String::new();
+    output.push_str(
+        "/// Programs tool-gates allows unconditionally, emitted as Antigravity\n\
+         /// native `command(<prog>)` allow rules by `tool-gates agy allowlist`.\n",
+    );
+    output.push_str("pub static ANTIGRAVITY_ALLOW_COMMANDS: &[&str] = &[\n");
+    for cmd in &allow {
+        output.push_str(&format!("    \"{}\",\n", escape_rust_string(cmd)));
+    }
+    output.push_str("];\n");
 
     output
 }

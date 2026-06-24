@@ -93,6 +93,11 @@ fn main() {
         return;
     }
 
+    if args.len() > 1 && (args[1] == "agy" || args[1] == "antigravity") {
+        handle_agy_subcommand(&args[2..]);
+        return;
+    }
+
     // Handle global flags
     if args.iter().any(|a| a == "--refresh-tools") {
         eprintln!("Refreshing tool cache...");
@@ -1831,6 +1836,206 @@ fn install_codex_hooks(scope: &str, dry_run: bool) {
             std::process::exit(1);
         }
     }
+}
+
+/// Path to Antigravity's global settings file, which holds the native
+/// `permissions.allow` list. Distinct from the hooks file
+/// (`~/.gemini/config/hooks.json`): settings live under `antigravity-cli/`.
+fn get_antigravity_settings_path() -> std::path::PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join(".gemini")
+        .join("antigravity-cli")
+        .join("settings.json")
+}
+
+/// Dispatch `tool-gates agy <subcommand>`.
+fn handle_agy_subcommand(args: &[String]) {
+    match args.first().map(String::as_str) {
+        Some("allowlist") => {
+            let apply = args.iter().any(|a| a == "--apply");
+            let dry_run = args.iter().any(|a| a == "--dry-run");
+            handle_agy_allowlist(apply, dry_run);
+        }
+        Some("help") | Some("--help") | Some("-h") | None => print_agy_help(),
+        Some(other) => {
+            eprintln!("Error: unknown agy subcommand '{other}'");
+            print_agy_help();
+            std::process::exit(2);
+        }
+    }
+}
+
+/// The Antigravity native `permissions.allow` rules for tool-gates'
+/// unconditionally-safe commands (`command(<prog>)` per program).
+fn agy_allow_rules() -> Vec<String> {
+    tool_gates::generated::rules::ANTIGRAVITY_ALLOW_COMMANDS
+        .iter()
+        .map(|cmd| format!("command({cmd})"))
+        .collect()
+}
+
+/// Merge `rules` into `settings["permissions"]["allow"]`, preserving every
+/// existing entry and adding only rules not already present. Creates the
+/// `permissions` object and `allow` array when absent. Returns `(added,
+/// already_present)`, or an error string if the JSON shape is wrong.
+fn merge_agy_allowlist(
+    settings: &mut serde_json::Value,
+    rules: &[String],
+) -> Result<(usize, usize), String> {
+    let root = settings
+        .as_object_mut()
+        .ok_or("settings root must be a JSON object")?;
+    let permissions = root
+        .entry("permissions")
+        .or_insert_with(|| serde_json::json!({}));
+    let perms = permissions
+        .as_object_mut()
+        .ok_or("`permissions` must be a JSON object")?;
+    let allow = perms
+        .entry("allow")
+        .or_insert_with(|| serde_json::json!([]))
+        .as_array_mut()
+        .ok_or("`permissions.allow` must be a JSON array")?;
+
+    // Owned set so the immutable scan doesn't borrow `allow` across the push.
+    let existing: std::collections::HashSet<String> = allow
+        .iter()
+        .filter_map(|v| v.as_str().map(str::to_string))
+        .collect();
+    let mut added = 0;
+    for rule in rules {
+        if existing.contains(rule) {
+            continue;
+        }
+        allow.push(serde_json::json!(rule));
+        added += 1;
+    }
+    Ok((added, rules.len() - added))
+}
+
+/// Print or apply the agy native allowlist for safe commands.
+///
+/// A hook `allow` cannot suppress an agy prompt (agy keeps the strictest of its
+/// candidate decisions and allow is the lowest rank), so prompt-free safe
+/// commands come from agy's native `permissions.allow`. These `command(<prog>)`
+/// rules cover only unconditionally-safe programs; the tool-gates hook still
+/// tightens (deny/ask/force_ask) over any dangerous form, so the native allow
+/// is safe.
+fn handle_agy_allowlist(apply: bool, dry_run: bool) {
+    let rules = agy_allow_rules();
+    let path = get_antigravity_settings_path();
+
+    if !apply {
+        let snippet = serde_json::json!({ "permissions": { "allow": rules } });
+        println!("{}", serde_json::to_string_pretty(&snippet).unwrap());
+        eprintln!();
+        eprintln!(
+            "{} read-only commands. Merge the permissions.allow entries into",
+            rules.len()
+        );
+        eprintln!("{} and restart agy,", path.display());
+        eprintln!("or run `tool-gates agy allowlist --apply` to merge them automatically.");
+        return;
+    }
+
+    let mut settings: serde_json::Value = if path.exists() {
+        match std::fs::read_to_string(&path) {
+            Ok(c) if c.trim().is_empty() => serde_json::json!({}),
+            Ok(c) => serde_json::from_str(&c).unwrap_or_else(|e| {
+                eprintln!("Error: failed to parse {}: {}", path.display(), e);
+                std::process::exit(1);
+            }),
+            Err(e) => {
+                eprintln!("Error: failed to read {}: {}", path.display(), e);
+                std::process::exit(1);
+            }
+        }
+    } else {
+        serde_json::json!({})
+    };
+
+    let (added, already) = match merge_agy_allowlist(&mut settings, &rules) {
+        Ok(counts) => counts,
+        Err(msg) => {
+            eprintln!("Error: {}: {msg}", path.display());
+            std::process::exit(1);
+        }
+    };
+
+    if dry_run {
+        eprintln!("--dry-run: would merge into {}", path.display());
+        eprintln!("  {added} added, {already} already present");
+        println!("{}", serde_json::to_string_pretty(&settings).unwrap());
+        return;
+    }
+
+    if added == 0 {
+        eprintln!(
+            "✓ {} already has all {} command allow rules. Nothing to do.",
+            path.display(),
+            rules.len()
+        );
+        return;
+    }
+
+    if path.exists() {
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let backup = path.with_extension(format!("json.bak-{ts}"));
+        if let Err(e) = std::fs::copy(&path, &backup) {
+            eprintln!("Error: failed to back up {}: {}", path.display(), e);
+            std::process::exit(1);
+        }
+        eprintln!("Backed up to {}", backup.display());
+    }
+    if let Some(parent) = path.parent() {
+        if !parent.exists() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                eprintln!("Error: failed to create {}: {}", parent.display(), e);
+                std::process::exit(1);
+            }
+        }
+    }
+    match std::fs::write(
+        &path,
+        serde_json::to_string_pretty(&settings).unwrap() + "\n",
+    ) {
+        Ok(()) => {
+            eprintln!(
+                "✓ Merged {added} command allow rules into {} ({already} already present).",
+                path.display()
+            );
+            eprintln!("Restart agy for the change to take effect (settings are read at startup).");
+        }
+        Err(e) => {
+            eprintln!("Error: failed to write {}: {}", path.display(), e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn print_agy_help() {
+    eprintln!("tool-gates agy - Antigravity (agy) helpers");
+    eprintln!();
+    eprintln!("USAGE:");
+    eprintln!(
+        "  tool-gates agy allowlist                    Print a native permissions.allow block for safe commands"
+    );
+    eprintln!(
+        "  tool-gates agy allowlist --apply            Merge it into ~/.gemini/antigravity-cli/settings.json"
+    );
+    eprintln!("  tool-gates agy allowlist --apply --dry-run  Preview the merge without writing");
+    eprintln!();
+    eprintln!("agy keeps the strictest of its candidate decisions, and a hook allow is the lowest");
+    eprintln!(
+        "rank, so a hook cannot suppress an agy prompt. Native permissions.allow rules are what"
+    );
+    eprintln!(
+        "stop the prompt for read-only commands; the tool-gates hook still gates dangerous forms."
+    );
 }
 
 /// Get Antigravity (`agy`) hooks file path.
@@ -4154,6 +4359,94 @@ mod tests {
         assert_eq!(hi.cwd, "/ws");
         assert_eq!(hi.session_id, "c1");
         assert!(Client::is_shell_tool(&hi.tool_name));
+    }
+
+    #[test]
+    fn agy_allowlist_includes_safe_excludes_dangerous() {
+        let rules: std::collections::HashSet<String> = agy_allow_rules().into_iter().collect();
+        for safe in [
+            "command(rg)",
+            "command(ls)",
+            "command(cat)",
+            "command(jq)",
+            "command(pytest)",
+            "command(py.test)",
+            "command(mypy)",
+        ] {
+            assert!(rules.contains(safe), "allowlist should include {safe}");
+        }
+        // Interpreters (custom handlers), api-rule and conditionally-gated
+        // programs, and shell builtins must never be blanket-allowed.
+        for danger in [
+            "command(bash)",
+            "command(sh)",
+            "command(zsh)",
+            "command(xargs)",
+            "command(command)",
+            "command(yq)",
+            "command(curl)",
+            "command(eval)",
+            "command(cd)",
+        ] {
+            assert!(
+                !rules.contains(danger),
+                "allowlist must not include {danger}"
+            );
+        }
+        // Every rule is a well-formed `command(<prog>)`.
+        assert!(
+            agy_allow_rules()
+                .iter()
+                .all(|r| r.starts_with("command(") && r.ends_with(')')),
+            "all rules must be command(...) form"
+        );
+    }
+
+    #[test]
+    fn agy_merge_creates_unions_and_preserves() {
+        let rules = vec!["command(rg)".to_string(), "command(ls)".to_string()];
+
+        // Missing settings: `permissions.allow` is created.
+        let mut settings = serde_json::json!({});
+        assert_eq!(merge_agy_allowlist(&mut settings, &rules).unwrap(), (2, 0));
+        assert_eq!(
+            settings["permissions"]["allow"].as_array().unwrap().len(),
+            2
+        );
+
+        // Existing entries (incl. mcp) are preserved; only missing are added; no dup.
+        let mut settings = serde_json::json!({
+            "permissions": { "allow": ["mcp(perplexity/*)", "command(rg)"], "deny": ["command(dd)"] }
+        });
+        assert_eq!(merge_agy_allowlist(&mut settings, &rules).unwrap(), (1, 1));
+        let allow: Vec<&str> = settings["permissions"]["allow"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(serde_json::Value::as_str)
+            .collect();
+        assert!(allow.contains(&"mcp(perplexity/*)"));
+        assert!(allow.contains(&"command(ls)"));
+        assert_eq!(allow.iter().filter(|&&r| r == "command(rg)").count(), 1);
+        // Unrelated lists are untouched.
+        assert!(
+            settings["permissions"]["deny"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|v| v == "command(dd)")
+        );
+    }
+
+    #[test]
+    fn agy_merge_rejects_bad_shape() {
+        let one = vec!["command(rg)".to_string()];
+        let mut bad_allow = serde_json::json!({ "permissions": { "allow": "not-an-array" } });
+        assert!(merge_agy_allowlist(&mut bad_allow, &one).is_err());
+        let mut bad_perms = serde_json::json!({ "permissions": 42 });
+        assert!(merge_agy_allowlist(&mut bad_perms, &one).is_err());
+        let mut bad_root = serde_json::json!([1, 2, 3]);
+        assert!(merge_agy_allowlist(&mut bad_root, &one).is_err());
     }
 
     #[test]

@@ -102,6 +102,7 @@
       <tr><td><code>~/.claude/settings.json</code></td><td>Claude Code permission rules. tool-gates respects every explicit allow / deny / ask before applying its own gate decision.</td></tr>
       <tr><td><code>~/.codex/hooks.json</code></td><td>Codex CLI hook configuration.</td></tr>
       <tr><td><code>~/.gemini/config/hooks.json</code></td><td>Antigravity CLI (<code>agy</code>) shared user hook configuration. Keyed by hook name; tool-gates owns the <code>tool-gates</code> entry. Project scope writes <code>.agents/hooks.json</code>.</td></tr>
+      <tr><td><code>~/.gemini/antigravity-cli/settings.json</code></td><td>Antigravity CLI native settings, including the <code>permissions.allow</code> list. <code>tool-gates agy allowlist --apply</code> merges <code>command(&lt;prog&gt;)</code> rules here to stop prompts for read-only commands (a hook allow cannot). Distinct from the hooks file.</td></tr>
       <tr><td><code>~/.gemini/settings.json</code></td><td>Gemini CLI hook configuration (deprecated).</td></tr>
       <tr><td><code>~/.config/tool-gates/config.toml</code></td><td>User configuration for feature toggles, tool blocking, MCP / Skill auto-approval, file guards, hints, cache, git aliases.</td></tr>
       <tr><td><code>~/.cache/tool-gates/pending.jsonl</code></td><td>The pending-approval queue. Successful asks land here for promotion via <code>tool-gates review</code>.</td></tr>

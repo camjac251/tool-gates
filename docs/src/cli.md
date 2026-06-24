@@ -27,6 +27,14 @@
         <td>Wire a single PreToolUse hook into the shared user path at <code>~/.gemini/config/hooks.json</code> by default. The installer bakes <code>--client antigravity</code> into the command. The <code>-s project</code> scope writes <code>.agents/hooks.json</code>. Antigravity (<code>agy</code>) is Google's successor to the Gemini CLI.</td>
       </tr>
       <tr>
+        <td><code>tool-gates agy allowlist</code></td>
+        <td>Print a native <code>permissions.allow</code> block (one <code>command(&lt;prog&gt;)</code> rule per unconditionally-safe program) for <code>~/.gemini/antigravity-cli/settings.json</code>. A hook <code>allow</code> cannot suppress an agy prompt, so this native allowlist is what stops prompts for read-only commands.</td>
+      </tr>
+      <tr>
+        <td><code>tool-gates agy allowlist --apply</code></td>
+        <td>Merge that allowlist into <code>~/.gemini/antigravity-cli/settings.json</code> (preserves existing entries, backs up first). Add <code>--dry-run</code> to preview. Restart <code>agy</code> afterward so it re-reads settings.</td>
+      </tr>
+      <tr>
         <td><code>tool-gates hooks add … --dry-run</code></td>
         <td>Print what would change without writing. Works on every <code>hooks add</code> variant.</td>
       </tr>

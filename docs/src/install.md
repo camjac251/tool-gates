@@ -81,7 +81,7 @@
           <h3>Antigravity CLI</h3>
           <span class="hooks-count">1 hook</span>
         </header>
-        <p>Google's successor to the Gemini CLI (<code>agy</code>). The installer bakes <code>--client antigravity</code> into the hook command so the wire format routes correctly.</p>
+        <p>Google's successor to the Gemini CLI (<code>agy</code>). The installer bakes <code>--client antigravity</code> into the hook command so the wire format routes correctly. The hook gates commands (deny/ask); to also stop prompts for read-only commands, generate agy's native allowlist with <code>tool-gates agy allowlist --apply</code> (see <a href="antigravity.html#allowlist">Antigravity</a>).</p>
 <pre class="code-block"><span class="prompt">$</span> tool-gates hooks add --antigravity</pre>
         <ul class="hook-list">
           <li><code>PreToolUse</code>: command safety, file guards, secret scanning</li>

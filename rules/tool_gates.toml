@@ -71,6 +71,10 @@ reason = "Health check. Read-only; safe to run anytime."
 subcommand = "rules ask-audit"
 reason = "Categorise `permissions.ask` rules. Read-only listing without `--apply`."
 
+[[programs.allow]]
+subcommand = "agy allowlist"
+reason = "Print the Antigravity native permissions.allow block for safe commands. Read-only without --apply."
+
 # -----------------------------------------------------------------------------
 # Info / Help / Version
 # -----------------------------------------------------------------------------
@@ -122,6 +126,11 @@ reason = "Empties `~/.cache/tool-gates/pending.jsonl`. Drops every queued approv
 [[programs.ask]]
 subcommand = "hooks add"
 reason = "Writes tool-gates hook entries into the client's settings.json (Claude/Gemini) or hooks.json (Codex/Antigravity). Changes how every future tool call in that scope is gated."
+
+[[programs.ask]]
+subcommand = "agy allowlist"
+if_flags_any = ["--apply"]
+reason = "Merges the safe-command allowlist into agy's settings.json. Changes which commands agy auto-allows without prompting."
 
 # -----------------------------------------------------------------------------
 # Interactive TUI

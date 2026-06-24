@@ -44,7 +44,7 @@
       <div class="lc-node exec">
         <span class="lc-icon">▷</span>
         <div class="lc-title">Decision on stdout</div>
-        <div class="lc-sub">Serialised per client. Claude: nested <code>hookSpecificOutput.permissionDecision</code>. Codex: empty stdout for allow/ask, nested <code>permissionDecision: "deny"</code> for blocks. Antigravity: flat <code>{decision, reason}</code> (<code>allow</code>/<code>ask</code>/<code>deny</code>), empty stdout for no-opinion. Gemini (deprecated): flat <code>decision</code> + <code>reason</code> (tool-gates emits <code>"block"</code> for hard blocks; Gemini also accepts <code>"deny"</code>, and exit code 2 blocks). Modern-CLI hints ride on <code>additionalContext</code>.</div>
+        <div class="lc-sub">Serialised per client. Claude: nested <code>hookSpecificOutput.permissionDecision</code>. Codex: empty stdout for allow/ask, nested <code>permissionDecision: "deny"</code> for blocks. Antigravity: flat <code>{decision, reason}</code> for the tightening decisions (<code>deny</code>/<code>ask</code>/<code>force_ask</code>), empty stdout for allow and no-opinion (a hook <code>allow</code> is inert, since agy keeps the strictest decision). Gemini (deprecated): flat <code>decision</code> + <code>reason</code> (tool-gates emits <code>"block"</code> for hard blocks; Gemini also accepts <code>"deny"</code>, and exit code 2 blocks). Modern-CLI hints ride on <code>additionalContext</code>.</div>
       </div>
     </div>
   </div>

@@ -48,6 +48,7 @@ tool-gates hooks add --codex
 # For Antigravity CLI (agy)
 tool-gates hooks add --antigravity  # ~/.gemini/config/hooks.json
 tool-gates hooks add --antigravity -s project  # .agents/hooks.json
+tool-gates agy allowlist --apply    # stop agy prompting for read-only commands (native permissions.allow)
 
 # For Gemini CLI (deprecated; Google sunsets it 2026-06-18)
 tool-gates hooks add --gemini

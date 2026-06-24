@@ -779,17 +779,26 @@ impl HookOutput {
     /// Serialize to Antigravity CLI (`agy`) wire format.
     ///
     /// Antigravity PreToolUse hooks return a FLAT JSON object on stdout:
-    /// `{"decision":"allow|deny|ask|force_ask","reason":"...","permissionOverrides":[...]}`.
-    /// `decision` is the only required field. Unlike Codex, Antigravity has no
-    /// documented "emit nothing = pass through" value, but a hook that produces
-    /// no decision falls back to Antigravity's own fine-grained permission
-    /// engine (the `action(target)` allow/deny/ask lists). tool-gates uses that
-    /// fallback for "no opinion" so it never auto-allows a command it does not
-    /// explicitly recognize.
+    /// `{"decision":"allow|deny|ask|force_ask","reason":"..."}`. `decision` is the
+    /// only required field. A hook that produces no decision (empty stdout) falls
+    /// back to Antigravity's own fine-grained permission engine (the
+    /// `action(target)` allow/deny/ask lists in
+    /// `~/.gemini/antigravity-cli/settings.json`); tool-gates uses that fallback
+    /// for "no opinion" so it never speaks for a command it does not recognize.
+    ///
+    /// Antigravity resolves a tool call as the STRICTEST of all candidate
+    /// decisions, ranked allow=1 (floor) < ask=2 < deny_unless_prior_grant=3 <
+    /// force_ask=4 < deny=5. The hook's decision is one input to that max, so a
+    /// hook can only TIGHTEN: `deny`/`ask`/`force_ask` win when they outrank the
+    /// native decision, but `allow` (rank 1) can never lower the result below
+    /// what agy's own rules decided. An unconfigured `command(...)` defaults to
+    /// `ask`, so a hook `allow` does not stop the prompt. Prompt-free allowlisting
+    /// of safe commands is done out-of-band via agy's native `permissions.allow`
+    /// list, which `tool-gates agy allowlist` generates.
     ///
     /// Mapping:
     /// - `Approve` (no opinion) -> `Value::Null` (emit nothing; Antigravity's permission engine decides)
-    /// - `Allow`                -> `{"decision":"allow","reason":...}` (documented allow shape; prompt suppression depends on native permissions)
+    /// - `Allow`                -> `Value::Null` (tool-gates recognizes the command as safe, but a hook allow is rank 1 and inert on agy, so it emits nothing and lets the native engine decide; prompt-free allowlisting is via native `permissions.allow`, see `tool-gates agy allowlist`)
     /// - `Ask`                  -> `{"decision":"ask","reason":...}` (prompt; respects "Always Allow" grants)
     /// - `Ask` + `force`        -> `{"decision":"force_ask","reason":...}` (hard-ask floor: always prompts, ignores "Always Allow")
     /// - `Defer`                -> `{"decision":"ask",...}` (no Antigravity equivalent of CC's resolver)
@@ -799,16 +808,18 @@ impl HookOutput {
     /// with `force` set, NOT `Deny`, so it must map to `force_ask`: Antigravity's
     /// plain `ask` honors a prior "Always Allow" grant, which would let a granted
     /// command silently bypass the floor, while `force_ask` always prompts.
-    /// `permissionOverrides` (scope widening) is not emitted. The Antigravity Pre
-    /// output has no `additionalContext` field, so hints and Tier-3 warnings
-    /// carried in `context` are dropped on allow/ask; on `deny` the context is
-    /// folded into the reason (a blocked tool fires no later turn to carry it),
-    /// mirroring the Codex deny path.
+    /// tool-gates emits no `permissionOverrides`: a hook's `permissionOverrides`
+    /// does not suppress the current call's prompt, so it would buy nothing. The
+    /// Antigravity Pre output has no `additionalContext` field, so hints and
+    /// Tier-3 warnings carried in `context` are dropped on allow/ask; on `deny`
+    /// the context is folded into the reason (a blocked tool fires no later turn
+    /// to carry it), mirroring the Codex deny path.
     fn to_antigravity_json(&self) -> serde_json::Value {
-        if self.decision == PermissionDecision::Approve {
-            return serde_json::Value::Null;
-        }
-
+        // A hook can only tighten on Antigravity: agy keeps the strictest of the
+        // hook and native decisions and `allow` is the floor, so tool-gates emits
+        // a decision only when it tightens. Approve (no opinion) and Allow both
+        // emit nothing (empty stdout) and let agy's native engine decide.
+        //
         // Defer collapses to "ask": Antigravity has no equivalent of Claude's
         // resolver-driven prefix-suggestion path, so the end-user experience is
         // the same prompt an ask-tier command already gets. The hard-ask safety
@@ -818,9 +829,9 @@ impl HookOutput {
             PermissionDecision::Deny => "deny",
             PermissionDecision::Ask if self.force => "force_ask",
             PermissionDecision::Defer | PermissionDecision::Ask => "ask",
-            PermissionDecision::Allow => "allow",
-            // Handled by the early return above.
-            PermissionDecision::Approve => return serde_json::Value::Null,
+            PermissionDecision::Approve | PermissionDecision::Allow => {
+                return serde_json::Value::Null;
+            }
         };
 
         let mut out = serde_json::Map::new();
@@ -1860,12 +1871,15 @@ mod tests {
     }
 
     #[test]
-    fn test_antigravity_allow_output() {
+    fn test_antigravity_allow_emits_null() {
+        // A hook allow is inert on agy (allow is the lowest rank), so tool-gates
+        // emits nothing and lets the native engine decide. Prompt-free
+        // allowlisting is via native permissions.allow (tool-gates agy allowlist).
         let value = HookOutput::allow(Some("Read-only")).serialize(Client::Antigravity);
-        assert_eq!(value["decision"], "allow");
-        assert_eq!(value["reason"], "Read-only");
-        assert!(value.get("hookSpecificOutput").is_none());
-        assert!(value.get("permissionDecision").is_none());
+        assert!(
+            value.is_null(),
+            "Antigravity allow must serialize to Null (inert), got: {value}"
+        );
     }
 
     #[test]

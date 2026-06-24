@@ -3,6 +3,22 @@
   <p class="page-lede">Release cadence is fast. Below is a curated set of recent versions and what shipped. Full history at <a href="https://github.com/camjac251/tool-gates/blob/main/CHANGELOG.md" target="_blank" rel="noopener">CHANGELOG.md</a>.</p>
   <div class="config-block">
     <header>
+      <h3>v1.31.0 · June 24, 2026</h3>
+      <span class="src-tag">Antigravity allowlist · release pending</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  tool-gates agy allowlist [--apply]: generate agy's native
+  permissions.allow block for read-only commands</pre>
+      </div>
+      <div class="config-prose">
+        <p>Antigravity resolves a tool call as the strictest of its candidate decisions, so a hook <code>allow</code> is the lowest rank and cannot suppress a prompt agy's own rules would show. The way to stop agy prompting for a read-only command is its native <code>permissions.allow</code> list. <code>tool-gates agy allowlist</code> generates that list from tool-gates' own unconditionally-safe command set, one <code>command(&lt;prog&gt;)</code> rule per program; <code>--apply</code> merges it into <code>~/.gemini/antigravity-cli/settings.json</code>, preserving existing entries and writing a backup first. The hook still gates dangerous forms, so a native <code>command(find)</code> does not let <code>find . -delete</code> through. See the <a href="antigravity.html#allowlist">Antigravity</a> page.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
       <h3>v1.30.0 · June 23, 2026</h3>
       <span class="src-tag">design lint cleanset · <a href="https://github.com/camjac251/tool-gates/commit/2de112f" target="_blank" rel="noopener">2de112f</a></span>
     </header>

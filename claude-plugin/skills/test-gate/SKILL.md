@@ -93,6 +93,8 @@ Empty stdout means no opinion; CC behaves as if no hook fired.
 
 For Gemini CLI (`hook_event_name: "BeforeTool"`), output is flat: `{"decision":"allow|ask|block","reason":"..."}`. Defer maps to `"ask"` since Gemini has no equivalent prefix-suggestion path.
 
+For Antigravity CLI (`--client antigravity`), output is a flat `{"decision","reason"}` object emitted only to tighten: `deny`, `ask`, or `force_ask`. A hook `allow` is inert (agy keeps the strictest of the hook and native decisions and `allow` is the lowest rank), so tool-gates emits nothing for it. Prompt-free safe commands come from agy's native `permissions.allow` (`tool-gates agy allowlist`).
+
 ## Examples
 
 ```
