@@ -46,7 +46,7 @@
   </div>
   <div class="cat">
     <h4>Dev tools (read-only)</h4>
-    <div class="chips-line"><span>tokei</span><span>cloc</span><span>scc</span><span>loc</span><span>token-counter</span><span>jq</span><span>yq</span><span>gron</span><span>fx</span><span>hexdump</span><span>xxd</span><span>base64</span><span>od</span><span>hexyl</span><span>strings</span><span>delta</span><span>difft</span><span>dust</span><span>fselect</span><span>pastel</span><span>numbat</span><span>fzf</span><span>tig</span><span>glow</span><span>jc</span></div>
+    <div class="chips-line"><span>tokei</span><span>cloc</span><span>scc</span><span>loc</span><span>token-counter</span><span>jq</span><span>yq</span><span>gron</span><span>hexdump</span><span>xxd</span><span>base64</span><span>od</span><span>hexyl</span><span>strings</span><span>delta</span><span>difft</span><span>dust</span><span>pastel</span><span>numbat</span><span>fzf</span><span>tig</span><span>glow</span><span>jc</span></div>
   </div>
   <div class="cat">
     <h4>Navigation</h4>

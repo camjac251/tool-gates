@@ -4,7 +4,7 @@
   <div class="config-block">
     <header>
       <h3>v1.31.1 · June 25, 2026</h3>
-      <span class="src-tag">flag gating · release pending</span>
+      <span class="src-tag">flag gating · <a href="https://github.com/camjac251/tool-gates/commit/5ad22a7" target="_blank" rel="noopener">5ad22a7</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
