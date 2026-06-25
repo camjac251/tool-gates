@@ -3,6 +3,25 @@
   <p class="page-lede">Release cadence is fast. Below is a curated set of recent versions and what shipped. Full history at <a href="https://github.com/camjac251/tool-gates/blob/main/CHANGELOG.md" target="_blank" rel="noopener">CHANGELOG.md</a>.</p>
   <div class="config-block">
     <header>
+      <h3>v1.31.1 · June 25, 2026</h3>
+      <span class="src-tag">flag gating · release pending</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec fixed">Fixed</span>
+  gate exec/write flags on otherwise-safe tools:
+  rg --pre / --hostname-bin (code execution), sort -o,
+  find -fprintf, pg_dump -f, gitleaks -r, unrar x,
+  ip / route / ifconfig / arp network mutations
+  drop fx and fselect from the always-safe list</pre>
+      </div>
+      <div class="config-prose">
+        <p>Closes a gap where several read-only tools were auto-allowed regardless of flags that run a program or write a file. <code>rg --pre</code> and <code>--hostname-bin</code> run an external program per file (arbitrary code execution); <code>sort -o</code>, <code>find -fprintf</code>, <code>pg_dump -f</code>, <code>gitleaks -r</code>, and <code>unrar x</code> write or overwrite files; <code>ip</code>/<code>route</code>/<code>ifconfig</code>/<code>arp</code> can change network config. These are the program's own arguments, not pipes or redirects, so the existing shell-construct checks never saw them and the gate returned <code>allow</code> on every client. They now ask, with <code>rg --pre</code> a hard ask in the same tier as pipe-to-shell. <code>fx</code> and <code>fselect</code> leave the always-safe list because their danger lives inside a quoted expression or query the parser can't inspect. Normal usage stays allowed: <code>rg pattern</code>, <code>sort -u</code>, <code>find -print</code>, <code>ip addr show</code>.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
       <h3>v1.31.0 · June 24, 2026</h3>
       <span class="src-tag">Antigravity allowlist · <a href="https://github.com/camjac251/tool-gates/commit/56c3720" target="_blank" rel="noopener">56c3720</a></span>
     </header>
