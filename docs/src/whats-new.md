@@ -4,7 +4,7 @@
   <div class="config-block">
     <header>
       <h3>v1.31.0 · June 24, 2026</h3>
-      <span class="src-tag">Antigravity allowlist · release pending</span>
+      <span class="src-tag">Antigravity allowlist · <a href="https://github.com/camjac251/tool-gates/commit/30055e3" target="_blank" rel="noopener">30055e3</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
