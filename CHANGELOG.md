@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.31.0](https://github.com/camjac251/tool-gates/compare/v1.30.0...v1.31.0) - 2026-06-25
+
+### Added
+
+- *(antigravity)* add native allowlist generator for safe commands
+
+### Other
+
+- rebase release PRs instead of creating merge commits
+- link v1.30.0 whats-new src-tag to its release commit
+
 ## [1.30.0](https://github.com/camjac251/tool-gates/compare/v1.29.0...v1.30.0) - 2026-06-23
 
 ### Added
