@@ -20,7 +20,7 @@ pre-commit:
     # Stage them immediately so they are captured in the commit.
     rules-export:
       run: cargo run -- rules export --format md && git add docs/src/gates/ docs/src/security-floor.md docs/src/hints.md
-      glob: "rules/**/*.toml"
+      glob: "rules/{*,**/*}.toml"
       stage_fixed: true
       priority: 3
     # Then check with clippy
