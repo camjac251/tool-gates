@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.31.1](https://github.com/camjac251/tool-gates/compare/v1.31.0...v1.31.1) - 2026-06-25
+
+### Fixed
+
+- *(router)* gate exec/write flags on otherwise-safe tools
+
+### Other
+
+- add provisional v1.31.1 whats-new entry for flag gating
+- point v1.31.0 whats-new src-tag at the release tag commit
+
 ## [1.31.0](https://github.com/camjac251/tool-gates/compare/v1.30.0...v1.31.0) - 2026-06-25
 
 ### Added
