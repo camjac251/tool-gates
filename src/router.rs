@@ -146,6 +146,55 @@ static FIND_EXEC_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\s-(?:execdir|okdir|exec|ok)\b").expect("FIND_EXEC_RE must compile")
 });
 
+/// find's file-writing actions (`-fprintf`, `-fprint`, `-fprint0`, `-fls`)
+/// write matched output to an arbitrary file. The -exec/-delete checks don't
+/// cover these, so they get their own pattern.
+static FIND_FWRITE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\s-(?:fprintf|fprint0|fprint|fls)\b").expect("FIND_FWRITE_RE must compile")
+});
+
+/// ripgrep's `--pre` / `--pre-glob` / `--hostname-bin` run an external program
+/// (a per-file preprocessor, or a hostname helper). That is arbitrary command
+/// execution through an otherwise read-only tool, so it is a hard ask.
+/// `[^;&|]*` keeps the flag inside the same command segment, so a `--pre` that
+/// belongs to a different command in a pipeline or chain is not attributed here.
+static RG_EXEC_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\b(?:rg|ripgrep)\b[^;&|]*--(?:pre(?:-glob)?|hostname-bin)(?:[=\s]|$)")
+        .expect("RG_EXEC_RE must compile")
+});
+
+/// sort `-o` / `--output` writes (overwrites) the target file.
+static SORT_OUTPUT_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\bsort\b[^;&|]*(?:\s-o(?:[=\s]|$)|--output\b)")
+        .expect("SORT_OUTPUT_RE must compile")
+});
+
+/// pg_dump / pg_dumpall `-f` / `--file` writes (overwrites) the target file.
+static PG_DUMP_FILE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\bpg_dump(?:all)?\b[^;&|]*(?:\s-f(?:[=\s]|$)|--file\b)")
+        .expect("PG_DUMP_FILE_RE must compile")
+});
+
+/// gitleaks `-r` / `--report-path` writes a report to an arbitrary path.
+static GITLEAKS_REPORT_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\bgitleaks\b[^;&|]*(?:\s-r(?:[=\s]|$)|--report-path\b)")
+        .expect("GITLEAKS_REPORT_RE must compile")
+});
+
+/// unrar `x` / `e` extracts archive contents to disk (writes/overwrites files).
+static UNRAR_EXTRACT_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\bunrar\s+(?:x|e)\b").expect("UNRAR_EXTRACT_RE must compile"));
+
+/// Network-configuration mutations through otherwise read-only diagnostics:
+/// `ip ... add|del|set|flush|change|replace`, `route add|del`,
+/// `ifconfig ... up|down|netmask|mtu|promisc|add|del`, `arp -d|-s|-f`.
+static NET_MUTATE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"\bip\b[^;&|]*\b(?:add|del|delete|set|flush|change|replace)\b|\broute\b[^;&|]*\b(?:add|del|delete)\b|\bifconfig\b[^;&|]*\b(?:up|down|netmask|mtu|promisc|add|del)\b|\barp\b[^;&|]*\s-[dsf]\b",
+    )
+    .expect("NET_MUTATE_RE must compile")
+});
+
 /// $() command substitution pattern.
 static DOLLAR_SUBST_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\$\([^)]+\)").expect("DOLLAR_SUBST_RE must compile"));
@@ -1549,6 +1598,14 @@ fn check_raw_string_patterns(command_string: &str) -> (Option<HookOutput>, Optio
                 )),
             );
         }
+        if FIND_FWRITE_RE.is_match(&unquoted) {
+            return (
+                None,
+                Some(HookOutput::ask(
+                    "`find -fprintf`/`-fprint`/`-fls` writes matched output to a file, overwriting it. Verify the target path.",
+                )),
+            );
+        }
     }
 
     // fd with -x/--exec executing dangerous commands
@@ -1592,6 +1649,69 @@ fn check_raw_string_patterns(command_string: &str) -> (Option<HookOutput>, Optio
                 }
             }
         }
+    }
+
+    // ripgrep --pre / --pre-glob / --hostname-bin run an external program
+    // (preprocessor per file, or hostname helper): arbitrary code execution
+    // through a read-only tool. Hard ask, same class as pipe-to-shell: there is
+    // no inspectable command body, so it can't be auto-approved.
+    if RG_EXEC_RE.is_match(&unquoted) {
+        return (
+            Some(HookOutput::ask(
+                "ripgrep `--pre`/`--pre-glob`/`--hostname-bin` run an external program (a per-file preprocessor or a hostname helper), i.e. arbitrary code execution. Run that program directly and inspect it first.",
+            )),
+            None,
+        );
+    }
+
+    // sort -o / --output overwrites the target file (sort is otherwise read-only).
+    if SORT_OUTPUT_RE.is_match(&unquoted) {
+        return (
+            None,
+            Some(HookOutput::ask(
+                "`sort -o`/`--output` overwrites the target file without warning, and the target can be the input file itself. Verify the path.",
+            )),
+        );
+    }
+
+    // pg_dump -f / --file overwrites the target file.
+    if PG_DUMP_FILE_RE.is_match(&unquoted) {
+        return (
+            None,
+            Some(HookOutput::ask(
+                "`pg_dump -f`/`--file` writes the dump to a file and overwrites it. Omit `-f` to send the dump to stdout, or verify the path.",
+            )),
+        );
+    }
+
+    // gitleaks -r / --report-path writes a report to an arbitrary path.
+    if GITLEAKS_REPORT_RE.is_match(&unquoted) {
+        return (
+            None,
+            Some(HookOutput::ask(
+                "`gitleaks -r`/`--report-path` writes a report file to the given path, overwriting it. Verify the destination.",
+            )),
+        );
+    }
+
+    // unrar x / e extracts archive contents to disk (writes/overwrites files).
+    if UNRAR_EXTRACT_RE.is_match(&unquoted) {
+        return (
+            None,
+            Some(HookOutput::ask(
+                "`unrar x`/`e` extracts archive contents to disk and can overwrite files. Use `unrar l` to list without extracting, or verify the destination.",
+            )),
+        );
+    }
+
+    // ip/route/ifconfig/arp mutating the network configuration.
+    if NET_MUTATE_RE.is_match(&unquoted) {
+        return (
+            None,
+            Some(HookOutput::ask(
+                "Network configuration change (`ip/route ... add|del|set`, `ifconfig ... up|down`, `arp -d|-s`). Verify the interface and values; routing and interface changes can disrupt connectivity.",
+            )),
+        );
     }
 
     // Command substitution with dangerous commands
@@ -5130,6 +5250,140 @@ run = "mytool42 verify"
                 let result = check_command(cmd);
                 assert_eq!(get_decision(&result), "ask", "Failed for: {cmd}");
                 assert!(get_reason(&result).contains("find"), "Failed for: {cmd}");
+            }
+        }
+
+        #[test]
+        fn test_rg_pre_hostname_exec() {
+            // ripgrep --pre / --pre-glob / --hostname-bin run an external
+            // program = arbitrary code execution. Hard ask.
+            for cmd in [
+                "rg --pre sh foo .",
+                "rg --pre=/tmp/x.sh foo .",
+                "rg --pre-glob '*.gz' --pre zcat foo .",
+                "rg --hostname-bin /tmp/evil foo .",
+                "ripgrep --pre sh foo .",
+            ] {
+                let result = check_command(cmd);
+                assert_eq!(get_decision(&result), "ask", "Failed for: {cmd}");
+                assert!(get_reason(&result).contains("ripgrep"), "Failed for: {cmd}");
+            }
+        }
+
+        #[test]
+        fn test_rg_safe_flags_still_allow() {
+            // Normal ripgrep usage must not trip the --pre detector. `--pretty`
+            // in particular shares the `--pre` prefix but is read-only.
+            for cmd in [
+                "rg pattern src/",
+                "rg -n --hidden foo .",
+                "rg -z foo .",
+                "rg --pretty foo .",
+            ] {
+                let result = check_command(cmd);
+                assert_eq!(get_decision(&result), "allow", "Failed for: {cmd}");
+            }
+        }
+
+        #[test]
+        fn test_sort_output_write() {
+            for cmd in [
+                "sort -o out.txt in.txt",
+                "sort --output=out.txt in.txt",
+                "sort in.txt -o in.txt",
+            ] {
+                let result = check_command(cmd);
+                assert_eq!(get_decision(&result), "ask", "Failed for: {cmd}");
+                assert!(get_reason(&result).contains("sort"), "Failed for: {cmd}");
+            }
+            for cmd in ["sort -u file.txt", "sort file.txt", "sort -rn data"] {
+                let result = check_command(cmd);
+                assert_eq!(get_decision(&result), "allow", "Failed for: {cmd}");
+            }
+        }
+
+        #[test]
+        fn test_find_fwrite() {
+            for cmd in [
+                "find . -fprintf /tmp/out %p",
+                "find . -fprint /tmp/out",
+                "find . -fprint0 /tmp/out",
+                "find . -fls /tmp/out",
+            ] {
+                let result = check_command(cmd);
+                assert_eq!(get_decision(&result), "ask", "Failed for: {cmd}");
+                assert!(get_reason(&result).contains("find"), "Failed for: {cmd}");
+            }
+            // -print is read-only and must not trip the -fprint write detector.
+            let result = check_command("find . -name '*.py' -print");
+            assert_eq!(get_decision(&result), "allow");
+        }
+
+        #[test]
+        fn test_pg_dump_file_write() {
+            for cmd in [
+                "pg_dump -f dump.sql mydb",
+                "pg_dump --file=dump.sql mydb",
+                "pg_dumpall -f all.sql",
+            ] {
+                let result = check_command(cmd);
+                assert_eq!(get_decision(&result), "ask", "Failed for: {cmd}");
+                assert!(get_reason(&result).contains("pg_dump"), "Failed for: {cmd}");
+            }
+            let result = check_command("pg_dump mydb");
+            assert_eq!(get_decision(&result), "allow");
+        }
+
+        #[test]
+        fn test_gitleaks_report_write() {
+            let result = check_command("gitleaks detect -r /tmp/report.json");
+            assert_eq!(get_decision(&result), "ask");
+            assert!(get_reason(&result).contains("gitleaks"));
+            let result = check_command("gitleaks detect --report-path=/tmp/r.json");
+            assert_eq!(get_decision(&result), "ask");
+            let result = check_command("gitleaks detect");
+            assert_eq!(get_decision(&result), "allow");
+        }
+
+        #[test]
+        fn test_unrar_extract_write() {
+            for cmd in ["unrar x archive.rar", "unrar e archive.rar /tmp/"] {
+                let result = check_command(cmd);
+                assert_eq!(get_decision(&result), "ask", "Failed for: {cmd}");
+                assert!(get_reason(&result).contains("unrar"), "Failed for: {cmd}");
+            }
+            let result = check_command("unrar l archive.rar");
+            assert_eq!(get_decision(&result), "allow");
+        }
+
+        #[test]
+        fn test_net_config_mutate() {
+            for cmd in [
+                "ip link set eth0 down",
+                "ip addr add 10.0.0.1/24 dev eth0",
+                "ip route add default via 1.2.3.4",
+                "route add default gw 1.2.3.4",
+                "ifconfig eth0 down",
+                "ifconfig eth0 netmask 255.255.255.0",
+                "arp -d 1.2.3.4",
+                "arp -s host 00:11:22:33:44:55",
+            ] {
+                let result = check_command(cmd);
+                assert_eq!(get_decision(&result), "ask", "Failed for: {cmd}");
+                assert!(get_reason(&result).contains("Network"), "Failed for: {cmd}");
+            }
+            // Read-only network diagnostics stay allow. `ip addr show` is the
+            // key case: `addr` must not match the `add` verb (word boundary).
+            for cmd in [
+                "ip addr show",
+                "ip route show",
+                "route -n",
+                "arp -a",
+                "ifconfig eth0",
+                "ifconfig -a",
+            ] {
+                let result = check_command(cmd);
+                assert_eq!(get_decision(&result), "allow", "Failed for: {cmd}");
             }
         }
 
