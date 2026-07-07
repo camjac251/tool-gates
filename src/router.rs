@@ -104,17 +104,18 @@ static PIPE_SOFT_PATTERNS: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new(
     .collect()
 });
 
-/// eval pattern (hard ask).
+/// eval pattern (hard ask). Newline and carriage return are valid bash command
+/// separators, so they are in the boundary class alongside `;`, `&`, `|`.
 static EVAL_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(^|[;&|])\s*eval\s").expect("EVAL_RE must compile"));
+    LazyLock::new(|| Regex::new(r"(^|[;&|\n\r])\s*eval\s").expect("EVAL_RE must compile"));
 
 /// source command pattern (soft ask).
 static SOURCE_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(^|[;&|])\s*source\s+\S").expect("SOURCE_RE must compile"));
+    LazyLock::new(|| Regex::new(r"(^|[;&|\n\r])\s*source\s+\S").expect("SOURCE_RE must compile"));
 
 /// dot-source command pattern (soft ask).
 static DOT_SOURCE_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(^|[;&|])\s*\.\s+[^.]").expect("DOT_SOURCE_RE must compile"));
+    LazyLock::new(|| Regex::new(r"(^|[;&|\n\r])\s*\.\s+[^.]").expect("DOT_SOURCE_RE must compile"));
 
 /// xargs with dangerous commands (soft ask). Each entry: (compiled regex, command name for message).
 static XARGS_DANGEROUS_PATTERNS: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new(|| {
@@ -6049,6 +6050,54 @@ run = "mytool42 verify"
                     "Auto mode should deny eval: {cmd}"
                 );
             }
+        }
+
+        #[test]
+        fn test_eval_after_newline_is_caught() {
+            // Newline is a valid bash command separator; eval on a second line
+            // must hit the hard-ask floor the same as `; eval`.
+            let result = check_command("echo hi\neval \"$X\"");
+            assert_eq!(
+                get_decision(&result),
+                "ask",
+                "newline-separated eval must be caught"
+            );
+            assert!(get_reason(&result).to_lowercase().contains("eval"));
+        }
+
+        #[test]
+        fn test_eval_after_newline_denies_under_auto_mode() {
+            let result = check_command_with_settings("echo hi\neval \"$X\"", "/tmp", "auto");
+            assert_eq!(
+                get_decision(&result),
+                "deny",
+                "newline-separated eval must deny under auto mode"
+            );
+        }
+
+        #[test]
+        fn test_eval_substring_not_flagged_under_auto() {
+            // Over-match guard: `evaluate` must not trip the eval floor. Under
+            // auto mode a real eval hard-ask promotes to deny, so a false match
+            // would surface as a deny here.
+            let result = check_command_with_settings("echo evaluate results", "/tmp", "auto");
+            assert_ne!(
+                get_decision(&result),
+                "deny",
+                "eval must not match inside another word"
+            );
+        }
+
+        #[test]
+        fn test_source_after_newline_is_caught() {
+            // Newline-separated source must hit the soft-ask floor like `; source`.
+            let result = check_command("echo hi\nsource ./setup.sh");
+            assert_eq!(
+                get_decision(&result),
+                "ask",
+                "newline-separated source must be caught"
+            );
+            assert!(get_reason(&result).to_lowercase().contains("sourc"));
         }
 
         #[test]
