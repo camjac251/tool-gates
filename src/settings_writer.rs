@@ -147,11 +147,20 @@ where
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
 
-    // Parse (or default if empty/invalid)
+    // Parse. An empty file is a fresh settings file. A non-empty file that fails
+    // to parse must NOT be overwritten: returning an error here leaves the file
+    // intact (truncation happens further down) instead of silently replacing the
+    // user's hooks/env/permissions with `{}` plus the new rule. Mirrors the
+    // installer's fail-closed policy.
     let mut settings: Value = if contents.is_empty() {
         json!({})
     } else {
-        serde_json::from_str(&contents).unwrap_or_else(|_| json!({}))
+        serde_json::from_str(&contents).map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("{} is not valid JSON: {e}", path.display()),
+            )
+        })?
     };
 
     // Execute the modification function
@@ -423,6 +432,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_user_scope_respects_config_dir_env() {
         let temp_dir = TempDir::new().unwrap();
         let custom_path = temp_dir.path().to_string_lossy().to_string();
@@ -435,6 +445,98 @@ mod tests {
         assert!(path.ends_with("settings.json"));
 
         // Clean up
+        unsafe { std::env::remove_var("CLAUDE_CONFIG_DIR") };
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn add_rule_round_trips_to_user_settings() {
+        let temp = TempDir::new().unwrap();
+        // SAFETY: serialized with other env-mutating tests via serial.
+        unsafe { std::env::set_var("CLAUDE_CONFIG_DIR", temp.path()) };
+
+        add_rule(Scope::User, "git status:*", RuleType::Allow).unwrap();
+
+        let path = temp.path().join("settings.json");
+        let v: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        let allow = v["permissions"]["allow"].as_array().unwrap();
+        assert!(allow.iter().any(|r| r == "Bash(git status:*)"));
+
+        unsafe { std::env::remove_var("CLAUDE_CONFIG_DIR") };
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn add_rule_preserves_unrelated_config_and_dedups_across_types() {
+        let temp = TempDir::new().unwrap();
+        unsafe { std::env::set_var("CLAUDE_CONFIG_DIR", temp.path()) };
+        let path = temp.path().join("settings.json");
+
+        // Seed a valid file with an unrelated key and the pattern already in ask.
+        fs::write(
+            &path,
+            r#"{"env":{"FOO":"bar"},"permissions":{"ask":["Bash(deploy:*)"]}}"#,
+        )
+        .unwrap();
+
+        add_rule(Scope::User, "deploy:*", RuleType::Allow).unwrap();
+
+        let v: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(v["env"]["FOO"], "bar"); // unrelated config preserved
+        let ask = v["permissions"]["ask"].as_array().unwrap();
+        assert!(!ask.iter().any(|r| r == "Bash(deploy:*)")); // moved out of ask
+        let allow = v["permissions"]["allow"].as_array().unwrap();
+        assert!(allow.iter().any(|r| r == "Bash(deploy:*)")); // into allow
+
+        unsafe { std::env::remove_var("CLAUDE_CONFIG_DIR") };
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn add_rule_does_not_wipe_an_unparseable_settings_file() {
+        let temp = TempDir::new().unwrap();
+        unsafe { std::env::set_var("CLAUDE_CONFIG_DIR", temp.path()) };
+        let path = temp.path().join("settings.json");
+
+        // A settings file the user hand-edited into an invalid state.
+        let original = "{ \"permissions\": { \"allow\": [ } broken";
+        fs::write(&path, original).unwrap();
+
+        // Must fail closed, leaving the original bytes intact.
+        let result = add_rule(Scope::User, "git status:*", RuleType::Allow);
+        assert!(
+            result.is_err(),
+            "an invalid settings.json must not be silently overwritten"
+        );
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            original,
+            "the original (invalid) file must be preserved on failure"
+        );
+
+        unsafe { std::env::remove_var("CLAUDE_CONFIG_DIR") };
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn add_rule_creates_a_fresh_settings_file_when_absent() {
+        let temp = TempDir::new().unwrap();
+        unsafe { std::env::set_var("CLAUDE_CONFIG_DIR", temp.path()) };
+
+        // No settings.json exists yet.
+        add_rule(Scope::User, "ls:*", RuleType::Allow).unwrap();
+
+        let path = temp.path().join("settings.json");
+        assert!(path.exists());
+        let v: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert!(
+            v["permissions"]["allow"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|r| r == "Bash(ls:*)")
+        );
+
         unsafe { std::env::remove_var("CLAUDE_CONFIG_DIR") };
     }
 }
