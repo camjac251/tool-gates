@@ -58,3 +58,45 @@ pub static GATES: &[(&str, GateCheckFn)] = &[
     ("shortcut", check_shortcut),
     ("basics", check_basics),
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn basics_gate_runs_last() {
+        assert_eq!(
+            GATES.last().map(|(name, _)| *name),
+            Some("basics"),
+            "basics must be the final gate (catch-all for safe commands)"
+        );
+    }
+
+    #[test]
+    fn every_rules_toml_has_a_registered_gate() {
+        // The gate registry key is the rules file STEM: build.rs generates
+        // check_<stem>_gate and GATES lists <stem>. ([meta].name is a
+        // human-readable display label, not the key.) Guards the "added
+        // rules/<x>.toml but forgot to register check_<x> in GATES" failure,
+        // which otherwise silently falls through to skip.
+        let manifest = env!("CARGO_MANIFEST_DIR");
+        let rules_dir = std::path::Path::new(manifest).join("rules");
+        let registered: std::collections::HashSet<&str> =
+            GATES.iter().map(|(name, _)| *name).collect();
+
+        for entry in std::fs::read_dir(&rules_dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().and_then(|e| e.to_str()) != Some("toml") {
+                continue;
+            }
+            let stem = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or_else(|| panic!("{}: non-utf8 filename", path.display()));
+            assert!(
+                registered.contains(stem),
+                "rules/{stem}.toml has no registered gate in GATES",
+            );
+        }
+    }
+}
