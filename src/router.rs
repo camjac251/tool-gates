@@ -1457,7 +1457,12 @@ fn check_head_tail_pipe(command_string: &str) -> Option<HookOutput> {
     for cap in SED_AWK_TRUNC_RE.find_iter(&stripped) {
         let offset = cap.start();
         let end = cap.end().min(unquoted.len());
-        let unquoted_span = &unquoted[offset..end];
+        // `cap` was found in `stripped`; `strip_quoted_strings` is char- but not
+        // byte-length preserving, so a multibyte char inside quotes shifts these
+        // offsets away from `unquoted`. Skip the cap instead of panicking.
+        let Some(unquoted_span) = unquoted.get(offset..end) else {
+            continue;
+        };
         if !unquoted_span.contains("sed") && !unquoted_span.contains("awk") {
             continue; // keyword was inside a quote: literal text, not a pipe
             // stage
@@ -1482,6 +1487,13 @@ fn check_head_tail_pipe(command_string: &str) -> Option<HookOutput> {
     // filter does not match RG_COUNTER_RE, so legitimate filtering passes.
     for cap in RG_COUNTER_RE.find_iter(&stripped) {
         let offset = cap.start();
+        // Offset is from `stripped`; skip if it does not map to a valid char
+        // boundary in `unquoted` (multibyte-in-quotes divergence).
+        // `is_char_boundary` returns false for any index past the end, so this
+        // also bounds it.
+        if !unquoted.is_char_boundary(offset) {
+            continue;
+        }
         if inside_command_substitution(&unquoted, offset) {
             continue;
         }
@@ -5520,6 +5532,37 @@ run = "mytool42 verify"
                     get_reason(&result)
                 );
             }
+        }
+
+        #[test]
+        fn test_head_tail_multibyte_quoted_does_not_panic() {
+            // Regression: strip_quoted_strings is char- but not byte-length
+            // preserving, so a multibyte char inside quotes used to make the
+            // sed/awk and rg backstops slice `unquoted` out of bounds and abort
+            // the process. These must yield a decision without panicking.
+            for cmd in [
+                "echo '\u{20ac}\u{20ac}\u{20ac}\u{20ac}\u{20ac}\u{20ac}\u{20ac}\u{20ac}\u{20ac}\u{20ac}' | sed -n '1,2p'",
+                "echo '\u{20ac}\u{20ac}\u{20ac}\u{20ac}\u{20ac}' | rg .",
+                "echo 'caf\u{e9} r\u{e9}sum\u{e9}' | awk 'NR<=5'",
+            ] {
+                let result = check_command(cmd);
+                assert!(
+                    !get_decision(&result).is_empty(),
+                    "multibyte command must yield a decision, not panic: {cmd}"
+                );
+            }
+        }
+
+        #[test]
+        fn test_head_tail_ascii_sed_trunc_still_denies() {
+            // Guard against over-correcting: the ASCII truncation pipe must still
+            // hard-deny after the multibyte offset guards were added.
+            let result = check_command("echo hi | sed -n '1,2p'");
+            assert_eq!(
+                get_decision(&result),
+                "deny",
+                "ASCII sed truncation should still deny"
+            );
         }
 
         #[test]
