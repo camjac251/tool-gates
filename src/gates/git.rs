@@ -113,6 +113,14 @@ fn extract_subcommand(args: &[String]) -> Option<(usize, &str)> {
 
 /// Check git command.
 pub fn check_git(cmd: &CommandInfo) -> GateResult {
+    // Non-git commands never resolve an alias and never match a git rule. Skip
+    // here, before consulting config or forcing the GLOBAL_ALIASES LazyLock
+    // (which spawns `git config --global`), so no subprocess runs on the vast
+    // majority of Bash calls, which are not git.
+    if cmd.program != "git" {
+        return GateResult::skip();
+    }
+
     let config = crate::config::get();
     if !config.features.git_aliases {
         // Alias resolution disabled. Empty map -> no alias ever resolves;
@@ -257,6 +265,15 @@ mod tests {
 
     fn cmd(args: &[&str]) -> CommandInfo {
         make_cmd("git", args)
+    }
+
+    #[test]
+    fn non_git_command_skips_without_alias_lookup() {
+        // A non-git command must skip the git gate. The early return also keeps
+        // the alias-map subprocess (git config --global) from being forced on
+        // non-git Bash calls.
+        let result = check_git(&make_cmd("cargo", &["check"]));
+        assert_eq!(result.decision, Decision::Skip);
     }
 
     // === Read Commands ===
