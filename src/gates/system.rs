@@ -18,8 +18,9 @@ use crate::generated::rules::{
     check_mvn_declarative, check_mysql_declarative, check_ninja_declarative,
     check_openssl_declarative, check_pacman_declarative, check_pactl_declarative,
     check_pg_dump_declarative, check_pg_restore_declarative, check_pkill_declarative,
-    check_psql_declarative, check_ssh_keygen_declarative, check_systemctl_declarative,
-    check_task_declarative, check_vagrant_declarative, check_xkill_declarative,
+    check_psql_declarative, check_ssh_keygen_declarative, check_system_gate,
+    check_systemctl_declarative, check_task_declarative, check_vagrant_declarative,
+    check_xkill_declarative,
 };
 use crate::models::{CommandInfo, Decision, GateResult};
 
@@ -143,7 +144,13 @@ pub fn check_system(cmd: &CommandInfo) -> GateResult {
         "age" | "age-keygen" => check_age_declarative(cmd)
             .unwrap_or_else(|| GateResult::ask("age: Encrypting/decrypting")),
 
-        _ => GateResult::skip(),
+        // Programs system.toml declares but that have no custom arm above
+        // (e.g. the unknown_action = "block" destructive set) are routed
+        // through the generated dispatcher so their TOML decision actually
+        // fires instead of silently degrading to an unknown-command ask.
+        // check_system_gate returns Skip for programs the TOML does not
+        // declare, so genuinely-unknown commands still fall through.
+        _ => check_system_gate(cmd),
     }
 }
 
@@ -657,5 +664,68 @@ mod tests {
     fn test_non_system_skips() {
         let result = check_system(&cmd("git", &["status"]));
         assert_eq!(result.decision, Decision::Skip);
+    }
+
+    // === Reachability invariant ===
+
+    #[test]
+    fn every_system_toml_program_is_reachable() {
+        // Guards the class of bug where system.toml declares a program (with a
+        // real decision) but check_system has no arm for it, so the declaration
+        // silently degrades to an unknown-command ask. Every declared program
+        // must resolve to a real gate decision, never Skip.
+        use crate::generated::rules::SYSTEM_PROGRAMS;
+        for prog in SYSTEM_PROGRAMS {
+            let result = check_system(&cmd(prog, &[]));
+            assert_ne!(
+                result.decision,
+                Decision::Skip,
+                "system.toml declares `{prog}` but check_system skips it \
+                 (it will silently degrade to an unknown-command ask)"
+            );
+        }
+    }
+
+    #[test]
+    fn destructive_system_programs_block_when_run_bare() {
+        // The unknown_action = "block" set must actually block, not ask.
+        let blocked = [
+            "shred",
+            "wipe",
+            "wipefs",
+            "mke2fs",
+            "mkswap",
+            "hdparm",
+            "insmod",
+            "rmmod",
+            "modprobe",
+            "grub-install",
+            "update-grub",
+            "useradd",
+            "userdel",
+            "usermod",
+            "passwd",
+            "chsh",
+            "iptables",
+            "ufw",
+            "firewall-cmd",
+            "chattr",
+            "umount",
+            "swapon",
+            "swapoff",
+            "lvremove",
+            "vgremove",
+            "pvremove",
+        ];
+        for prog in blocked {
+            let result = check_system(&cmd(prog, &[]));
+            assert_eq!(
+                result.decision,
+                Decision::Block,
+                "`{prog}` is declared unknown_action = block in system.toml but \
+                 check_system returned {:?}",
+                result.decision
+            );
+        }
     }
 }
