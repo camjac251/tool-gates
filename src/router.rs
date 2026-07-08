@@ -25,7 +25,7 @@ use crate::task_expansion::{check_mise_task, check_package_script};
 // gates/helpers.rs, lib.rs) keep resolving `crate::router::*` paths.
 pub use crate::gates::check_single_command;
 pub(crate) use crate::paths::is_under_any_dir;
-pub use crate::scratch::{is_under_scratch, is_under_scratch_with_vars};
+pub use crate::scratch::{claude_scratchpad_root, is_under_scratch, is_under_scratch_with_vars};
 #[cfg(feature = "wasm")]
 pub use crate::sim::decide_instrumented;
 

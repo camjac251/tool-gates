@@ -1815,6 +1815,7 @@ dependencies = [
  "crossterm",
  "dirs",
  "fs2",
+ "libc",
  "prettyplease",
  "proptest",
  "ratatui",

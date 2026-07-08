@@ -12,13 +12,30 @@ fn bin_path() -> &'static str {
 }
 
 /// Spawn the binary with `XDG_CONFIG_HOME` (no config) and `TOOL_GATES_SCRATCH`
-/// pointed at `scratch`, feed `stdin_json`, return stdout.
+/// pointed at `scratch`, feed `stdin_json`, return stdout. `session` pins
+/// `CLAUDE_CODE_SESSION_ID` in the child env; `None` removes it, so results
+/// stay deterministic even when the test itself runs inside a Claude session.
 fn run(stdin_json: &str, xdg: &std::path::Path, scratch: &std::path::Path) -> String {
-    let mut child = Command::new(bin_path())
+    run_with_session(stdin_json, xdg, scratch, None)
+}
+
+fn run_with_session(
+    stdin_json: &str,
+    xdg: &std::path::Path,
+    scratch: &std::path::Path,
+    session: Option<&str>,
+) -> String {
+    let mut command = Command::new(bin_path());
+    command
         .env("XDG_CONFIG_HOME", xdg)
         .env("TOOL_GATES_SCRATCH", scratch)
         .env_remove("CLAUDE_PROJECT_DIR")
-        .env_remove("GEMINI_PROJECT_DIR")
+        .env_remove("GEMINI_PROJECT_DIR");
+    match session {
+        Some(sid) => command.env("CLAUDE_CODE_SESSION_ID", sid),
+        None => command.env_remove("CLAUDE_CODE_SESSION_ID"),
+    };
+    let mut child = command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -80,5 +97,83 @@ fn write_under_scratch_in_plan_mode_does_not_allow() {
     assert!(
         !out.contains("\"permissionDecision\":\"allow\""),
         "plan mode must not auto-allow scratch writes, got: {out}"
+    );
+}
+
+// === Claude Code native session scratchpad ===
+
+const SID: &str = "01234567-89ab-cdef-0123-456789abcdef";
+
+fn claude_pad() -> String {
+    format!(
+        "{}/-home-u-proj/{SID}/scratchpad",
+        tool_gates::router::claude_scratchpad_root().display()
+    )
+}
+
+#[test]
+fn write_under_claude_scratchpad_auto_allows() {
+    let xdg = tempfile::tempdir().expect("xdg");
+    let scratch = tempfile::tempdir().expect("scratch");
+    let target = format!("{}/note.txt", claude_pad());
+    let out = run_with_session(
+        &write_payload(&target, "default"),
+        xdg.path(),
+        scratch.path(),
+        Some(SID),
+    );
+    assert!(
+        out.contains("\"permissionDecision\":\"allow\""),
+        "write under the session scratchpad should allow, got: {out}"
+    );
+}
+
+#[test]
+fn write_under_claude_scratchpad_wrong_session_does_not_allow() {
+    let xdg = tempfile::tempdir().expect("xdg");
+    let scratch = tempfile::tempdir().expect("scratch");
+    let target = format!("{}/note.txt", claude_pad());
+    let out = run_with_session(
+        &write_payload(&target, "default"),
+        xdg.path(),
+        scratch.path(),
+        Some("99999999-89ab-cdef-0123-456789abcdef"),
+    );
+    assert!(
+        !out.contains("\"permissionDecision\":\"allow\""),
+        "another session's scratchpad must not auto-allow, got: {out}"
+    );
+}
+
+#[test]
+fn write_under_claude_scratchpad_without_session_does_not_allow() {
+    let xdg = tempfile::tempdir().expect("xdg");
+    let scratch = tempfile::tempdir().expect("scratch");
+    let target = format!("{}/note.txt", claude_pad());
+    let out = run(
+        &write_payload(&target, "default"),
+        xdg.path(),
+        scratch.path(),
+    );
+    assert!(
+        !out.contains("\"permissionDecision\":\"allow\""),
+        "no session id in the env must leave the scratchpad root inert, got: {out}"
+    );
+}
+
+#[test]
+fn write_under_claude_scratchpad_in_plan_mode_does_not_allow() {
+    let xdg = tempfile::tempdir().expect("xdg");
+    let scratch = tempfile::tempdir().expect("scratch");
+    let target = format!("{}/note.txt", claude_pad());
+    let out = run_with_session(
+        &write_payload(&target, "plan"),
+        xdg.path(),
+        scratch.path(),
+        Some(SID),
+    );
+    assert!(
+        !out.contains("\"permissionDecision\":\"allow\""),
+        "plan mode must not auto-allow scratchpad writes, got: {out}"
     );
 }

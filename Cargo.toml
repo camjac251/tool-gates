@@ -64,6 +64,14 @@ uuid = { version = "1", features = ["v4"] }
 ratatui = "0.30"
 crossterm = "0.29"
 
+[target.'cfg(unix)'.dependencies]
+# Process uid, for locating the per-user Claude Code scratchpad tree under the
+# system temp dir (`claude-<uid>`). The scratchpad matcher is unix-only today
+# (Windows backslash paths never match its `/` separators), and
+# wasm32-unknown-unknown is not unix, so the docs-site artifact's dependency
+# graph stays clean.
+libc = "0.2"
+
 [features]
 schemars = ["dep:schemars"]
 wasm = ["dep:wasm-bindgen", "dep:serde-wasm-bindgen"]

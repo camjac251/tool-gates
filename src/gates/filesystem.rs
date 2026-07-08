@@ -420,6 +420,75 @@ mod tests {
         }
     }
 
+    #[serial_test::serial]
+    #[test]
+    fn test_filesystem_claude_scratchpad_auto_allow() {
+        let sid = "01234567-89ab-cdef-0123-456789abcdef";
+        let saved_scratch = std::env::var("TOOL_GATES_SCRATCH").ok();
+        let saved_sid = std::env::var("CLAUDE_CODE_SESSION_ID").ok();
+        // SAFETY: serialized via #[serial], so no concurrent env access.
+        unsafe {
+            std::env::set_var("TOOL_GATES_SCRATCH", "/tmp/cc-scratch-test");
+            std::env::set_var("CLAUDE_CODE_SESSION_ID", sid);
+        }
+
+        let root = crate::router::claude_scratchpad_root()
+            .to_string_lossy()
+            .into_owned();
+        let pad = format!("{root}/-home-u-proj/{sid}/scratchpad");
+
+        // mkdir / touch / cp / tee into the session scratchpad -> allow.
+        for c in [
+            cmd("mkdir", &["-p", &format!("{pad}/sub")]),
+            cmd("touch", &[&format!("{pad}/note.txt")]),
+            cmd("cp", &["/etc/hosts", &format!("{pad}/hosts")]),
+            cmd("tee", &[&format!("{pad}/log")]),
+        ] {
+            assert_eq!(
+                check_filesystem(&c).decision,
+                Decision::Allow,
+                "claude scratchpad target should auto-allow: {} {:?}",
+                c.program,
+                c.args
+            );
+        }
+
+        // The tasks/ sibling, another session's scratchpad, and a `..` escape
+        // all stay on the ask path.
+        for c in [
+            cmd(
+                "mkdir",
+                &["-p", &format!("{root}/-home-u-proj/{sid}/tasks/x")],
+            ),
+            cmd(
+                "touch",
+                &[&format!(
+                    "{root}/-home-u-proj/99999999-89ab-cdef-0123-456789abcdef/scratchpad/f"
+                )],
+            ),
+            cmd("mkdir", &["-p", &format!("{pad}/../../../../escape")]),
+        ] {
+            assert_eq!(
+                check_filesystem(&c).decision,
+                Decision::Ask,
+                "outside the session scratchpad should ask: {} {:?}",
+                c.program,
+                c.args
+            );
+        }
+
+        unsafe {
+            match saved_scratch {
+                Some(v) => std::env::set_var("TOOL_GATES_SCRATCH", v),
+                None => std::env::remove_var("TOOL_GATES_SCRATCH"),
+            }
+            match saved_sid {
+                Some(v) => std::env::set_var("CLAUDE_CODE_SESSION_ID", v),
+                None => std::env::remove_var("CLAUDE_CODE_SESSION_ID"),
+            }
+        }
+    }
+
     // === rm ===
 
     #[test]

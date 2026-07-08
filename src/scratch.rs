@@ -74,11 +74,16 @@ pub fn scratch_base() -> Option<String> {
     Some(normalized)
 }
 
-/// True when `path` resolves under the session scratch base directory.
+/// True when `path` resolves under one of the two recognized scratch roots:
+/// the `$TOOL_GATES_SCRATCH` base (any client), or the current Claude Code
+/// session's native scratchpad under the system temp dir (see
+/// `is_claude_session_scratchpad`).
 ///
 /// Accepts the surface forms an agent actually produces, since tool-gates does
 /// not expand arbitrary environment variables out of a raw command string:
-/// - the literal `$TOOL_GATES_SCRATCH/...` / `${TOOL_GATES_SCRATCH}/...` token,
+/// - the literal `$TOOL_GATES_SCRATCH/...` / `${TOOL_GATES_SCRATCH}/...` token
+///   (only while the env var is set; unset, the shell expands the token to
+///   nothing, so the gate refuses to substitute its internal default),
 /// - the `~/.cache/tool-gates-scratch/...` tilde form,
 /// - an already-absolute path,
 /// - the canonical scratchpad convention tokens `${PWD//\//-}` and
@@ -98,15 +103,21 @@ pub fn scratch_base() -> Option<String> {
 /// unresolved expansion is never reported as scratch; normal gating prompts
 /// instead.
 pub fn is_under_scratch(path: &str) -> bool {
-    let Some(base) = scratch_base() else {
-        return false;
-    };
+    let base = scratch_base();
     // Substitute the literal TOOL_GATES_SCRATCH token (braced first) before the
-    // generic ~/$HOME expansion: the agent's env sets it, but the gate only ever
-    // sees the unexpanded token in a command string.
-    let substituted = path
-        .replace("${TOOL_GATES_SCRATCH}", &base)
-        .replace("$TOOL_GATES_SCRATCH", &base);
+    // generic ~/$HOME expansion, and only while the env var is actually set:
+    // the shell expands the token from the same env, so with it unset the
+    // shell produces "" while the internal default base would still
+    // prefix-match here and auto-allow a write the shell sends somewhere
+    // else. Left literal, the token is rejected by the residual guard below.
+    // An unresolvable base (None) gets the same treatment.
+    let token_env_set = std::env::var("TOOL_GATES_SCRATCH").is_ok_and(|v| !v.trim().is_empty());
+    let substituted = match base.as_deref() {
+        Some(base) if token_env_set => path
+            .replace("${TOOL_GATES_SCRATCH}", base)
+            .replace("$TOOL_GATES_SCRATCH", base),
+        _ => path.to_string(),
+    };
     // Resolve the scratch-convention tokens to the same values the shell will:
     // the gate's own environment carries the session id the Bash subprocess
     // expands `$CLAUDE_CODE_SESSION_ID` to, and `${PWD//\//-}` is traversal-safe
@@ -120,7 +131,106 @@ pub fn is_under_scratch(path: &str) -> bool {
         return false;
     }
     let resolved = resolve_path(&expanded);
-    is_under_any_dir(&resolved, std::slice::from_ref(&base))
+    if let Some(base) = &base {
+        if is_under_any_dir(&resolved, std::slice::from_ref(base)) {
+            return true;
+        }
+    }
+    is_claude_session_scratchpad(&resolved)
+}
+
+/// True when `resolved` (already substituted, expansion-guarded, and
+/// canonicalized by `is_under_scratch`) targets the current session's Claude
+/// Code scratchpad: `<tmpdir>/claude-<uid>/<project-segment>/<session-id>/scratchpad[/...]`.
+///
+/// Claude Code creates that directory at session start and hands the agent
+/// the literal path in its system prompt, but its own auto-allow covers only
+/// the file-tool read/write resolvers; Bash writes into it (redirects, mkdir,
+/// tee, cp) would prompt without this check.
+///
+/// `<project-segment>` encodes the session's launch directory, which can
+/// differ from any cwd the gate sees (worktrees, `cd`), and its over-length
+/// form carries a hash suffix the gate cannot reproduce. So that segment is
+/// matched structurally: exactly one path component of the sanitized alphabet
+/// `[A-Za-z0-9-]`. The binding that scopes the match to this session is the
+/// `<session-id>` component, which must equal the gate's own
+/// `CLAUDE_CODE_SESSION_ID` (the same trusted env source the convention-token
+/// resolver uses; for a Bash command the gate and the shell share that env).
+/// Other clients never set the variable, so this root is inert for them.
+/// Every failure mode falls through to a normal prompt, never to an
+/// over-allow.
+fn is_claude_session_scratchpad(resolved: &str) -> bool {
+    // Session-id gate first: absent or non-UUID means this is not a Claude
+    // session. Checking it before touching the filesystem also keeps targets
+    // without an OS temp dir (wasm) from reaching temp_dir(), which panics
+    // there.
+    let Ok(session_id) = std::env::var("CLAUDE_CODE_SESSION_ID") else {
+        return false;
+    };
+    if !is_uuid_shaped(&session_id) {
+        return false;
+    }
+    let root = claude_scratchpad_root();
+    let root = root.to_string_lossy();
+    let Some(rest) = resolved
+        .strip_prefix(root.as_ref())
+        .and_then(|r| r.strip_prefix('/'))
+    else {
+        return false;
+    };
+    let mut parts = rest.split('/');
+    let project_segment_ok = parts.next().is_some_and(|seg| {
+        !seg.is_empty() && seg.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+    });
+    project_segment_ok
+        && parts.next() == Some(session_id.as_str())
+        && parts.next() == Some("scratchpad")
+}
+
+/// Claude Code's per-user tree under the system temp dir, in canonical form
+/// (macOS `/tmp` and `$TMPDIR` are symlinks); the candidate side of the
+/// scratchpad check is canonicalized the same way by `resolve_path`.
+///
+/// Must not be called on wasm targets: `temp_dir()` panics there. Callers
+/// gate on `CLAUDE_CODE_SESSION_ID` first (always absent on wasm), which is
+/// why `is_claude_session_scratchpad` checks the session id before this.
+pub fn claude_scratchpad_root() -> std::path::PathBuf {
+    let tmp = std::env::temp_dir();
+    let tmp = std::fs::canonicalize(&tmp).unwrap_or(tmp);
+    tmp.join(claude_tmp_dir_name())
+}
+
+/// Directory name of Claude Code's per-user tree under the system temp dir:
+/// `claude-<uid>` on unix, an unsuffixed `claude` on Windows. The Windows arm
+/// documents the naming but is a fail-closed placeholder: the scratchpad
+/// matcher splits on `/`, which Windows backslash paths never satisfy.
+#[cfg(unix)]
+fn claude_tmp_dir_name() -> String {
+    // SAFETY: getuid reads the process credential and cannot fail.
+    format!("claude-{}", unsafe { libc::getuid() })
+}
+
+#[cfg(windows)]
+fn claude_tmp_dir_name() -> String {
+    "claude".to_string()
+}
+
+#[cfg(not(any(unix, windows)))]
+fn claude_tmp_dir_name() -> String {
+    "claude-0".to_string()
+}
+
+/// Strict UUID shape: 36 chars, dashes at 8/13/18/23, hex digits elsewhere.
+/// Guards the session-id path component against a degenerate or hostile env
+/// value (empty string, `..`, a path fragment) widening the scratchpad match.
+fn is_uuid_shaped(s: &str) -> bool {
+    if s.len() != 36 {
+        return false;
+    }
+    s.bytes().enumerate().all(|(i, b)| match i {
+        8 | 13 | 18 | 23 => b == b'-',
+        _ => b.is_ascii_hexdigit(),
+    })
 }
 
 /// Variable-aware scratch check: substitute tracked `$NAME`/`${NAME}` tokens in
@@ -305,6 +415,215 @@ mod tests {
             match saved {
                 Some(v) => std::env::set_var("TOOL_GATES_SCRATCH", v),
                 None => std::env::remove_var("TOOL_GATES_SCRATCH"),
+            }
+        }
+    }
+
+    #[serial_test::serial]
+    #[test]
+    fn test_scratch_token_requires_env() {
+        let saved = std::env::var("TOOL_GATES_SCRATCH").ok();
+        // SAFETY: serialized via #[serial], so no concurrent env access.
+        unsafe {
+            std::env::remove_var("TOOL_GATES_SCRATCH");
+        }
+
+        // With the env var unset the shell expands the token to "", so the
+        // gate must not substitute its internal default; the token path is
+        // not scratch and falls to a normal prompt.
+        assert!(!is_under_scratch("$TOOL_GATES_SCRATCH/p/f.txt"));
+        assert!(!is_under_scratch("${TOOL_GATES_SCRATCH}/p/f.txt"));
+
+        // Fully-spelled paths under the internal default still match: shell
+        // and gate agree on those with or without the env var.
+        assert!(is_under_scratch("~/.cache/tool-gates-scratch/p/f.txt"));
+
+        unsafe {
+            match saved {
+                Some(v) => std::env::set_var("TOOL_GATES_SCRATCH", v),
+                None => std::env::remove_var("TOOL_GATES_SCRATCH"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_is_uuid_shaped() {
+        assert!(is_uuid_shaped("01234567-89ab-cdef-0123-456789abcdef"));
+        assert!(is_uuid_shaped("ABCDEF01-2345-6789-ABCD-EF0123456789"));
+
+        assert!(!is_uuid_shaped(""));
+        assert!(!is_uuid_shaped(".."));
+        assert!(!is_uuid_shaped("not-a-uuid"));
+        // One char short / long.
+        assert!(!is_uuid_shaped("01234567-89ab-cdef-0123-456789abcde"));
+        assert!(!is_uuid_shaped("01234567-89ab-cdef-0123-456789abcdef0"));
+        // Right length, dashes misplaced or missing.
+        assert!(!is_uuid_shaped("0123456789ab-cdef-0123-456789abcdef0"));
+        // Non-hex character.
+        assert!(!is_uuid_shaped("g1234567-89ab-cdef-0123-456789abcdef"));
+        // A path fragment must never pass.
+        assert!(!is_uuid_shaped("../../../../../../../../../../etc/pw"));
+    }
+
+    #[serial_test::serial]
+    #[test]
+    fn test_is_under_scratch_recognizes_claude_session_scratchpad() {
+        let sid = "01234567-89ab-cdef-0123-456789abcdef";
+        let saved_scratch = std::env::var("TOOL_GATES_SCRATCH").ok();
+        let saved_sid = std::env::var("CLAUDE_CODE_SESSION_ID").ok();
+        // SAFETY: serialized via #[serial], so no concurrent env access.
+        unsafe {
+            std::env::set_var("TOOL_GATES_SCRATCH", "/tmp/cc-scratch-test");
+            std::env::set_var("CLAUDE_CODE_SESSION_ID", sid);
+        }
+
+        let root = claude_scratchpad_root();
+        let tmp = root
+            .parent()
+            .expect("tmp parent")
+            .to_string_lossy()
+            .into_owned();
+        let root = root.to_string_lossy().into_owned();
+        let pad = format!("{root}/-home-u-proj/{sid}/scratchpad");
+
+        // The scratchpad dir itself, children, and the session-id token form.
+        assert!(is_under_scratch(&pad));
+        assert!(is_under_scratch(&format!("{pad}/notes.md")));
+        assert!(is_under_scratch(&format!("{pad}/sub/dir/f.txt")));
+        assert!(is_under_scratch(&format!(
+            "{root}/-home-u-proj/$CLAUDE_CODE_SESSION_ID/scratchpad/f.txt"
+        )));
+
+        // Another session's scratchpad is not this session's.
+        assert!(!is_under_scratch(&format!(
+            "{root}/-home-u-proj/99999999-89ab-cdef-0123-456789abcdef/scratchpad/f"
+        )));
+        // The tasks/ sibling and the session dir itself are outside the
+        // scratchpad scope.
+        assert!(!is_under_scratch(&format!(
+            "{root}/-home-u-proj/{sid}/tasks/t.output"
+        )));
+        assert!(!is_under_scratch(&format!("{root}/-home-u-proj/{sid}")));
+        // `..` collapsing out of the scratchpad is not scratch.
+        assert!(!is_under_scratch(&format!("{pad}/../../../../etc/passwd")));
+        // An unresolved variable inside stays fail-closed.
+        assert!(!is_under_scratch(&format!("{pad}/$X/f")));
+        // The project segment must be a single sanitized component.
+        assert!(!is_under_scratch(&format!(
+            "{root}/bad.segment/{sid}/scratchpad/f"
+        )));
+        // A different per-user dir under the temp root does not match.
+        assert!(!is_under_scratch(&format!(
+            "{tmp}/claude-none/-home-u-proj/{sid}/scratchpad/f"
+        )));
+        // Nor does a same-component extension of the exact root (the prefix
+        // strip requires a `/` right after it).
+        assert!(!is_under_scratch(&format!(
+            "{root}abc/-home-u-proj/{sid}/scratchpad/f"
+        )));
+
+        unsafe {
+            match saved_scratch {
+                Some(v) => std::env::set_var("TOOL_GATES_SCRATCH", v),
+                None => std::env::remove_var("TOOL_GATES_SCRATCH"),
+            }
+            match saved_sid {
+                Some(v) => std::env::set_var("CLAUDE_CODE_SESSION_ID", v),
+                None => std::env::remove_var("CLAUDE_CODE_SESSION_ID"),
+            }
+        }
+    }
+
+    #[serial_test::serial]
+    #[test]
+    fn test_claude_scratchpad_requires_uuid_session_id() {
+        let saved_scratch = std::env::var("TOOL_GATES_SCRATCH").ok();
+        let saved_sid = std::env::var("CLAUDE_CODE_SESSION_ID").ok();
+        // SAFETY: serialized via #[serial], so no concurrent env access.
+        unsafe {
+            std::env::set_var("TOOL_GATES_SCRATCH", "/tmp/cc-scratch-test");
+        }
+
+        let root = claude_scratchpad_root().to_string_lossy().into_owned();
+
+        // No session id in the env: the root is inert (non-Claude clients).
+        unsafe {
+            std::env::remove_var("CLAUDE_CODE_SESSION_ID");
+        }
+        assert!(!is_under_scratch(&format!(
+            "{root}/-home-u-proj/01234567-89ab-cdef-0123-456789abcdef/scratchpad/f"
+        )));
+
+        // A non-UUID value never widens the match, even when the path segment
+        // matches it exactly.
+        unsafe {
+            std::env::set_var("CLAUDE_CODE_SESSION_ID", "not-a-uuid");
+        }
+        assert!(!is_under_scratch(&format!(
+            "{root}/-home-u-proj/not-a-uuid/scratchpad/f"
+        )));
+
+        unsafe {
+            match saved_scratch {
+                Some(v) => std::env::set_var("TOOL_GATES_SCRATCH", v),
+                None => std::env::remove_var("TOOL_GATES_SCRATCH"),
+            }
+            match saved_sid {
+                Some(v) => std::env::set_var("CLAUDE_CODE_SESSION_ID", v),
+                None => std::env::remove_var("CLAUDE_CODE_SESSION_ID"),
+            }
+        }
+    }
+
+    #[serial_test::serial]
+    #[test]
+    fn test_redirect_into_claude_scratchpad_skips_soft_ask() {
+        let sid = "01234567-89ab-cdef-0123-456789abcdef";
+        let saved_scratch = std::env::var("TOOL_GATES_SCRATCH").ok();
+        let saved_sid = std::env::var("CLAUDE_CODE_SESSION_ID").ok();
+        // SAFETY: serialized via #[serial], so no concurrent env access.
+        unsafe {
+            std::env::set_var("TOOL_GATES_SCRATCH", "/tmp/cc-scratch-test");
+            std::env::set_var("CLAUDE_CODE_SESSION_ID", sid);
+        }
+
+        let root = claude_scratchpad_root().to_string_lossy().into_owned();
+        let pad = format!("{root}/-home-u-proj/{sid}/scratchpad");
+
+        // Redirect into the session scratchpad: soft-ask suppressed, echo is
+        // safe -> allow.
+        let into = check_command_with_settings(
+            &format!("echo hi > {pad}/out.log"),
+            "/home/user/project",
+            "default",
+        );
+        assert_eq!(
+            get_decision(&into),
+            "allow",
+            "redirect into claude scratchpad should allow, got: {}",
+            get_reason(&into)
+        );
+
+        // The tasks/ sibling is outside the scratchpad scope -> still asks.
+        let sibling = check_command_with_settings(
+            &format!("echo hi > {root}/-home-u-proj/{sid}/tasks/t.output"),
+            "/home/user/project",
+            "default",
+        );
+        assert_eq!(
+            get_decision(&sibling),
+            "ask",
+            "redirect into the tasks/ sibling should ask"
+        );
+
+        unsafe {
+            match saved_scratch {
+                Some(v) => std::env::set_var("TOOL_GATES_SCRATCH", v),
+                None => std::env::remove_var("TOOL_GATES_SCRATCH"),
+            }
+            match saved_sid {
+                Some(v) => std::env::set_var("CLAUDE_CODE_SESSION_ID", v),
+                None => std::env::remove_var("CLAUDE_CODE_SESSION_ID"),
             }
         }
     }
