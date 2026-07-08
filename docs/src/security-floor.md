@@ -4,6 +4,188 @@
 
 <div class="rule-card">
   <header>
+    <h2>Raw-string floor · matched before parsing</h2>
+    <a href="https://github.com/camjac251/tool-gates/blob/main/rules/security.toml" class="src" target="_blank" rel="noopener">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+      rules/security.toml
+    </a>
+    <span class="count">34 patterns</span>
+  </header>
+
+<div class="rule-row" data-decision="ask" id="floor-pipe-bash">
+  <div class="rule-cmd"><span class="prog">pipe-bash</span> <span class="flag">hard-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Piping to bash runs whatever upstream returns, with no chance to inspect. Save the output to a file first, review it, then run.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-pipe-sh">
+  <div class="rule-cmd"><span class="prog">pipe-sh</span> <span class="flag">hard-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Piping to sh runs whatever upstream returns, with no chance to inspect. Save the output to a file first, review it, then run.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-pipe-zsh">
+  <div class="rule-cmd"><span class="prog">pipe-zsh</span> <span class="flag">hard-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Piping to zsh runs whatever upstream returns, with no chance to inspect. Save the output to a file first, review it, then run.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-pipe-sudo">
+  <div class="rule-cmd"><span class="prog">pipe-sudo</span> <span class="flag">hard-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Piping to sudo elevates upstream output. Same risk as <code>curl | bash</code> with full privileges; save and review the upstream content first.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-pipe-doas">
+  <div class="rule-cmd"><span class="prog">pipe-doas</span> <span class="flag">hard-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Piping to doas elevates upstream output. Same risk as <code>curl | bash</code> with full privileges; save and review the upstream content first.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-pipe-python">
+  <div class="rule-cmd"><span class="prog">pipe-python</span> <span class="flag">soft-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Piping to python runs upstream as a script. Save to a file first, review it, then run.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-pipe-perl">
+  <div class="rule-cmd"><span class="prog">pipe-perl</span> <span class="flag">soft-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Piping to perl runs upstream as a script. Save to a file first, review it, then run.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-pipe-ruby">
+  <div class="rule-cmd"><span class="prog">pipe-ruby</span> <span class="flag">soft-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Piping to ruby runs upstream as a script. Save to a file first, review it, then run.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-pipe-node">
+  <div class="rule-cmd"><span class="prog">pipe-node</span> <span class="flag">soft-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Piping to node runs upstream as a script. Save to a file first, review it, then run.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-eval">
+  <div class="rule-cmd"><span class="prog">eval</span> <span class="flag">hard-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason"><code>eval</code> runs arbitrary code constructed from variables. Prefer parameter expansion (<code>${var}</code>), array indexing, or <code>case</code> statements; if eval is truly needed, validate the input first.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-source">
+  <div class="rule-cmd"><span class="prog">source</span> <span class="flag">soft-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason"><code>source</code> runs the file in the current shell and inherits its <code>export</code>s, aliases, and <code>cd</code>s. Verify the file's contents before approving.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-dot-source">
+  <div class="rule-cmd"><span class="prog">dot-source</span> <span class="flag">soft-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason"><code>.</code> is equivalent to <code>source</code>: runs the file in the current shell and inherits its <code>export</code>s and aliases. Verify the file's contents before approving.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-xargs-rm">
+  <div class="rule-cmd"><span class="prog">xargs-rm</span> <span class="flag">soft-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">xargs piping to <code>rm</code> runs it once per input line. Verify the upstream filter; mistakes cascade.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-xargs-mv">
+  <div class="rule-cmd"><span class="prog">xargs-mv</span> <span class="flag">soft-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">xargs piping to <code>mv</code> runs it once per input line. Verify the upstream filter; mistakes cascade.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-xargs-cp">
+  <div class="rule-cmd"><span class="prog">xargs-cp</span> <span class="flag">soft-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">xargs piping to <code>cp</code> runs it once per input line. Verify the upstream filter; mistakes cascade.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-xargs-chmod">
+  <div class="rule-cmd"><span class="prog">xargs-chmod</span> <span class="flag">soft-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">xargs piping to <code>chmod</code> runs it once per input line. Verify the upstream filter; mistakes cascade.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-xargs-chown">
+  <div class="rule-cmd"><span class="prog">xargs-chown</span> <span class="flag">soft-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">xargs piping to <code>chown</code> runs it once per input line. Verify the upstream filter; mistakes cascade.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-xargs-dd">
+  <div class="rule-cmd"><span class="prog">xargs-dd</span> <span class="flag">soft-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">xargs piping to <code>dd</code> runs it once per input line. Verify the upstream filter; mistakes cascade.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-xargs-shred">
+  <div class="rule-cmd"><span class="prog">xargs-shred</span> <span class="flag">soft-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">xargs piping to <code>shred</code> runs it once per input line. Verify the upstream filter; mistakes cascade.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-xargs-kubectl-delete">
+  <div class="rule-cmd"><span class="prog">xargs-kubectl-delete</span> <span class="flag">soft-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">xargs piping to <code>kubectl delete</code> runs delete once per input line. Verify the upstream filter; mistakes cascade across many resources.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-find-delete">
+  <div class="rule-cmd"><span class="prog">find-delete</span> <span class="flag">soft-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason"><code>find -delete</code> removes every match. Run without <code>-delete</code> first to preview which paths would be removed.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-find-exec">
+  <div class="rule-cmd"><span class="prog">find-exec</span> <span class="flag">soft-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason"><code>find -exec</code> runs a command per match. Verify both the find filter and the command body; mistakes cascade across every match.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-find-fwrite">
+  <div class="rule-cmd"><span class="prog">find-fwrite</span> <span class="flag">soft-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason"><code>find -fprintf</code>/<code>-fprint</code>/<code>-fls</code> writes matched output to a file, overwriting it. Verify the target path.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-fd-exec">
+  <div class="rule-cmd"><span class="prog">fd-exec</span> <span class="flag">soft-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">fd executing <code>rm</code>/<code>mv</code>/<code>chmod</code>/<code>chown</code>/<code>dd</code>/<code>shred</code> per match via -x/--exec. Verify the fd filter first (run without -x); mistakes cascade across every match.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-rg-exec">
+  <div class="rule-cmd"><span class="prog">rg-exec</span> <span class="flag">hard-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">ripgrep <code>--pre</code>/<code>--pre-glob</code>/<code>--hostname-bin</code> run an external program (a per-file preprocessor or a hostname helper), i.e. arbitrary code execution. Run that program directly and inspect it first.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-sort-output">
+  <div class="rule-cmd"><span class="prog">sort-output</span> <span class="flag">soft-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason"><code>sort -o</code>/<code>--output</code> overwrites the target file without warning, and the target can be the input file itself. Verify the path.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-pg-dump-file">
+  <div class="rule-cmd"><span class="prog">pg-dump-file</span> <span class="flag">soft-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason"><code>pg_dump -f</code>/<code>--file</code> writes the dump to a file and overwrites it. Omit <code>-f</code> to send the dump to stdout, or verify the path.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-gitleaks-report">
+  <div class="rule-cmd"><span class="prog">gitleaks-report</span> <span class="flag">soft-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason"><code>gitleaks -r</code>/<code>--report-path</code> writes a report file to the given path, overwriting it. Verify the destination.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-unrar-extract">
+  <div class="rule-cmd"><span class="prog">unrar-extract</span> <span class="flag">soft-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason"><code>unrar x</code>/<code>e</code> extracts archive contents to disk and can overwrite files. Use <code>unrar l</code> to list without extracting, or verify the destination.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-net-mutate">
+  <div class="rule-cmd"><span class="prog">net-mutate</span> <span class="flag">soft-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Network configuration change (<code>ip/route ... add|del|set</code>, <code>ifconfig ... up|down</code>, <code>arp -d|-s</code>). Verify the interface and values; routing and interface changes can disrupt connectivity.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-dollar-subst">
+  <div class="rule-cmd"><span class="prog">dollar-subst</span> <span class="flag">hard-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason"><code>$(...)</code> command substitution contains a dangerous inner command (<code>…</code>). It runs and injects its output into the outer command, so the destructive call executes even when nested. Run it separately first, then use the literal result.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-backtick-subst">
+  <div class="rule-cmd"><span class="prog">backtick-subst</span> <span class="flag">hard-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Backtick substitution contains a dangerous inner command (<code>…</code>). It runs and injects its output into the outer command, so the destructive call executes even when nested. Run it separately first, then use the literal result. Prefer <code>$(...)</code>.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-leading-semicolon">
+  <div class="rule-cmd"><span class="prog">leading-semicolon</span> <span class="flag">soft-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Command starts with <code>;</code>. Usually a paste artifact or shell-injection attempt; review the full command before approving.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="floor-redirect">
+  <div class="rule-cmd"><span class="prog">redirect</span> <span class="flag">soft-ask</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Output redirection (<code>&gt;</code>, <code>&gt;&gt;</code>, <code>tee</code>) writes to a file. Verify the target path; <code>&gt;</code> overwrites without warning.</div>
+</div>
+</div>
+
+<div class="rule-card">
+  <header>
     <h2>Hard blocks · denied without prompting</h2>
     <a href="https://github.com/camjac251/tool-gates/tree/main/rules" class="src" target="_blank" rel="noopener">
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>

@@ -15762,3 +15762,271 @@ pub fn is_file_editing_command(cmd: &CommandInfo) -> bool {
         _ => false,
     }
 }
+
+// ============================================================================
+// Security Floor (generated from rules/security.toml)
+// ============================================================================
+
+use crate::rules_schema::FloorTier;
+use crate::security_floor::FloorHit;
+use regex::Regex;
+
+static FLOOR_PIPE_BASH_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"\|\s*bash\b|\|\s*/bin/bash\b|\|\s*/usr/bin/bash\b"#)
+        .expect("security floor 'pipe-bash' regex must compile")
+});
+static FLOOR_PIPE_SH_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"\|\s*sh\b|\|\s*/bin/sh\b|\|\s*/usr/bin/sh\b"#)
+        .expect("security floor 'pipe-sh' regex must compile")
+});
+static FLOOR_PIPE_ZSH_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"\|\s*zsh\b|\|\s*/bin/zsh\b|\|\s*/usr/bin/zsh\b"#)
+        .expect("security floor 'pipe-zsh' regex must compile")
+});
+static FLOOR_PIPE_SUDO_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"\|\s*sudo\b|\|\s*/usr/bin/sudo\b"#)
+        .expect("security floor 'pipe-sudo' regex must compile")
+});
+static FLOOR_PIPE_DOAS_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"\|\s*doas\b"#).expect("security floor 'pipe-doas' regex must compile")
+});
+static FLOOR_PIPE_PYTHON_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"\|\s*python[0-9.]*\b"#).expect("security floor 'pipe-python' regex must compile")
+});
+static FLOOR_PIPE_PERL_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"\|\s*perl\b"#).expect("security floor 'pipe-perl' regex must compile")
+});
+static FLOOR_PIPE_RUBY_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"\|\s*ruby\b"#).expect("security floor 'pipe-ruby' regex must compile")
+});
+static FLOOR_PIPE_NODE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"\|\s*node\b"#).expect("security floor 'pipe-node' regex must compile")
+});
+static FLOOR_EVAL_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(^|[;&|\n\r])\s*eval\s"#).expect("security floor 'eval' regex must compile")
+});
+static FLOOR_SOURCE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(^|[;&|\n\r])\s*source\s+\S"#)
+        .expect("security floor 'source' regex must compile")
+});
+static FLOOR_DOT_SOURCE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(^|[;&|\n\r])\s*\.\s+[^.]"#)
+        .expect("security floor 'dot-source' regex must compile")
+});
+static FLOOR_XARGS_RM_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"xargs\s+.*\brm\b|xargs\s+\brm\b"#)
+        .expect("security floor 'xargs-rm' regex must compile")
+});
+static FLOOR_XARGS_MV_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"xargs\s+.*\bmv\b|xargs\s+\bmv\b"#)
+        .expect("security floor 'xargs-mv' regex must compile")
+});
+static FLOOR_XARGS_CP_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"xargs\s+.*\bcp\b|xargs\s+\bcp\b"#)
+        .expect("security floor 'xargs-cp' regex must compile")
+});
+static FLOOR_XARGS_CHMOD_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"xargs\s+.*\bchmod\b|xargs\s+\bchmod\b"#)
+        .expect("security floor 'xargs-chmod' regex must compile")
+});
+static FLOOR_XARGS_CHOWN_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"xargs\s+.*\bchown\b|xargs\s+\bchown\b"#)
+        .expect("security floor 'xargs-chown' regex must compile")
+});
+static FLOOR_XARGS_DD_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"xargs\s+.*\bdd\b|xargs\s+\bdd\b"#)
+        .expect("security floor 'xargs-dd' regex must compile")
+});
+static FLOOR_XARGS_SHRED_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"xargs\s+.*\bshred\b|xargs\s+\bshred\b"#)
+        .expect("security floor 'xargs-shred' regex must compile")
+});
+static FLOOR_XARGS_KUBECTL_DELETE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"xargs\s+.*kubectl\s+delete|xargs\s+kubectl\s+delete"#)
+        .expect("security floor 'xargs-kubectl-delete' regex must compile")
+});
+static FLOOR_FIND_DELETE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"-delete"#).expect("security floor 'find-delete' regex must compile")
+});
+static FLOOR_FIND_EXEC_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"\s-(?:execdir|okdir|exec|ok)\b"#)
+        .expect("security floor 'find-exec' regex must compile")
+});
+static FLOOR_FIND_FWRITE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"\s-(?:fprintf|fprint0|fprint|fls)\b"#)
+        .expect("security floor 'find-fwrite' regex must compile")
+});
+static FLOOR_RG_EXEC_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"\b(?:rg|ripgrep)\b[^;&|]*--(?:pre(?:-glob)?|hostname-bin)(?:[=\s]|$)"#)
+        .expect("security floor 'rg-exec' regex must compile")
+});
+static FLOOR_SORT_OUTPUT_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"\bsort\b[^;&|]*(?:\s-o(?:[=\s]|$)|--output\b)"#)
+        .expect("security floor 'sort-output' regex must compile")
+});
+static FLOOR_PG_DUMP_FILE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"\bpg_dump(?:all)?\b[^;&|]*(?:\s-f(?:[=\s]|$)|--file\b)"#)
+        .expect("security floor 'pg-dump-file' regex must compile")
+});
+static FLOOR_GITLEAKS_REPORT_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"\bgitleaks\b[^;&|]*(?:\s-r(?:[=\s]|$)|--report-path\b)"#)
+        .expect("security floor 'gitleaks-report' regex must compile")
+});
+static FLOOR_UNRAR_EXTRACT_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"\bunrar\s+(?:x|e)\b"#).expect("security floor 'unrar-extract' regex must compile")
+});
+static FLOOR_NET_MUTATE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"\bip\b[^;&|]*\b(?:add|del|delete|set|flush|change|replace)\b|\broute\b[^;&|]*\b(?:add|del|delete)\b|\bifconfig\b[^;&|]*\b(?:up|down|netmask|mtu|promisc|add|del)\b|\barp\b[^;&|]*\s-[dsf]\b"#).expect("security floor 'net-mutate' regex must compile")
+});
+static FLOOR_DOLLAR_SUBST_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"\$\([^)]+\)"#).expect("security floor 'dollar-subst' regex must compile")
+});
+static FLOOR_BACKTICK_SUBST_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"`[^`]+`"#).expect("security floor 'backtick-subst' regex must compile")
+});
+static FLOOR_LEADING_SEMICOLON_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"^\s*;"#).expect("security floor 'leading-semicolon' regex must compile")
+});
+
+/// Raw-string security floor: first-match-wins over rules/security.toml.
+/// `comment_stripped` has comments removed (quotes intact); `unquoted` also
+/// has quoted strings blanked. Returns the first matching row's tier + reason.
+pub fn check_security_floor(comment_stripped: &str, unquoted: &str) -> Option<FloorHit> {
+    if FLOOR_PIPE_BASH_RE.is_match(unquoted) {
+        return Some(FloorHit { tier: FloorTier::HardAsk, reason: "Piping to bash runs whatever upstream returns, with no chance to inspect. Save the output to a file first, review it, then run.".to_string() });
+    }
+    if FLOOR_PIPE_SH_RE.is_match(unquoted) {
+        return Some(FloorHit { tier: FloorTier::HardAsk, reason: "Piping to sh runs whatever upstream returns, with no chance to inspect. Save the output to a file first, review it, then run.".to_string() });
+    }
+    if FLOOR_PIPE_ZSH_RE.is_match(unquoted) {
+        return Some(FloorHit { tier: FloorTier::HardAsk, reason: "Piping to zsh runs whatever upstream returns, with no chance to inspect. Save the output to a file first, review it, then run.".to_string() });
+    }
+    if FLOOR_PIPE_SUDO_RE.is_match(unquoted) {
+        return Some(FloorHit { tier: FloorTier::HardAsk, reason: "Piping to sudo elevates upstream output. Same risk as `curl | bash` with full privileges; save and review the upstream content first.".to_string() });
+    }
+    if FLOOR_PIPE_DOAS_RE.is_match(unquoted) {
+        return Some(FloorHit { tier: FloorTier::HardAsk, reason: "Piping to doas elevates upstream output. Same risk as `curl | bash` with full privileges; save and review the upstream content first.".to_string() });
+    }
+    if FLOOR_PIPE_PYTHON_RE.is_match(unquoted) {
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "Piping to python runs upstream as a script. Save to a file first, review it, then run.".to_string() });
+    }
+    if FLOOR_PIPE_PERL_RE.is_match(unquoted) {
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "Piping to perl runs upstream as a script. Save to a file first, review it, then run.".to_string() });
+    }
+    if FLOOR_PIPE_RUBY_RE.is_match(unquoted) {
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "Piping to ruby runs upstream as a script. Save to a file first, review it, then run.".to_string() });
+    }
+    if FLOOR_PIPE_NODE_RE.is_match(unquoted) {
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "Piping to node runs upstream as a script. Save to a file first, review it, then run.".to_string() });
+    }
+    if FLOOR_EVAL_RE.is_match(unquoted) {
+        return Some(FloorHit { tier: FloorTier::HardAsk, reason: "`eval` runs arbitrary code constructed from variables. Prefer parameter expansion (`${var}`), array indexing, or `case` statements; if eval is truly needed, validate the input first.".to_string() });
+    }
+    if FLOOR_SOURCE_RE.is_match(unquoted) {
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`source` runs the file in the current shell and inherits its `export`s, aliases, and `cd`s. Verify the file's contents before approving.".to_string() });
+    }
+    if FLOOR_DOT_SOURCE_RE.is_match(unquoted) {
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`.` is equivalent to `source`: runs the file in the current shell and inherits its `export`s and aliases. Verify the file's contents before approving.".to_string() });
+    }
+    if (unquoted.contains("xargs")) && FLOOR_XARGS_RM_RE.is_match(unquoted) {
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "xargs piping to `rm` runs it once per input line. Verify the upstream filter; mistakes cascade.".to_string() });
+    }
+    if (unquoted.contains("xargs")) && FLOOR_XARGS_MV_RE.is_match(unquoted) {
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "xargs piping to `mv` runs it once per input line. Verify the upstream filter; mistakes cascade.".to_string() });
+    }
+    if (unquoted.contains("xargs")) && FLOOR_XARGS_CP_RE.is_match(unquoted) {
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "xargs piping to `cp` runs it once per input line. Verify the upstream filter; mistakes cascade.".to_string() });
+    }
+    if (unquoted.contains("xargs")) && FLOOR_XARGS_CHMOD_RE.is_match(unquoted) {
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "xargs piping to `chmod` runs it once per input line. Verify the upstream filter; mistakes cascade.".to_string() });
+    }
+    if (unquoted.contains("xargs")) && FLOOR_XARGS_CHOWN_RE.is_match(unquoted) {
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "xargs piping to `chown` runs it once per input line. Verify the upstream filter; mistakes cascade.".to_string() });
+    }
+    if (unquoted.contains("xargs")) && FLOOR_XARGS_DD_RE.is_match(unquoted) {
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "xargs piping to `dd` runs it once per input line. Verify the upstream filter; mistakes cascade.".to_string() });
+    }
+    if (unquoted.contains("xargs")) && FLOOR_XARGS_SHRED_RE.is_match(unquoted) {
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "xargs piping to `shred` runs it once per input line. Verify the upstream filter; mistakes cascade.".to_string() });
+    }
+    if (unquoted.contains("xargs")) && FLOOR_XARGS_KUBECTL_DELETE_RE.is_match(unquoted) {
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "xargs piping to `kubectl delete` runs delete once per input line. Verify the upstream filter; mistakes cascade across many resources.".to_string() });
+    }
+    if (unquoted.contains("find ") || unquoted.contains("find\t"))
+        && FLOOR_FIND_DELETE_RE.is_match(unquoted)
+    {
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`find -delete` removes every match. Run without `-delete` first to preview which paths would be removed.".to_string() });
+    }
+    if (unquoted.contains("find ") || unquoted.contains("find\t"))
+        && FLOOR_FIND_EXEC_RE.is_match(unquoted)
+    {
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`find -exec` runs a command per match. Verify both the find filter and the command body; mistakes cascade across every match.".to_string() });
+    }
+    if (unquoted.contains("find ") || unquoted.contains("find\t"))
+        && FLOOR_FIND_FWRITE_RE.is_match(unquoted)
+    {
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`find -fprintf`/`-fprint`/`-fls` writes matched output to a file, overwriting it. Verify the target path.".to_string() });
+    }
+    if let Some(hit) = crate::security_floor::fd_exec(comment_stripped, unquoted) {
+        return Some(hit);
+    }
+    if FLOOR_RG_EXEC_RE.is_match(unquoted) {
+        return Some(FloorHit { tier: FloorTier::HardAsk, reason: "ripgrep `--pre`/`--pre-glob`/`--hostname-bin` run an external program (a per-file preprocessor or a hostname helper), i.e. arbitrary code execution. Run that program directly and inspect it first.".to_string() });
+    }
+    if FLOOR_SORT_OUTPUT_RE.is_match(unquoted) {
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`sort -o`/`--output` overwrites the target file without warning, and the target can be the input file itself. Verify the path.".to_string() });
+    }
+    if FLOOR_PG_DUMP_FILE_RE.is_match(unquoted) {
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`pg_dump -f`/`--file` writes the dump to a file and overwrites it. Omit `-f` to send the dump to stdout, or verify the path.".to_string() });
+    }
+    if FLOOR_GITLEAKS_REPORT_RE.is_match(unquoted) {
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`gitleaks -r`/`--report-path` writes a report file to the given path, overwriting it. Verify the destination.".to_string() });
+    }
+    if FLOOR_UNRAR_EXTRACT_RE.is_match(unquoted) {
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`unrar x`/`e` extracts archive contents to disk and can overwrite files. Use `unrar l` to list without extracting, or verify the destination.".to_string() });
+    }
+    if FLOOR_NET_MUTATE_RE.is_match(unquoted) {
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "Network configuration change (`ip/route ... add|del|set`, `ifconfig ... up|down`, `arp -d|-s`). Verify the interface and values; routing and interface changes can disrupt connectivity.".to_string() });
+    }
+    for cap in FLOOR_DOLLAR_SUBST_RE.captures_iter(comment_stripped) {
+        let m = cap.get(0).map_or("", |x| x.as_str());
+        if ["rm ", "rm\t", "mv ", "chmod ", "chown ", "dd "]
+            .into_iter()
+            .any(|d| m.contains(d))
+        {
+            let truncated = if m.len() > 30 { &m[..30] } else { m };
+            let mut reason =
+                String::from("`$(...)` command substitution contains a dangerous inner command (`");
+            reason.push_str(truncated);
+            reason.push_str("`). It runs and injects its output into the outer command, so the destructive call executes even when nested. Run it separately first, then use the literal result.");
+            return Some(FloorHit {
+                tier: FloorTier::HardAsk,
+                reason,
+            });
+        }
+    }
+    for cap in FLOOR_BACKTICK_SUBST_RE.captures_iter(comment_stripped) {
+        let m = cap.get(0).map_or("", |x| x.as_str());
+        if ["rm ", "rm\t", "mv ", "chmod ", "chown ", "dd "]
+            .into_iter()
+            .any(|d| m.contains(d))
+        {
+            let truncated = if m.len() > 30 { &m[..30] } else { m };
+            let mut reason =
+                String::from("Backtick substitution contains a dangerous inner command (`");
+            reason.push_str(truncated);
+            reason.push_str("`). It runs and injects its output into the outer command, so the destructive call executes even when nested. Run it separately first, then use the literal result. Prefer `$(...)`.");
+            return Some(FloorHit {
+                tier: FloorTier::HardAsk,
+                reason,
+            });
+        }
+    }
+    if FLOOR_LEADING_SEMICOLON_RE.is_match(comment_stripped) {
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "Command starts with `;`. Usually a paste artifact or shell-injection attempt; review the full command before approving.".to_string() });
+    }
+    if let Some(hit) = crate::security_floor::redirect_targets(comment_stripped, unquoted) {
+        return Some(hit);
+    }
+    None
+}

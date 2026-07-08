@@ -114,6 +114,12 @@ mod tests {
                 .file_stem()
                 .and_then(|s| s.to_str())
                 .unwrap_or_else(|| panic!("{}: non-utf8 filename", path.display()));
+            // security.toml is the raw-string floor, not a per-program gate. It
+            // generates `check_security_floor` (run before the gates), not a
+            // `check_security_gate`, so it is intentionally absent from GATES.
+            if stem == "security" {
+                continue;
+            }
             assert!(
                 registered.contains(stem),
                 "rules/{stem}.toml has no registered gate in GATES",

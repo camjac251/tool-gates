@@ -286,6 +286,104 @@ pub struct CustomHandler {
     pub description: Option<String>,
 }
 
+// ============================================================================
+// Security floor (rules/security.toml)
+// ============================================================================
+//
+// The raw-string security floor is matched against the command text before AST
+// parsing. Unlike the gates, it is not a per-program table: each row is a regex
+// (or a Rust `handler`) plus a tier and a reason. `build.rs` generates a
+// linear, first-match-wins `check_security_floor` from these rows, so file
+// order is significant.
+
+/// The tier a floor row resolves to. Encodes how the caller treats a hit:
+/// `hard_ask` is force-promptable (not overridable by settings, promoted to
+/// deny under auto mode); `soft_ask` is overridable via settings.json.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(all(feature = "schemars", lib_only), derive(JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum FloorTier {
+    HardAsk,
+    SoftAsk,
+}
+
+/// Which scan-prepared input a floor row's regex runs against.
+/// `quote_stripped` is comments-then-quotes stripped (the common case);
+/// `comment_stripped` keeps quotes intact (needed by the substitution rows so
+/// they can see inside `$(...)` / backticks).
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(all(feature = "schemars", lib_only), derive(JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum FloorScan {
+    #[default]
+    QuoteStripped,
+    CommentStripped,
+}
+
+/// Special matching mode for a floor row. `command_substitution` iterates every
+/// regex match, checks it against `inner_contains_any`, and echoes the matched
+/// text (truncated) into the reason via the `{match}` placeholder.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(all(feature = "schemars", lib_only), derive(JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum FloorWithin {
+    CommandSubstitution,
+}
+
+/// The `rules/security.toml` file: an ordered list of floor patterns.
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[cfg_attr(all(feature = "schemars", lib_only), derive(JsonSchema))]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+pub struct SecurityFloorFile {
+    #[serde(default)]
+    pub meta: RuleMeta,
+    #[serde(default)]
+    pub patterns: Vec<SecurityPattern>,
+}
+
+/// One raw-string floor row. Exactly one of `regex` / `handler` drives matching:
+/// `regex` rows run the compiled pattern (optionally in a `within` mode);
+/// `handler` rows call a Rust function `crate::security_floor::<handler>` that
+/// owns its own matching (the escape hatch for logic the table can't express,
+/// mirroring the gates' `[[custom_handlers]]`).
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(all(feature = "schemars", lib_only), derive(JsonSchema))]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+pub struct SecurityPattern {
+    /// Stable kebab-case identifier. Doubles as the docs anchor and the regex
+    /// static name (`FLOOR_<ID>_RE`).
+    pub id: String,
+    /// The regex source. `None` for `handler` rows (the handler owns matching).
+    #[serde(default)]
+    pub regex: Option<String>,
+    pub tier: FloorTier,
+    /// Help-menu reason. For `within` rows it may contain a `{match}`
+    /// placeholder replaced by the (truncated) matched substring.
+    pub reason: String,
+    #[serde(default)]
+    pub scan: FloorScan,
+    /// Cheap pre-guard: the scan input must contain at least one of these
+    /// substrings before the regex runs (e.g. `["find ", "find\t"]`).
+    #[serde(default)]
+    pub requires_substring: Vec<String>,
+    /// Special matching mode (see [`FloorWithin`]).
+    #[serde(default)]
+    pub within: Option<FloorWithin>,
+    /// For `within` rows: the dangerous inner substrings a match must contain.
+    #[serde(default)]
+    pub inner_contains_any: Vec<String>,
+    /// Names the values the reason interpolates. Only `["match"]` is supported,
+    /// paired with a `{match}` placeholder in `reason`.
+    #[serde(default)]
+    pub reason_args: Vec<String>,
+    /// Rust escape hatch: the name of a `crate::security_floor::<handler>`
+    /// function that owns matching. Mutually exclusive with `regex`.
+    #[serde(default)]
+    pub handler: Option<String>,
+}
+
 impl AllowRule {
     pub fn subcommand_parts(&self) -> Vec<&str> {
         if let Some(ref s) = self.subcommand {

@@ -16,7 +16,10 @@ use std::io;
 use std::path::Path;
 
 use crate::hints::{HintCatalogEntry, hint_catalog, program_hint};
-use crate::rules_schema::{AllowRule, AskRule, BlockRule, ProgramRules, RuleFile, UnknownAction};
+use crate::rules_schema::{
+    AllowRule, AskRule, BlockRule, FloorTier, ProgramRules, RuleFile, SecurityFloorFile,
+    UnknownAction,
+};
 
 /// GitHub blob base for `.src` source links. The design links every gate
 /// card to its TOML on `main`.
@@ -90,6 +93,7 @@ struct Gate {
 /// security floor into `out_dir/security-floor.md`.
 pub fn export_markdown(rules_dir: &Path, out_dir: &Path) -> io::Result<()> {
     let gates = load_gates(rules_dir)?;
+    let floor_patterns = load_security_floor(rules_dir)?;
 
     let gates_dir = out_dir.join("gates");
     fs::create_dir_all(&gates_dir)?;
@@ -99,7 +103,7 @@ pub fn export_markdown(rules_dir: &Path, out_dir: &Path) -> io::Result<()> {
         fs::write(gates_dir.join(format!("{}.md", gate.stem)), page)?;
     }
 
-    let floor = render_security_floor(&gates);
+    let floor = render_security_floor(&gates, &floor_patterns);
     fs::write(out_dir.join("security-floor.md"), floor)?;
 
     let hints = render_hints_page();
@@ -121,6 +125,17 @@ fn load_gates(rules_dir: &Path) -> io::Result<Vec<Gate>> {
 
     let mut gates = Vec::with_capacity(paths.len());
     for path in paths {
+        let stem = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("unknown")
+            .to_string();
+        // security.toml is the raw-string floor, not a per-program gate table;
+        // it is loaded separately by `load_security_floor` and rendered onto the
+        // security-floor page. Parsing it as a RuleFile would fail.
+        if stem == "security" {
+            continue;
+        }
         let content = fs::read_to_string(&path)?;
         let rule_file: RuleFile = toml::from_str(&content).map_err(|e| {
             io::Error::new(
@@ -128,11 +143,6 @@ fn load_gates(rules_dir: &Path) -> io::Result<Vec<Gate>> {
                 format!("failed to parse {}: {e}", path.display()),
             )
         })?;
-        let stem = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("unknown")
-            .to_string();
         let name = rule_file.meta.name.clone().unwrap_or_else(|| stem.clone());
         let priority = rule_file.meta.priority.unwrap_or(0);
         gates.push(Gate {
@@ -144,6 +154,22 @@ fn load_gates(rules_dir: &Path) -> io::Result<Vec<Gate>> {
     }
     gates.sort_by(|a, b| a.stem.cmp(&b.stem));
     Ok(gates)
+}
+
+/// Parse `rules/security.toml` into the raw-string floor table. A missing file
+/// yields an empty table so the page still renders (the gate cards remain).
+fn load_security_floor(rules_dir: &Path) -> io::Result<SecurityFloorFile> {
+    let path = rules_dir.join("security.toml");
+    if !path.exists() {
+        return Ok(SecurityFloorFile::default());
+    }
+    let content = fs::read_to_string(&path)?;
+    toml::from_str(&content).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("failed to parse {}: {e}", path.display()),
+        )
+    })
 }
 
 /// Bucket counts for the seg-bar and chips.
@@ -899,9 +925,53 @@ fn render_floor_card(title: &str, anchor_label: &str, rows: &[FloorRow]) -> Stri
     )
 }
 
-/// Render `security-floor.md`: the cross-cut page with Hard blocks and Warn
-/// rules cards aggregating every gate.
-fn render_security_floor(gates: &[Gate]) -> String {
+/// Render one raw-string floor pattern row (from `rules/security.toml`). The
+/// pattern id renders as the `.prog` label, the tier as a `.flag` badge, and the
+/// reason as the row reason. Both tiers show the Ask pill; the tier badge
+/// carries the hard-ask (not settings-overridable) vs soft-ask distinction. A
+/// `within` row's `{match}` placeholder renders as an ellipsis.
+fn floor_pattern_row(p: &crate::rules_schema::SecurityPattern) -> String {
+    let tier = match p.tier {
+        FloorTier::HardAsk => "hard-ask",
+        FloorTier::SoftAsk => "soft-ask",
+    };
+    let reason = p.reason.replace("{match}", "\u{2026}");
+    let entry = RuleEntry {
+        program: p.id.clone(),
+        cmd_rest_html: format!(" <span class=\"flag\">{tier}</span>"),
+        decision: RowDecision::Ask,
+        warn: false,
+        reason_html: reason_to_html(&reason),
+        slug: p.id.clone(),
+        id: format!("floor-{}", p.id),
+    };
+    render_row(&entry, None)
+}
+
+/// Render the raw-string floor card: the pattern table from
+/// `rules/security.toml`, matched before AST parsing and before the gate rules.
+fn render_floor_patterns(floor: &SecurityFloorFile) -> String {
+    let src = src_link(
+        &format!("{SRC_REPO_BLOB}/security.toml"),
+        "rules/security.toml",
+    );
+    let mut body = String::new();
+    for p in &floor.patterns {
+        body.push('\n');
+        body.push_str(&floor_pattern_row(p));
+    }
+    format!(
+        "<div class=\"rule-card\">\n  <header>\n    <h2>{title}</h2>\n    {src}\n    <span class=\"count\">{n} patterns</span>\n  </header>\n{body}\n</div>",
+        title = "Raw-string floor \u{b7} matched before parsing",
+        src = src,
+        n = floor.patterns.len(),
+        body = body,
+    )
+}
+
+/// Render `security-floor.md`: the raw-string floor patterns plus the cross-cut
+/// Hard blocks and Warn rules cards aggregating every gate.
+fn render_security_floor(gates: &[Gate], floor: &SecurityFloorFile) -> String {
     let (hard_blocks, warn_rules) = collect_floor(gates);
 
     let mut out = String::new();
@@ -910,6 +980,11 @@ fn render_security_floor(gates: &[Gate]) -> String {
     );
     out.push_str("<h1>Security floor</h1>\n");
     out.push_str("<p class=\"page-lede\">Every <code>block</code> rule and every <code>warn = true</code> rule across all 13 gates, on one page. The hard-deny floor fires regardless of <code>settings.json</code>; warn rules ask first but are marked dangerous-but-recoverable. Generated from <code>rules/*.toml</code>; authoritative for security review.</p>\n\n");
+
+    if !floor.patterns.is_empty() {
+        out.push_str(&render_floor_patterns(floor));
+        out.push_str("\n\n");
+    }
 
     out.push_str(&render_floor_card(
         "Hard blocks \u{b7} denied without prompting",

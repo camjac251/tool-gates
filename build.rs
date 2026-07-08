@@ -74,8 +74,11 @@ fn main() {
         println!("cargo:rerun-if-changed={}", entry.path().display());
     }
 
-    // Collect all rule files
+    // Collect all rule files. `security.toml` is the raw-string floor, not a
+    // per-program gate table, so it is parsed separately as a SecurityFloorFile
+    // below and skipped here (it would fail RuleFile's deny_unknown_fields).
     let mut rule_files: Vec<(String, RuleFile)> = Vec::new();
+    let mut security_floor: Option<(std::path::PathBuf, SecurityFloorFile)> = None;
 
     for entry in fs::read_dir(rules_dir).expect("Failed to read rules directory") {
         let entry = entry.expect("Failed to read directory entry");
@@ -90,6 +93,14 @@ fn main() {
 
             let content = fs::read_to_string(&path)
                 .unwrap_or_else(|e| panic!("Failed to read {}: {}", path.display(), e));
+
+            if name == "security" {
+                let floor: SecurityFloorFile = toml::from_str(&content)
+                    .unwrap_or_else(|e| panic!("Failed to parse {}: {}", path.display(), e));
+                validate_security_floor(&path, &floor);
+                security_floor = Some((path, floor));
+                continue;
+            }
 
             let rules: RuleFile = toml::from_str(&content)
                 .unwrap_or_else(|e| panic!("Failed to parse {}: {}", path.display(), e));
@@ -109,7 +120,13 @@ fn main() {
     });
 
     // Generate Rust code
-    let rust_code = generate_rust_code(&rule_files);
+    let mut rust_code = generate_rust_code(&rule_files);
+
+    // Append the raw-string security floor matcher, generated from
+    // rules/security.toml (parsed separately above).
+    if let Some((_, floor)) = &security_floor {
+        rust_code.push_str(&generate_security_floor(floor));
+    }
 
     // Write to src/generated/
     let out_dir = Path::new("src/generated");
@@ -239,6 +256,80 @@ fn validate_rule_file(path: &Path, rules: &RuleFile) {
                 );
             }
         }
+    }
+}
+
+/// Validate `rules/security.toml`: unique ids, exactly one of regex/handler per
+/// row, well-formed `within` rows, and the same 250-char reason cap the gates
+/// enforce (Reason Style guide in AGENTS.md).
+fn validate_security_floor(path: &Path, floor: &SecurityFloorFile) {
+    let file_name = path.display().to_string();
+    let mut seen_ids: HashSet<&str> = HashSet::new();
+
+    for (i, p) in floor.patterns.iter().enumerate() {
+        if p.id.trim().is_empty() {
+            panic!("{}: patterns[{}] has an empty id", file_name, i);
+        }
+        if !seen_ids.insert(p.id.as_str()) {
+            panic!("{}: duplicate pattern id '{}'", file_name, p.id);
+        }
+
+        // Exactly one matcher source.
+        match (&p.regex, &p.handler) {
+            (Some(_), Some(_)) => panic!(
+                "{}: pattern '{}' sets both regex and handler (pick one)",
+                file_name, p.id
+            ),
+            (None, None) => panic!(
+                "{}: pattern '{}' sets neither regex nor handler",
+                file_name, p.id
+            ),
+            _ => {}
+        }
+
+        // within-rows need a regex, a non-empty inner list, reason_args =
+        // ["match"], and a {match} placeholder in the reason.
+        if p.within.is_some() {
+            if p.regex.is_none() {
+                panic!(
+                    "{}: pattern '{}' has `within` but no regex",
+                    file_name, p.id
+                );
+            }
+            if p.inner_contains_any.is_empty() {
+                panic!(
+                    "{}: pattern '{}' has `within` but empty inner_contains_any",
+                    file_name, p.id
+                );
+            }
+            if p.reason_args != ["match"] {
+                panic!(
+                    "{}: pattern '{}' `within` row must set reason_args = [\"match\"]",
+                    file_name, p.id
+                );
+            }
+            if !p.reason.contains("{match}") {
+                panic!(
+                    "{}: pattern '{}' `within` row reason must contain the {{match}} placeholder",
+                    file_name, p.id
+                );
+            }
+        } else {
+            if !p.inner_contains_any.is_empty() {
+                panic!(
+                    "{}: pattern '{}' sets inner_contains_any without `within`",
+                    file_name, p.id
+                );
+            }
+            if !p.reason_args.is_empty() {
+                panic!(
+                    "{}: pattern '{}' sets reason_args without `within`",
+                    file_name, p.id
+                );
+            }
+        }
+
+        check_reason_length(&file_name, "security-floor", "pattern", &p.id, &p.reason);
     }
 }
 
@@ -1747,6 +1838,146 @@ fn generate_file_editing_code(rule_files: &[(String, RuleFile)]) -> String {
     output.push_str("}\n\n");
 
     output
+}
+
+// ============================================================================
+// Security Floor Code Generation
+// ============================================================================
+
+/// The regex-static name for a floor row id (`pipe-bash` -> `FLOOR_PIPE_BASH_RE`).
+fn floor_static_name(id: &str) -> String {
+    format!("FLOOR_{}_RE", id.to_uppercase().replace('-', "_"))
+}
+
+/// Split a `within`-row reason around its `{match}` placeholder into
+/// (prefix, suffix). Validation guarantees the placeholder is present.
+fn split_match_placeholder(reason: &str) -> (String, String) {
+    match reason.split_once("{match}") {
+        Some((a, b)) => (a.to_string(), b.to_string()),
+        None => (reason.to_string(), String::new()),
+    }
+}
+
+/// Emit the `check_security_floor` matcher plus its regex statics from
+/// `rules/security.toml`. Rows run in file order (first-match-wins); each is a
+/// regex `is_match`, a `within` capture-iterate, or a Rust `handler` call.
+fn generate_security_floor(floor: &SecurityFloorFile) -> String {
+    let mut out = String::new();
+
+    out.push_str(
+        "\n// ============================================================================\n",
+    );
+    out.push_str("// Security Floor (generated from rules/security.toml)\n");
+    out.push_str(
+        "// ============================================================================\n\n",
+    );
+    out.push_str("use crate::rules_schema::FloorTier;\n");
+    out.push_str("use crate::security_floor::FloorHit;\n");
+    out.push_str("use regex::Regex;\n\n");
+
+    // Compiled regex statics, one per regex row.
+    for p in &floor.patterns {
+        if let Some(re) = &p.regex {
+            out.push_str(&format!(
+                "static {name}: LazyLock<Regex> = LazyLock::new(|| {{\n    Regex::new(r#\"{re}\"#).expect(\"security floor '{id}' regex must compile\")\n}});\n",
+                name = floor_static_name(&p.id),
+                re = re,
+                id = escape_rust_string(&p.id),
+            ));
+        }
+    }
+    out.push('\n');
+
+    out.push_str("/// Raw-string security floor: first-match-wins over rules/security.toml.\n");
+    out.push_str("/// `comment_stripped` has comments removed (quotes intact); `unquoted` also\n");
+    out.push_str(
+        "/// has quoted strings blanked. Returns the first matching row's tier + reason.\n",
+    );
+    out.push_str(
+        "pub fn check_security_floor(comment_stripped: &str, unquoted: &str) -> Option<FloorHit> {\n",
+    );
+
+    for p in &floor.patterns {
+        out.push_str(&generate_floor_row(p));
+    }
+
+    out.push_str("    None\n");
+    out.push_str("}\n");
+    out
+}
+
+/// Emit one floor row's check into `check_security_floor`.
+fn generate_floor_row(p: &SecurityPattern) -> String {
+    let mut out = String::new();
+
+    let tier = match p.tier {
+        FloorTier::HardAsk => "FloorTier::HardAsk",
+        FloorTier::SoftAsk => "FloorTier::SoftAsk",
+    };
+
+    // Handler row: the named Rust function owns matching and its own reason.
+    if let Some(handler) = &p.handler {
+        out.push_str(&format!(
+            "    if let Some(hit) = crate::security_floor::{handler}(comment_stripped, unquoted) {{\n        return Some(hit);\n    }}\n",
+        ));
+        return out;
+    }
+
+    let scan = match p.scan {
+        FloorScan::QuoteStripped => "unquoted",
+        FloorScan::CommentStripped => "comment_stripped",
+    };
+    let name = floor_static_name(&p.id);
+
+    // within = command_substitution: iterate each match, check the dangerous
+    // inner substrings, and echo the (byte-30-truncated) match into the reason.
+    if p.within == Some(FloorWithin::CommandSubstitution) {
+        let inner: Vec<String> = p
+            .inner_contains_any
+            .iter()
+            .map(|s| format!("\"{}\"", escape_rust_string(s)))
+            .collect();
+        let (prefix, suffix) = split_match_placeholder(&p.reason);
+        out.push_str(&format!("    for cap in {name}.captures_iter({scan}) {{\n"));
+        out.push_str("        let m = cap.get(0).map_or(\"\", |x| x.as_str());\n");
+        out.push_str(&format!(
+            "        if [{}].into_iter().any(|d| m.contains(d)) {{\n",
+            inner.join(", ")
+        ));
+        out.push_str("            let truncated = if m.len() > 30 { &m[..30] } else { m };\n");
+        out.push_str(&format!(
+            "            let mut reason = String::from(\"{}\");\n",
+            escape_rust_string(&prefix)
+        ));
+        out.push_str("            reason.push_str(truncated);\n");
+        out.push_str(&format!(
+            "            reason.push_str(\"{}\");\n",
+            escape_rust_string(&suffix)
+        ));
+        out.push_str(&format!(
+            "            return Some(FloorHit {{ tier: {tier}, reason }});\n"
+        ));
+        out.push_str("        }\n");
+        out.push_str("    }\n");
+        return out;
+    }
+
+    // Plain regex row, with an optional cheap substring pre-guard.
+    let guard = if p.requires_substring.is_empty() {
+        String::new()
+    } else {
+        let checks: Vec<String> = p
+            .requires_substring
+            .iter()
+            .map(|s| format!("{scan}.contains(\"{}\")", escape_rust_string(s)))
+            .collect();
+        format!("({}) && ", checks.join(" || "))
+    };
+    out.push_str(&format!(
+        "    if {guard}{name}.is_match({scan}) {{\n        return Some(FloorHit {{ tier: {tier}, reason: \"{reason}\".to_string() }});\n    }}\n",
+        reason = escape_rust_string(&p.reason),
+    ));
+    out
 }
 
 fn escape_rust_string(s: &str) -> String {
