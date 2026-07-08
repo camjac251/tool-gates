@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.32.0](https://github.com/camjac251/tool-gates/compare/v1.31.1...v1.32.0) - 2026-07-08
+
+### Added
+
+- *(router)* recognize the Claude Code session scratchpad as scratch
+
+### Fixed
+
+- *(gates)* honor package-manager allow rules, gate write subverbs
+- *(gates)* route unmatched system programs through the generated dispatcher
+- *(settings)* fail closed instead of wiping an unparseable settings.json
+- *(router)* treat newline as a command separator for the eval/source floor
+- *(router)* guard head/tail backstop slices against multibyte offset drift
+
+### Other
+
+- document the Claude session scratchpad scratch root
+- *(scanners)* share one content-scan engine and generate the docs
+- *(security)* make the raw-string floor declarative
+- *(router)* split into concern modules and break the gates cycle
+- *(gates)* pin registry invariants and correct the CLAUDE.md gate map
+- *(git)* skip the git gate before forcing the alias-map subprocess
+- fire lefthook rules-export on top-level rules changes
+- regenerate basics gate doc, link v1.31.1 src-tag
+
 ## [1.31.1](https://github.com/camjac251/tool-gates/compare/v1.31.0...v1.31.1) - 2026-06-25
 
 ### Fixed
