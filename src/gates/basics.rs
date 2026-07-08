@@ -12,10 +12,10 @@
 //! 2. `check_shell_c` - bash/sh/zsh -c 'script' requires parsing the script
 //!    string and checking each command in it. TOML can't parse embedded scripts.
 
+use crate::gates::check_single_command;
 use crate::generated::rules::{SAFE_COMMANDS, check_conditional_allow, check_safe_command};
 use crate::models::{CommandInfo, Decision, GateResult};
 use crate::parser::extract_commands;
-use crate::router::check_single_command;
 
 /// Check if a shell -c command is safe by parsing and checking the inner script.
 /// Handles: bash -c 'script', sh -c 'script', zsh -c 'script'

@@ -30,6 +30,7 @@
 //! assert_eq!(output.decision, PermissionDecision::Deny);
 //! ```
 
+pub mod accept_edits;
 pub mod apply_patch_parser;
 pub mod cache;
 pub mod config;
@@ -44,15 +45,23 @@ pub mod mise;
 pub mod models;
 pub mod package_json;
 pub mod parser;
+pub mod paths;
 pub mod patterns;
 pub mod permission_request;
+pub mod pipe_caps;
 pub mod router;
 pub mod rules_export;
 pub mod rules_schema;
+pub mod scratch;
+pub mod security_floor;
 pub mod security_reminders;
 pub mod settings;
+pub mod task_expansion;
 pub mod tool_blocks;
 pub mod tool_cache;
+
+#[cfg(feature = "wasm")]
+pub mod sim;
 
 // These modules depend on crates that do not compile for
 // `wasm32-unknown-unknown` (`fs2` file locking has no wasm target arm; `uuid`

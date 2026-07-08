@@ -36,7 +36,7 @@ pub use shortcut::check_shortcut;
 pub use system::check_system;
 pub use tool_gates::check_tool_gates;
 
-use crate::models::{CommandInfo, GateResult};
+use crate::models::{CommandInfo, Decision, GateResult};
 
 /// Type alias for gate check functions
 pub type GateCheckFn = fn(&CommandInfo) -> GateResult;
@@ -58,6 +58,27 @@ pub static GATES: &[(&str, GateCheckFn)] = &[
     ("shortcut", check_shortcut),
     ("basics", check_basics),
 ];
+
+/// Check a single command against all gates.
+pub fn check_single_command(cmd: &crate::models::CommandInfo) -> GateResult {
+    let mut strictest = GateResult::skip();
+
+    for (_gate_name, gate_func) in GATES {
+        let result = gate_func(cmd);
+
+        // Track the strictest decision (Block > Ask > Allow > Skip)
+        if result.decision > strictest.decision {
+            strictest = result;
+        }
+
+        // Early return on Block (can't get stricter)
+        if strictest.decision == Decision::Block {
+            return strictest;
+        }
+    }
+
+    strictest
+}
 
 #[cfg(test)]
 mod tests {
