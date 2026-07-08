@@ -130,43 +130,12 @@ fn check_npm(cmd: &CommandInfo) -> GateResult {
         return result;
     }
 
-    if let Some(result) = check_npm_declarative(cmd) {
-        // Don't auto-allow unknown commands
-        if !matches!(result.decision, Decision::Allow)
-            || has_known_subcommand(
-                cmd,
-                &[
-                    "list",
-                    "ls",
-                    "outdated",
-                    "audit",
-                    "config",
-                    "run",
-                    "test",
-                    "start",
-                    "build",
-                    "dev",
-                    "lint",
-                    "check",
-                    "typecheck",
-                    "format",
-                    "tsc",
-                    "prettier",
-                    "eslint",
-                    "--version",
-                    "-v",
-                    "--help",
-                    "-h",
-                ],
-            )
-        {
-            return result;
-        }
-    }
-    GateResult::ask(format!(
-        "npm: {}",
-        cmd.args.first().unwrap_or(&"unknown".to_string())
-    ))
+    check_npm_declarative(cmd).unwrap_or_else(|| {
+        GateResult::ask(format!(
+            "npm: {}",
+            cmd.args.first().unwrap_or(&"unknown".to_string())
+        ))
+    })
 }
 
 /// npx runs arbitrary binaries - route through all gates
@@ -185,39 +154,12 @@ fn check_pnpm(cmd: &CommandInfo) -> GateResult {
         return result;
     }
 
-    if let Some(result) = check_pnpm_declarative(cmd) {
-        if !matches!(result.decision, Decision::Allow)
-            || has_known_subcommand(
-                cmd,
-                &[
-                    "list",
-                    "ls",
-                    "outdated",
-                    "audit",
-                    "run",
-                    "test",
-                    "start",
-                    "build",
-                    "dev",
-                    "lint",
-                    "check",
-                    "typecheck",
-                    "format",
-                    "tsc",
-                    "--version",
-                    "-v",
-                    "--help",
-                    "-h",
-                ],
-            )
-        {
-            return result;
-        }
-    }
-    GateResult::ask(format!(
-        "pnpm: {}",
-        cmd.args.first().unwrap_or(&"unknown".to_string())
-    ))
+    check_pnpm_declarative(cmd).unwrap_or_else(|| {
+        GateResult::ask(format!(
+            "pnpm: {}",
+            cmd.args.first().unwrap_or(&"unknown".to_string())
+        ))
+    })
 }
 
 fn check_yarn(cmd: &CommandInfo) -> GateResult {
@@ -231,39 +173,12 @@ fn check_yarn(cmd: &CommandInfo) -> GateResult {
         return result;
     }
 
-    if let Some(result) = check_yarn_declarative(cmd) {
-        if !matches!(result.decision, Decision::Allow)
-            || has_known_subcommand(
-                cmd,
-                &[
-                    "list",
-                    "info",
-                    "outdated",
-                    "audit",
-                    "config",
-                    "run",
-                    "test",
-                    "start",
-                    "build",
-                    "dev",
-                    "lint",
-                    "check",
-                    "typecheck",
-                    "format",
-                    "--version",
-                    "-v",
-                    "--help",
-                    "-h",
-                ],
-            )
-        {
-            return result;
-        }
-    }
-    GateResult::ask(format!(
-        "yarn: {}",
-        cmd.args.first().unwrap_or(&"unknown".to_string())
-    ))
+    check_yarn_declarative(cmd).unwrap_or_else(|| {
+        GateResult::ask(format!(
+            "yarn: {}",
+            cmd.args.first().unwrap_or(&"unknown".to_string())
+        ))
+    })
 }
 
 fn check_pip(cmd: &CommandInfo) -> GateResult {
@@ -272,31 +187,12 @@ fn check_pip(cmd: &CommandInfo) -> GateResult {
         return GateResult::allow();
     }
 
-    if let Some(result) = check_pip_declarative(cmd) {
-        if !matches!(result.decision, Decision::Allow)
-            || has_known_subcommand(
-                cmd,
-                &[
-                    "list",
-                    "show",
-                    "freeze",
-                    "check",
-                    "config",
-                    "cache",
-                    "--version",
-                    "-V",
-                    "--help",
-                    "-h",
-                ],
-            )
-        {
-            return result;
-        }
-    }
-    GateResult::ask(format!(
-        "pip: {}",
-        cmd.args.first().unwrap_or(&"unknown".to_string())
-    ))
+    check_pip_declarative(cmd).unwrap_or_else(|| {
+        GateResult::ask(format!(
+            "pip: {}",
+            cmd.args.first().unwrap_or(&"unknown".to_string())
+        ))
+    })
 }
 
 fn check_uv(cmd: &CommandInfo) -> GateResult {
@@ -305,94 +201,30 @@ fn check_uv(cmd: &CommandInfo) -> GateResult {
         return result;
     }
 
-    if let Some(result) = check_uv_declarative(cmd) {
-        if !matches!(result.decision, Decision::Allow)
-            || has_known_subcommand(
-                cmd,
-                &[
-                    "pip list",
-                    "pip show",
-                    "pip freeze",
-                    "pip check",
-                    "run",
-                    "--version",
-                    "-V",
-                    "--help",
-                    "-h",
-                ],
-            )
-        {
-            return result;
-        }
-    }
-    GateResult::ask(format!(
-        "uv: {}",
-        cmd.args.first().unwrap_or(&"unknown".to_string())
-    ))
+    check_uv_declarative(cmd).unwrap_or_else(|| {
+        GateResult::ask(format!(
+            "uv: {}",
+            cmd.args.first().unwrap_or(&"unknown".to_string())
+        ))
+    })
 }
 
 fn check_cargo(cmd: &CommandInfo) -> GateResult {
-    if let Some(result) = check_cargo_declarative(cmd) {
-        if !matches!(result.decision, Decision::Allow)
-            || has_known_subcommand(
-                cmd,
-                &[
-                    "check",
-                    "test",
-                    "build",
-                    "run",
-                    "clippy",
-                    "fmt",
-                    "doc",
-                    "tree",
-                    "metadata",
-                    "nextest",
-                    "audit",
-                    "deny",
-                    "expand",
-                    "semver-checks",
-                    "llvm-cov",
-                    "outdated",
-                    "bloat",
-                    "machete",
-                    "depgraph",
-                    "insta",
-                    "bench",
-                    "clean",
-                    "--version",
-                    "-V",
-                    "--help",
-                    "-h",
-                ],
-            )
-        {
-            return result;
-        }
-    }
-    GateResult::ask(format!(
-        "cargo: {}",
-        cmd.args.first().unwrap_or(&"unknown".to_string())
-    ))
+    check_cargo_declarative(cmd).unwrap_or_else(|| {
+        GateResult::ask(format!(
+            "cargo: {}",
+            cmd.args.first().unwrap_or(&"unknown".to_string())
+        ))
+    })
 }
 
 fn check_go(cmd: &CommandInfo) -> GateResult {
-    if let Some(result) = check_go_declarative(cmd) {
-        if !matches!(result.decision, Decision::Allow)
-            || has_known_subcommand(
-                cmd,
-                &[
-                    "build", "test", "run", "fmt", "vet", "list", "mod", "version", "doc", "env",
-                    "--help", "-h",
-                ],
-            )
-        {
-            return result;
-        }
-    }
-    GateResult::ask(format!(
-        "go: {}",
-        cmd.args.first().unwrap_or(&"unknown".to_string())
-    ))
+    check_go_declarative(cmd).unwrap_or_else(|| {
+        GateResult::ask(format!(
+            "go: {}",
+            cmd.args.first().unwrap_or(&"unknown".to_string())
+        ))
+    })
 }
 
 fn check_bun(cmd: &CommandInfo) -> GateResult {
@@ -401,20 +233,12 @@ fn check_bun(cmd: &CommandInfo) -> GateResult {
         return result;
     }
 
-    if let Some(result) = check_bun_declarative(cmd) {
-        if !matches!(result.decision, Decision::Allow)
-            || has_known_subcommand(
-                cmd,
-                &["run", "test", "build", "--version", "-v", "--help", "-h"],
-            )
-        {
-            return result;
-        }
-    }
-    GateResult::ask(format!(
-        "bun: {}",
-        cmd.args.first().unwrap_or(&"unknown".to_string())
-    ))
+    check_bun_declarative(cmd).unwrap_or_else(|| {
+        GateResult::ask(format!(
+            "bun: {}",
+            cmd.args.first().unwrap_or(&"unknown".to_string())
+        ))
+    })
 }
 
 /// bunx runs arbitrary binaries - route through all gates
@@ -424,30 +248,12 @@ fn check_bunx(cmd: &CommandInfo) -> GateResult {
 }
 
 fn check_conda(cmd: &CommandInfo) -> GateResult {
-    if let Some(result) = check_conda_declarative(cmd) {
-        if !matches!(result.decision, Decision::Allow)
-            || has_known_subcommand(
-                cmd,
-                &[
-                    "list",
-                    "info",
-                    "search",
-                    "config",
-                    "env list",
-                    "--version",
-                    "-V",
-                    "--help",
-                    "-h",
-                ],
-            )
-        {
-            return result;
-        }
-    }
-    GateResult::ask(format!(
-        "conda: {}",
-        cmd.args.first().unwrap_or(&"unknown".to_string())
-    ))
+    check_conda_declarative(cmd).unwrap_or_else(|| {
+        GateResult::ask(format!(
+            "conda: {}",
+            cmd.args.first().unwrap_or(&"unknown".to_string())
+        ))
+    })
 }
 
 fn check_poetry(cmd: &CommandInfo) -> GateResult {
@@ -456,34 +262,12 @@ fn check_poetry(cmd: &CommandInfo) -> GateResult {
         return result;
     }
 
-    if let Some(result) = check_poetry_declarative(cmd) {
-        if !matches!(result.decision, Decision::Allow)
-            || has_known_subcommand(
-                cmd,
-                &[
-                    "show",
-                    "check",
-                    "search",
-                    "run",
-                    "shell",
-                    "config",
-                    "env list",
-                    "env info",
-                    "env activate",
-                    "--version",
-                    "-V",
-                    "--help",
-                    "-h",
-                ],
-            )
-        {
-            return result;
-        }
-    }
-    GateResult::ask(format!(
-        "poetry: {}",
-        cmd.args.first().unwrap_or(&"unknown".to_string())
-    ))
+    check_poetry_declarative(cmd).unwrap_or_else(|| {
+        GateResult::ask(format!(
+            "poetry: {}",
+            cmd.args.first().unwrap_or(&"unknown".to_string())
+        ))
+    })
 }
 
 fn check_pipx(cmd: &CommandInfo) -> GateResult {
@@ -492,17 +276,12 @@ fn check_pipx(cmd: &CommandInfo) -> GateResult {
         return result;
     }
 
-    if let Some(result) = check_pipx_declarative(cmd) {
-        if !matches!(result.decision, Decision::Allow)
-            || has_known_subcommand(cmd, &["list", "run", "--version", "--help"])
-        {
-            return result;
-        }
-    }
-    GateResult::ask(format!(
-        "pipx: {}",
-        cmd.args.first().unwrap_or(&"unknown".to_string())
-    ))
+    check_pipx_declarative(cmd).unwrap_or_else(|| {
+        GateResult::ask(format!(
+            "pipx: {}",
+            cmd.args.first().unwrap_or(&"unknown".to_string())
+        ))
+    })
 }
 
 fn check_pdm(cmd: &CommandInfo) -> GateResult {
@@ -612,53 +391,12 @@ fn check_mise(cmd: &CommandInfo) -> GateResult {
     }
 
     // Use declarative rules for other mise commands
-    if let Some(result) = check_mise_declarative(cmd) {
-        if !matches!(result.decision, Decision::Allow)
-            || has_known_subcommand(
-                cmd,
-                &[
-                    "ls",
-                    "list",
-                    "ls-remote",
-                    "current",
-                    "where",
-                    "which",
-                    "env",
-                    "version",
-                    "doctor",
-                    "reshim",
-                    "trust",
-                    "exec",
-                    "registry",
-                    "--version",
-                    "-V",
-                    "--help",
-                    "-h",
-                ],
-            )
-        {
-            return result;
-        }
-    }
-
-    GateResult::ask(format!(
-        "mise: {}",
-        cmd.args.first().unwrap_or(&"".to_string())
-    ))
-}
-
-/// Check if command has a known subcommand
-fn has_known_subcommand(cmd: &CommandInfo, known: &[&str]) -> bool {
-    if cmd.args.is_empty() {
-        return false;
-    }
-    let first = cmd.args[0].as_str();
-    let two_word = if cmd.args.len() >= 2 {
-        format!("{} {}", cmd.args[0], cmd.args[1])
-    } else {
-        String::new()
-    };
-    known.contains(&first) || known.contains(&two_word.as_str())
+    check_mise_declarative(cmd).unwrap_or_else(|| {
+        GateResult::ask(format!(
+            "mise: {}",
+            cmd.args.first().unwrap_or(&"".to_string())
+        ))
+    })
 }
 
 /// Check if a Python tool is running a command via "run" subcommand.
@@ -1018,6 +756,106 @@ mod tests {
     fn test_non_pm_skips() {
         let result = check_package_managers(&cmd("git", &["status"]));
         assert_eq!(result.decision, Decision::Skip);
+    }
+
+    // === TOML is the sole allow authority (no Rust shadow allowlist) ===
+
+    #[test]
+    fn every_package_manager_program_is_reachable() {
+        use crate::generated::rules::PACKAGE_MANAGERS_PROGRAMS;
+        for prog in PACKAGE_MANAGERS_PROGRAMS {
+            let result = check_package_managers(&cmd(prog, &[]));
+            assert_ne!(
+                result.decision,
+                Decision::Skip,
+                "package_managers.toml declares `{prog}` but the gate skips it"
+            );
+        }
+    }
+
+    #[test]
+    fn toml_allowed_subcommands_are_allowed_end_to_end() {
+        for (prog, args, label) in [
+            ("poetry", &["build"][..], "poetry build"),
+            ("pipx", &["environment"][..], "pipx environment"),
+            ("npm", &["view", "react"][..], "npm view"),
+            ("npm", &["whoami"][..], "npm whoami"),
+            ("cargo", &["search", "serde"][..], "cargo search"),
+        ] {
+            let result = check_package_managers(&cmd(prog, args));
+            assert_eq!(result.decision, Decision::Allow, "{label} should allow");
+        }
+    }
+
+    // === Write subverbs ask while read forms stay allowed (matcher-precedence) ===
+
+    #[test]
+    fn write_subverbs_ask() {
+        for (prog, args, label) in [
+            ("npm", &["token", "create"][..], "npm token create"),
+            ("npm", &["token", "revoke", "abc"][..], "npm token revoke"),
+            (
+                "npm",
+                &["team", "add", "org:team", "user"][..],
+                "npm team add",
+            ),
+            (
+                "npm",
+                &["team", "destroy", "org:team"][..],
+                "npm team destroy",
+            ),
+            (
+                "mise",
+                &["settings", "set", "a", "b"][..],
+                "mise settings set",
+            ),
+            (
+                "mise",
+                &["settings", "unset", "a"][..],
+                "mise settings unset",
+            ),
+            (
+                "mise",
+                &["alias", "set", "a", "b", "c"][..],
+                "mise alias set",
+            ),
+            (
+                "mise",
+                &["alias", "unset", "a", "b"][..],
+                "mise alias unset",
+            ),
+            ("bun", &["pm", "trust", "pkg"][..], "bun pm trust"),
+            ("bun", &["pm", "cache", "rm"][..], "bun pm cache"),
+            (
+                "conda",
+                &["package", "--reset"][..],
+                "conda package --reset",
+            ),
+        ] {
+            let result = check_package_managers(&cmd(prog, args));
+            assert_eq!(result.decision, Decision::Ask, "{label} should ask");
+        }
+    }
+
+    #[test]
+    fn read_forms_stay_allowed() {
+        for (prog, args, label) in [
+            ("npm", &["token", "list"][..], "npm token list"),
+            ("npm", &["team", "ls"][..], "npm team ls"),
+            ("mise", &["settings", "get", "x"][..], "mise settings get"),
+            ("mise", &["settings", "ls"][..], "mise settings ls"),
+            (
+                "mise",
+                &["alias", "get", "node", "lts"][..],
+                "mise alias get",
+            ),
+            ("mise", &["alias", "ls"][..], "mise alias ls"),
+            ("bun", &["pm", "ls"][..], "bun pm ls"),
+            ("bun", &["pm", "bin"][..], "bun pm bin"),
+        ] {
+            let result = check_package_managers(&cmd(prog, args));
+            assert_eq!(result.decision, Decision::Allow, "{label} should allow");
+        }
     }
 
     // === Security: Exec/Run with dangerous commands should BLOCK ===

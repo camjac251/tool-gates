@@ -3016,6 +3016,13 @@ pub fn check_pulumi_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 pub static NPM_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
+        ("token create", "Creates a new npm registry auth token. Mints a credential that can publish and modify packages; store it securely."),
+        ("token revoke", "Revokes an npm registry auth token by id or value. Immediately invalidates that credential for every consumer."),
+        ("token delete", "Deletes an npm registry auth token. Immediately invalidates that credential."),
+        ("team create", "Creates a team in an organization on the registry. Changes the org's team structure."),
+        ("team destroy", "Destroys a team in an organization on the registry. Removes the team and its access grants."),
+        ("team add", "Adds a user to an organization team on the registry. Grants that user the team's package access."),
+        ("team rm", "Removes a user from an organization team on the registry. Revokes that user's team package access."),
         ("run", "Running script from package.json"),
         ("run-script", "Running script from package.json"),
         ("start", "Running start script"),
@@ -3161,14 +3168,19 @@ pub fn check_npm_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             "Prints the username of the logged-in registry account. Read-only.",
         ));
     }
-    if subcmd_single == "token" {
+    if cmd.args.len() >= 2 && cmd.args[0] == "token" && cmd.args[1] == "list" {
         return Some(GateResult::allow_with_reason(
-            "Lists authentication tokens for the registry account. Read-only; does not create or revoke.",
+            "Lists authentication tokens for the registry account. Read-only.",
         ));
     }
-    if subcmd_single == "team" {
+    if cmd.args.len() >= 2 && cmd.args[0] == "team" && cmd.args[1] == "ls" {
         return Some(GateResult::allow_with_reason(
-            "Lists or inspects organization teams on the registry. Read-only.",
+            "Lists teams in an organization or the members of a team. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "team" && cmd.args[1] == "list" {
+        return Some(GateResult::allow_with_reason(
+            "Lists teams in an organization or the members of a team. Read-only.",
         ));
     }
     if subcmd_single == "outdated" {
@@ -4349,6 +4361,8 @@ pub fn check_go_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 pub static BUN_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
+        ("pm trust", "Runs the blocked postinstall scripts for the named or all dependencies. Executes third-party install scripts; same trust boundary as running arbitrary code."),
+        ("pm cache", "Inspects or clears the bun install cache. `bun pm cache rm` deletes all cached packages."),
         ("run", "Running script from package.json"),
         ("start", "Running start script"),
         ("install", "Installing packages"),
@@ -4384,9 +4398,24 @@ pub fn check_bun_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
 
     // Check conditional allow rules
-    if subcmd_single == "pm" {
+    if cmd.args.len() >= 2 && cmd.args[0] == "pm" && cmd.args[1] == "ls" {
         return Some(GateResult::allow_with_reason(
-            "Inspects bun's package manager state (ls, cache dir, bin path, hash). Read-only.",
+            "Lists installed packages in the bun store or project. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "pm" && cmd.args[1] == "bin" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the path to the project or global bin directory. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "pm" && cmd.args[1] == "hash" {
+        return Some(GateResult::allow_with_reason(
+            "Prints or verifies the lockfile hash. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "pm" && cmd.args[1] == "untrusted" {
+        return Some(GateResult::allow_with_reason(
+            "Lists dependencies whose postinstall scripts were blocked as untrusted. Read-only.",
         ));
     }
     if subcmd_single == "-v" {
@@ -4455,6 +4484,7 @@ pub fn check_bun_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 pub static CONDA_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
+        ("package", "Low-level conda package build helpers. `--reset` clears package metadata and `--untracked` alters tracking; rarely used outside package authoring."),
         ("install", "Installing packages"),
         ("remove", "Removing packages"),
         ("uninstall", "Uninstalling packages"),
@@ -4537,11 +4567,6 @@ pub fn check_conda_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     {
         return Some(GateResult::allow_with_reason(
             "Shows conda config values. Read-only unless a write flag (`--add`, `--remove`, `--set`, `--append`, `--prepend`, `--remove-key`) is present, which is gated separately.",
-        ));
-    }
-    if subcmd_single == "package" {
-        return Some(GateResult::allow_with_reason(
-            "Inspects or queries package metadata (low-level package operations in read mode). Read-only.",
         ));
     }
     if subcmd_single == "--version" {
@@ -4798,6 +4823,11 @@ pub fn check_pipx_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 pub static MISE_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
+        ("settings set", "Sets a mise setting. Writes to the mise config; changes tool resolution and runtime behavior."),
+        ("settings unset", "Removes a mise setting, reverting it to the default. Writes to the mise config."),
+        ("settings add", "Appends a value to a list-valued mise setting. Writes to the mise config."),
+        ("alias set", "Defines or overwrites a tool-version alias. Writes to the mise config; changes which version the alias resolves to."),
+        ("alias unset", "Removes a tool-version alias. Writes to the mise config."),
         ("run", "Running mise task"),
         ("task", "Manages or runs mise tasks (run, ls, edit, add). `mise task run` executes shell from the task file; treat as running that script."),
         ("tasks", "Manages or runs mise tasks (run, ls, edit, add). `mise tasks run` executes shell from the task file; treat as running that script."),
@@ -4916,14 +4946,24 @@ pub fn check_mise_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             "Lists installed mise plugins. Read-only unless an install/remove/update subcommand is given, which is gated separately.",
         ));
     }
-    if subcmd_single == "settings" {
+    if cmd.args.len() >= 2 && cmd.args[0] == "settings" && cmd.args[1] == "get" {
         return Some(GateResult::allow_with_reason(
-            "Shows mise settings values. Read-only in list form.",
+            "Prints the value of a single mise setting. Read-only.",
         ));
     }
-    if subcmd_single == "alias" {
+    if cmd.args.len() >= 2 && cmd.args[0] == "settings" && cmd.args[1] == "ls" {
         return Some(GateResult::allow_with_reason(
-            "Shows tool-version aliases configured in mise. Read-only in list form.",
+            "Lists mise settings and their values. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "alias" && cmd.args[1] == "get" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the version an alias resolves to for a tool. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "alias" && cmd.args[1] == "ls" {
+        return Some(GateResult::allow_with_reason(
+            "Lists tool-version aliases configured in mise. Read-only.",
         ));
     }
     if subcmd_single == "bin-paths" {

@@ -102,12 +102,44 @@ subcommand = "whoami"
 reason = "Prints the username of the logged-in registry account. Read-only."
 
 [[programs.allow]]
-subcommand = "token"
-reason = "Lists authentication tokens for the registry account. Read-only; does not create or revoke."
+subcommand = "token list"
+reason = "Lists authentication tokens for the registry account. Read-only."
+
+[[programs.ask]]
+subcommand = "token create"
+reason = "Creates a new npm registry auth token. Mints a credential that can publish and modify packages; store it securely."
+
+[[programs.ask]]
+subcommand = "token revoke"
+reason = "Revokes an npm registry auth token by id or value. Immediately invalidates that credential for every consumer."
+
+[[programs.ask]]
+subcommand = "token delete"
+reason = "Deletes an npm registry auth token. Immediately invalidates that credential."
 
 [[programs.allow]]
-subcommand = "team"
-reason = "Lists or inspects organization teams on the registry. Read-only."
+subcommand = "team ls"
+reason = "Lists teams in an organization or the members of a team. Read-only."
+
+[[programs.allow]]
+subcommand = "team list"
+reason = "Lists teams in an organization or the members of a team. Read-only."
+
+[[programs.ask]]
+subcommand = "team create"
+reason = "Creates a team in an organization on the registry. Changes the org's team structure."
+
+[[programs.ask]]
+subcommand = "team destroy"
+reason = "Destroys a team in an organization on the registry. Removes the team and its access grants."
+
+[[programs.ask]]
+subcommand = "team add"
+reason = "Adds a user to an organization team on the registry. Grants that user the team's package access."
+
+[[programs.ask]]
+subcommand = "team rm"
+reason = "Removes a user from an organization team on the registry. Revokes that user's team package access."
 
 [[programs.allow]]
 subcommand = "outdated"
@@ -1355,8 +1387,28 @@ unknown_action = "ask"
 
 # Read-only commands
 [[programs.allow]]
-subcommand = "pm"
-reason = "Inspects bun's package manager state (ls, cache dir, bin path, hash). Read-only."
+subcommand = "pm ls"
+reason = "Lists installed packages in the bun store or project. Read-only."
+
+[[programs.allow]]
+subcommand = "pm bin"
+reason = "Prints the path to the project or global bin directory. Read-only."
+
+[[programs.allow]]
+subcommand = "pm hash"
+reason = "Prints or verifies the lockfile hash. Read-only."
+
+[[programs.allow]]
+subcommand = "pm untrusted"
+reason = "Lists dependencies whose postinstall scripts were blocked as untrusted. Read-only."
+
+[[programs.ask]]
+subcommand = "pm trust"
+reason = "Runs the blocked postinstall scripts for the named or all dependencies. Executes third-party install scripts; same trust boundary as running arbitrary code."
+
+[[programs.ask]]
+subcommand = "pm cache"
+reason = "Inspects or clears the bun install cache. `bun pm cache rm` deletes all cached packages."
 
 [[programs.allow]]
 subcommand = "-v"
@@ -1507,9 +1559,9 @@ if_flags_any = [
   "--remove-key",
 ]
 
-[[programs.allow]]
+[[programs.ask]]
 subcommand = "package"
-reason = "Inspects or queries package metadata (low-level package operations in read mode). Read-only."
+reason = "Low-level conda package build helpers. `--reset` clears package metadata and `--untracked` alters tracking; rarely used outside package authoring."
 
 [[programs.allow]]
 subcommand = "--version"
@@ -1887,12 +1939,40 @@ subcommand = "plugins"
 reason = "Lists installed mise plugins. Read-only unless an install/remove/update subcommand is given, which is gated separately."
 
 [[programs.allow]]
-subcommand = "settings"
-reason = "Shows mise settings values. Read-only in list form."
+subcommand = "settings get"
+reason = "Prints the value of a single mise setting. Read-only."
 
 [[programs.allow]]
-subcommand = "alias"
-reason = "Shows tool-version aliases configured in mise. Read-only in list form."
+subcommand = "settings ls"
+reason = "Lists mise settings and their values. Read-only."
+
+[[programs.ask]]
+subcommand = "settings set"
+reason = "Sets a mise setting. Writes to the mise config; changes tool resolution and runtime behavior."
+
+[[programs.ask]]
+subcommand = "settings unset"
+reason = "Removes a mise setting, reverting it to the default. Writes to the mise config."
+
+[[programs.ask]]
+subcommand = "settings add"
+reason = "Appends a value to a list-valued mise setting. Writes to the mise config."
+
+[[programs.allow]]
+subcommand = "alias get"
+reason = "Prints the version an alias resolves to for a tool. Read-only."
+
+[[programs.allow]]
+subcommand = "alias ls"
+reason = "Lists tool-version aliases configured in mise. Read-only."
+
+[[programs.ask]]
+subcommand = "alias set"
+reason = "Defines or overwrites a tool-version alias. Writes to the mise config; changes which version the alias resolves to."
+
+[[programs.ask]]
+subcommand = "alias unset"
+reason = "Removes a tool-version alias. Writes to the mise config."
 
 [[programs.allow]]
 subcommand = "bin-paths"

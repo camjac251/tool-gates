@@ -8,14 +8,14 @@
   </div>
 
   <div class="summary" aria-label="Rule counts at a glance">
-    <div class="seg-bar" role="img" aria-label="228 allow, 205 ask, 0 block">
-      <div class="seg allow" style="flex: 228"></div>
-      <div class="seg ask"   style="flex: 205"></div>
+    <div class="seg-bar" role="img" aria-label="233 allow, 220 ask, 0 block">
+      <div class="seg allow" style="flex: 233"></div>
+      <div class="seg ask"   style="flex: 220"></div>
       <div class="seg block" style="flex: 0"></div>
     </div>
     <div class="counts">
-      <span class="ca"><i></i><b>228</b> allow</span>
-      <span class="cas"><i></i><b>205</b> ask</span>
+      <span class="ca"><i></i><b>233</b> allow</span>
+      <span class="cas"><i></i><b>220</b> ask</span>
       <span class="cb"><i></i><b>0</b> block</span>
     </div>
   </div>
@@ -24,9 +24,9 @@
 </div>
 
 <div class="chips" role="group" aria-label="Filter rules by decision">
-  <button class="chip all"   data-filter="all"   aria-pressed="true"><i></i>All <span class="n">433</span></button>
-  <button class="chip allow" data-filter="allow" aria-pressed="false"><i></i>Allow <span class="n">228</span></button>
-  <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">205</span></button>
+  <button class="chip all"   data-filter="all"   aria-pressed="true"><i></i>All <span class="n">453</span></button>
+  <button class="chip allow" data-filter="allow" aria-pressed="false"><i></i>Allow <span class="n">233</span></button>
+  <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">220</span></button>
   <button class="chip block" data-filter="block" aria-pressed="false"><i></i>Block <span class="n">0</span></button>
 </div>
 
@@ -37,13 +37,28 @@
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
       rules/package_managers.toml#allow
     </a>
-    <span class="count">228 patterns</span>
+    <span class="count">233 patterns</span>
   </header>
 
-<div class="rule-row" data-decision="allow" id="package_managers-bun-pm">
-  <div class="rule-cmd"><span class="prog">bun</span> pm</div>
+<div class="rule-row" data-decision="allow" id="package_managers-bun-pm-ls">
+  <div class="rule-cmd"><span class="prog">bun</span> pm ls</div>
   <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
-  <div class="rule-reason">Inspects bun's package manager state (ls, cache dir, bin path, hash). Read-only.</div>
+  <div class="rule-reason">Lists installed packages in the bun store or project. Read-only.</div>
+</div>
+<div class="rule-row" data-decision="allow" id="package_managers-bun-pm-bin">
+  <div class="rule-cmd"><span class="prog">bun</span> pm bin</div>
+  <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
+  <div class="rule-reason">Prints the path to the project or global bin directory. Read-only.</div>
+</div>
+<div class="rule-row" data-decision="allow" id="package_managers-bun-pm-hash">
+  <div class="rule-cmd"><span class="prog">bun</span> pm hash</div>
+  <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
+  <div class="rule-reason">Prints or verifies the lockfile hash. Read-only.</div>
+</div>
+<div class="rule-row" data-decision="allow" id="package_managers-bun-pm-untrusted">
+  <div class="rule-cmd"><span class="prog">bun</span> pm untrusted</div>
+  <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
+  <div class="rule-reason">Lists dependencies whose postinstall scripts were blocked as untrusted. Read-only.</div>
 </div>
 <div class="rule-row" data-decision="allow" id="package_managers-bun-v">
   <div class="rule-cmd"><span class="prog">bun</span> -v</div>
@@ -290,11 +305,6 @@
   <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
   <div class="rule-reason">Shows conda config values. Read-only unless a write flag (<code>--add</code>, <code>--remove</code>, <code>--set</code>, <code>--append</code>, <code>--prepend</code>, <code>--remove-key</code>) is present, which is gated separately.</div>
 </div>
-<div class="rule-row" data-decision="allow" id="package_managers-conda-package">
-  <div class="rule-cmd"><span class="prog">conda</span> package</div>
-  <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
-  <div class="rule-reason">Inspects or queries package metadata (low-level package operations in read mode). Read-only.</div>
-</div>
 <div class="rule-row" data-decision="allow" id="package_managers-conda-version">
   <div class="rule-cmd"><span class="prog">conda</span> --version</div>
   <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
@@ -480,15 +490,25 @@
   <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
   <div class="rule-reason">Lists installed mise plugins. Read-only unless an install/remove/update subcommand is given, which is gated separately.</div>
 </div>
-<div class="rule-row" data-decision="allow" id="package_managers-mise-settings">
-  <div class="rule-cmd"><span class="prog">mise</span> settings</div>
+<div class="rule-row" data-decision="allow" id="package_managers-mise-settings-get">
+  <div class="rule-cmd"><span class="prog">mise</span> settings get</div>
   <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
-  <div class="rule-reason">Shows mise settings values. Read-only in list form.</div>
+  <div class="rule-reason">Prints the value of a single mise setting. Read-only.</div>
 </div>
-<div class="rule-row" data-decision="allow" id="package_managers-mise-alias">
-  <div class="rule-cmd"><span class="prog">mise</span> alias</div>
+<div class="rule-row" data-decision="allow" id="package_managers-mise-settings-ls">
+  <div class="rule-cmd"><span class="prog">mise</span> settings ls</div>
   <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
-  <div class="rule-reason">Shows tool-version aliases configured in mise. Read-only in list form.</div>
+  <div class="rule-reason">Lists mise settings and their values. Read-only.</div>
+</div>
+<div class="rule-row" data-decision="allow" id="package_managers-mise-alias-get">
+  <div class="rule-cmd"><span class="prog">mise</span> alias get</div>
+  <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
+  <div class="rule-reason">Prints the version an alias resolves to for a tool. Read-only.</div>
+</div>
+<div class="rule-row" data-decision="allow" id="package_managers-mise-alias-ls">
+  <div class="rule-cmd"><span class="prog">mise</span> alias ls</div>
+  <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
+  <div class="rule-reason">Lists tool-version aliases configured in mise. Read-only.</div>
 </div>
 <div class="rule-row" data-decision="allow" id="package_managers-mise-bin-paths">
   <div class="rule-cmd"><span class="prog">mise</span> bin-paths</div>
@@ -605,15 +625,20 @@
   <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
   <div class="rule-reason">Prints the username of the logged-in registry account. Read-only.</div>
 </div>
-<div class="rule-row" data-decision="allow" id="package_managers-npm-token">
-  <div class="rule-cmd"><span class="prog">npm</span> token</div>
+<div class="rule-row" data-decision="allow" id="package_managers-npm-token-list">
+  <div class="rule-cmd"><span class="prog">npm</span> token list</div>
   <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
-  <div class="rule-reason">Lists authentication tokens for the registry account. Read-only; does not create or revoke.</div>
+  <div class="rule-reason">Lists authentication tokens for the registry account. Read-only.</div>
 </div>
-<div class="rule-row" data-decision="allow" id="package_managers-npm-team">
-  <div class="rule-cmd"><span class="prog">npm</span> team</div>
+<div class="rule-row" data-decision="allow" id="package_managers-npm-team-ls">
+  <div class="rule-cmd"><span class="prog">npm</span> team ls</div>
   <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
-  <div class="rule-reason">Lists or inspects organization teams on the registry. Read-only.</div>
+  <div class="rule-reason">Lists teams in an organization or the members of a team. Read-only.</div>
+</div>
+<div class="rule-row" data-decision="allow" id="package_managers-npm-team-list">
+  <div class="rule-cmd"><span class="prog">npm</span> team list</div>
+  <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
+  <div class="rule-reason">Lists teams in an organization or the members of a team. Read-only.</div>
 </div>
 <div class="rule-row" data-decision="allow" id="package_managers-npm-outdated">
   <div class="rule-cmd"><span class="prog">npm</span> outdated</div>
@@ -1189,9 +1214,19 @@
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
       rules/package_managers.toml#ask
     </a>
-    <span class="count">205 patterns</span>
+    <span class="count">220 patterns</span>
   </header>
 
+<div class="rule-row" data-decision="ask" id="package_managers-bun-pm-trust">
+  <div class="rule-cmd"><span class="prog">bun</span> pm trust</div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Runs the blocked postinstall scripts for the named or all dependencies. Executes third-party install scripts; same trust boundary as running arbitrary code.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="package_managers-bun-pm-cache">
+  <div class="rule-cmd"><span class="prog">bun</span> pm cache</div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Inspects or clears the bun install cache. <code>bun pm cache rm</code> deletes all cached packages.</div>
+</div>
 <div class="rule-row" data-decision="ask" id="package_managers-bun-run">
   <div class="rule-cmd"><span class="prog">bun</span> run</div>
   <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
@@ -1342,6 +1377,11 @@
   <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
   <div class="rule-reason">Modifying conda config</div>
 </div>
+<div class="rule-row" data-decision="ask" id="package_managers-conda-package">
+  <div class="rule-cmd"><span class="prog">conda</span> package</div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Low-level conda package build helpers. <code>--reset</code> clears package metadata and <code>--untracked</code> alters tracking; rarely used outside package authoring.</div>
+</div>
 <div class="rule-row" data-decision="ask" id="package_managers-conda-install">
   <div class="rule-cmd"><span class="prog">conda</span> install</div>
   <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
@@ -1472,6 +1512,31 @@
   <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
   <div class="rule-reason">Edits <code>go.mod</code> programmatically (require, replace, drop, go directive). Rewrites the manifest.</div>
 </div>
+<div class="rule-row" data-decision="ask" id="package_managers-mise-settings-set">
+  <div class="rule-cmd"><span class="prog">mise</span> settings set</div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Sets a mise setting. Writes to the mise config; changes tool resolution and runtime behavior.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="package_managers-mise-settings-unset">
+  <div class="rule-cmd"><span class="prog">mise</span> settings unset</div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Removes a mise setting, reverting it to the default. Writes to the mise config.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="package_managers-mise-settings-add">
+  <div class="rule-cmd"><span class="prog">mise</span> settings add</div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Appends a value to a list-valued mise setting. Writes to the mise config.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="package_managers-mise-alias-set">
+  <div class="rule-cmd"><span class="prog">mise</span> alias set</div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Defines or overwrites a tool-version alias. Writes to the mise config; changes which version the alias resolves to.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="package_managers-mise-alias-unset">
+  <div class="rule-cmd"><span class="prog">mise</span> alias unset</div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Removes a tool-version alias. Writes to the mise config.</div>
+</div>
 <div class="rule-row" data-decision="ask" id="package_managers-mise-run">
   <div class="rule-cmd"><span class="prog">mise</span> run</div>
   <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
@@ -1586,6 +1651,41 @@
   <div class="rule-cmd"><span class="prog">npm</span> config <span class="flag">set</span> <span class="flag">delete</span> <span class="flag">edit</span></div>
   <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
   <div class="rule-reason">Modifying npm config</div>
+</div>
+<div class="rule-row" data-decision="ask" id="package_managers-npm-token-create">
+  <div class="rule-cmd"><span class="prog">npm</span> token create</div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Creates a new npm registry auth token. Mints a credential that can publish and modify packages; store it securely.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="package_managers-npm-token-revoke">
+  <div class="rule-cmd"><span class="prog">npm</span> token revoke</div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Revokes an npm registry auth token by id or value. Immediately invalidates that credential for every consumer.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="package_managers-npm-token-delete">
+  <div class="rule-cmd"><span class="prog">npm</span> token delete</div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Deletes an npm registry auth token. Immediately invalidates that credential.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="package_managers-npm-team-create">
+  <div class="rule-cmd"><span class="prog">npm</span> team create</div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Creates a team in an organization on the registry. Changes the org's team structure.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="package_managers-npm-team-destroy">
+  <div class="rule-cmd"><span class="prog">npm</span> team destroy</div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Destroys a team in an organization on the registry. Removes the team and its access grants.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="package_managers-npm-team-add">
+  <div class="rule-cmd"><span class="prog">npm</span> team add</div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Adds a user to an organization team on the registry. Grants that user the team's package access.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="package_managers-npm-team-rm">
+  <div class="rule-cmd"><span class="prog">npm</span> team rm</div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Removes a user from an organization team on the registry. Revokes that user's team package access.</div>
 </div>
 <div class="rule-row" data-decision="ask" id="package_managers-npm-audit-fix">
   <div class="rule-cmd"><span class="prog">npm</span> audit <span class="flag">fix</span></div>
