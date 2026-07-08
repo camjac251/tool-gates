@@ -29,11 +29,15 @@ const SRC_REPO_BLOB: &str = "https://github.com/camjac251/tool-gates/blob/main/r
 const SRC_REPO_TREE: &str = "https://github.com/camjac251/tool-gates/tree/main/rules";
 
 /// The decision a rendered rule row carries. Distinct from the runtime
-/// `Decision` enum because the docs only ever show these three pills.
+/// `Decision` enum because the docs only ever show these pills. `Nudge` is the
+/// post-write scanner nudge (Tier 2 security anti-patterns, every design-lint
+/// finding): it never prompts, so it renders as its own pill rather than
+/// borrowing the `Ask` styling.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RowDecision {
     Allow,
     Ask,
+    Nudge,
     Block,
 }
 
@@ -43,6 +47,7 @@ impl RowDecision {
         match self {
             RowDecision::Allow => "allow",
             RowDecision::Ask => "ask",
+            RowDecision::Nudge => "nudge",
             RowDecision::Block => "block",
         }
     }
@@ -52,6 +57,7 @@ impl RowDecision {
         match self {
             RowDecision::Allow => "Allow",
             RowDecision::Ask => "Ask",
+            RowDecision::Nudge => "Nudge",
             RowDecision::Block => "Block",
         }
     }
@@ -108,6 +114,12 @@ pub fn export_markdown(rules_dir: &Path, out_dir: &Path) -> io::Result<()> {
 
     let hints = render_hints_page();
     fs::write(out_dir.join("hints.md"), hints)?;
+
+    fs::write(
+        out_dir.join("security-reminders.md"),
+        render_security_reminders_page(),
+    )?;
+    fs::write(out_dir.join("design-lint.md"), render_design_lint_page())?;
 
     Ok(())
 }
@@ -196,6 +208,9 @@ pub fn compute_counts(rows: &[RuleEntry]) -> Counts {
             RowDecision::Allow => c.allow += 1,
             RowDecision::Ask => c.ask += 1,
             RowDecision::Block => c.block += 1,
+            // Nudge is a scanner-page-only decision; gate rows never carry it,
+            // so it contributes to no gate seg-bar bucket.
+            RowDecision::Nudge => {}
         }
     }
     c
@@ -579,6 +594,10 @@ fn pill_svg(decision: RowDecision) -> &'static str {
         }
         RowDecision::Ask => {
             "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.4\" stroke-linecap=\"round\"><line x1=\"9\" y1=\"6\" x2=\"9\" y2=\"18\"></line><line x1=\"15\" y1=\"6\" x2=\"15\" y2=\"18\"></line></svg>"
+        }
+        // Right-chevron: a forward nudge, distinct from the ask pause-bars.
+        RowDecision::Nudge => {
+            "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polyline points=\"9 6 15 12 9 18\"></polyline></svg>"
         }
         RowDecision::Block => {
             "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.4\" stroke-linecap=\"round\"><line x1=\"6\" y1=\"6\" x2=\"18\" y2=\"18\"></line><line x1=\"18\" y1=\"6\" x2=\"6\" y2=\"18\"></line></svg>"
@@ -1038,6 +1057,160 @@ fn render_hints_page() -> String {
     out
 }
 
+/// Map a security [`Tier`](crate::security_reminders::Tier) to its rendered row
+/// decision. Tier 1 hard-denies render as `Block`; Tier 2 post-write nudges as
+/// `Nudge` (the fix for the old `data-decision="ask"` mislabel); Tier 3 as an
+/// `Allow` pill carrying the `warn` badge (allow-plus-warn).
+fn security_row_decision(tier: crate::security_reminders::Tier) -> (RowDecision, bool) {
+    use crate::security_reminders::Tier;
+    match tier {
+        Tier::Deny => (RowDecision::Block, false),
+        Tier::NudgeOnce => (RowDecision::Nudge, false),
+        Tier::Warn => (RowDecision::Allow, true),
+    }
+}
+
+/// Render one scanner rule-row. Unlike gate rows, the command cell is the rule
+/// id in a `<code>` span and there is no per-page HTML id. `message` is
+/// whitespace-collapsed (some scanner messages are multi-line) so the page stays
+/// one contiguous HTML block, then run through [`reason_to_html`].
+fn scanner_row(rule_id: &str, decision: RowDecision, warn: bool, message: &str) -> String {
+    let normalized = message.split_whitespace().collect::<Vec<_>>().join(" ");
+    let warn_tag = if warn {
+        " <span class=\"warn-tag\" title=\"allow + warn\">warn</span>"
+    } else {
+        ""
+    };
+    format!(
+        "    <div class=\"rule-row\" data-decision=\"{dec}\">\n      <div class=\"rule-cmd\"><code>{id}</code></div>\n      <div>{pill}{warn}</div>\n      <div class=\"rule-reason\">{reason}</div>\n    </div>",
+        dec = decision.class(),
+        id = html_escape(rule_id),
+        pill = pill_html(decision),
+        warn = warn_tag,
+        reason = reason_to_html(&normalized),
+    )
+}
+
+/// Render one scanner rule-card: header (title + descriptive count label) then
+/// the pre-rendered rows. Emits no blank lines so the page is a single HTML
+/// block for mdBook.
+fn scanner_card(title: &str, count_label: &str, rows: &[String]) -> String {
+    let mut out = format!(
+        "  <div class=\"rule-card\">\n    <header>\n      <h2>{title}</h2>\n      <span class=\"count\">{count_label}</span>\n    </header>"
+    );
+    for row in rows {
+        out.push('\n');
+        out.push_str(row);
+    }
+    out.push_str("\n  </div>");
+    out
+}
+
+/// Render `security-reminders.md` from `security_reminders::rules()`. The
+/// lede/why/config prose is hand-written here; only the per-rule rows are
+/// generated. The three cards partition the table by tier, so the row count
+/// equals `rules().len()` (guarded by a test).
+fn render_security_reminders_page() -> String {
+    use crate::security_reminders::Tier;
+    let rules = crate::security_reminders::rules();
+
+    let row_for = |tier: Tier| -> Vec<String> {
+        rules
+            .iter()
+            .filter(|r| r.tier == tier)
+            .map(|r| {
+                let (decision, warn) = security_row_decision(r.tier);
+                scanner_row(r.name, decision, warn, r.message)
+            })
+            .collect()
+    };
+
+    let mut out = String::new();
+    out.push_str(
+        "  <p class=\"breadcrumb\"><a href=\"index.html\">Reference</a> / Security reminders</p>\n",
+    );
+    out.push_str("  <h1 id=\"secrems-h1\">Security reminders</h1>\n");
+    out.push_str(&format!(
+        "  <p class=\"page-lede\">tool-gates scans write/edit bodies for {count} anti-patterns organised into three tiers, including Claude <code>Write</code>/<code>Edit</code>, Codex <code>apply_patch</code> added lines, Antigravity <code>write_to_file</code>/<code>replace_file_content</code>/<code>multi_replace_file_content</code>, and Gemini <code>write_file</code>/<code>replace</code> before-tool checks. The hard floor denies source writes before the file ever lands, while documentation files get a post-write warning. The middle tier nudges the assistant after a write so the next action can self-correct. The top tier informs without blocking.</p>\n",
+        count = rules.len(),
+    ));
+    out.push_str("  <div class=\"sec-head\" style=\"margin-top: var(--s-6)\">\n    <p class=\"lbl\">Why Tier 2 nudges after the write</p>\n    <h2>Self-correction beats re-prompting.</h2>\n    <p>Tier 2 patterns let the write succeed, then attach a <code>&lt;system-reminder&gt;</code> on <code>additionalContext</code>. Claude and Codex see the warning in the next turn and can edit the file before doing anything else; Gemini AfterTool output is not plumbed for Tier 2 yet, and Antigravity has no post hook, so on Antigravity only the Tier 1 secret deny (at PreToolUse) applies. No wasted Write call from blocking-then-retrying. Each (file, rule) pair fires at most once per session.</p>\n  </div>\n");
+
+    out.push_str(&scanner_card(
+        "Tier 1 \u{b7} Hard-coded secrets",
+        "source deny \u{b7} docs warn",
+        &row_for(Tier::Deny),
+    ));
+    out.push('\n');
+    out.push_str(&scanner_card(
+        "Tier 2 \u{b7} Anti-patterns in code",
+        "post-write nudge \u{b7} PostToolUse",
+        &row_for(Tier::NudgeOnce),
+    ));
+    out.push('\n');
+    out.push_str(&scanner_card(
+        "Tier 3 \u{b7} Informational warnings",
+        "allow + warn \u{b7} PreToolUse/BeforeTool; Codex PostToolUse",
+        &row_for(Tier::Warn),
+    ));
+    out.push('\n');
+
+    out.push_str("  <div class=\"config-block\">\n    <header>\n      <h3>Configure</h3>\n      <span class=\"src-tag\">documented</span>\n    </header>\n    <div class=\"config-body\">\n      <div class=\"config-toml\">\n<pre><span class=\"sec\">[features]</span>\n<span class=\"k\">security_reminders</span> = <span class=\"b\">true</span>\n<span class=\"sec\">[security_reminders]</span>\n<span class=\"k\">secrets</span> = <span class=\"b\">true</span>\n<span class=\"k\">anti_patterns</span> = <span class=\"b\">true</span>\n<span class=\"k\">warnings</span> = <span class=\"b\">true</span>\n<span class=\"k\">disable_rules</span> = [<span class=\"s\">\"eval_injection\"</span>]</pre>\n      </div>\n      <div class=\"config-prose\">\n        <p>Disable individual rules by id when a Tier 2 nudge fires on a legitimate use of (for example) <code>eval()</code> in your codebase.</p>\n        <p>Tier 1 secret rules are on by default. Disable them by id via <code>disable_rules</code>, or all at once with <code>secrets = false</code>.</p>\n        <p>Documentation files (<code>.md</code>, <code>.txt</code>, <code>.rst</code>, etc.) are exempt for Tier 2/3 content checks. Tier 1 secrets in source files deny before write; Tier 1 secrets in docs get a PostToolUse warning; dedicated secret files (<code>.env</code>, <code>.envrc</code>, <code>.env.*</code>) skip secret detection because they exist to hold secrets.</p>\n      </div>\n    </div>\n  </div>\n");
+
+    out
+}
+
+/// Render `design-lint.md` from `design_lint::rules()`. Cards group the rules by
+/// their id-prefix category; every rule renders as a `Nudge` row (design lint is
+/// a single post-write tier). Lede/why/config prose is hand-written; rows are
+/// generated. The card set covers every category, so the row count equals
+/// `rules().len()` (guarded by a test).
+fn render_design_lint_page() -> String {
+    let rules = crate::design_lint::rules();
+
+    // (card title, id-prefix categories it collects), in display order. Every
+    // rule id's prefix must appear in exactly one card, or the count guard fails.
+    let cards: &[(&str, &[&str])] = &[
+        ("Color", &["color"]),
+        ("Typography", &["typography"]),
+        ("Content", &["content"]),
+        ("Motion", &["motion"]),
+        (
+            "Structure &amp; accessibility",
+            &["layout", "behavior", "assets", "a11y"],
+        ),
+    ];
+
+    let mut out = String::new();
+    out.push_str(
+        "  <p class=\"breadcrumb\"><a href=\"index.html\">Reference</a> / Design lint</p>\n",
+    );
+    out.push_str("  <h1 id=\"design-lint-h1\">Design lint</h1>\n");
+    out.push_str("  <p class=\"page-lede\">tool-gates scans UI file write/edit bodies for generic, templated design patterns and missing UI-quality basics. It covers Claude <code>Write</code>/<code>Edit</code> and Codex <code>apply_patch</code> added lines on the PostToolUse path, the same path as the security-reminder nudges. Antigravity has no PostToolUse hook, so design-lint does not run there. Findings are a single tier: every match attaches a post-write nudge so the next action can self-correct. Nothing is blocked. The gate is opt-in (default off) and only scans UI extensions (<code>.tsx</code>, <code>.jsx</code>, <code>.vue</code>, <code>.svelte</code>, <code>.astro</code>, <code>.html</code>, <code>.css</code>, <code>.scss</code>, and similar).</p>\n");
+    out.push_str("  <div class=\"sec-head\" style=\"margin-top: var(--s-6)\">\n    <p class=\"lbl\">Why it is opt-in</p>\n    <h2>A design opinion you switch on per project.</h2>\n    <p>Security reminders enforce a safety floor everywhere. These rules encode a house style for frontend output: avoid the patterns that read as generic or templated, and keep the accessibility basics. That is a deliberate choice a project opts into, so the gate defaults off. When enabled, each match attaches a <code>&lt;system-reminder&gt;</code> via <code>additionalContext</code> after the write lands. Raw color values inside a <code>:root</code> token <em>definition</em> are exempt: defining a brand token is legitimate; reaching for the same value in markup is what gets flagged.</p>\n  </div>\n");
+
+    for (title, categories) in cards {
+        let rows: Vec<String> = rules
+            .iter()
+            .filter(|r| {
+                let prefix = r.id.split('/').next().unwrap_or(r.id);
+                categories.contains(&prefix)
+            })
+            .map(|r| scanner_row(r.id, RowDecision::Nudge, false, r.message))
+            .collect();
+        out.push_str(&scanner_card(
+            title,
+            "post-write nudge \u{b7} PostToolUse",
+            &rows,
+        ));
+        out.push('\n');
+    }
+
+    out.push_str("  <div class=\"config-block\">\n    <header>\n      <h3>Configure</h3>\n      <span class=\"src-tag\">documented</span>\n    </header>\n    <div class=\"config-body\">\n      <div class=\"config-toml\">\n<pre><span class=\"sec\">[features]</span>\n<span class=\"k\">design_lint</span> = <span class=\"b\">true</span>\n<span class=\"sec\">[design_lint]</span>\n<span class=\"k\">disable_rules</span> = [<span class=\"s\">\"color/default-indigo\"</span>]</pre>\n      </div>\n      <div class=\"config-prose\">\n        <p>Opt-in. Set <code>design_lint = true</code> under <code>[features]</code> to turn the gate on; it is off by default.</p>\n        <p>Disable individual rules by id (for example <code>color/default-indigo</code> or <code>content/dash</code>) when a project deliberately uses that pattern.</p>\n        <p>Only UI file extensions are scanned. CSS custom-property <em>definitions</em> in a <code>:root</code> block are exempt from the raw-color rules, so defining a brand token is never flagged, while the same value used in markup or inline styles still is.</p>\n      </div>\n    </div>\n  </div>\n");
+
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1139,5 +1312,50 @@ mod tests {
         assert_eq!(c.ask, 1);
         assert_eq!(c.block, 1);
         assert_eq!(c.total(), 3);
+    }
+
+    /// Count the generated `.rule-row` divs on a page.
+    fn row_count(page: &str) -> usize {
+        page.matches("class=\"rule-row\"").count()
+    }
+
+    #[test]
+    fn security_reminders_page_row_count_matches_rules() {
+        let page = render_security_reminders_page();
+        assert_eq!(
+            row_count(&page),
+            crate::security_reminders::rules().len(),
+            "every security rule must render exactly one row; a rule add that \
+             skips `rules export` must fail CI"
+        );
+        // The count is generated, not hardcoded: the lede states the live total.
+        assert!(page.contains(&format!(
+            "for {} anti-patterns",
+            crate::security_reminders::rules().len()
+        )));
+    }
+
+    #[test]
+    fn design_lint_page_row_count_matches_rules() {
+        let page = render_design_lint_page();
+        assert_eq!(
+            row_count(&page),
+            crate::design_lint::rules().len(),
+            "every design-lint rule must render exactly one row"
+        );
+    }
+
+    #[test]
+    fn scanner_pages_use_nudge_not_ask_for_post_write_rows() {
+        // The old hand-written pages mislabeled post-write nudges as
+        // data-decision="ask"; generated pages must use the nudge decision.
+        let sec = render_security_reminders_page();
+        assert!(sec.contains("data-decision=\"nudge\""));
+        let design = render_design_lint_page();
+        assert!(design.contains("data-decision=\"nudge\""));
+        assert!(
+            !design.contains("data-decision=\"ask\""),
+            "design-lint rows are all nudges, never asks"
+        );
     }
 }

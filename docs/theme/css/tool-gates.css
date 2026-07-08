@@ -1884,6 +1884,9 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
 .pill.ask {
   --c: var(--ask);
 }
+.pill.nudge {
+  --c: var(--nudge);
+}
 .pill.block {
   --c: var(--block);
 }

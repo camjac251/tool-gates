@@ -18,8 +18,8 @@
 //! value lives). The catalog below is the floor, not the ceiling.
 
 use crate::config::DesignLintConfig;
+use crate::content_scan::{Matcher, ScanRule, extract_content, scan};
 use crate::models::PostToolUseOutput;
-use crate::security_reminders::extract_content;
 use regex::Regex;
 use std::sync::OnceLock;
 
@@ -63,7 +63,7 @@ pub struct LintRule {
 /// Skip-pattern for a CSS custom-property definition line.
 const TOKEN_DEF_SKIP: &str = r"--[\w-]+\s*:";
 
-fn rules() -> &'static [LintRule] {
+pub(crate) fn rules() -> &'static [LintRule] {
     static RULES: OnceLock<Vec<LintRule>> = OnceLock::new();
     RULES.get_or_init(|| {
         vec![
@@ -211,31 +211,41 @@ fn rules() -> &'static [LintRule] {
     })
 }
 
-/// Compiled (main regex, optional skip_if regex) for each `Kind::Line` rule,
-/// keyed by id. Compiled once.
-fn line_cache() -> &'static Vec<(&'static str, Regex, Option<Regex>)> {
-    static CACHE: OnceLock<Vec<(&'static str, Regex, Option<Regex>)>> = OnceLock::new();
-    CACHE.get_or_init(|| {
+/// Project the [`rules`] table onto the shared [`content_scan`] engine's
+/// [`ScanRule`] shape. Built once. `Kind::Line` maps to [`Matcher::LineRegex`];
+/// the two hand-rolled detectors map to whole-content [`Matcher::Custom`]
+/// predicates. The tag is the rule reference itself, so a [`scan`] hit maps
+/// straight back to its `&'static LintRule`.
+fn scan_rules() -> &'static [ScanRule<&'static LintRule>] {
+    static RULES: OnceLock<Vec<ScanRule<&'static LintRule>>> = OnceLock::new();
+    RULES.get_or_init(|| {
         rules()
             .iter()
-            .filter_map(|rule| match &rule.kind {
-                Kind::Line { pattern, skip_if } => Some((
-                    rule.id,
-                    Regex::new(pattern).expect("invalid design-lint regex"),
-                    skip_if.map(|s| Regex::new(s).expect("invalid skip_if regex")),
-                )),
-                _ => None,
+            .map(|rule| ScanRule {
+                id: rule.id,
+                tag: rule,
+                message: rule.message,
+                matcher: match &rule.kind {
+                    Kind::Line { pattern, skip_if } => Matcher::LineRegex {
+                        pattern,
+                        skip_if: *skip_if,
+                    },
+                    Kind::PurpleGradient => Matcher::Custom(has_purple_gradient),
+                    Kind::OutlineWithoutFocusVisible => {
+                        Matcher::Custom(outline_without_focus_visible)
+                    }
+                },
             })
             .collect()
     })
 }
 
-fn compiled_line(id: &str) -> (&'static Regex, Option<&'static Regex>) {
-    let (_, re, skip) = line_cache()
-        .iter()
-        .find(|(name, _, _)| *name == id)
-        .expect("line rule must be compiled");
-    (re, skip.as_ref())
+/// Whole-content predicate for `Kind::PurpleGradient`: any non-token-definition
+/// line that declares a violet/purple/indigo gradient.
+fn has_purple_gradient(content: &str) -> bool {
+    content
+        .lines()
+        .any(|line| is_purple_gradient(line) && !token_def_re().is_match(line))
 }
 
 fn token_def_re() -> &'static Regex {
@@ -329,25 +339,15 @@ fn is_purple_gradient(line: &str) -> bool {
 }
 
 /// Scan UI file content, returning the rules it violates (each at most once).
-/// Returns empty for non-UI files.
+/// Returns empty for non-UI files. The UI-extension gate is design-lint policy
+/// and stays here; the shared engine does the per-rule matching.
 pub fn scan_content(file_path: &str, content: &str) -> Vec<&'static LintRule> {
     if !is_ui_file(file_path) {
         return Vec::new();
     }
-    rules()
-        .iter()
-        .filter(|rule| match &rule.kind {
-            Kind::Line { .. } => {
-                let (re, skip) = compiled_line(rule.id);
-                content
-                    .lines()
-                    .any(|line| re.is_match(line) && !skip.is_some_and(|s| s.is_match(line)))
-            }
-            Kind::PurpleGradient => content
-                .lines()
-                .any(|line| is_purple_gradient(line) && !token_def_re().is_match(line)),
-            Kind::OutlineWithoutFocusVisible => outline_without_focus_visible(content),
-        })
+    scan(scan_rules(), file_path, content)
+        .into_iter()
+        .map(|hit| hit.tag)
         .collect()
 }
 

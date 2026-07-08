@@ -10,114 +10,30 @@
 //! - **Tier 3 (warn):** Informational context injected, no block (weak crypto, chmod 777)
 
 use crate::config::SecurityRemindersConfig;
+use crate::content_scan::{Matcher, ScanRule, extract_content, scan};
 use crate::models::{HookOutput, PostToolUseOutput};
 use regex::Regex;
 use std::sync::OnceLock;
 
-/// Extract all writable (file_path, content) pairs from a tool_input map.
-/// Shared by the security and design-lint content gates.
-///
-/// Handles all tool types:
-/// - Claude `Write` / Gemini `write_file`: top-level `file_path` + `content`.
-/// - Claude `Edit` / Gemini `replace`: top-level `file_path` + `new_string`,
-///   plus the batch `edits[].new_string` form.
-/// - Codex `apply_patch`: parse the unified-diff body in `command` and emit
-///   one `(path, added_lines)` pair per Add/Update section. Delete sections
-///   are skipped (no content to scan).
-/// - Antigravity `write_to_file` / `replace_file_content` /
-///   `multi_replace_file_content`: top-level `file_path` + `content`, populated
-///   by main()'s Antigravity payload normalization.
-pub(crate) fn extract_content(
-    tool_name: &str,
-    map: &serde_json::Map<String, serde_json::Value>,
-) -> Vec<(String, String)> {
-    let mut results = Vec::new();
-
-    if tool_name == "apply_patch" {
-        let command = map.get("command").and_then(|v| v.as_str()).unwrap_or("");
-        if command.is_empty() {
-            return results;
-        }
-        for file in crate::apply_patch_parser::parse_patch(command) {
-            if file.op == crate::apply_patch_parser::PatchOp::Delete {
-                continue;
-            }
-            let content = file.added_content();
-            if content.is_empty() {
-                continue;
-            }
-            // The destination path matters for "is this a doc/.env file" checks;
-            // when there's a rename we use the move target since that's where
-            // the bytes actually land.
-            let path = file
-                .move_to
-                .as_ref()
-                .unwrap_or(&file.path)
-                .display()
-                .to_string();
-            results.push((path, content));
-        }
-        return results;
-    }
-
-    let top_file_path = map
-        .get("file_path")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-
-    // Match tool names from both Claude (Write/Edit) and Gemini (write_file/replace).
-    // Field names (file_path, content, old_string, new_string) are the same in both CLIs.
-    match tool_name {
-        "Write" | "write_file" => {
-            if let Some(content) = map.get("content").and_then(|v| v.as_str()) {
-                if !content.is_empty() {
-                    results.push((top_file_path, content.to_string()));
-                }
-            }
-        }
-        "Edit" | "replace" => {
-            // Classic: single new_string
-            if let Some(new_string) = map.get("new_string").and_then(|v| v.as_str()) {
-                if !new_string.is_empty() {
-                    results.push((top_file_path.clone(), new_string.to_string()));
-                }
-            }
-            // Batch: edits[].new_string
-            if let Some(edits) = map.get("edits").and_then(|v| v.as_array()) {
-                for edit in edits {
-                    if let Some(ns) = edit.get("new_string").and_then(|v| v.as_str()) {
-                        if !ns.is_empty() {
-                            results.push((top_file_path.clone(), ns.to_string()));
-                        }
-                    }
-                }
-            }
-        }
-        // Antigravity write/edit tools. main()'s payload normalization flattens
-        // the PascalCase args (CodeContent / ReplacementContent / chunked
-        // ReplacementChunks[].ReplacementContent) into the canonical `content`
-        // key before this runs, so a single content read covers all three.
-        "write_to_file" | "replace_file_content" | "multi_replace_file_content" => {
-            if let Some(content) = map.get("content").and_then(|v| v.as_str()) {
-                if !content.is_empty() {
-                    results.push((top_file_path, content.to_string()));
-                }
-            }
-        }
-        _ => {}
-    }
-
-    results
-}
-
 /// Pattern severity tier.
+///
+/// The four namings of a tier line up as:
+///
+/// | Variant     | Tier | Config key      | Emission phase                                   |
+/// |-------------|------|-----------------|--------------------------------------------------|
+/// | `Deny`      | 1    | `secrets`       | PreToolUse deny (source); PostToolUse warn (docs) |
+/// | `NudgeOnce` | 2    | `anti_patterns` | PostToolUse `additionalContext` nudge            |
+/// | `Warn`      | 3    | `warnings`      | PreToolUse `additionalContext` (Codex: PostToolUse) |
+///
+/// `NudgeOnce` never emits `permissionDecision: "ask"`; it lets the write land
+/// and attaches a post-write nudge (deduped per file+rule per session). The
+/// enum derives no serde traits, so the variant names are compile-time only.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tier {
     /// Hard deny. Always blocked (secrets, keys).
     Deny,
     /// Post-write nudge once per (file, rule) per session, then silent.
-    AskOnce,
+    NudgeOnce,
     /// Allow but inject warning into additionalContext.
     Warn,
 }
@@ -145,10 +61,10 @@ enum CheckType {
     ContentRegex { pattern: &'static str },
 }
 
-struct SecurityRule {
-    name: &'static str,
-    tier: Tier,
-    message: &'static str,
+pub(crate) struct SecurityRule {
+    pub(crate) name: &'static str,
+    pub(crate) tier: Tier,
+    pub(crate) message: &'static str,
     check: CheckType,
     /// If true, Tier 1 secret check that fires even on doc files.
     always_check: bool,
@@ -182,29 +98,45 @@ fn is_gha_workflow(path: &str) -> bool {
         && (normalized.ends_with(".yml") || normalized.ends_with(".yaml"))
 }
 
-/// Compiled regex cache (compiled once, reused).
-static REGEX_CACHE: OnceLock<Vec<(&'static str, Regex)>> = OnceLock::new();
+/// The tag carried through the shared scan engine for each security rule. The
+/// tier routes emission; `always_check` drives the doc/secret skip matrix.
+#[derive(Debug, Clone, Copy)]
+struct SecTag {
+    tier: Tier,
+    always_check: bool,
+}
 
-fn get_compiled_regexes(rules: &[SecurityRule]) -> &'static Vec<(&'static str, Regex)> {
-    REGEX_CACHE.get_or_init(|| {
-        rules
+/// Project the [`rules`] table onto the shared [`content_scan`] engine's
+/// [`ScanRule`] shape. Built once. The `github_actions_injection` rule maps to a
+/// path-only [`Matcher::Path`]; its content requirement (`has_gha_injection`) is
+/// applied as policy in [`scan_content`], since it is specific to that one rule.
+fn scan_rules() -> &'static [ScanRule<SecTag>] {
+    static RULES: OnceLock<Vec<ScanRule<SecTag>>> = OnceLock::new();
+    RULES.get_or_init(|| {
+        rules()
             .iter()
-            .filter_map(|rule| {
-                if let CheckType::ContentRegex { pattern } = &rule.check {
-                    Some((
-                        rule.name,
-                        Regex::new(pattern).expect("invalid security regex"),
-                    ))
-                } else {
-                    None
-                }
+            .map(|rule| ScanRule {
+                id: rule.name,
+                tag: SecTag {
+                    tier: rule.tier,
+                    always_check: rule.always_check,
+                },
+                message: rule.message,
+                matcher: match &rule.check {
+                    CheckType::PathBased { path_fn } => Matcher::Path { path_fn: *path_fn },
+                    CheckType::Substring { patterns } => Matcher::Substring { patterns },
+                    CheckType::SubstringUnless { patterns, unless } => {
+                        Matcher::SubstringUnless { patterns, unless }
+                    }
+                    CheckType::ContentRegex { pattern } => Matcher::Regex { pattern },
+                },
             })
             .collect()
     })
 }
 
 /// All security rules (static definition).
-fn rules() -> &'static [SecurityRule] {
+pub(crate) fn rules() -> &'static [SecurityRule] {
     static RULES: OnceLock<Vec<SecurityRule>> = OnceLock::new();
     RULES.get_or_init(|| {
         vec![
@@ -258,63 +190,63 @@ fn rules() -> &'static [SecurityRule] {
             // === Tier 2: Post-write nudge once per session ===
             SecurityRule {
                 name: "child_process_exec",
-                tier: Tier::AskOnce,
+                tier: Tier::NudgeOnce,
                 message: "child_process.exec() can lead to command injection. Use child_process.execFile() or child_process.spawn() instead. They don't invoke a shell and prevent argument injection.",
                 check: CheckType::Substring { patterns: &["child_process.exec", "execSync("] },
                 always_check: false,
             },
             SecurityRule {
                 name: "new_function_injection",
-                tier: Tier::AskOnce,
+                tier: Tier::NudgeOnce,
                 message: "new Function() with dynamic strings can lead to code injection. Consider alternative approaches that don't evaluate arbitrary code.",
                 check: CheckType::Substring { patterns: &["new Function("] },
                 always_check: false,
             },
             SecurityRule {
                 name: "eval_injection",
-                tier: Tier::AskOnce,
+                tier: Tier::NudgeOnce,
                 message: "eval() executes arbitrary code and is a major security risk. Use JSON.parse() for data parsing, or alternative design patterns that don't require code evaluation.",
                 check: CheckType::Substring { patterns: &["eval("] },
                 always_check: false,
             },
             SecurityRule {
                 name: "os_system_injection",
-                tier: Tier::AskOnce,
+                tier: Tier::NudgeOnce,
                 message: "os.system() passes commands through the shell and is vulnerable to injection. Use subprocess.run() with a list of arguments (no shell=True) instead.",
                 check: CheckType::Substring { patterns: &["os.system(", "from os import system"] },
                 always_check: false,
             },
             SecurityRule {
                 name: "pickle_deserialization",
-                tier: Tier::AskOnce,
+                tier: Tier::NudgeOnce,
                 message: "pickle can execute arbitrary code during deserialization. Use JSON, msgpack, or other safe serialization formats for untrusted data. Only use pickle with data you fully trust.",
                 check: CheckType::Substring { patterns: &["pickle.load", "pickle.loads"] },
                 always_check: false,
             },
             SecurityRule {
                 name: "dangerous_inner_html",
-                tier: Tier::AskOnce,
+                tier: Tier::NudgeOnce,
                 message: "dangerouslySetInnerHTML can lead to XSS if used with untrusted content. Sanitize all content with DOMPurify or use safe alternatives like textContent.",
                 check: CheckType::Substring { patterns: &["dangerouslySetInnerHTML"] },
                 always_check: false,
             },
             SecurityRule {
                 name: "document_write_xss",
-                tier: Tier::AskOnce,
+                tier: Tier::NudgeOnce,
                 message: "document.write() can be exploited for XSS attacks. Use DOM manipulation methods like createElement() and appendChild() instead.",
                 check: CheckType::Substring { patterns: &["document.write("] },
                 always_check: false,
             },
             SecurityRule {
                 name: "inner_html_assignment",
-                tier: Tier::AskOnce,
+                tier: Tier::NudgeOnce,
                 message: "Setting innerHTML with untrusted content can lead to XSS. Use textContent for plain text, or sanitize HTML content with DOMPurify.",
                 check: CheckType::Substring { patterns: &[".innerHTML =", ".innerHTML="] },
                 always_check: false,
             },
             SecurityRule {
                 name: "unsafe_yaml_load",
-                tier: Tier::AskOnce,
+                tier: Tier::NudgeOnce,
                 message: "yaml.load() without SafeLoader can execute arbitrary Python code. Use yaml.safe_load() or yaml.load(f, Loader=yaml.SafeLoader) instead.",
                 check: CheckType::SubstringUnless {
                     patterns: &["yaml.load("],
@@ -324,7 +256,7 @@ fn rules() -> &'static [SecurityRule] {
             },
             SecurityRule {
                 name: "sql_string_interpolation",
-                tier: Tier::AskOnce,
+                tier: Tier::NudgeOnce,
                 message: "SQL query built with string interpolation is vulnerable to SQL injection. Use parameterized queries (?, %s, :param) instead of f-strings or .format().",
                 check: CheckType::ContentRegex {
                     pattern: r#"(?i)f["'](?:SELECT|INSERT|UPDATE|DELETE)|\.execute\(f["']"#,
@@ -333,7 +265,7 @@ fn rules() -> &'static [SecurityRule] {
             },
             SecurityRule {
                 name: "subprocess_shell_true",
-                tier: Tier::AskOnce,
+                tier: Tier::NudgeOnce,
                 message: "subprocess with shell=True is vulnerable to command injection. Pass a list of arguments instead: subprocess.run([\"cmd\", \"arg1\", \"arg2\"]).",
                 check: CheckType::ContentRegex {
                     pattern: r"subprocess\.(call|run|Popen)\(.*shell\s*=\s*True",
@@ -342,28 +274,28 @@ fn rules() -> &'static [SecurityRule] {
             },
             SecurityRule {
                 name: "flask_ssti",
-                tier: Tier::AskOnce,
+                tier: Tier::NudgeOnce,
                 message: "render_template_string() with user input can lead to server-side template injection (SSTI). Use render_template() with a file instead, or sanitize all dynamic content.",
                 check: CheckType::Substring { patterns: &["render_template_string("] },
                 always_check: false,
             },
             SecurityRule {
                 name: "marshal_deserialization",
-                tier: Tier::AskOnce,
+                tier: Tier::NudgeOnce,
                 message: "marshal can execute arbitrary code during deserialization. Use JSON or other safe serialization formats for untrusted data.",
                 check: CheckType::Substring { patterns: &["marshal.load(", "marshal.loads(", "shelve.open("] },
                 always_check: false,
             },
             SecurityRule {
                 name: "python_dynamic_import",
-                tier: Tier::AskOnce,
+                tier: Tier::NudgeOnce,
                 message: "__import__() with dynamic strings can load arbitrary modules. Use static imports or importlib with validated module names.",
                 check: CheckType::Substring { patterns: &["__import__("] },
                 always_check: false,
             },
             SecurityRule {
                 name: "php_unserialize",
-                tier: Tier::AskOnce,
+                tier: Tier::NudgeOnce,
                 message: "unserialize() with untrusted data can lead to arbitrary code execution via PHP object injection. Use json_decode() instead.",
                 check: CheckType::Substring { patterns: &["unserialize("] },
                 always_check: false,
@@ -458,65 +390,52 @@ fn has_gha_injection(content: &str) -> bool {
 }
 
 /// Scan content against all rules, returning all matches.
+///
+/// The shared [`content_scan`] engine reports which rules a `(path, content)`
+/// pair matches, in table order. This function layers the security-specific
+/// skip matrix on top of those hits:
+/// - `.env` / `.envrc` / real `.env.*` files skip Tier 1 secret detection.
+/// - doc files skip every content check except the `always_check` secret rules.
+/// - the `github_actions_injection` path rule additionally requires the
+///   GHA-specific injection regex in the content (path match alone is not enough).
 pub fn scan_content(file_path: &str, content: &str) -> Vec<PatternMatch> {
-    let all_rules = rules();
-    let compiled = get_compiled_regexes(all_rules);
     let is_doc = is_doc_file(file_path);
     let is_secret = is_secret_file(file_path);
     let mut matches = Vec::new();
 
-    for rule in all_rules {
-        // Secret files (.env, .envrc) exist to hold secrets. Skip Tier 1 secret detection
-        if is_secret && rule.always_check && rule.tier == Tier::Deny {
+    for hit in scan(scan_rules(), file_path, content) {
+        let SecTag { tier, always_check } = hit.tag;
+
+        // The GHA rule is a path matcher: the engine fired it on the workflow
+        // path, but a hit only counts when the content also carries an injection.
+        // This content gate is specific to this rule, so it lives here as policy.
+        // Path rules bypass the doc/secret skip matrix (a workflow file is
+        // neither a doc nor a secret file), matching the prior behavior.
+        if hit.id == "github_actions_injection" {
+            if has_gha_injection(content) {
+                matches.push(PatternMatch {
+                    rule_name: hit.id,
+                    tier,
+                    message: hit.message,
+                });
+            }
             continue;
         }
 
-        // Skip content-based checks on doc files (unless always_check for secrets)
-        let skip_content = is_doc && !rule.always_check;
-
-        match &rule.check {
-            CheckType::PathBased { path_fn }
-                if path_fn(file_path) && has_gha_injection(content) =>
-            {
-                matches.push(PatternMatch {
-                    rule_name: rule.name,
-                    tier: rule.tier,
-                    message: rule.message,
-                });
-            }
-            CheckType::Substring { patterns }
-                if !skip_content && patterns.iter().any(|p| content.contains(p)) =>
-            {
-                matches.push(PatternMatch {
-                    rule_name: rule.name,
-                    tier: rule.tier,
-                    message: rule.message,
-                });
-            }
-            CheckType::SubstringUnless { patterns, unless }
-                if !skip_content
-                    && patterns.iter().any(|p| content.contains(p))
-                    && !unless.iter().any(|u| content.contains(u)) =>
-            {
-                matches.push(PatternMatch {
-                    rule_name: rule.name,
-                    tier: rule.tier,
-                    message: rule.message,
-                });
-            }
-            CheckType::ContentRegex { pattern: _ } if !skip_content => {
-                if let Some((_, re)) = compiled.iter().find(|(name, _)| *name == rule.name) {
-                    if re.is_match(content) {
-                        matches.push(PatternMatch {
-                            rule_name: rule.name,
-                            tier: rule.tier,
-                            message: rule.message,
-                        });
-                    }
-                }
-            }
-            _ => {} // skip_content was true
+        // Secret files (.env, .envrc) exist to hold secrets. Skip Tier 1 secret detection.
+        if is_secret && always_check && tier == Tier::Deny {
+            continue;
         }
+        // Skip content-based checks on doc files (unless always_check for secrets).
+        if is_doc && !always_check {
+            continue;
+        }
+
+        matches.push(PatternMatch {
+            rule_name: hit.id,
+            tier,
+            message: hit.message,
+        });
     }
 
     matches
@@ -576,7 +495,7 @@ pub fn check_security_reminders(
                         .user_visible(),
                     );
                 }
-                Tier::AskOnce => {
+                Tier::NudgeOnce => {
                     // Handled by PostToolUse. Skip in PreToolUse
                     continue;
                 }
@@ -644,7 +563,7 @@ pub fn check_security_reminders_post(
             // PostToolUse handles Tier 2 (all files) + Tier 1 (doc files only).
             // For Codex, also Tier 3 (warn) since it can't ride on Pre.
             let dominated = match m.tier {
-                Tier::AskOnce => !config.anti_patterns,
+                Tier::NudgeOnce => !config.anti_patterns,
                 Tier::Deny => {
                     if !config.secrets {
                         true
@@ -826,7 +745,7 @@ jobs:
         let content = "const result = eval(userInput);";
         let matches = scan_content("/tmp/app.js", content);
         assert!(matches.iter().any(|m| m.rule_name == "eval_injection"));
-        assert!(matches.iter().any(|m| m.tier == Tier::AskOnce));
+        assert!(matches.iter().any(|m| m.tier == Tier::NudgeOnce));
     }
 
     #[test]

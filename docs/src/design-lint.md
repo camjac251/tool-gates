@@ -11,45 +11,45 @@
       <h2>Color</h2>
       <span class="count">post-write nudge · PostToolUse</span>
     </header>
-    <div class="rule-row" data-decision="ask">
-      <div class="rule-cmd"><code>color/default-indigo</code></div>
-      <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Nudge</span></div>
-      <div class="rule-reason">Default Tailwind indigo accent (<code>#6366f1</code>, <code>#4f46e5</code>, ...). Use a theme token; define indigo in the theme if the brand genuinely calls for it.</div>
-    </div>
-    <div class="rule-row" data-decision="ask">
-      <div class="rule-cmd"><code>color/purple-gradient</code></div>
-      <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Nudge</span></div>
-      <div class="rule-reason">Purple, violet, or indigo gradient, detected by OKLCH hue so arbitrary violets are caught, not just literals. Favor a flat surface; define brand violet as a token if it is real.</div>
-    </div>
-    <div class="rule-row" data-decision="ask">
+    <div class="rule-row" data-decision="nudge">
       <div class="rule-cmd"><code>color/cliche-gradient</code></div>
-      <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Nudge</span></div>
-      <div class="rule-reason">The overused <code>#667eea</code> / <code>#764ba2</code> "tech" gradient. Use a solid color or a narrow-band gradient.</div>
+      <div><span class="pill nudge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>Nudge</span></div>
+      <div class="rule-reason">Overused #667eea / #764ba2 'tech' gradient. Use a solid color or a narrow-band gradient.</div>
     </div>
-    <div class="rule-row" data-decision="ask">
+    <div class="rule-row" data-decision="nudge">
+      <div class="rule-cmd"><code>color/purple-gradient</code></div>
+      <div><span class="pill nudge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>Nudge</span></div>
+      <div class="rule-reason">Purple, violet, or indigo gradient. Favor a flat surface with intentional typography; if the brand truly uses violet, define it as a token and reference it via var().</div>
+    </div>
+    <div class="rule-row" data-decision="nudge">
       <div class="rule-cmd"><code>color/overused-palette</code></div>
-      <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Nudge</span></div>
-      <div class="rule-reason">The overused beige / brass / espresso "premium" palette. Choose colors that reflect the actual brand.</div>
+      <div><span class="pill nudge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>Nudge</span></div>
+      <div class="rule-reason">Overused beige / brass / espresso 'premium' palette. Choose colors that reflect the actual brand.</div>
     </div>
-    <div class="rule-row" data-decision="ask">
+    <div class="rule-row" data-decision="nudge">
+      <div class="rule-cmd"><code>color/default-indigo</code></div>
+      <div><span class="pill nudge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>Nudge</span></div>
+      <div class="rule-reason">Default Tailwind indigo accent. Use a theme token; define indigo in the theme if the brand genuinely calls for it.</div>
+    </div>
+    <div class="rule-row" data-decision="nudge">
       <div class="rule-cmd"><code>color/hardcoded-palette</code></div>
-      <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Nudge</span></div>
-      <div class="rule-reason">Hardcoded Tailwind palette color (<code>bg-blue-500</code>, ...). Use semantic theme tokens such as <code>bg-background</code>, <code>text-foreground</code>.</div>
+      <div><span class="pill nudge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>Nudge</span></div>
+      <div class="rule-reason">Hardcoded Tailwind palette color. Use semantic theme tokens (bg-background, text-foreground, ...).</div>
     </div>
-    <div class="rule-row" data-decision="ask">
+    <div class="rule-row" data-decision="nudge">
       <div class="rule-cmd"><code>color/raw-hex</code></div>
-      <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Nudge</span></div>
+      <div><span class="pill nudge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>Nudge</span></div>
       <div class="rule-reason">Raw hex in an inline style. Use a theme token.</div>
     </div>
-    <div class="rule-row" data-decision="ask">
+    <div class="rule-row" data-decision="nudge">
       <div class="rule-cmd"><code>color/theme-accessor</code></div>
-      <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Nudge</span></div>
-      <div class="rule-reason"><code>theme(colors.*)</code> in raw CSS. Reference the CSS variable directly, e.g. <code>var(--color-muted)</code>.</div>
+      <div><span class="pill nudge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>Nudge</span></div>
+      <div class="rule-reason">theme(colors.*) in raw CSS. Reference the CSS variable directly, e.g. var(--color-muted).</div>
     </div>
-    <div class="rule-row" data-decision="ask">
+    <div class="rule-row" data-decision="nudge">
       <div class="rule-cmd"><code>color/maxed-saturation</code></div>
-      <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Nudge</span></div>
-      <div class="rule-reason">Pure screen-primary color (<code>#f00</code>, <code>#00ff00</code>, ...). Use an OKLCH value with moderate chroma in a safe lightness range.</div>
+      <div><span class="pill nudge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>Nudge</span></div>
+      <div class="rule-reason">Pure screen-primary color (#f00, #00ff00, ...). Use an OKLCH value with moderate chroma in a safe lightness range.</div>
     </div>
   </div>
   <div class="rule-card">
@@ -57,20 +57,20 @@
       <h2>Typography</h2>
       <span class="count">post-write nudge · PostToolUse</span>
     </header>
-    <div class="rule-row" data-decision="ask">
+    <div class="rule-row" data-decision="nudge">
       <div class="rule-cmd"><code>typography/default-font</code></div>
-      <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Nudge</span></div>
+      <div><span class="pill nudge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>Nudge</span></div>
       <div class="rule-reason">Inter as the display font. Choose a typeface suited to the product's character.</div>
     </div>
-    <div class="rule-row" data-decision="ask">
+    <div class="rule-row" data-decision="nudge">
       <div class="rule-cmd"><code>typography/small-body-text</code></div>
-      <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Nudge</span></div>
-      <div class="rule-reason"><code>text-xs</code> / <code>text-sm</code> on a <code>&lt;p&gt;</code>. Body text should be 16px or larger; reserve smaller sizes for metadata.</div>
+      <div><span class="pill nudge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>Nudge</span></div>
+      <div class="rule-reason">text-xs / text-sm on a &lt;p&gt;. Body text should be 16px or larger; reserve smaller sizes for metadata.</div>
     </div>
-    <div class="rule-row" data-decision="ask">
+    <div class="rule-row" data-decision="nudge">
       <div class="rule-cmd"><code>typography/script-font</code></div>
-      <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Nudge</span></div>
-      <div class="rule-reason">Script or handwriting font as display type (Pacifico, Caveat, Comic Sans, ...). Reserve script faces for genuine handwriting context.</div>
+      <div><span class="pill nudge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>Nudge</span></div>
+      <div class="rule-reason">Script or handwriting font used as display type (Pacifico, Caveat, Comic Sans, ...). Reserve script faces for genuine handwriting context.</div>
     </div>
   </div>
   <div class="rule-card">
@@ -78,29 +78,29 @@
       <h2>Content</h2>
       <span class="count">post-write nudge · PostToolUse</span>
     </header>
-    <div class="rule-row" data-decision="ask">
+    <div class="rule-row" data-decision="nudge">
       <div class="rule-cmd"><code>content/placeholder-name</code></div>
-      <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Nudge</span></div>
-      <div class="rule-reason">Placeholder or stock person / company name. Use real content or an explicit <code>[placeholder]</code>.</div>
+      <div><span class="pill nudge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>Nudge</span></div>
+      <div class="rule-reason">Placeholder or stock person/company name. Use real content or an explicit [placeholder].</div>
     </div>
-    <div class="rule-row" data-decision="ask">
+    <div class="rule-row" data-decision="nudge">
       <div class="rule-cmd"><code>content/fabricated-stat</code></div>
-      <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Nudge</span></div>
-      <div class="rule-reason">Round, unsourced statistic (<code>99.9%</code>, <code>10,000+</code>). Use a real measured number or remove it.</div>
+      <div><span class="pill nudge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>Nudge</span></div>
+      <div class="rule-reason">Round, unsourced statistic. Use a real measured number or remove it.</div>
     </div>
-    <div class="rule-row" data-decision="ask">
+    <div class="rule-row" data-decision="nudge">
       <div class="rule-cmd"><code>content/filler-copy</code></div>
-      <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Nudge</span></div>
-      <div class="rule-reason">Generic marketing filler ("Elevate", "Seamless", "Unleash", ...). State a concrete outcome instead.</div>
+      <div><span class="pill nudge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>Nudge</span></div>
+      <div class="rule-reason">Generic marketing filler ('Elevate', 'Seamless', 'Unleash', ...). State a concrete outcome instead.</div>
     </div>
-    <div class="rule-row" data-decision="ask">
+    <div class="rule-row" data-decision="nudge">
       <div class="rule-cmd"><code>content/dash</code></div>
-      <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Nudge</span></div>
+      <div><span class="pill nudge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>Nudge</span></div>
       <div class="rule-reason">Em or en dash in rendered text. Use a period, comma, colon, or parentheses.</div>
     </div>
-    <div class="rule-row" data-decision="ask">
+    <div class="rule-row" data-decision="nudge">
       <div class="rule-cmd"><code>content/emoji-decoration</code></div>
-      <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Nudge</span></div>
+      <div><span class="pill nudge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>Nudge</span></div>
       <div class="rule-reason">Emoji decorating a heading or button. Reads casual in most product and editorial UI; remove unless the brand uses emoji deliberately.</div>
     </div>
   </div>
@@ -109,15 +109,15 @@
       <h2>Motion</h2>
       <span class="count">post-write nudge · PostToolUse</span>
     </header>
-    <div class="rule-row" data-decision="ask">
+    <div class="rule-row" data-decision="nudge">
       <div class="rule-cmd"><code>motion/transition-all</code></div>
-      <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Nudge</span></div>
-      <div class="rule-reason"><code>transition: all</code> (or the <code>transition-all</code> utility) animates every property, including layout. List the specific properties to transition.</div>
+      <div><span class="pill nudge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>Nudge</span></div>
+      <div class="rule-reason">transition: all (or the transition-all utility) animates every property, including layout. List the specific properties to transition.</div>
     </div>
-    <div class="rule-row" data-decision="ask">
+    <div class="rule-row" data-decision="nudge">
       <div class="rule-cmd"><code>motion/scale-hover</code></div>
-      <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Nudge</span></div>
-      <div class="rule-reason">Default <code>scale(1.05)</code> / <code>scale(1.1)</code> hover. Differentiate hover by element: a color shift for links, a ring for buttons.</div>
+      <div><span class="pill nudge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>Nudge</span></div>
+      <div class="rule-reason">Default scale(1.05) / scale(1.1) hover. Differentiate hover by element: a color shift for links, a ring for buttons.</div>
     </div>
   </div>
   <div class="rule-card">
@@ -125,25 +125,25 @@
       <h2>Structure &amp; accessibility</h2>
       <span class="count">post-write nudge · PostToolUse</span>
     </header>
-    <div class="rule-row" data-decision="ask">
-      <div class="rule-cmd"><code>a11y/focus-visible</code></div>
-      <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Nudge</span></div>
-      <div class="rule-reason">Focus outline removed with no <code>focus-visible</code> replacement in the file. Add a visible focus style.</div>
-    </div>
-    <div class="rule-row" data-decision="ask">
-      <div class="rule-cmd"><code>behavior/scroll-into-view</code></div>
-      <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Nudge</span></div>
-      <div class="rule-reason"><code>scrollIntoView</code> mutates ancestor scroll position in embedded contexts. Use <code>scrollTo</code> with a computed offset.</div>
-    </div>
-    <div class="rule-row" data-decision="ask">
+    <div class="rule-row" data-decision="nudge">
       <div class="rule-cmd"><code>layout/accent-stripe</code></div>
-      <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Nudge</span></div>
+      <div><span class="pill nudge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>Nudge</span></div>
       <div class="rule-reason">Card with a 4px left accent stripe. Use a tonal background or a thin bottom border instead.</div>
     </div>
-    <div class="rule-row" data-decision="ask">
+    <div class="rule-row" data-decision="nudge">
+      <div class="rule-cmd"><code>behavior/scroll-into-view</code></div>
+      <div><span class="pill nudge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>Nudge</span></div>
+      <div class="rule-reason">scrollIntoView mutates ancestor scroll position in embedded contexts. Use scrollTo with a computed offset.</div>
+    </div>
+    <div class="rule-row" data-decision="nudge">
       <div class="rule-cmd"><code>assets/hotlinked-image</code></div>
-      <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Nudge</span></div>
-      <div class="rule-reason">Hotlinked external image (<code>unsplash.com</code>). Download and self-host the asset.</div>
+      <div><span class="pill nudge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>Nudge</span></div>
+      <div class="rule-reason">Hotlinked external image. Download and self-host the asset.</div>
+    </div>
+    <div class="rule-row" data-decision="nudge">
+      <div class="rule-cmd"><code>a11y/focus-visible</code></div>
+      <div><span class="pill nudge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>Nudge</span></div>
+      <div class="rule-reason">Focus outline removed with no focus-visible replacement. Add a visible focus style.</div>
     </div>
   </div>
   <div class="config-block">
