@@ -1,6 +1,6 @@
   <p class="breadcrumb"><a href="index.html">Core Concepts</a> / Scratch Directory</p>
   <h1 id="scratch-h1">Scratch Directory</h1>
-  <p class="page-lede">A friction-free, session-scoped working directory for an agent's throwaway files: patch diffs, fetch dumps, screenshots, draft PR bodies, captured build output. When <code>$TOOL_GATES_SCRATCH</code> is set, writes whose target resolves under it auto-allow in every permission mode, so agents stop reaching for <code>/tmp</code> and stop prompting for intermediate work.</p>
+  <p class="page-lede">A friction-free, session-scoped working directory for an agent's throwaway files: patch diffs, fetch dumps, screenshots, draft PR bodies, captured build output. Writes whose target resolves under a recognized scratch root (<code>$TOOL_GATES_SCRATCH</code>, or Claude Code's native session scratchpad) auto-allow in every permission mode, so agents stop prompting for intermediate work.</p>
 
   <div class="sec-head" style="margin-top: var(--s-6)">
     <p class="lbl">The base</p>
@@ -9,6 +9,14 @@
   <p class="step-prose">The base is <code>$TOOL_GATES_SCRATCH</code> (default <code>~/.cache/tool-gates-scratch</code>). The convention is to write under a per-project, per-session subtree so parallel work never collides and scratch lines up with the session transcript:</p>
   <pre class="code-block">$TOOL_GATES_SCRATCH/&lt;project-slug&gt;/$CLAUDE_CODE_SESSION_ID/</pre>
   <p class="step-prose">The project slug mirrors the <code>~/.claude/projects/&lt;slug&gt;/&lt;session&gt;/</code> transcript scheme (the working dir with <code>/</code> turned into <code>-</code>), and the session id lets a session's subagents and workflow agents resolve the <em>same</em> dir. Those segments are organizational only: the permission decision is a pure prefix match against the base, so the leading <code>$TOOL_GATES_SCRATCH</code> is the only part that matters for auto-allow.</p>
+
+  <div class="sec-head">
+    <p class="lbl">Second root</p>
+    <h2>Claude Code's native session scratchpad.</h2>
+  </div>
+  <p class="step-prose">Claude Code creates its own per-session scratchpad at session start and hands the agent the literal path in the system prompt, no variables required:</p>
+  <pre class="code-block">&lt;tmpdir&gt;/claude-&lt;uid&gt;/&lt;project-segment&gt;/&lt;session-id&gt;/scratchpad/</pre>
+  <p class="step-prose">Claude Code auto-allows its file tools there, but not Bash, so a redirect, <code>mkdir</code>, <code>tee</code>, or <code>cp</code> into it would still prompt. tool-gates recognizes this directory as a second scratch root with the same upgrade set as below. The match is bound to the <em>current</em> session: the session-id path component must equal the gate's own <code>CLAUDE_CODE_SESSION_ID</code> (UUID-shaped), the <code>claude-&lt;uid&gt;</code> component is exact, and scope ends at <code>scratchpad/</code>, so another session's scratchpad, the <code>tasks/</code> sibling, and anything else under the temp dir still prompt. Other clients never set that variable, so the root is inert for them.</p>
 
   <div class="sec-head">
     <p class="lbl">What auto-allows</p>
@@ -62,4 +70,4 @@
   </div>
   <p class="step-prose">Set <code>TOOL_GATES_SCRATCH</code> in your environment. Putting it in the <code>env</code> block of <code>~/.claude/settings.json</code> makes it ambient: it reaches every Bash call, every subagent, and every workflow agent, and survives context compaction.</p>
   <pre class="code-block">{ "env": { "TOOL_GATES_SCRATCH": "/home/you/.cache/tool-gates-scratch" } }</pre>
-  <p class="step-prose">There is no <code>config.toml</code> toggle; relocate the base only via the env var. An override that contains an unresolvable variable makes the feature inert (fail closed: nothing is treated as scratch). The gate only removes the prompt, so the other half is instructing your agent to write its throwaway and intermediate files under the canonical path (and to <code>mkdir -p</code> it first) instead of <code>/tmp</code>.</p>
+  <p class="step-prose">There is no <code>config.toml</code> toggle; relocate the base only via the env var. The literal <code>$TOOL_GATES_SCRATCH</code> token in a command is substituted only while the env var is set: unset, the shell would expand it to nothing, so the gate leaves the token alone and prompts (fully-spelled paths under the default base still match). An override that contains an unresolvable variable makes this root inert (fail closed: nothing resolves under it); the session-scratchpad root above is independent and keeps matching. The gate only removes the prompt, so the other half is instructing your agent to write its throwaway and intermediate files under the canonical path (and to <code>mkdir -p</code> it first) instead of <code>/tmp</code>.</p>
