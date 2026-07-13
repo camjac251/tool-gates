@@ -1,227 +1,401 @@
-//! Session-scoped dedup tracker for hints and security warnings.
-//!
-//! Tracks which hints and warnings have been emitted during the current
-//! session. Each entry fires at most once per session, reducing the
-//! context tax from repeated `<system-reminder>` injections.
+//! Multi-session dedup tracker for hints and security warnings.
 //!
 //! File: `~/.cache/tool-gates/hint-tracker.json`
 
+use chrono::{DateTime, Duration, Utc};
+use fs2::FileExt;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
-use std::fs;
-use std::path::PathBuf;
-use std::sync::{Mutex, OnceLock};
+use std::collections::{HashMap, HashSet};
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, Read, Write};
+use std::path::{Path, PathBuf};
+use tempfile::Builder;
 
-/// Global tracker. Loaded once per process, mutated in-place.
-static TRACKER: OnceLock<Mutex<HintTracker>> = OnceLock::new();
+const SCHEMA_VERSION: u8 = 2;
+const SESSION_TTL_SECS: i64 = 7 * 24 * 60 * 60;
 
-/// Session-scoped dedup state.
-#[derive(Debug, Default, Serialize, Deserialize)]
-pub struct HintTracker {
-    /// Current session ID (resets tracker when session changes)
-    pub session_id: String,
-    /// Hint keys already emitted (e.g. "cat", "grep", "find")
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct SessionState {
     #[serde(default)]
-    pub hints: HashSet<String>,
-    /// Security warning keys already shown (e.g. "/tmp/f.js-eval_injection")
+    hints: HashSet<String>,
     #[serde(default)]
-    pub security_warnings: HashSet<String>,
-    /// Whether state has changed since load (skip disk write if clean)
-    #[serde(skip)]
-    dirty: bool,
+    security_warnings: HashSet<String>,
+    updated_at: DateTime<Utc>,
 }
 
-impl HintTracker {
-    /// Load tracker from disk, resetting if session_id doesn't match.
-    fn load(session_id: &str) -> Self {
-        if let Some(tracker) = load_from_disk() {
-            if tracker.session_id == session_id {
-                return tracker;
-            }
+impl SessionState {
+    fn new() -> Self {
+        Self {
+            hints: HashSet::new(),
+            security_warnings: HashSet::new(),
+            updated_at: Utc::now(),
         }
-        HintTracker {
-            session_id: session_id.to_string(),
-            ..Default::default()
-        }
-    }
-
-    /// Check if a hint key is new for this session. Records it if so.
-    pub fn is_hint_new(&mut self, hint_key: &str) -> bool {
-        if self.hints.contains(hint_key) {
-            return false;
-        }
-        self.hints.insert(hint_key.to_string());
-        self.dirty = true;
-        true
-    }
-
-    /// Check if a security warning key is new for this session.
-    pub fn is_security_warning_new(&mut self, key: &str) -> bool {
-        if self.security_warnings.contains(key) {
-            return false;
-        }
-        self.security_warnings.insert(key.to_string());
-        self.dirty = true;
-        true
-    }
-
-    /// Save to disk if state changed since load.
-    pub fn save_if_dirty(&self) {
-        if !self.dirty {
-            return;
-        }
-        let _ = save_to_disk(self);
     }
 }
 
-fn tracker_path() -> Option<PathBuf> {
-    Some(crate::cache::cache_dir().join("hint-tracker.json"))
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct HintStore {
+    version: u8,
+    #[serde(default)]
+    sessions: HashMap<String, SessionState>,
 }
 
-fn load_from_disk() -> Option<HintTracker> {
-    let path = tracker_path()?;
-    let content = fs::read_to_string(&path).ok()?;
-    serde_json::from_str(&content).ok()
-}
-
-fn save_to_disk(tracker: &HintTracker) -> Result<(), std::io::Error> {
-    let path = tracker_path().ok_or_else(|| {
-        std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            "Could not determine cache path",
-        )
-    })?;
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
+impl Default for HintStore {
+    fn default() -> Self {
+        Self {
+            version: SCHEMA_VERSION,
+            sessions: HashMap::new(),
+        }
     }
-    let content = serde_json::to_string(tracker)?;
-    let tmp = path.with_extension("tmp");
-    fs::write(&tmp, &content)?;
-    fs::rename(&tmp, &path)?;
+}
+
+impl HintStore {
+    fn clean_expired_at(&mut self, now: DateTime<Utc>) {
+        let cutoff = now - Duration::seconds(SESSION_TTL_SECS);
+        self.sessions
+            .retain(|_, session| session.updated_at >= cutoff);
+    }
+
+    fn session_mut(&mut self, session_id: &str) -> &mut SessionState {
+        self.sessions
+            .entry(session_id.to_string())
+            .or_insert_with(SessionState::new)
+    }
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct LegacyTracker {
+    session_id: String,
+    #[serde(default)]
+    hints: HashSet<String>,
+    #[serde(default)]
+    security_warnings: HashSet<String>,
+}
+
+fn tracker_path() -> PathBuf {
+    crate::cache::cache_dir().join("hint-tracker.json")
+}
+
+fn lock_path(path: &Path) -> PathBuf {
+    path.with_file_name("hint-tracker.json.lock")
+}
+
+fn parse_store(content: &str) -> (HintStore, bool) {
+    if content.trim().is_empty() {
+        return (HintStore::default(), false);
+    }
+
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(content) else {
+        return (HintStore::default(), true);
+    };
+    if value.get("sessions").is_some() {
+        let Ok(mut store) = serde_json::from_value::<HintStore>(value) else {
+            return (HintStore::default(), true);
+        };
+        let needs_rewrite = store.version != SCHEMA_VERSION;
+        store.version = SCHEMA_VERSION;
+        return (store, needs_rewrite);
+    }
+
+    let legacy = serde_json::from_value::<LegacyTracker>(value).unwrap_or_default();
+    let mut store = HintStore::default();
+    if !legacy.session_id.is_empty() {
+        store.sessions.insert(
+            legacy.session_id,
+            SessionState {
+                hints: legacy.hints,
+                security_warnings: legacy.security_warnings,
+                updated_at: Utc::now(),
+            },
+        );
+    }
+    (store, true)
+}
+
+fn with_locked_store<R>(mutate: impl FnOnce(&mut HintStore) -> R) -> io::Result<R> {
+    let path = tracker_path();
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent)?;
+
+    let lock = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(lock_path(&path))?;
+    #[allow(clippy::incompatible_msrv)]
+    lock.lock_exclusive()?;
+
+    let mut content = String::new();
+    match File::open(&path) {
+        Ok(mut file) => {
+            file.read_to_string(&mut content)?;
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error),
+    }
+    let (mut store, mut needs_rewrite) = parse_store(&content);
+    let session_count = store.sessions.len();
+    store.clean_expired_at(Utc::now());
+    needs_rewrite |= store.sessions.len() != session_count;
+    let before = store.clone();
+    let result = mutate(&mut store);
+
+    if needs_rewrite || store != before {
+        persist_store(&path, parent, &store)?;
+    }
+
+    FileExt::unlock(&lock)?;
+    Ok(result)
+}
+
+fn persist_store(path: &Path, parent: &Path, store: &HintStore) -> io::Result<()> {
+    let mut bytes = serde_json::to_vec(store).map_err(io::Error::other)?;
+    bytes.push(b'\n');
+    let mut temp = Builder::new()
+        .prefix(".hint-tracker-")
+        .tempfile_in(parent)?;
+    temp.write_all(&bytes)?;
+    temp.flush()?;
+    temp.as_file().sync_all()?;
+    temp.persist(path).map_err(|error| error.error)?;
+    sync_parent(parent)
+}
+
+#[cfg(unix)]
+fn sync_parent(parent: &Path) -> io::Result<()> {
+    File::open(parent)?.sync_all()
+}
+
+#[cfg(not(unix))]
+fn sync_parent(_parent: &Path) -> io::Result<()> {
     Ok(())
 }
 
-/// Get the global tracker. Initializes on first call.
-pub fn get(session_id: &str) -> std::sync::MutexGuard<'static, HintTracker> {
-    let mutex = TRACKER.get_or_init(|| Mutex::new(HintTracker::load(session_id)));
-    mutex.lock().unwrap()
+fn record_hint_keys(session_id: &str, keys: &[&str]) -> io::Result<HashSet<String>> {
+    with_locked_store(|store| {
+        let session = store.session_mut(session_id);
+        let mut new = HashSet::new();
+        for key in keys {
+            if session.hints.insert((*key).to_string()) {
+                new.insert((*key).to_string());
+            }
+        }
+        if !new.is_empty() {
+            session.updated_at = Utc::now();
+        }
+        new
+    })
 }
 
-/// Filter hints, retaining only those not yet shown this session.
-/// Empty `session_id` skips filtering (backward compat).
+fn record_security_warning(session_id: &str, key: &str) -> io::Result<bool> {
+    with_locked_store(|store| {
+        let session = store.session_mut(session_id);
+        let is_new = session.security_warnings.insert(key.to_string());
+        if is_new {
+            session.updated_at = Utc::now();
+        }
+        is_new
+    })
+}
+
+/// Filter hints, retaining only those not yet shown in this session.
+/// Empty `session_id` skips filtering for backward compatibility. Disk errors
+/// fail open so a persistence problem never hides useful context.
 pub fn filter_hints(session_id: &str, hints: &mut Vec<crate::hints::ModernHint>) {
     if session_id.is_empty() || hints.is_empty() {
         return;
     }
-    let mut tracker = get(session_id);
-    hints.retain(|h| tracker.is_hint_new(h.legacy_command));
-    tracker.save_if_dirty();
+    let keys = hints
+        .iter()
+        .map(|hint| hint.legacy_command)
+        .collect::<Vec<_>>();
+    if let Ok(new) = record_hint_keys(session_id, &keys) {
+        hints.retain(|hint| new.contains(hint.legacy_command));
+    }
 }
 
-/// Check if a security warning is new for this session. Persists to disk.
+/// Check whether a security warning is new for this session.
+/// Persistence errors fail open so warnings remain visible.
 pub fn is_security_warning_new(session_id: &str, key: &str) -> bool {
     if session_id.is_empty() {
         return true;
     }
-    let mut tracker = get(session_id);
-    let is_new = tracker.is_security_warning_new(key);
-    tracker.save_if_dirty();
-    is_new
+    record_security_warning(session_id, key).unwrap_or(true)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::hints::ModernHint;
+    use serial_test::serial;
+    use std::ffi::OsString;
 
-    fn fresh(session_id: &str) -> HintTracker {
-        HintTracker {
-            session_id: session_id.to_string(),
-            ..Default::default()
+    struct IsolatedCache {
+        _temp: tempfile::TempDir,
+        previous: Option<OsString>,
+    }
+
+    impl IsolatedCache {
+        fn new() -> Self {
+            let temp = tempfile::tempdir().expect("cache tempdir");
+            let previous = std::env::var_os("XDG_CACHE_HOME");
+            unsafe { std::env::set_var("XDG_CACHE_HOME", temp.path()) };
+            Self {
+                _temp: temp,
+                previous,
+            }
+        }
+    }
+
+    impl Drop for IsolatedCache {
+        fn drop(&mut self) {
+            match &self.previous {
+                Some(value) => unsafe { std::env::set_var("XDG_CACHE_HOME", value) },
+                None => unsafe { std::env::remove_var("XDG_CACHE_HOME") },
+            }
+        }
+    }
+
+    fn hint(key: &'static str) -> ModernHint {
+        ModernHint {
+            legacy_command: key,
+            modern_command: "mytool",
+            hint: "Use mytool".to_string(),
         }
     }
 
     #[test]
-    fn test_hint_first_time_is_new() {
-        let mut t = fresh("s1");
-        assert!(t.is_hint_new("cat"));
-        assert!(t.is_hint_new("grep"));
+    fn store_keeps_sessions_independent_and_prunes_expired_state() {
+        let mut store = HintStore::default();
+        store.session_mut("session-a").hints.insert("first".into());
+        store.session_mut("session-b").hints.insert("second".into());
+        store.sessions.get_mut("session-a").unwrap().updated_at =
+            Utc::now() - Duration::seconds(SESSION_TTL_SECS + 1);
+
+        store.clean_expired_at(Utc::now());
+        assert!(!store.sessions.contains_key("session-a"));
+        assert!(store.sessions["session-b"].hints.contains("second"));
     }
 
     #[test]
-    fn test_hint_second_time_suppressed() {
-        let mut t = fresh("s1");
-        assert!(t.is_hint_new("cat"));
-        assert!(!t.is_hint_new("cat"));
+    fn legacy_file_migrates_into_the_session_map() {
+        let (store, needs_rewrite) = parse_store(
+            r#"{"session_id":"session-old","hints":["first"],"security_warnings":["warning"]}"#,
+        );
+        assert!(needs_rewrite);
+        assert_eq!(store.version, SCHEMA_VERSION);
+        assert!(store.sessions["session-old"].hints.contains("first"));
+        assert!(
+            store.sessions["session-old"]
+                .security_warnings
+                .contains("warning")
+        );
     }
 
     #[test]
-    fn test_warning_first_time_is_new() {
-        let mut t = fresh("s1");
-        assert!(t.is_security_warning_new("/tmp/f.js-eval_injection"));
+    #[serial]
+    fn legacy_file_is_rewritten_when_the_recorded_hint_is_a_duplicate() {
+        let _cache = IsolatedCache::new();
+        fs::create_dir_all(tracker_path().parent().unwrap()).expect("create cache directory");
+        fs::write(
+            tracker_path(),
+            r#"{"session_id":"session-old","hints":["first"],"security_warnings":[]}"#,
+        )
+        .expect("seed legacy tracker");
+
+        let new = record_hint_keys("session-old", &["first"]).expect("record duplicate hint");
+        assert!(new.is_empty());
+
+        let content = fs::read_to_string(tracker_path()).expect("read migrated tracker");
+        let value: serde_json::Value = serde_json::from_str(&content).expect("parse tracker");
+        assert_eq!(value["version"], SCHEMA_VERSION);
+        assert!(value.get("sessions").is_some());
+        assert!(value.get("session_id").is_none());
     }
 
     #[test]
-    fn test_warning_second_time_suppressed() {
-        let mut t = fresh("s1");
-        assert!(t.is_security_warning_new("key"));
-        assert!(!t.is_security_warning_new("key"));
+    #[serial]
+    fn expired_sessions_are_removed_when_the_current_record_is_a_duplicate() {
+        let _cache = IsolatedCache::new();
+        fs::create_dir_all(tracker_path().parent().unwrap()).expect("create cache directory");
+        let mut store = HintStore::default();
+        store
+            .session_mut("current-session")
+            .security_warnings
+            .insert("warning".into());
+        store.session_mut("expired-session").updated_at =
+            Utc::now() - Duration::seconds(SESSION_TTL_SECS + 1);
+        persist_store(&tracker_path(), tracker_path().parent().unwrap(), &store)
+            .expect("seed tracker");
+
+        assert!(!record_security_warning("current-session", "warning").expect("record warning"));
+
+        let content = fs::read_to_string(tracker_path()).expect("read cleaned tracker");
+        let (store, _) = parse_store(&content);
+        assert!(store.sessions.contains_key("current-session"));
+        assert!(!store.sessions.contains_key("expired-session"));
     }
 
     #[test]
-    fn test_dirty_on_new_entry() {
-        let mut t = fresh("s1");
-        assert!(!t.dirty);
-        t.is_hint_new("cat");
-        assert!(t.dirty);
+    #[serial]
+    fn alternating_sessions_do_not_reset_each_other() {
+        let _cache = IsolatedCache::new();
+
+        let mut first = vec![hint("first")];
+        filter_hints("session-a", &mut first);
+        assert_eq!(first.len(), 1);
+
+        let mut second = vec![hint("first")];
+        filter_hints("session-b", &mut second);
+        assert_eq!(second.len(), 1);
+
+        let mut repeated = vec![hint("first")];
+        filter_hints("session-a", &mut repeated);
+        assert!(repeated.is_empty());
+
+        let content = fs::read_to_string(tracker_path()).expect("read tracker");
+        let (store, _) = parse_store(&content);
+        assert_eq!(store.sessions.len(), 2);
     }
 
     #[test]
-    fn test_not_dirty_on_duplicate() {
-        let mut t = fresh("s1");
-        t.is_hint_new("cat");
-        t.dirty = false;
-        t.is_hint_new("cat");
-        assert!(!t.dirty);
+    #[serial]
+    fn concurrent_process_style_updates_do_not_lose_sessions() {
+        let _cache = IsolatedCache::new();
+        let threads = (0..16)
+            .map(|index| {
+                std::thread::spawn(move || {
+                    record_security_warning(
+                        &format!("session-{index}"),
+                        &format!("warning-{index}"),
+                    )
+                    .expect("record warning");
+                })
+            })
+            .collect::<Vec<_>>();
+        for thread in threads {
+            thread.join().expect("join warning thread");
+        }
+
+        let content = fs::read_to_string(tracker_path()).expect("read tracker");
+        let (store, _) = parse_store(&content);
+        assert_eq!(store.sessions.len(), 16);
+        for index in 0..16 {
+            assert!(
+                store.sessions[&format!("session-{index}")]
+                    .security_warnings
+                    .contains(&format!("warning-{index}"))
+            );
+        }
     }
 
     #[test]
-    fn test_session_change_resets() {
-        let mut t = fresh("s1");
-        t.is_hint_new("cat");
-        assert!(!t.is_hint_new("cat"));
-
-        let mut t2 = fresh("s2");
-        assert!(t2.is_hint_new("cat"));
-    }
-
-    #[test]
-    fn test_serialization_roundtrip() {
-        let mut t = fresh("s1");
-        t.is_hint_new("cat");
-        t.is_security_warning_new("k1");
-
-        let json = serde_json::to_string(&t).unwrap();
-        let loaded: HintTracker = serde_json::from_str(&json).unwrap();
-        assert_eq!(loaded.session_id, "s1");
-        assert!(loaded.hints.contains("cat"));
-        assert!(loaded.security_warnings.contains("k1"));
-    }
-
-    #[test]
-    fn test_filter_hints_empty_session_passes_through() {
-        use crate::hints::ModernHint;
-        let mut hints = vec![ModernHint {
-            legacy_command: "cat",
-            modern_command: "bat",
-            hint: "Use bat".to_string(),
-        }];
+    fn empty_session_bypasses_dedup() {
+        let mut hints = vec![hint("first")];
         filter_hints("", &mut hints);
         assert_eq!(hints.len(), 1);
-    }
-
-    #[test]
-    fn test_security_warning_empty_session_always_new() {
-        assert!(is_security_warning_new("", "key"));
-        assert!(is_security_warning_new("", "key"));
+        assert!(is_security_warning_new("", "warning"));
+        assert!(is_security_warning_new("", "warning"));
     }
 }
