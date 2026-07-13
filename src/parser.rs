@@ -264,22 +264,7 @@ fn visit_node(cursor: &mut TreeCursor, source: &str, commands: &mut Vec<CommandI
             if let Some(cmd) = extract_command(cursor, source) {
                 commands.push(cmd);
             }
-            // Also check for nested substitutions within command arguments
-            if cursor.goto_first_child() {
-                loop {
-                    let child = cursor.node();
-                    if matches!(
-                        child.kind(),
-                        "command_substitution" | "process_substitution"
-                    ) {
-                        visit_node(cursor, source, commands);
-                    }
-                    if !cursor.goto_next_sibling() {
-                        break;
-                    }
-                }
-                cursor.goto_parent();
-            }
+            visit_nested_substitutions(cursor, source, commands);
         }
         "pipeline" => {
             // Visit each command in the pipeline
@@ -287,9 +272,7 @@ fn visit_node(cursor: &mut TreeCursor, source: &str, commands: &mut Vec<CommandI
                 loop {
                     let child = cursor.node();
                     if child.kind() == "command" {
-                        if let Some(cmd) = extract_command(cursor, source) {
-                            commands.push(cmd);
-                        }
+                        visit_node(cursor, source, commands);
                     } else if child.kind() != "|" {
                         // Recurse into non-pipe children
                         visit_node(cursor, source, commands);
@@ -349,6 +332,35 @@ fn visit_node(cursor: &mut TreeCursor, source: &str, commands: &mut Vec<CommandI
                 cursor.goto_parent();
             }
         }
+    }
+}
+
+/// Find executable substitutions anywhere inside a command argument tree.
+///
+/// Tree-sitter nests substitutions below `string`, `concatenation`, and
+/// arithmetic nodes. Stop descending once a substitution is found because
+/// `visit_node` owns traversal of that executable subtree, including any
+/// further nested substitutions.
+fn visit_nested_substitutions(
+    cursor: &mut TreeCursor,
+    source: &str,
+    commands: &mut Vec<CommandInfo>,
+) {
+    if cursor.goto_first_child() {
+        loop {
+            if matches!(
+                cursor.node().kind(),
+                "command_substitution" | "process_substitution"
+            ) {
+                visit_node(cursor, source, commands);
+            } else {
+                visit_nested_substitutions(cursor, source, commands);
+            }
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
+        cursor.goto_parent();
     }
 }
 
@@ -754,6 +766,60 @@ mod tests {
         assert_eq!(cmds.len(), 1);
         assert_eq!(cmds[0].program, "echo");
         // The quoted string should be an argument, not parsed as a command
+    }
+
+    #[test]
+    fn test_quoted_substitution_extracts_inner_command() {
+        let cmds = extract_commands(r#"echo "$(mytool --check)""#);
+        let programs = cmds
+            .iter()
+            .map(|cmd| cmd.program.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(programs, vec!["echo", "mytool"]);
+        assert_eq!(cmds[1].args, vec!["--check"]);
+    }
+
+    #[test]
+    fn test_quoted_substitution_extracts_deeply_nested_command_once() {
+        let cmds = extract_commands(r#"echo "$(printf '%s' "$(mytool --check)")""#);
+        let programs = cmds
+            .iter()
+            .map(|cmd| cmd.program.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(programs, vec!["echo", "printf", "mytool"]);
+    }
+
+    #[test]
+    fn test_quoted_substitution_handles_backticks_concatenation_and_arithmetic() {
+        for command in [
+            r#"echo "`mytool --check`""#,
+            r#"echo prefix"$(mytool --check)"suffix"#,
+            r#"echo "$((1 + $(mytool --check)))""#,
+        ] {
+            let programs = extract_commands(command)
+                .into_iter()
+                .map(|cmd| cmd.program)
+                .collect::<Vec<_>>();
+            assert_eq!(
+                programs,
+                vec!["echo", "mytool"],
+                "nested executable was missed in {command}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_quoted_substitution_literals_are_not_executed() {
+        for command in [
+            r#"echo '$(mytool --check)'"#,
+            r#"echo "\$(mytool --check)""#,
+        ] {
+            let programs = extract_commands(command)
+                .into_iter()
+                .map(|cmd| cmd.program)
+                .collect::<Vec<_>>();
+            assert_eq!(programs, vec!["echo"], "literal was executed in {command}");
+        }
     }
 
     #[test]

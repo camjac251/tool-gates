@@ -837,6 +837,28 @@ pub(crate) mod tests {
         }
     }
 
+    mod quoted_substitution_composition {
+        use super::*;
+
+        #[test]
+        fn mutating_inner_command_requires_approval() {
+            let result = check_command(r#"echo "$(git add file.txt)""#);
+            assert_eq!(get_decision(&result), "ask");
+        }
+
+        #[test]
+        fn unknown_inner_command_requires_approval() {
+            let result = check_command(r#"echo "$(mytool deploy)""#);
+            assert_eq!(get_decision(&result), "ask");
+        }
+
+        #[test]
+        fn read_only_inner_command_remains_allowed() {
+            let result = check_command(r#"echo "$(git status)""#);
+            assert_eq!(get_decision(&result), "allow");
+        }
+    }
+
     // === Compound Command Settings Matching ===
 
     mod compound_settings {
