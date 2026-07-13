@@ -112,8 +112,7 @@ fn parse_store(content: &str) -> (HintStore, bool) {
     (store, true)
 }
 
-fn with_locked_store<R>(mutate: impl FnOnce(&mut HintStore) -> R) -> io::Result<R> {
-    let path = tracker_path();
+fn with_locked_store_at<R>(path: &Path, mutate: impl FnOnce(&mut HintStore) -> R) -> io::Result<R> {
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
     fs::create_dir_all(parent)?;
 
@@ -122,12 +121,12 @@ fn with_locked_store<R>(mutate: impl FnOnce(&mut HintStore) -> R) -> io::Result<
         .write(true)
         .create(true)
         .truncate(false)
-        .open(lock_path(&path))?;
+        .open(lock_path(path))?;
     #[allow(clippy::incompatible_msrv)]
     lock.lock_exclusive()?;
 
     let mut content = String::new();
-    match File::open(&path) {
+    match File::open(path) {
         Ok(mut file) => {
             file.read_to_string(&mut content)?;
         }
@@ -142,7 +141,7 @@ fn with_locked_store<R>(mutate: impl FnOnce(&mut HintStore) -> R) -> io::Result<
     let result = mutate(&mut store);
 
     if needs_rewrite || store != before {
-        persist_store(&path, parent, &store)?;
+        persist_store(path, parent, &store)?;
     }
 
     FileExt::unlock(&lock)?;
@@ -172,8 +171,12 @@ fn sync_parent(_parent: &Path) -> io::Result<()> {
     Ok(())
 }
 
-fn record_hint_keys(session_id: &str, keys: &[&str]) -> io::Result<HashSet<String>> {
-    with_locked_store(|store| {
+fn record_hint_keys_at(
+    path: &Path,
+    session_id: &str,
+    keys: &[&str],
+) -> io::Result<HashSet<String>> {
+    with_locked_store_at(path, |store| {
         let session = store.session_mut(session_id);
         let mut new = HashSet::new();
         for key in keys {
@@ -188,8 +191,12 @@ fn record_hint_keys(session_id: &str, keys: &[&str]) -> io::Result<HashSet<Strin
     })
 }
 
-fn record_security_warning(session_id: &str, key: &str) -> io::Result<bool> {
-    with_locked_store(|store| {
+fn record_hint_keys(session_id: &str, keys: &[&str]) -> io::Result<HashSet<String>> {
+    record_hint_keys_at(&tracker_path(), session_id, keys)
+}
+
+fn record_security_warning_at(path: &Path, session_id: &str, key: &str) -> io::Result<bool> {
+    with_locked_store_at(path, |store| {
         let session = store.session_mut(session_id);
         let is_new = session.security_warnings.insert(key.to_string());
         if is_new {
@@ -197,6 +204,10 @@ fn record_security_warning(session_id: &str, key: &str) -> io::Result<bool> {
         }
         is_new
     })
+}
+
+fn record_security_warning(session_id: &str, key: &str) -> io::Result<bool> {
+    record_security_warning_at(&tracker_path(), session_id, key)
 }
 
 /// Filter hints, retaining only those not yet shown in this session.
@@ -228,33 +239,11 @@ pub fn is_security_warning_new(session_id: &str, key: &str) -> bool {
 mod tests {
     use super::*;
     use crate::hints::ModernHint;
-    use serial_test::serial;
-    use std::ffi::OsString;
 
-    struct IsolatedCache {
-        _temp: tempfile::TempDir,
-        previous: Option<OsString>,
-    }
-
-    impl IsolatedCache {
-        fn new() -> Self {
-            let temp = tempfile::tempdir().expect("cache tempdir");
-            let previous = std::env::var_os("XDG_CACHE_HOME");
-            unsafe { std::env::set_var("XDG_CACHE_HOME", temp.path()) };
-            Self {
-                _temp: temp,
-                previous,
-            }
-        }
-    }
-
-    impl Drop for IsolatedCache {
-        fn drop(&mut self) {
-            match &self.previous {
-                Some(value) => unsafe { std::env::set_var("XDG_CACHE_HOME", value) },
-                None => unsafe { std::env::remove_var("XDG_CACHE_HOME") },
-            }
-        }
+    fn isolated_tracker() -> (tempfile::TempDir, PathBuf) {
+        let temp = tempfile::tempdir().expect("cache tempdir");
+        let path = temp.path().join("hint-tracker.json");
+        (temp, path)
     }
 
     fn hint(key: &'static str) -> ModernHint {
@@ -294,20 +283,19 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn legacy_file_is_rewritten_when_the_recorded_hint_is_a_duplicate() {
-        let _cache = IsolatedCache::new();
-        fs::create_dir_all(tracker_path().parent().unwrap()).expect("create cache directory");
+        let (_cache, path) = isolated_tracker();
         fs::write(
-            tracker_path(),
+            &path,
             r#"{"session_id":"session-old","hints":["first"],"security_warnings":[]}"#,
         )
         .expect("seed legacy tracker");
 
-        let new = record_hint_keys("session-old", &["first"]).expect("record duplicate hint");
+        let new =
+            record_hint_keys_at(&path, "session-old", &["first"]).expect("record duplicate hint");
         assert!(new.is_empty());
 
-        let content = fs::read_to_string(tracker_path()).expect("read migrated tracker");
+        let content = fs::read_to_string(path).expect("read migrated tracker");
         let value: serde_json::Value = serde_json::from_str(&content).expect("parse tracker");
         assert_eq!(value["version"], SCHEMA_VERSION);
         assert!(value.get("sessions").is_some());
@@ -315,10 +303,8 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn expired_sessions_are_removed_when_the_current_record_is_a_duplicate() {
-        let _cache = IsolatedCache::new();
-        fs::create_dir_all(tracker_path().parent().unwrap()).expect("create cache directory");
+        let (_cache, path) = isolated_tracker();
         let mut store = HintStore::default();
         store
             .session_mut("current-session")
@@ -326,47 +312,49 @@ mod tests {
             .insert("warning".into());
         store.session_mut("expired-session").updated_at =
             Utc::now() - Duration::seconds(SESSION_TTL_SECS + 1);
-        persist_store(&tracker_path(), tracker_path().parent().unwrap(), &store)
-            .expect("seed tracker");
+        persist_store(&path, path.parent().unwrap(), &store).expect("seed tracker");
 
-        assert!(!record_security_warning("current-session", "warning").expect("record warning"));
+        assert!(
+            !record_security_warning_at(&path, "current-session", "warning")
+                .expect("record warning")
+        );
 
-        let content = fs::read_to_string(tracker_path()).expect("read cleaned tracker");
+        let content = fs::read_to_string(path).expect("read cleaned tracker");
         let (store, _) = parse_store(&content);
         assert!(store.sessions.contains_key("current-session"));
         assert!(!store.sessions.contains_key("expired-session"));
     }
 
     #[test]
-    #[serial]
     fn alternating_sessions_do_not_reset_each_other() {
-        let _cache = IsolatedCache::new();
+        let (_cache, path) = isolated_tracker();
 
-        let mut first = vec![hint("first")];
-        filter_hints("session-a", &mut first);
-        assert_eq!(first.len(), 1);
+        let first =
+            record_hint_keys_at(&path, "session-a", &["first"]).expect("record first session");
+        assert!(first.contains("first"));
 
-        let mut second = vec![hint("first")];
-        filter_hints("session-b", &mut second);
-        assert_eq!(second.len(), 1);
+        let second =
+            record_hint_keys_at(&path, "session-b", &["first"]).expect("record second session");
+        assert!(second.contains("first"));
 
-        let mut repeated = vec![hint("first")];
-        filter_hints("session-a", &mut repeated);
+        let repeated =
+            record_hint_keys_at(&path, "session-a", &["first"]).expect("record repeated hint");
         assert!(repeated.is_empty());
 
-        let content = fs::read_to_string(tracker_path()).expect("read tracker");
+        let content = fs::read_to_string(path).expect("read tracker");
         let (store, _) = parse_store(&content);
         assert_eq!(store.sessions.len(), 2);
     }
 
     #[test]
-    #[serial]
     fn concurrent_process_style_updates_do_not_lose_sessions() {
-        let _cache = IsolatedCache::new();
+        let (_cache, path) = isolated_tracker();
         let threads = (0..16)
             .map(|index| {
+                let path = path.clone();
                 std::thread::spawn(move || {
-                    record_security_warning(
+                    record_security_warning_at(
+                        &path,
                         &format!("session-{index}"),
                         &format!("warning-{index}"),
                     )
@@ -378,7 +366,7 @@ mod tests {
             thread.join().expect("join warning thread");
         }
 
-        let content = fs::read_to_string(tracker_path()).expect("read tracker");
+        let content = fs::read_to_string(path).expect("read tracker");
         let (store, _) = parse_store(&content);
         assert_eq!(store.sessions.len(), 16);
         for index in 0..16 {
