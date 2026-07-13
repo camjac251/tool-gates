@@ -7,11 +7,11 @@
   </div>
 <pre class="code-block"><span class="prompt">$</span> tool-gates doctor
 <span class="comment">✓ binary: ~/.local/bin/tool-gates (vX.Y.Z)</span>
-<span class="comment">✓ config: ~/.config/tool-gates/config.toml (6 features, defaults)</span>
+<span class="comment">✓ config: ~/.config/tool-gates/config.toml (valid; design_lint disabled by default)</span>
 <span class="comment">✓ hooks · claude:    user + project (4 hooks each)</span>
 <span class="comment">✓ hooks · codex:       user (3 hooks)</span>
 <span class="comment">✓ hooks · antigravity: user (1 hook)</span>
-<span class="comment">✓ hooks · gemini:      user (2 hooks, deprecated)</span>
+<span class="comment">✓ hooks · gemini:      user (1 hook, deprecated)</span>
 <span class="comment">✓ cache: ~/.cache/tool-gates (4 files, 18 KB)</span>
 <span class="comment">✓ legacy: no bash-gates remnants in settings files</span>
 <span class="comment">All checks passed.</span></pre>
