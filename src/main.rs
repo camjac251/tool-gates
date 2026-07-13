@@ -558,13 +558,7 @@ fn handle_pre_tool_use_hook(input: &str, client: Client) {
     if let Some(output) =
         check_tool_block(&hook_input.tool_name, &tool_input_map, config.block_rules())
     {
-        let value = output.serialize(client);
-        if !emit_hook_value(&value) && !value.is_null() {
-            print_deny_and_exit(client, "Internal error serializing block deny");
-        }
-        if client == Client::Gemini {
-            std::process::exit(2);
-        }
+        emit_pre_tool_use_output(&output, client);
         return;
     }
 
@@ -593,11 +587,7 @@ fn handle_pre_tool_use_hook(input: &str, client: Client) {
             if rule.matches_tool(&hook_input.tool_name) && rule.conditions_met(&project_dir) {
                 let reason = rule.reason.as_deref().filter(|m| !m.trim().is_empty());
                 let output = HookOutput::allow(reason);
-                let value = output.serialize(client);
-                if !emit_hook_value(&value) && !value.is_null() {
-                    eprintln!("tool-gates: error serializing accept_edits_mcp allow");
-                    print_no_opinion_for(client);
-                }
+                emit_pre_tool_use_output(&output, client);
                 return;
             }
         }
@@ -633,16 +623,7 @@ fn handle_pre_tool_use_hook(input: &str, client: Client) {
                 let output = HookOutput::deny(
                     "apply_patch payload has no parseable file headers; tool-gates refuses to pass through unrecognized patch shapes. The payload must be wrapped in `*** Begin Patch` and `*** End Patch` envelopes, with file headers between them: `*** Add File: /abs/path` for new files, `*** Update File: /abs/path` for edits (optionally followed by `*** Move to: /abs/path` for renames), or `*** Delete File: /abs/path` for deletions. Verify the patch was constructed with the standard apply_patch grammar and that paths are absolute.",
                 );
-                let value = output.serialize(client);
-                if !emit_hook_value(&value) && !value.is_null() {
-                    print_deny_and_exit(
-                        client,
-                        "Internal error serializing apply_patch parse-failure deny",
-                    );
-                }
-                if client == Client::Gemini {
-                    std::process::exit(2);
-                }
+                emit_pre_tool_use_output(&output, client);
                 return;
             }
         }
@@ -654,13 +635,7 @@ fn handle_pre_tool_use_hook(input: &str, client: Client) {
                 if let Some(output) =
                     check_file_guard(file_path, &hook_input.tool_name, &config.file_guards)
                 {
-                    let value = output.serialize(client);
-                    if !emit_hook_value(&value) && !value.is_null() {
-                        print_deny_and_exit(client, "Internal error serializing file guard deny");
-                    }
-                    if client == Client::Gemini {
-                        std::process::exit(2);
-                    }
+                    emit_pre_tool_use_output(&output, client);
                     return;
                 }
             }
@@ -681,10 +656,7 @@ fn handle_pre_tool_use_hook(input: &str, client: Client) {
                     .all(|p| tool_gates::router::is_under_scratch(p))
             {
                 let output = HookOutput::allow(Some("Scratch directory write (auto-allowed)"));
-                let value = output.serialize(client);
-                if !emit_hook_value(&value) && !value.is_null() {
-                    print_no_opinion_for(client);
-                }
+                emit_pre_tool_use_output(&output, client);
                 return;
             }
         }
@@ -697,15 +669,7 @@ fn handle_pre_tool_use_hook(input: &str, client: Client) {
                 &config.security_reminders,
                 &hook_input.session_id,
             ) {
-                let value = output.serialize(client);
-                let is_gemini_block = client == Client::Gemini
-                    && value.get("decision").and_then(|d| d.as_str()) == Some("block");
-                if !emit_hook_value(&value) && !value.is_null() {
-                    print_deny_and_exit(client, "Internal error serializing security reminder");
-                }
-                if is_gemini_block {
-                    std::process::exit(2);
-                }
+                emit_pre_tool_use_output(&output, client);
             }
         }
         // No output = allow (pass through)
@@ -732,8 +696,7 @@ fn handle_pre_tool_use_hook(input: &str, client: Client) {
                 if rule.matches_skill(skill_name) && rule.conditions_met(&project_dir) {
                     let reason = rule.message.as_deref().filter(|m| !m.is_empty());
                     let output = HookOutput::allow(reason);
-                    let value = output.serialize(client);
-                    emit_hook_value(&value);
+                    emit_pre_tool_use_output(&output, client);
                     return;
                 }
             }
@@ -880,17 +843,7 @@ fn handle_bash_pre_tool_use(hook_input: &HookInput, client: Client) {
         }
     }
 
-    // Serialize in the appropriate format for the client.
-    let value = output.serialize(client);
-    let is_gemini_block =
-        client == Client::Gemini && value.get("decision").and_then(|d| d.as_str()) == Some("block");
-    if !emit_hook_value(&value) && !value.is_null() {
-        eprintln!("Error serializing output");
-        print_no_opinion_for(client);
-    }
-    if is_gemini_block {
-        std::process::exit(2);
-    }
+    emit_pre_tool_use_output(&output, client);
 }
 
 fn handle_permission_request_hook(input: &str, client: Client) {
@@ -3887,22 +3840,38 @@ fn emit_hook_value(value: &serde_json::Value) -> bool {
     }
 }
 
+/// Serialize and emit one PreToolUse decision using the selected client's
+/// wire format and exit-code contract.
+fn emit_pre_tool_use_output(output: &HookOutput, client: Client) {
+    let value = output.serialize(client);
+    if value.is_null() {
+        return;
+    }
+    if !emit_hook_value(&value) {
+        if output.decision == PermissionDecision::Deny {
+            print_deny_and_exit(client, "Internal error serializing PreToolUse deny");
+        }
+        eprintln!("Error serializing PreToolUse output for {client:?}");
+        match client {
+            Client::Claude => println!(r#"{{"decision":"approve"}}"#),
+            Client::Gemini => println!(r#"{{"decision":"allow"}}"#),
+            Client::Codex | Client::Antigravity => {}
+            _ => println!(r#"{{"decision":"approve"}}"#),
+        }
+        return;
+    }
+    if client == Client::Gemini && output.decision == PermissionDecision::Deny {
+        std::process::exit(2);
+    }
+}
+
 /// Print empty/no-opinion JSON for the given client.
 ///
 /// Claude: `{"decision": "approve"}`. Gemini: `{"decision": "allow"}`.
 /// Codex: empty stdout (Codex's parser treats no output as pass-through).
 fn print_no_opinion_for(client: Client) {
     let output = HookOutput::no_opinion();
-    let value = output.serialize(client);
-    if value.is_null() {
-        // Codex pass-through: emit nothing.
-        return;
-    }
-    if let Ok(json) = serde_json::to_string(&value) {
-        println!("{json}");
-    } else {
-        println!("{{}}");
-    }
+    emit_pre_tool_use_output(&output, client);
 }
 
 /// Print a deny/block result in the correct client format and exit.
