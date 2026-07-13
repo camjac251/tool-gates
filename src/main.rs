@@ -1275,17 +1275,11 @@ const GEMINI_BEFORE_TOOL_MATCHER: &str = "run_shell_command|read_file|read_many_
 /// Gemini BeforeTool matcher for MCP tools (single underscore prefix).
 const GEMINI_MCP_TOOL_MATCHER: &str = "mcp_.*";
 
-/// Gemini AfterTool matcher for shell (tracking) + write tools (security reminders).
-const GEMINI_AFTER_TOOL_MATCHER: &str = "run_shell_command|write_file|replace";
-
 fn generate_gemini_hooks_json(binary_path: &str) -> serde_json::Value {
     serde_json::json!({
         "BeforeTool": [
             generate_gemini_hook_entry(binary_path, GEMINI_BEFORE_TOOL_MATCHER),
             generate_gemini_hook_entry(binary_path, GEMINI_MCP_TOOL_MATCHER),
-        ],
-        "AfterTool": [
-            generate_gemini_hook_entry(binary_path, GEMINI_AFTER_TOOL_MATCHER),
         ]
     })
 }
@@ -1428,8 +1422,20 @@ fn sync_expected_hook_events(
     let mut changes = Vec::new();
 
     for (event, expected) in expected_events {
+        if expected.is_empty() && hooks.get(event).is_none() {
+            continue;
+        }
         ensure_event_array(hooks, event, settings_path)?;
-        match sync_hook_entries(&mut hooks[event], expected) {
+        let change = sync_hook_entries(&mut hooks[event], expected);
+        let remove_empty_event = expected.is_empty()
+            && change.is_some()
+            && hooks[event]
+                .as_array()
+                .is_some_and(|entries| entries.is_empty());
+        if remove_empty_event {
+            hooks.as_object_mut().unwrap().remove(event);
+        }
+        match change {
             None => eprintln!("✓ {event} hook(s) up to date"),
             Some(ref change) if change == "added" => {
                 changes.push(event.clone());
@@ -1558,18 +1564,19 @@ fn install_gemini_hooks(scope: &str, dry_run: bool) {
     eprintln!();
 
     let gemini_hooks = generate_gemini_hooks_json(&binary_path);
-    let expected_events = ["BeforeTool", "AfterTool"]
-        .into_iter()
-        .map(|event| {
-            (
-                event.to_string(),
-                gemini_hooks[event]
-                    .as_array()
-                    .map(|entries| entries.to_vec())
-                    .unwrap_or_default(),
-            )
-        })
-        .collect::<Vec<_>>();
+    let expected_events = vec![
+        (
+            "BeforeTool".to_string(),
+            gemini_hooks["BeforeTool"]
+                .as_array()
+                .map(|entries| entries.to_vec())
+                .unwrap_or_default(),
+        ),
+        // Older installs included an AfterTool handler, but the Gemini post
+        // payload cannot be correlated or serialized by tool-gates. An empty
+        // managed set removes that stale entry while preserving other hooks.
+        ("AfterTool".to_string(), Vec::new()),
+    ];
     let (changes, changed) = install_expected_hook_events(
         &settings_path,
         tool_gates::json_file::EmptyPolicy::Reject,
@@ -2237,7 +2244,7 @@ fn handle_hooks_status() {
         ("user", get_gemini_settings_path("user")),
         ("project", get_gemini_settings_path("project")),
     ];
-    let gemini_hooks = ["BeforeTool", "AfterTool"];
+    let gemini_hooks = ["BeforeTool"];
     for (scope, path) in &gemini_scopes {
         check_settings_hooks(scope, path, &gemini_hooks);
     }
@@ -3421,37 +3428,13 @@ fn handle_doctor_subcommand(args: &[String]) {
             .get("BeforeTool")
             .map(has_tool_gates_hook)
             .unwrap_or(false);
-        let has_after = hooks
-            .get("AfterTool")
-            .map(has_tool_gates_hook)
-            .unwrap_or(false);
-
-        let count = [has_before, has_after].iter().filter(|&&x| x).count();
-        if count == 0 {
+        if !has_before {
             continue;
         }
 
         any_installed = true;
-        if count == 2 {
-            eprintln!("  ✓ Hooks (gemini {}): all 2 installed", scope);
-            ok_count += 1;
-        } else {
-            let mut missing = Vec::new();
-            if !has_before {
-                missing.push("BeforeTool");
-            }
-            if !has_after {
-                missing.push("AfterTool");
-            }
-            let msg = format!("Missing Gemini hooks in {}: {}", scope, missing.join(", "));
-            eprintln!(
-                "  ⚠ Hooks (gemini {}): {}/2 (missing {})",
-                scope,
-                count,
-                missing.join(", ")
-            );
-            issues.push(msg);
-        }
+        eprintln!("  ✓ Hooks (gemini {}): BeforeTool installed", scope);
+        ok_count += 1;
 
         // Check for external hook commands that tool-gates should replace.
         if let Some(hook_entries) = hooks.as_object() {
@@ -4458,6 +4441,62 @@ mod tests {
         assert_eq!(post.len(), 1);
         assert_eq!(post[0]["matcher"], POST_TOOL_USE_MATCHER);
         assert!(POST_TOOL_USE_MATCHER.contains("NotebookEdit"));
+    }
+
+    #[test]
+    fn gemini_hooks_only_install_gateable_events() {
+        let hooks = generate_gemini_hooks_json("/path/to/tool-gates");
+        let obj = hooks.as_object().unwrap();
+
+        assert_eq!(obj.len(), 1);
+        assert!(obj.contains_key("BeforeTool"));
+        assert!(!obj.contains_key("AfterTool"));
+        assert_eq!(obj["BeforeTool"].as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn empty_expected_event_removes_only_managed_hooks() {
+        let managed = generate_gemini_hook_entry(
+            "/path/to/tool-gates",
+            "run_shell_command|write_file|replace",
+        );
+        let unrelated = serde_json::json!({
+            "matcher": "write_file",
+            "hooks": [{"type": "command", "command": "/path/to/other-hook"}]
+        });
+        let mut settings = serde_json::json!({
+            "hooks": {"AfterTool": [managed, unrelated.clone()]}
+        });
+        let expected = vec![("AfterTool".to_string(), Vec::new())];
+
+        let changes = sync_expected_hook_events(
+            &mut settings,
+            std::path::Path::new("/tmp/settings.json"),
+            &expected,
+        )
+        .unwrap();
+
+        assert_eq!(changes, vec!["AfterTool"]);
+        assert_eq!(
+            settings["hooks"]["AfterTool"],
+            serde_json::json!([unrelated])
+        );
+    }
+
+    #[test]
+    fn empty_expected_event_does_not_create_an_event() {
+        let mut settings = serde_json::json!({"hooks": {}});
+        let expected = vec![("AfterTool".to_string(), Vec::new())];
+
+        let changes = sync_expected_hook_events(
+            &mut settings,
+            std::path::Path::new("/tmp/settings.json"),
+            &expected,
+        )
+        .unwrap();
+
+        assert!(changes.is_empty());
+        assert!(settings["hooks"].get("AfterTool").is_none());
     }
 
     #[test]
