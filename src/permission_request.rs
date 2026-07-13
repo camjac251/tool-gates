@@ -81,7 +81,7 @@ pub fn handle_permission_request_for_client(
         && input.tool_name == "apply_patch"
         && config.codex.accept_project_edits
     {
-        return handle_codex_project_edit(input, tool_input_map);
+        return handle_codex_project_edit(input, tool_input_map, &config);
     }
 
     // Edit/Write/apply_patch tools: auto-approve in worktree contexts.
@@ -93,14 +93,14 @@ pub fn handle_permission_request_for_client(
     let can_consider_worktree_write =
         input.agent_id.is_some() || (client == Client::Codex && input.tool_name == "apply_patch");
     if Client::is_write_tool(&input.tool_name) && can_consider_worktree_write {
-        return handle_file_permission_request(input, tool_input_map);
+        return handle_file_permission_request(input, tool_input_map, &config);
     }
 
     // MCP tools in acceptEdits mode: consult `[[accept_edits_mcp]]` rules.
     // Subagents need this because PreToolUse's `allow` decision is ignored
     // for subagent tool calls -- PermissionRequest is the only hook where
     // an approval actually lands.
-    if let Some(output) = handle_mcp_accept_edits(input) {
+    if let Some(output) = handle_mcp_accept_edits(input, &config) {
         return Some(output);
     }
 
@@ -204,13 +204,13 @@ pub fn handle_permission_request_for_client(
 fn handle_file_permission_request(
     input: &PermissionRequestInput,
     tool_input_map: &serde_json::Map<String, serde_json::Value>,
+    config: &crate::config::Config,
 ) -> Option<PermissionRequestOutput> {
     let paths = collect_paths_for_permission(input, tool_input_map);
     if paths.is_empty() {
         return None;
     }
 
-    let config = crate::config::load();
     for raw in &paths {
         let joined = if Path::new(raw).is_absolute() {
             std::path::PathBuf::from(raw)
@@ -250,8 +250,8 @@ fn handle_file_permission_request(
 fn handle_codex_project_edit(
     input: &PermissionRequestInput,
     tool_input_map: &serde_json::Map<String, serde_json::Value>,
+    config: &crate::config::Config,
 ) -> Option<PermissionRequestOutput> {
-    let config = crate::config::load();
     let paths = collect_paths_for_permission(input, tool_input_map);
     let settings = Settings::load(&input.cwd);
     decide_codex_project_edit(
@@ -350,9 +350,10 @@ fn collect_paths_for_permission(
 /// All three None branches (wrong mode / non-MCP tool / no matching rule)
 /// are indistinguishable from outside -- callers should not rely on which
 /// branch was taken.
-fn handle_mcp_accept_edits(input: &PermissionRequestInput) -> Option<PermissionRequestOutput> {
-    let config = crate::config::load();
-
+fn handle_mcp_accept_edits(
+    input: &PermissionRequestInput,
+    config: &crate::config::Config,
+) -> Option<PermissionRequestOutput> {
     let project_dir = std::env::var("CLAUDE_PROJECT_DIR")
         .or_else(|_| std::env::var("GEMINI_PROJECT_DIR"))
         .unwrap_or_default();
@@ -1101,8 +1102,12 @@ mod tests {
                 &worktree.to_string_lossy(),
             );
             assert!(
-                handle_file_permission_request(&input, input.tool_input.as_map().unwrap())
-                    .is_none(),
+                handle_file_permission_request(
+                    &input,
+                    input.tool_input.as_map().unwrap(),
+                    &crate::config::Config::default(),
+                )
+                .is_none(),
                 "PermissionRequest must pass symlink escapes to the normal prompt"
             );
         }
@@ -1121,8 +1126,12 @@ mod tests {
             assert!(is_worktree_context(&resolved, &worktree.to_string_lossy()));
             let input = make_file_input("Write", "link/new/file.rs", &worktree.to_string_lossy());
             assert!(
-                handle_file_permission_request(&input, input.tool_input.as_map().unwrap())
-                    .is_some(),
+                handle_file_permission_request(
+                    &input,
+                    input.tool_input.as_map().unwrap(),
+                    &crate::config::Config::default(),
+                )
+                .is_some(),
                 "PermissionRequest must allow symlinks contained by the worktree"
             );
         }
