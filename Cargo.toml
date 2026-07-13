@@ -36,9 +36,6 @@ regex = "1"
 # Rules
 toml = "1.0"
 
-# Time handling for tracking TTL
-chrono = { version = "0.4", features = ["serde"] }
-
 # JSON Schema generation for rule files (off by default; used by docs tooling)
 schemars = { version = "1", optional = true }
 
@@ -49,13 +46,13 @@ wasm-bindgen = { version = "0.2", optional = true }
 serde-wasm-bindgen = { version = "0.6", optional = true }
 
 # Host-only dependencies. `fs2` (file locking) has no `wasm32-unknown-unknown`
-# target arm, and `uuid` v4 / `ratatui` / `crossterm` are host-only too. Scoping
-# them to non-wasm targets keeps them out of the WASM artifact's dependency
-# graph entirely while leaving the native binary, tests, and msrv check
-# byte-for-byte unchanged. The modules that use them (tracking, pending,
-# settings_writer, tui, post_tool_use) are `#[cfg(not(feature = "wasm"))]` in
-# lib.rs.
+# target arm, while persistent timestamps, UUID generation, and the terminal UI
+# are host concerns. Scoping these crates to non-wasm targets keeps them out of
+# the simulator artifact while leaving the native binary, tests, and msrv check
+# unchanged. The modules that use them are target- or feature-gated in lib.rs.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# Time handling for tracking TTL
+chrono = { version = "0.4", features = ["serde"] }
 # File locking for concurrent access
 fs2 = "0.4"
 # Collision-resistant same-directory files for atomic config replacement
