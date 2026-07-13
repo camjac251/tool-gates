@@ -859,6 +859,34 @@ pub(crate) mod tests {
         }
     }
 
+    mod env_split_string_composition {
+        use super::*;
+
+        #[test]
+        fn unknown_split_string_utility_requires_approval() {
+            let result = check_command("env --split-string='mytool --check'");
+            assert_eq!(get_decision(&result), "ask");
+        }
+
+        #[test]
+        fn safe_split_string_utility_remains_allowed() {
+            let result = check_command("env -S 'git status'");
+            assert_eq!(get_decision(&result), "allow");
+        }
+
+        #[test]
+        fn blocked_split_string_utility_remains_denied() {
+            let result = check_command("env --split-string='rm -rf /'");
+            assert_eq!(get_decision(&result), "deny");
+        }
+
+        #[test]
+        fn ambiguous_split_string_requires_approval() {
+            let result = check_command("env --split-string='$COMMAND --check'");
+            assert_eq!(get_decision(&result), "ask");
+        }
+    }
+
     // === Compound Command Settings Matching ===
 
     mod compound_settings {

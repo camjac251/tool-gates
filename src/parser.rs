@@ -458,7 +458,7 @@ fn is_numeric_arg(s: &str) -> bool {
 ///
 /// Handles these cases recursively:
 /// - Simple wrappers (`time`, `exec`, `nice`, etc.): skip flags, first non-flag arg becomes program
-/// - `env`: skip `-flags` and `VAR=value` args to find the real command
+/// - `env`: parse options, assignments, and conservative split strings to find the real command
 /// - `timeout`: skip flags, then skip the duration arg, then the next arg is the command
 ///
 /// Preserves the original `raw` field (the caller keeps it from the AST node).
@@ -510,16 +510,11 @@ fn strip_wrapper_recursive(program: String, args: Vec<String>) -> (String, Vec<S
     }
 
     if program == "env" {
-        // `env` can have -flags and VAR=value before the actual command
-        if let Some(idx) = args
-            .iter()
-            .position(|a| !a.starts_with('-') && !a.contains('='))
-        {
-            let new_program = args[idx].clone();
-            let new_args = args[idx + 1..].to_vec();
+        if let Some((new_program, new_args)) = parse_env_inner_command(&args) {
             return strip_wrapper_recursive(new_program, new_args);
         }
-        // No real command found (e.g., `env` or `env VAR=val`), keep as-is
+        // No concrete command found. Keep `env` and its original arguments so
+        // the gate can distinguish display-only use from an ambiguous split string.
         return (program, args);
     }
 
@@ -546,6 +541,124 @@ fn strip_wrapper_recursive(program: String, args: Vec<String>) -> (String, Vec<S
     }
 
     (program, args)
+}
+
+const ENV_OPTIONS_WITH_VALUES: &[&str] = &["-u", "--unset", "-C", "--chdir", "-a", "--argv0"];
+const MAX_ENV_SPLIT_EXPANSIONS: usize = 16;
+
+/// Resolve the command executed by `env` without invoking the host utility.
+///
+/// GNU `env -S` inserts the tokenized split string back into its argument list,
+/// where those tokens may themselves be options, assignments, or the command.
+/// Only static split strings with ordinary quoting are accepted. Expansion and
+/// escape syntax is left unresolved so the caller retains `env` for manual
+/// review instead of classifying a potentially different executable as safe.
+fn parse_env_inner_command(args: &[String]) -> Option<(String, Vec<String>)> {
+    let mut expanded = args.to_vec();
+    let mut split_expansions = 0;
+    let mut options_done = false;
+    let mut i = 0;
+
+    while i < expanded.len() {
+        let arg = expanded[i].clone();
+
+        if !options_done && arg == "--" {
+            options_done = true;
+            i += 1;
+            continue;
+        }
+
+        if !options_done {
+            let split_value = if arg == "-S" || arg == "--split-string" {
+                let value = expanded.get(i + 1)?.clone();
+                Some((value, 2))
+            } else if let Some(value) = arg.strip_prefix("--split-string=") {
+                Some((value.to_string(), 1))
+            } else {
+                arg.strip_prefix("-S")
+                    .filter(|value| !value.is_empty())
+                    .map(|value| (value.to_string(), 1))
+            };
+
+            if let Some((value, consumed)) = split_value {
+                split_expansions += 1;
+                if split_expansions > MAX_ENV_SPLIT_EXPANSIONS {
+                    return None;
+                }
+                let tokens = tokenize_env_split_string(&value)?;
+                expanded.splice(i..i + consumed, tokens);
+                continue;
+            }
+
+            if ENV_OPTIONS_WITH_VALUES.contains(&arg.as_str()) {
+                if i + 1 >= expanded.len() {
+                    return None;
+                }
+                i += 2;
+                continue;
+            }
+
+            if arg.starts_with('-') {
+                i += 1;
+                continue;
+            }
+        }
+
+        if arg.contains('=') {
+            i += 1;
+            continue;
+        }
+
+        return Some((arg, expanded[i + 1..].to_vec()));
+    }
+
+    None
+}
+
+fn tokenize_env_split_string(value: &str) -> Option<Vec<String>> {
+    if value
+        .chars()
+        .any(|ch| matches!(ch, '\\' | '$' | '\n' | '\r' | '\0'))
+    {
+        return None;
+    }
+
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+    let mut in_single_quote = false;
+    let mut in_double_quote = false;
+    let mut token_started = false;
+
+    for ch in value.chars() {
+        match ch {
+            '\'' if !in_double_quote => {
+                in_single_quote = !in_single_quote;
+                token_started = true;
+            }
+            '"' if !in_single_quote => {
+                in_double_quote = !in_double_quote;
+                token_started = true;
+            }
+            ' ' | '\t' if !in_single_quote && !in_double_quote => {
+                if token_started {
+                    tokens.push(std::mem::take(&mut current));
+                    token_started = false;
+                }
+            }
+            _ => {
+                current.push(ch);
+                token_started = true;
+            }
+        }
+    }
+
+    if in_single_quote || in_double_quote {
+        return None;
+    }
+    if token_started {
+        tokens.push(current);
+    }
+    Some(tokens)
 }
 
 fn extract_concatenation(cursor: &mut TreeCursor, source: &str) -> Option<String> {
@@ -1104,6 +1217,39 @@ mod tests {
         assert_eq!(cmds.len(), 1);
         assert_eq!(cmds[0].program, "rm");
         assert_eq!(cmds[0].args, vec!["-rf", "/"]);
+    }
+
+    #[test]
+    fn test_env_split_string_extracts_inner_command() {
+        for command in [
+            "env -S 'mytool --check'",
+            "env --split-string='mytool --check'",
+            "env -Smytool --check",
+            "env -u PATH -C /tmp -S 'mytool --check'",
+        ] {
+            let cmds = extract_commands(command);
+            assert_eq!(cmds.len(), 1, "unexpected extraction for {command}");
+            assert_eq!(cmds[0].program, "mytool", "wrong program for {command}");
+            assert_eq!(cmds[0].args, vec!["--check"], "wrong args for {command}");
+        }
+    }
+
+    #[test]
+    fn test_env_split_string_preserves_trailing_arguments() {
+        let cmds = extract_commands("env -S 'mytool --check' extra");
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].program, "mytool");
+        assert_eq!(cmds[0].args, vec!["--check", "extra"]);
+    }
+
+    #[test]
+    fn test_env_split_string_ambiguous_input_keeps_env_for_review() {
+        let (program, args) = strip_transparent_wrappers(
+            "env".to_string(),
+            vec!["--split-string=$COMMAND --check".to_string()],
+        );
+        assert_eq!(program, "env");
+        assert_eq!(args, vec!["--split-string=$COMMAND --check"]);
     }
 
     #[test]

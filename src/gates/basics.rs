@@ -11,6 +11,9 @@
 //!
 //! 2. `check_shell_c` - bash/sh/zsh -c 'script' requires parsing the script
 //!    string and checking each command in it. TOML can't parse embedded scripts.
+//!
+//! 3. `env` split strings that remain after parser normalization are ambiguous
+//!    and require review instead of inheriting the display-only `env` allow rule.
 
 use crate::gates::check_single_command;
 use crate::generated::rules::{SAFE_COMMANDS, check_conditional_allow, check_safe_command};
@@ -213,6 +216,15 @@ fn check_command_builtin(cmd: &CommandInfo) -> GateResult {
     GateResult::allow()
 }
 
+fn has_env_split_string(args: &[String]) -> bool {
+    args.iter().any(|arg| {
+        arg == "-S"
+            || arg == "--split-string"
+            || arg.starts_with("-S")
+            || arg.starts_with("--split-string=")
+    })
+}
+
 /// Commands that are safe only with certain conditions
 pub fn check_basics(cmd: &CommandInfo) -> GateResult {
     // Strip path prefix to handle /usr/bin/sed etc.
@@ -232,6 +244,12 @@ pub fn check_basics(cmd: &CommandInfo) -> GateResult {
     // command builtin - lookup or transparent wrapper
     if program == "command" {
         return check_command_builtin(cmd);
+    }
+
+    if program == "env" && has_env_split_string(&cmd.args) {
+        return GateResult::ask(
+            "env split-string contains an unsupported or incomplete embedded command",
+        );
     }
 
     // sed is special - safe without -i flag
