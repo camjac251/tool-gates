@@ -10,7 +10,7 @@
 //! - **Tier 3 (warn):** Informational context injected, no block (weak crypto, chmod 777)
 
 use crate::config::SecurityRemindersConfig;
-use crate::content_scan::{Matcher, ScanRule, extract_content, scan};
+use crate::content_scan::{Matcher, ScanRule, extract_content, scan_filtered};
 use crate::models::{HookOutput, PostToolUseOutput};
 use regex::Regex;
 use std::sync::OnceLock;
@@ -398,13 +398,33 @@ fn has_gha_injection(content: &str) -> bool {
 /// - doc files skip every content check except the `always_check` secret rules.
 /// - the `github_actions_injection` path rule additionally requires the
 ///   GHA-specific injection regex in the content (path match alone is not enough).
-pub fn scan_content(file_path: &str, content: &str) -> Vec<PatternMatch> {
+fn scan_content_filtered(
+    file_path: &str,
+    content: &str,
+    include: impl Fn(&ScanRule<SecTag>) -> bool,
+) -> Vec<PatternMatch> {
     let is_doc = is_doc_file(file_path);
     let is_secret = is_secret_file(file_path);
     let mut matches = Vec::new();
 
-    for hit in scan(scan_rules(), file_path, content) {
-        let SecTag { tier, always_check } = hit.tag;
+    for hit in scan_filtered(scan_rules(), file_path, content, |rule| {
+        if !include(rule) {
+            return false;
+        }
+
+        let SecTag { tier, always_check } = rule.tag;
+        if rule.id == "github_actions_injection" {
+            return true;
+        }
+        if is_secret && always_check && tier == Tier::Deny {
+            return false;
+        }
+        if is_doc && !always_check {
+            return false;
+        }
+        true
+    }) {
+        let SecTag { tier, .. } = hit.tag;
 
         // The GHA rule is a path matcher: the engine fired it on the workflow
         // path, but a hit only counts when the content also carries an injection.
@@ -422,15 +442,6 @@ pub fn scan_content(file_path: &str, content: &str) -> Vec<PatternMatch> {
             continue;
         }
 
-        // Secret files (.env, .envrc) exist to hold secrets. Skip Tier 1 secret detection.
-        if is_secret && always_check && tier == Tier::Deny {
-            continue;
-        }
-        // Skip content-based checks on doc files (unless always_check for secrets).
-        if is_doc && !always_check {
-            continue;
-        }
-
         matches.push(PatternMatch {
             rule_name: hit.id,
             tier,
@@ -439,6 +450,11 @@ pub fn scan_content(file_path: &str, content: &str) -> Vec<PatternMatch> {
     }
 
     matches
+}
+
+/// Scan content against every security rule after file-policy exclusions.
+pub fn scan_content(file_path: &str, content: &str) -> Vec<PatternMatch> {
+    scan_content_filtered(file_path, content, |_| true)
 }
 
 /// PreToolUse: Check content for Tier 1 (deny) and Tier 3 (warn) patterns.
@@ -468,28 +484,26 @@ pub fn check_security_reminders_for_content(
     config: &SecurityRemindersConfig,
     session_id: &str,
 ) -> Option<HookOutput> {
-    if content_pairs.is_empty() {
+    if content_pairs.is_empty() || (!config.secrets && !config.warnings) {
         return None;
     }
 
     for (file_path, content) in content_pairs {
-        let matches = scan_content(file_path, content);
+        let is_doc = is_doc_file(file_path);
+        let matches = scan_content_filtered(file_path, content, |rule| {
+            if config.disable_rules.iter().any(|name| name == rule.id) {
+                return false;
+            }
+            match rule.tag.tier {
+                Tier::Deny => config.secrets && !is_doc,
+                Tier::NudgeOnce => false,
+                Tier::Warn => config.warnings,
+            }
+        });
 
         for m in &matches {
-            if config.disable_rules.iter().any(|r| r == m.rule_name) {
-                continue;
-            }
-
             match m.tier {
                 Tier::Deny => {
-                    if !config.secrets {
-                        continue;
-                    }
-                    // Doc files get a PostToolUse nudge instead of a hard block,
-                    // since docs commonly reference example keys/tokens.
-                    if is_doc_file(file_path) {
-                        continue;
-                    }
                     // Tier-1 secret blocks surface to the user via
                     // systemMessage. Routine denies (head/tail, settings.json
                     // matches) stay silent at the UI level; secret leaks
@@ -504,13 +518,11 @@ pub fn check_security_reminders_for_content(
                     );
                 }
                 Tier::NudgeOnce => {
-                    // Handled by PostToolUse. Skip in PreToolUse
+                    // Excluded before matching. Keep this arm defensive if the
+                    // phase filter changes later.
                     continue;
                 }
                 Tier::Warn => {
-                    if !config.warnings {
-                        continue;
-                    }
                     let dedup_key = format!("warn-{}", m.rule_name);
                     if !crate::hint_tracker::is_security_warning_new(session_id, &dedup_key) {
                         continue;
@@ -574,35 +586,19 @@ pub fn check_security_reminders_post_for_content(
     let mut warnings = Vec::new();
 
     for (file_path, content) in content_pairs {
-        let matches = scan_content(file_path, content);
+        let is_doc = is_doc_file(file_path);
+        let matches = scan_content_filtered(file_path, content, |rule| {
+            if config.disable_rules.iter().any(|name| name == rule.id) {
+                return false;
+            }
+            match rule.tag.tier {
+                Tier::NudgeOnce => config.anti_patterns,
+                Tier::Deny => config.secrets && is_doc,
+                Tier::Warn => tier3_active,
+            }
+        });
 
         for m in &matches {
-            // PostToolUse handles Tier 2 (all files) + Tier 1 (doc files only).
-            // For Codex, also Tier 3 (warn) since it can't ride on Pre.
-            let dominated = match m.tier {
-                Tier::NudgeOnce => !config.anti_patterns,
-                Tier::Deny => {
-                    if !config.secrets {
-                        true
-                    } else {
-                        // Only handle Tier 1 here for doc files. Source code
-                        // secrets are blocked by PreToolUse before reaching this point
-                        !is_doc_file(file_path)
-                    }
-                }
-                Tier::Warn => {
-                    // Tier 3: Claude/Gemini handle on Pre. For Codex, emit
-                    // here because non-deny Pre output is empty.
-                    !(tier3_active)
-                }
-            };
-            if dominated {
-                continue;
-            }
-            if config.disable_rules.iter().any(|r| r == m.rule_name) {
-                continue;
-            }
-
             let dedup_key = format!("{}-{}", file_path, m.rule_name);
             if !crate::hint_tracker::is_security_warning_new(session_id, &dedup_key) {
                 continue;

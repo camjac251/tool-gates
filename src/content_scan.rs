@@ -140,9 +140,26 @@ fn lookup<'a>(compiled: &'a [(&'static str, Compiled)], id: &str) -> Option<&'a 
 /// matching rule in table order. Pure: applies no file-skip, opt-in, or dedup
 /// policy. Callers layer their own policy on the returned hits.
 pub fn scan<T: Copy>(rules: &'static [ScanRule<T>], path: &str, content: &str) -> Vec<Hit<T>> {
+    scan_filtered(rules, path, content, |_| true)
+}
+
+/// Scan only rules accepted by `include`.
+///
+/// The filter runs before any substring, regex, path, line, or custom matcher,
+/// so callers can remove disabled or event-inapplicable policy without paying
+/// its matching cost. Included rules retain the table's original order.
+pub fn scan_filtered<T: Copy>(
+    rules: &'static [ScanRule<T>],
+    path: &str,
+    content: &str,
+    include: impl Fn(&ScanRule<T>) -> bool,
+) -> Vec<Hit<T>> {
     let compiled = compiled_regexes(rules);
     let mut hits = Vec::new();
     for rule in rules {
+        if !include(rule) {
+            continue;
+        }
         let matched = match &rule.matcher {
             Matcher::Substring { patterns } => patterns.iter().any(|p| content.contains(p)),
             Matcher::SubstringUnless { patterns, unless } => {
@@ -355,5 +372,24 @@ mod tests {
         assert_eq!(substr.tag, Tag(1));
         let path = hits.iter().find(|h| h.id == "path").unwrap();
         assert_eq!(path.tag, Tag(5));
+    }
+
+    #[test]
+    fn filtered_rules_do_not_run_their_matchers() {
+        fn must_not_run(_content: &str) -> bool {
+            panic!("excluded matcher ran");
+        }
+
+        let rules = Box::leak(
+            vec![ScanRule {
+                id: "excluded",
+                tag: (),
+                message: "excluded",
+                matcher: Matcher::Custom(must_not_run),
+            }]
+            .into_boxed_slice(),
+        );
+
+        assert!(scan_filtered(rules, "a.txt", "content", |_| false).is_empty());
     }
 }
