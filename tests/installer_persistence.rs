@@ -60,6 +60,17 @@ fn run_installer(case: InstallerCase, root: &std::path::Path) -> Output {
         .unwrap_or_else(|error| panic!("spawn {} installer: {error}", case.name))
 }
 
+fn run_allowlist(root: &std::path::Path) -> Output {
+    Command::new(bin_path())
+        .args(["agy", "allowlist", "--apply"])
+        .current_dir(root)
+        .env("HOME", root)
+        .env("XDG_CACHE_HOME", root.join("cache"))
+        .env("XDG_CONFIG_HOME", root.join("config"))
+        .output()
+        .expect("spawn allowlist command")
+}
+
 fn config_path(case: InstallerCase, root: &std::path::Path) -> std::path::PathBuf {
     root.join(case.relative_path)
 }
@@ -187,4 +198,82 @@ fn hook_installers_leave_malformed_json_untouched() {
             case.name
         );
     }
+}
+
+#[test]
+fn antigravity_allowlist_uses_the_same_transaction_contract() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let path = temp.path().join(".gemini/antigravity-cli/settings.json");
+    std::fs::create_dir_all(path.parent().expect("settings parent"))
+        .expect("create settings parent");
+    let original = br#"{"permissions":{"allow":["command(existing)"],"deny":["command(blocked)"]},"other":true}"#;
+    std::fs::write(&path, original).expect("seed settings");
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o640))
+            .expect("set settings mode");
+    }
+
+    let first = run_allowlist(temp.path());
+    assert!(
+        first.status.success(),
+        "allowlist update failed: {}",
+        String::from_utf8_lossy(&first.stderr)
+    );
+    let first_bytes = std::fs::read(&path).expect("read updated settings");
+    let settings: serde_json::Value =
+        serde_json::from_slice(&first_bytes).expect("updated settings are valid");
+    assert_eq!(settings["other"], true);
+    assert!(
+        settings["permissions"]["deny"]
+            .as_array()
+            .expect("deny array")
+            .iter()
+            .any(|value| value == "command(blocked)")
+    );
+    assert!(
+        settings["permissions"]["allow"]
+            .as_array()
+            .expect("allow array")
+            .iter()
+            .any(|value| value == "command(existing)")
+    );
+    let backups = backup_paths(&path);
+    assert_eq!(backups.len(), 1);
+    assert_eq!(std::fs::read(&backups[0]).expect("read backup"), original);
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            std::fs::metadata(&path)
+                .expect("settings metadata")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o640
+        );
+    }
+
+    let second = run_allowlist(temp.path());
+    assert!(second.status.success());
+    assert_eq!(std::fs::read(&path).expect("read settings"), first_bytes);
+    assert_eq!(backup_paths(&path).len(), 1);
+}
+
+#[test]
+fn antigravity_allowlist_preserves_malformed_json() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let path = temp.path().join(".gemini/antigravity-cli/settings.json");
+    std::fs::create_dir_all(path.parent().expect("settings parent"))
+        .expect("create settings parent");
+    let original = b"{not-json";
+    std::fs::write(&path, original).expect("seed malformed settings");
+
+    let output = run_allowlist(temp.path());
+    assert!(!output.status.success());
+    assert_eq!(std::fs::read(&path).expect("read settings"), original);
+    assert!(backup_paths(&path).is_empty());
 }

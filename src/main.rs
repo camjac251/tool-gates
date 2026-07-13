@@ -1829,38 +1829,42 @@ fn handle_agy_allowlist(apply: bool, dry_run: bool) {
         return;
     }
 
-    let mut settings: serde_json::Value = if path.exists() {
-        match std::fs::read_to_string(&path) {
-            Ok(c) if c.trim().is_empty() => serde_json::json!({}),
-            Ok(c) => serde_json::from_str(&c).unwrap_or_else(|e| {
-                eprintln!("Error: failed to parse {}: {}", path.display(), e);
-                std::process::exit(1);
-            }),
-            Err(e) => {
-                eprintln!("Error: failed to read {}: {}", path.display(), e);
-                std::process::exit(1);
-            }
-        }
-    } else {
-        serde_json::json!({})
-    };
-
-    let (added, already) = match merge_agy_allowlist(&mut settings, &rules) {
-        Ok(counts) => counts,
-        Err(msg) => {
-            eprintln!("Error: {}: {msg}", path.display());
-            std::process::exit(1);
-        }
-    };
-
     if dry_run {
+        let mut settings = tool_gates::json_file::read_json(
+            &path,
+            tool_gates::json_file::EmptyPolicy::EmptyObject,
+        )
+        .unwrap_or_else(|error| {
+            eprintln!("Error: failed to read {}: {error}", path.display());
+            std::process::exit(1);
+        });
+        let (added, already) =
+            merge_agy_allowlist(&mut settings, &rules).unwrap_or_else(|message| {
+                eprintln!("Error: {}: {message}", path.display());
+                std::process::exit(1);
+            });
         eprintln!("--dry-run: would merge into {}", path.display());
         eprintln!("  {added} added, {already} already present");
         println!("{}", serde_json::to_string_pretty(&settings).unwrap());
         return;
     }
 
-    if added == 0 {
+    let outcome = tool_gates::json_file::update_json(
+        &path,
+        tool_gates::json_file::EmptyPolicy::EmptyObject,
+        true,
+        |settings| {
+            merge_agy_allowlist(settings, &rules)
+                .map_err(|message| std::io::Error::new(std::io::ErrorKind::InvalidData, message))
+        },
+    )
+    .unwrap_or_else(|error| {
+        eprintln!("Error: failed to update {}: {error}", path.display());
+        std::process::exit(1);
+    });
+    let (added, already) = outcome.result;
+
+    if !outcome.changed {
         eprintln!(
             "✓ {} already has all {} command allow rules. Nothing to do.",
             path.display(),
@@ -1869,42 +1873,14 @@ fn handle_agy_allowlist(apply: bool, dry_run: bool) {
         return;
     }
 
-    if path.exists() {
-        let ts = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-        let backup = path.with_extension(format!("json.bak-{ts}"));
-        if let Err(e) = std::fs::copy(&path, &backup) {
-            eprintln!("Error: failed to back up {}: {}", path.display(), e);
-            std::process::exit(1);
-        }
+    if let Some(backup) = outcome.backup_path {
         eprintln!("Backed up to {}", backup.display());
     }
-    if let Some(parent) = path.parent() {
-        if !parent.exists() {
-            if let Err(e) = std::fs::create_dir_all(parent) {
-                eprintln!("Error: failed to create {}: {}", parent.display(), e);
-                std::process::exit(1);
-            }
-        }
-    }
-    match std::fs::write(
-        &path,
-        serde_json::to_string_pretty(&settings).unwrap() + "\n",
-    ) {
-        Ok(()) => {
-            eprintln!(
-                "✓ Merged {added} command allow rules into {} ({already} already present).",
-                path.display()
-            );
-            eprintln!("Restart agy for the change to take effect (settings are read at startup).");
-        }
-        Err(e) => {
-            eprintln!("Error: failed to write {}: {}", path.display(), e);
-            std::process::exit(1);
-        }
-    }
+    eprintln!(
+        "✓ Merged {added} command allow rules into {} ({already} already present).",
+        path.display()
+    );
+    eprintln!("Restart agy for the change to take effect (settings are read at startup).");
 }
 
 fn print_agy_help() {
