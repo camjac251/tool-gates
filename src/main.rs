@@ -148,13 +148,30 @@ fn main() {
         return;
     }
 
-    // First, try to detect hook type from raw JSON
-    let hook_event: Option<String> = serde_json::from_str::<serde_json::Value>(&input)
-        .ok()
-        .and_then(|v| {
-            v.get("hook_event_name")
-                .and_then(|h| h.as_str().map(String::from))
-        });
+    let parsed_input = match serde_json::from_str::<serde_json::Value>(&input) {
+        Ok(value) => value,
+        Err(error) => {
+            let client = client_override.unwrap_or(Client::Claude);
+            eprintln!("Error: Invalid JSON input: {error}");
+            match client {
+                Client::Codex => {
+                    print_deny_and_exit(client, "tool-gates: malformed PreToolUse hook input")
+                }
+                Client::Antigravity => print_deny_and_exit(
+                    client,
+                    "tool-gates: malformed Antigravity PreToolUse payload",
+                ),
+                Client::Claude | Client::Gemini => print_no_opinion_for(client),
+                _ => print_no_opinion_for(client),
+            }
+            return;
+        }
+    };
+
+    let hook_event = parsed_input
+        .get("hook_event_name")
+        .and_then(|event| event.as_str())
+        .map(str::to_string);
 
     // Detect which client is calling us. The argv override (Codex et al.)
     // wins over hook_event_name detection because Codex shares Claude's event
@@ -169,7 +186,7 @@ fn main() {
     // a PreToolUse hook for Antigravity, so a payload without `toolCall` (a
     // Post/Stop event) has nothing to gate and we emit nothing.
     let (input, hook_event) = if client == Client::Antigravity {
-        match normalize_antigravity_pre_tool_use(&input) {
+        match normalize_antigravity_pre_tool_use(parsed_input) {
             AntigravityPayload::PreToolUse(normalized) => {
                 (normalized, Some("PreToolUse".to_string()))
             }
@@ -183,23 +200,23 @@ fn main() {
             ),
         }
     } else {
-        (input, hook_event)
+        (parsed_input, hook_event)
     };
 
     // Route based on hook event type
     match hook_event.as_deref() {
         Some("PermissionRequest") => {
-            handle_permission_request_hook(&input, client);
+            handle_permission_request_hook(input, client);
         }
         Some("PostToolUse") | Some("AfterTool") => {
-            handle_post_tool_use_hook(&input, client);
+            handle_post_tool_use_hook(input, client);
         }
         Some("PermissionDenied") => {
-            handle_permission_denied_hook(&input);
+            handle_permission_denied_hook(input);
         }
         _ => {
             // Default: PreToolUse (Claude/Codex) or BeforeTool (Gemini) or unspecified
-            handle_pre_tool_use_hook(&input, client);
+            handle_pre_tool_use_hook(input, client);
         }
     }
 }
@@ -262,7 +279,7 @@ fn extract_client_override(args: Vec<String>) -> (Option<Client>, Vec<String>) {
 /// Outcome of normalizing an Antigravity (`agy`) PreToolUse payload.
 enum AntigravityPayload {
     /// A gateable PreToolUse call, normalized into canonical `HookInput` JSON.
-    PreToolUse(String),
+    PreToolUse(serde_json::Value),
     /// No `toolCall` present (a Post/Stop/invocation event). Nothing to gate;
     /// the caller emits nothing and Antigravity's own engine proceeds.
     NotGateable,
@@ -285,13 +302,7 @@ enum AntigravityPayload {
 /// PascalCase args are preserved alongside. Distinguishes "no toolCall" (a
 /// non-gateable Post/Stop event) from "toolCall present but unparseable" so the
 /// caller emits nothing in the first case and fails closed in the second.
-fn normalize_antigravity_pre_tool_use(input: &str) -> AntigravityPayload {
-    // Antigravity hook payloads are always JSON; unparseable input is a
-    // malformed payload, not a missing event -> fail closed.
-    let v: serde_json::Value = match serde_json::from_str(input) {
-        Ok(v) => v,
-        Err(_) => return AntigravityPayload::Malformed,
-    };
+fn normalize_antigravity_pre_tool_use(v: serde_json::Value) -> AntigravityPayload {
     // No toolCall at all: a Post/Stop/invocation event, nothing to gate.
     let tool_call = match v.get("toolCall") {
         Some(tc) => tc,
@@ -455,10 +466,7 @@ fn normalize_antigravity_pre_tool_use(input: &str) -> AntigravityPayload {
         "permission_mode": "default",
     });
 
-    match serde_json::to_string(&canonical) {
-        Ok(s) => AntigravityPayload::PreToolUse(s),
-        Err(_) => AntigravityPayload::Malformed,
-    }
+    AntigravityPayload::PreToolUse(canonical)
 }
 
 /// Handle PermissionDenied hook (Claude auto mode only).
@@ -468,8 +476,8 @@ fn normalize_antigravity_pre_tool_use(input: &str) -> AntigravityPayload {
 /// shot -- this closes the loop on classifier false positives where tool-gates
 /// has stronger domain knowledge (e.g. "cargo check" is clearly safe, but the
 /// classifier denied it because it lacked user intent context).
-fn handle_permission_denied_hook(input: &str) {
-    let pd_input: PermissionDeniedInput = match serde_json::from_str(input) {
+fn handle_permission_denied_hook(input: serde_json::Value) {
+    let pd_input: PermissionDeniedInput = match serde_json::from_value(input) {
         Ok(pi) => pi,
         Err(e) => {
             eprintln!("Error: Invalid PermissionDenied JSON: {e}");
@@ -526,8 +534,8 @@ fn handle_permission_denied_hook(input: &str) {
 }
 
 /// Handle PreToolUse (Claude) / BeforeTool (Gemini) hook. Routes all tool types
-fn handle_pre_tool_use_hook(input: &str, client: Client) {
-    let hook_input: HookInput = match serde_json::from_str(input) {
+fn handle_pre_tool_use_hook(input: serde_json::Value, client: Client) {
+    let hook_input: HookInput = match serde_json::from_value(input) {
         Ok(hi) => hi,
         Err(e) => {
             eprintln!("Error: Invalid JSON input: {e}");
@@ -545,19 +553,10 @@ fn handle_pre_tool_use_hook(input: &str, client: Client) {
 
     let config = config::load();
 
-    // Check configurable block rules first (applies to ALL tool types)
-    // Re-extract tool_input as raw map since Structured variant
-    // drops unknown fields (url, pattern, etc.)
-    let tool_input_map = serde_json::from_str::<serde_json::Value>(input)
-        .ok()
-        .and_then(|v| v.get("tool_input").cloned())
-        .and_then(|v| match v {
-            serde_json::Value::Object(m) => Some(m),
-            _ => None,
-        })
-        .unwrap_or_default();
+    let empty_tool_input = serde_json::Map::new();
+    let tool_input_map = hook_input.tool_input.as_map().unwrap_or(&empty_tool_input);
     if let Some(output) =
-        check_tool_block(&hook_input.tool_name, &tool_input_map, config.block_rules())
+        check_tool_block(&hook_input.tool_name, tool_input_map, config.block_rules())
     {
         emit_pre_tool_use_output(&output, client);
         return;
@@ -631,7 +630,7 @@ fn handle_pre_tool_use_hook(input: &str, client: Client) {
 
         // 1. File guards: symlink check for AI config files
         if config.features.file_guards {
-            let file_paths = extract_file_paths_from_map(&hook_input.tool_name, &tool_input_map);
+            let file_paths = extract_file_paths_from_map(&hook_input.tool_name, tool_input_map);
             for file_path in &file_paths {
                 if let Some(output) =
                     check_file_guard(file_path, &hook_input.tool_name, &config.file_guards)
@@ -650,7 +649,7 @@ fn handle_pre_tool_use_hook(input: &str, client: Client) {
         // a symlink or `..` that escapes it resolves outside the base and is
         // not matched, so writes to real project/system files are untouched.
         if Client::is_write_tool(tool_name) && !is_plan_mode(&hook_input.permission_mode) {
-            let file_paths = extract_file_paths_from_map(&hook_input.tool_name, &tool_input_map);
+            let file_paths = extract_file_paths_from_map(&hook_input.tool_name, tool_input_map);
             if !file_paths.is_empty()
                 && file_paths
                     .iter()
@@ -666,7 +665,7 @@ fn handle_pre_tool_use_hook(input: &str, client: Client) {
         if config.features.security_reminders && Client::is_write_tool(tool_name) {
             if let Some(output) = check_security_reminders(
                 &hook_input.tool_name,
-                &tool_input_map,
+                tool_input_map,
                 &config.security_reminders,
                 &hook_input.session_id,
             ) {
@@ -865,8 +864,8 @@ fn handle_bash_pre_tool_use(hook_input: &HookInput, client: Client) {
     emit_pre_tool_use_output(&output, client);
 }
 
-fn handle_permission_request_hook(input: &str, client: Client) {
-    let perm_input: PermissionRequestInput = match serde_json::from_str(input) {
+fn handle_permission_request_hook(input: serde_json::Value, client: Client) {
+    let perm_input: PermissionRequestInput = match serde_json::from_value(input) {
         Ok(pi) => pi,
         Err(e) => {
             eprintln!("Error: Invalid PermissionRequest JSON: {e}");
@@ -887,22 +886,11 @@ fn handle_permission_request_hook(input: &str, client: Client) {
         return;
     }
 
-    // Extract the raw tool_input as a Map from the source JSON. Needed
-    // because ToolInputVariant is untagged and `Structured(ToolInput)`
-    // silently wins for MCP payloads (every ToolInput field is optional),
-    // erasing fields like `url` that block rules rely on. Re-parsing from
-    // the raw input sidesteps that.
-    let tool_input_map = serde_json::from_str::<serde_json::Value>(input)
-        .ok()
-        .and_then(|v| v.get("tool_input").cloned())
-        .and_then(|v| match v {
-            serde_json::Value::Object(m) => Some(m),
-            _ => None,
-        })
-        .unwrap_or_default();
+    let empty_tool_input = serde_json::Map::new();
+    let tool_input_map = perm_input.tool_input.as_map().unwrap_or(&empty_tool_input);
 
     // Check if we should approve this
-    if let Some(output) = handle_permission_request_for_client(&perm_input, &tool_input_map, client)
+    if let Some(output) = handle_permission_request_for_client(&perm_input, tool_input_map, client)
     {
         let value = serialize_permission_request_for_client(&output, client);
         if value.is_null() {
@@ -1003,8 +991,8 @@ fn serialize_permission_request_for_client(
 }
 
 /// Handle PostToolUse (Claude / Codex) / AfterTool (Gemini) hook
-fn handle_post_tool_use_hook(input: &str, client: Client) {
-    let post_input: PostToolUseInput = match serde_json::from_str(input) {
+fn handle_post_tool_use_hook(input: serde_json::Value, client: Client) {
+    let post_input: PostToolUseInput = match serde_json::from_value(input) {
         Ok(pi) => pi,
         Err(e) => {
             eprintln!("Error: Invalid PostToolUse JSON: {e}");
@@ -1086,21 +1074,14 @@ fn handle_post_tool_use_hook(input: &str, client: Client) {
         if !config.features.security_reminders && !config.features.design_lint {
             return;
         }
-        // Re-extract tool_input as raw map
-        let tool_input_map = serde_json::from_str::<serde_json::Value>(input)
-            .ok()
-            .and_then(|v| v.get("tool_input").cloned())
-            .and_then(|v| match v {
-                serde_json::Value::Object(m) => Some(m),
-                _ => None,
-            })
-            .unwrap_or_default();
+        let empty_tool_input = serde_json::Map::new();
+        let tool_input_map = post_input.tool_input.as_map().unwrap_or(&empty_tool_input);
 
         let mut outputs: Vec<tool_gates::models::PostToolUseOutput> = Vec::new();
         if config.features.security_reminders {
             if let Some(output) = tool_gates::security_reminders::check_security_reminders_post(
                 &post_input.tool_name,
-                &tool_input_map,
+                tool_input_map,
                 &config.security_reminders,
                 &post_input.session_id,
                 client,
@@ -1111,7 +1092,7 @@ fn handle_post_tool_use_hook(input: &str, client: Client) {
         if config.features.design_lint {
             if let Some(output) = tool_gates::design_lint::check_design_lint_post(
                 &post_input.tool_name,
-                &tool_input_map,
+                tool_input_map,
                 &config.design_lint,
             ) {
                 outputs.push(output);
@@ -4291,11 +4272,11 @@ mod tests {
             "workspacePaths": ["/ws"],
             "transcriptPath": "/ws/.gemini/antigravity/transcript.jsonl"
         }"#;
-        let norm = match normalize_antigravity_pre_tool_use(raw) {
-            AntigravityPayload::PreToolUse(s) => s,
+        let norm = match normalize_antigravity_pre_tool_use(serde_json::from_str(raw).unwrap()) {
+            AntigravityPayload::PreToolUse(value) => value,
             _ => panic!("expected PreToolUse"),
         };
-        let hi: HookInput = serde_json::from_str(&norm).unwrap();
+        let hi: HookInput = serde_json::from_value(norm).unwrap();
         assert_eq!(hi.tool_name, "run_command");
         assert_eq!(hi.get_command(), "git status");
         assert_eq!(hi.cwd, "/ws");
@@ -4397,16 +4378,15 @@ mod tests {
             "toolCall": {"name": "write_to_file", "args": {"TargetFile": "/ws/a.py", "CodeContent": "x = 1"}},
             "workspacePaths": ["/ws"]
         }"#;
-        let norm = match normalize_antigravity_pre_tool_use(raw) {
-            AntigravityPayload::PreToolUse(s) => s,
+        let norm = match normalize_antigravity_pre_tool_use(serde_json::from_str(raw).unwrap()) {
+            AntigravityPayload::PreToolUse(value) => value,
             _ => panic!("expected PreToolUse"),
         };
-        let hi: HookInput = serde_json::from_str(&norm).unwrap();
+        let hi: HookInput = serde_json::from_value(norm.clone()).unwrap();
         assert_eq!(hi.tool_name, "write_to_file");
         assert_eq!(hi.get_file_path(), "/ws/a.py");
         // The canonical `content` key is what the secret scanner reads.
-        let v: serde_json::Value = serde_json::from_str(&norm).unwrap();
-        assert_eq!(v["tool_input"]["content"], "x = 1");
+        assert_eq!(norm["tool_input"]["content"], "x = 1");
     }
 
     #[test]
@@ -4421,12 +4401,11 @@ mod tests {
             }},
             "workspacePaths": ["/ws"]
         }"#;
-        let norm = match normalize_antigravity_pre_tool_use(raw) {
-            AntigravityPayload::PreToolUse(s) => s,
+        let norm = match normalize_antigravity_pre_tool_use(serde_json::from_str(raw).unwrap()) {
+            AntigravityPayload::PreToolUse(value) => value,
             _ => panic!("expected PreToolUse"),
         };
-        let v: serde_json::Value = serde_json::from_str(&norm).unwrap();
-        let content = v["tool_input"]["content"].as_str().unwrap();
+        let content = norm["tool_input"]["content"].as_str().unwrap();
         // Chunks join with NO separator so a secret split across a chunk
         // boundary stays contiguous for the scanner. Asserting the exact join
         // (not just substring presence) guards against a separator regression
@@ -4439,25 +4418,18 @@ mod tests {
         // A Post/Stop payload carries no toolCall; nothing to gate -> emit nothing.
         let raw = r#"{"stepIdx": 5, "error": "", "conversationId": "c1"}"#;
         assert!(matches!(
-            normalize_antigravity_pre_tool_use(raw),
+            normalize_antigravity_pre_tool_use(serde_json::from_str(raw).unwrap()),
             AntigravityPayload::NotGateable
         ));
     }
 
     #[test]
     fn normalize_antigravity_malformed_payload_fails_closed() {
-        // Truncated JSON with a toolCall is malformed, not a missing event: it
-        // must fail closed (the embedded command is never silently allowed).
-        let truncated = r#"{"toolCall":{"name":"run_command","args":{"CommandLine":"rm -rf /""#;
-        assert!(matches!(
-            normalize_antigravity_pre_tool_use(truncated),
-            AntigravityPayload::Malformed
-        ));
         // A well-formed envelope whose args is the wrong JSON type would drop
         // the command silently; reject it as malformed instead.
         let wrong_args = r#"{"toolCall":{"name":"run_command","args":"CommandLine=rm -rf /"},"workspacePaths":["/ws"]}"#;
         assert!(matches!(
-            normalize_antigravity_pre_tool_use(wrong_args),
+            normalize_antigravity_pre_tool_use(serde_json::from_str(wrong_args).unwrap()),
             AntigravityPayload::Malformed
         ));
     }
@@ -4466,11 +4438,11 @@ mod tests {
     fn normalize_antigravity_prefers_args_cwd() {
         // run_command carries its own Cwd; settings resolution should key off it.
         let raw = r#"{"toolCall":{"name":"run_command","args":{"CommandLine":"ls","Cwd":"/ws/pkg"}},"workspacePaths":["/ws"]}"#;
-        let norm = match normalize_antigravity_pre_tool_use(raw) {
-            AntigravityPayload::PreToolUse(s) => s,
+        let norm = match normalize_antigravity_pre_tool_use(serde_json::from_str(raw).unwrap()) {
+            AntigravityPayload::PreToolUse(value) => value,
             _ => panic!("expected PreToolUse"),
         };
-        let hi: HookInput = serde_json::from_str(&norm).unwrap();
+        let hi: HookInput = serde_json::from_value(norm).unwrap();
         assert_eq!(hi.cwd, "/ws/pkg");
     }
 

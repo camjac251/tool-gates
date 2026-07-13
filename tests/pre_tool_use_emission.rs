@@ -133,3 +133,15 @@ fn antigravity_non_deny_emits_nothing() {
         String::from_utf8_lossy(&output.stdout)
     );
 }
+
+#[test]
+fn antigravity_malformed_json_fails_closed() {
+    let output = run_hook(
+        Some("antigravity"),
+        r#"{"toolCall":{"name":"run_command","args":{"CommandLine":"rm -rf /""#,
+    );
+    let value = stdout_json(&output);
+
+    assert!(output.status.success());
+    assert_eq!(value["decision"], "deny");
+}

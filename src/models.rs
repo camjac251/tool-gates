@@ -279,10 +279,21 @@ pub struct HookInput {
 #[derive(Debug, Deserialize, Default)]
 #[serde(untagged)]
 pub enum ToolInputVariant {
-    Structured(ToolInput),
+    /// Keep raw objects first so unknown policy fields are never discarded by
+    /// the permissive all-optional `ToolInput` struct.
     Map(serde_json::Map<String, serde_json::Value>),
+    Structured(ToolInput),
     #[default]
     Empty,
+}
+
+impl ToolInputVariant {
+    pub fn as_map(&self) -> Option<&serde_json::Map<String, serde_json::Value>> {
+        match self {
+            Self::Map(map) => Some(map),
+            Self::Structured(_) | Self::Empty => None,
+        }
+    }
 }
 
 impl HookInput {
@@ -1511,6 +1522,28 @@ mod tests {
         assert!(!Client::is_file_tool("Bash"));
         assert!(!Client::is_file_tool("run_shell_command"));
         assert!(!Client::is_file_tool("Glob"));
+    }
+
+    #[test]
+    fn hook_inputs_preserve_unknown_tool_fields_in_the_raw_map() {
+        let hook: HookInput = serde_json::from_str(
+            r#"{"tool_name":"mcp__example__fetch","tool_input":{"url":"https://example.com","sources":["web"]}}"#,
+        )
+        .unwrap();
+        let hook_map = hook.tool_input.as_map().expect("HookInput raw map");
+        assert_eq!(hook_map["url"], "https://example.com");
+        assert_eq!(hook_map["sources"], serde_json::json!(["web"]));
+
+        let permission: PermissionRequestInput = serde_json::from_str(
+            r#"{"hook_event_name":"PermissionRequest","tool_name":"mcp__example__fetch","tool_input":{"url":"https://example.com","sources":["web"]}}"#,
+        )
+        .unwrap();
+        let permission_map = permission
+            .tool_input
+            .as_map()
+            .expect("PermissionRequest raw map");
+        assert_eq!(permission_map["url"], "https://example.com");
+        assert_eq!(permission_map["sources"], serde_json::json!(["web"]));
     }
 
     #[test]
