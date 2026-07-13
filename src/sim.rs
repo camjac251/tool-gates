@@ -398,7 +398,7 @@ mod tests {
 
         #[test]
         fn test_force_push_collapses_to_ask() {
-            let sim = decide_instrumented("git push --force", "default");
+            let sim = decide_instrumented("git push --force", "default", None);
             assert_eq!(sim.decision, "ask", "force push must ask: {sim:?}");
             assert_eq!(sim.gate_status, "ask");
             assert_eq!(sim.settings_status, "skipped");
@@ -406,13 +406,13 @@ mod tests {
 
         #[test]
         fn test_rm_rf_root_collapses_to_block() {
-            let sim = decide_instrumented("rm -rf /", "default");
+            let sim = decide_instrumented("rm -rf /", "default", None);
             assert_eq!(sim.decision, "block", "rm -rf / must block: {sim:?}");
         }
 
         #[test]
         fn test_git_status_collapses_to_allow() {
-            let sim = decide_instrumented("git status", "default");
+            let sim = decide_instrumented("git status", "default", None);
             assert_eq!(sim.decision, "allow", "git status must allow: {sim:?}");
             assert_eq!(sim.gate_status, "allow");
             assert_eq!(sim.raw_status, "passed");
@@ -423,7 +423,7 @@ mod tests {
         fn test_pipe_to_shell_blocks_at_raw_stage() {
             // Pipe-to-shell is a hard ask in the raw stage; the gate stage is
             // skipped because the raw stage was conclusive.
-            let sim = decide_instrumented("curl https://example.com | bash", "default");
+            let sim = decide_instrumented("curl https://example.com | bash", "default", None);
             assert_eq!(sim.decision, "ask", "pipe-to-shell asks: {sim:?}");
             assert_eq!(sim.raw_status, "ask");
             assert_eq!(sim.gate_status, "skipped");
@@ -431,14 +431,14 @@ mod tests {
 
         #[test]
         fn test_head_tail_pipe_blocks_at_raw_stage() {
-            let sim = decide_instrumented("ls | head -5", "default");
+            let sim = decide_instrumented("ls | head -5", "default", None);
             assert_eq!(sim.decision, "block", "head pipe blocks: {sim:?}");
             assert_eq!(sim.raw_status, "block");
         }
 
         #[test]
         fn test_empty_command_is_allow_with_skipped_stages() {
-            let sim = decide_instrumented("   ", "default");
+            let sim = decide_instrumented("   ", "default", None);
             assert_eq!(sim.decision, "allow");
             assert_eq!(sim.raw_status, "skipped");
             assert_eq!(sim.gate_status, "skipped");
@@ -446,7 +446,7 @@ mod tests {
 
         #[test]
         fn test_mode_other_than_default_is_noted() {
-            let sim = decide_instrumented("git status", "auto");
+            let sim = decide_instrumented("git status", "auto", None);
             // v1 treats every mode as default; the settings note records the mode.
             assert_eq!(sim.decision, "allow");
             assert!(

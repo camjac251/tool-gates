@@ -58,6 +58,9 @@ jobs:
       - name: Test
         run: cargo test
 
+      - name: Test WebAssembly feature
+        run: cargo test --features wasm --lib
+
       - name: Check binary size
         run: |
           cargo build --release --target x86_64-unknown-linux-musl
