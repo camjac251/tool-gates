@@ -61,7 +61,10 @@ jobs:
         uses: taiki-e/install-action@59012be0884e296ca2da49b530610e72c49039ad # v2.81.6
         with:
           # wasm-bindgen-cli must match the wasm-bindgen crate version (Cargo.lock).
-          tool: mdbook,wasm-bindgen-cli@0.2.108,wasm-opt
+          tool: mdbook@0.5.3,wasm-bindgen-cli@0.2.108
+
+      - name: Install Binaryen
+        run: npm install --global binaryen@129.0.0
 
       - name: Regenerate gate docs from rules
         run: cargo run --locked --release -- rules export --format md

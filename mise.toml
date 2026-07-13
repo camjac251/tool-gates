@@ -7,10 +7,13 @@ lefthook = "latest"
 prettier = "3.8.3"
 biome = "2.4.16"
 taplo = "0.10.0"
+# Documentation and WASM tools. Keep in sync with docs.yml and Cargo.lock.
+"cargo:mdbook" = "0.5.3"
+"cargo:wasm-bindgen-cli" = "0.2.108"
 # zig is used as the C cross-compiler for the docs-site WASM build (see build-wasm).
-zig = "latest"
+zig = "0.15.2"
 # wasm-opt, for shrinking the docs-site WASM gate-engine bundle (cargo ... --features wasm)
-"github:WebAssembly/binaryen" = { version = "latest", version_prefix = "version_", filter_bins = "wasm-opt" }
+"github:WebAssembly/binaryen" = { version = "129", version_prefix = "version_", filter_bins = "wasm-opt" }
 
 [hooks]
 enter = "lefthook install"
@@ -26,7 +29,7 @@ description = "Build the WebAssembly target for the docs simulator"
 env = { CC_wasm32_unknown_unknown = "zig cc", CFLAGS_wasm32_unknown_unknown = "-target wasm32-wasi" }
 run = """
 rustup target add wasm32-unknown-unknown
-cargo build --profile release-wasm --lib --target wasm32-unknown-unknown --features wasm
+cargo build --locked --profile release-wasm --lib --target wasm32-unknown-unknown --features wasm
 wasm-bindgen --target web --no-typescript --out-dir docs/src/wasm/ target/wasm32-unknown-unknown/release-wasm/tool_gates.wasm
 wasm-opt -Oz --enable-bulk-memory -o docs/src/wasm/tool_gates_bg.wasm docs/src/wasm/tool_gates_bg.wasm
 """
