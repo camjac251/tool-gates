@@ -41,7 +41,18 @@ pub mod file_tools;
 pub mod gates;
 pub mod generated;
 pub mod git_aliases;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod hint_tracker;
+#[cfg(target_arch = "wasm32")]
+pub mod hint_tracker {
+    /// WASM has no persistent session cache, so every hint remains visible.
+    pub fn filter_hints(_session_id: &str, _hints: &mut Vec<crate::hints::ModernHint>) {}
+
+    /// WASM has no persistent session cache, so warnings fail open as new.
+    pub fn is_security_warning_new(_session_id: &str, _key: &str) -> bool {
+        true
+    }
+}
 pub mod hints;
 pub mod mise;
 pub mod models;
