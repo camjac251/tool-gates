@@ -365,13 +365,20 @@ pub fn check_design_lint_post(
     }
 
     let content_pairs = extract_content(tool_name, tool_input_map);
+    check_design_lint_post_for_content(&content_pairs, config)
+}
+
+pub fn check_design_lint_post_for_content(
+    content_pairs: &[(String, String)],
+    config: &DesignLintConfig,
+) -> Option<PostToolUseOutput> {
     if content_pairs.is_empty() {
         return None;
     }
 
     let mut findings: Vec<String> = Vec::new();
     let mut seen: Vec<&'static str> = Vec::new();
-    for (file_path, content) in &content_pairs {
+    for (file_path, content) in content_pairs {
         for rule in scan_content(file_path, content) {
             if config.disable_rules.iter().any(|r| r == rule.id) {
                 continue;

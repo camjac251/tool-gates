@@ -460,11 +460,19 @@ pub fn check_security_reminders(
     }
 
     let content_pairs = extract_content(tool_name, tool_input_map);
+    check_security_reminders_for_content(&content_pairs, config, session_id)
+}
+
+pub fn check_security_reminders_for_content(
+    content_pairs: &[(String, String)],
+    config: &SecurityRemindersConfig,
+    session_id: &str,
+) -> Option<HookOutput> {
     if content_pairs.is_empty() {
         return None;
     }
 
-    for (file_path, content) in &content_pairs {
+    for (file_path, content) in content_pairs {
         let matches = scan_content(file_path, content);
 
         for m in &matches {
@@ -542,13 +550,22 @@ pub fn check_security_reminders_post(
     if crate::models::Client::is_read_tool(tool_name) {
         return None;
     }
+    let content_pairs = extract_content(tool_name, tool_input_map);
+    check_security_reminders_post_for_content(&content_pairs, config, session_id, client)
+}
+
+pub fn check_security_reminders_post_for_content(
+    content_pairs: &[(String, String)],
+    config: &SecurityRemindersConfig,
+    session_id: &str,
+    client: crate::models::Client,
+) -> Option<PostToolUseOutput> {
     // Tier 3 emission depends on client; the early bail must consider it too.
     let tier3_active = client == crate::models::Client::Codex && config.warnings;
     if !config.anti_patterns && !config.secrets && !tier3_active {
         return None;
     }
 
-    let content_pairs = extract_content(tool_name, tool_input_map);
     if content_pairs.is_empty() {
         return None;
     }
@@ -556,7 +573,7 @@ pub fn check_security_reminders_post(
     // Collect all warnings (multiple patterns can match)
     let mut warnings = Vec::new();
 
-    for (file_path, content) in &content_pairs {
+    for (file_path, content) in content_pairs {
         let matches = scan_content(file_path, content);
 
         for m in &matches {

@@ -33,93 +33,9 @@ pub(crate) fn extract_content(
     tool_name: &str,
     map: &serde_json::Map<String, serde_json::Value>,
 ) -> Vec<(String, String)> {
-    let mut results = Vec::new();
-    let Some(spec) = crate::file_tools::spec_for_name(tool_name) else {
-        return results;
-    };
-
-    if spec.payload == crate::file_tools::FilePayloadKind::ApplyPatch {
-        let command = map.get("command").and_then(|v| v.as_str()).unwrap_or("");
-        if command.is_empty() {
-            return results;
-        }
-        for file in crate::apply_patch_parser::parse_patch(command) {
-            if file.op == crate::apply_patch_parser::PatchOp::Delete {
-                continue;
-            }
-            let content = file.added_content();
-            if content.is_empty() {
-                continue;
-            }
-            // The destination path matters for "is this a doc/.env file" checks;
-            // when there's a rename we use the move target since that's where
-            // the bytes actually land.
-            let path = file
-                .move_to
-                .as_ref()
-                .unwrap_or(&file.path)
-                .display()
-                .to_string();
-            results.push((path, content));
-        }
-        return results;
-    }
-
-    let top_file_path = map
-        .get(
-            if spec.payload == crate::file_tools::FilePayloadKind::Notebook {
-                "notebook_path"
-            } else {
-                "file_path"
-            },
-        )
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-
-    match spec.payload {
-        crate::file_tools::FilePayloadKind::Content
-        | crate::file_tools::FilePayloadKind::NormalizedContent => {
-            if let Some(content) = map.get("content").and_then(|v| v.as_str()) {
-                if !content.is_empty() {
-                    results.push((top_file_path, content.to_string()));
-                }
-            }
-        }
-        crate::file_tools::FilePayloadKind::Replacement => {
-            // Classic: single new_string
-            if let Some(new_string) = map.get("new_string").and_then(|v| v.as_str()) {
-                if !new_string.is_empty() {
-                    results.push((top_file_path.clone(), new_string.to_string()));
-                }
-            }
-            // Batch: edits[].new_string
-            if let Some(edits) = map.get("edits").and_then(|v| v.as_array()) {
-                for edit in edits {
-                    if let Some(ns) = edit.get("new_string").and_then(|v| v.as_str()) {
-                        if !ns.is_empty() {
-                            results.push((top_file_path.clone(), ns.to_string()));
-                        }
-                    }
-                }
-            }
-        }
-        crate::file_tools::FilePayloadKind::Notebook => {
-            let deletes_cell = map.get("edit_mode").and_then(|v| v.as_str()) == Some("delete");
-            if !deletes_cell {
-                if let Some(source) = map.get("new_source").and_then(|v| v.as_str()) {
-                    if !source.is_empty() {
-                        results.push((top_file_path, source.to_string()));
-                    }
-                }
-            }
-        }
-        crate::file_tools::FilePayloadKind::FilePath
-        | crate::file_tools::FilePayloadKind::ReadMany
-        | crate::file_tools::FilePayloadKind::ApplyPatch => {}
-    }
-
-    results
+    crate::file_tools::ParsedFileInput::new(tool_name, map)
+        .map(|parsed| parsed.content_pairs())
+        .unwrap_or_default()
 }
 
 /// How a rule decides whether a `(path, content)` pair is in violation.

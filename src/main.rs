@@ -40,7 +40,7 @@ use tool_gates::pending::{clear_pending, pending_count, read_pending};
 use tool_gates::permission_request::handle_permission_request_for_client;
 use tool_gates::post_tool_use::handle_post_tool_use;
 use tool_gates::router::{check_command_with_settings_and_session, check_single_command};
-use tool_gates::security_reminders::check_security_reminders;
+use tool_gates::security_reminders::check_security_reminders_for_content;
 use tool_gates::settings_writer::{
     RuleType, Scope, add_rule, list_all_rules, list_rules, remove_rule,
 };
@@ -604,6 +604,8 @@ fn handle_pre_tool_use_hook(input: serde_json::Value, client: Client) {
         handle_bash_pre_tool_use(&hook_input, client);
     } else if Client::is_file_tool(tool_name) {
         // File tools: symlink guard + security reminders.
+        let parsed_file = file_tools::ParsedFileInput::new(tool_name, tool_input_map)
+            .expect("classified file tool must have a registry entry");
 
         //
         // For apply_patch (Codex), fail closed when the patch body is
@@ -613,24 +615,18 @@ fn handle_pre_tool_use_hook(input: serde_json::Value, client: Client) {
         // would otherwise pass through untyped. The parser already mirrors
         // Codex's leading-whitespace handling, but the strictest defense is
         // to deny anything we couldn't parse.
-        if hook_input.tool_name == "apply_patch" {
-            let command = tool_input_map
-                .get("command")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            let parsed = tool_gates::apply_patch_parser::parse_patch(command);
-            if tool_gates::apply_patch_parser::looks_unparseable(command, &parsed) {
-                let output = HookOutput::deny(
-                    "apply_patch payload has no parseable file headers; tool-gates refuses to pass through unrecognized patch shapes. The payload must be wrapped in `*** Begin Patch` and `*** End Patch` envelopes, with file headers between them: `*** Add File: /abs/path` for new files, `*** Update File: /abs/path` for edits (optionally followed by `*** Move to: /abs/path` for renames), or `*** Delete File: /abs/path` for deletions. Verify the patch was constructed with the standard apply_patch grammar and that paths are absolute.",
-                );
-                emit_pre_tool_use_output(&output, client);
-                return;
-            }
+        if parsed_file.patch_is_unparseable() {
+            let output = HookOutput::deny(
+                "apply_patch payload has no parseable file headers; tool-gates refuses to pass through unrecognized patch shapes. The payload must be wrapped in `*** Begin Patch` and `*** End Patch` envelopes, with file headers between them: `*** Add File: /abs/path` for new files, `*** Update File: /abs/path` for edits (optionally followed by `*** Move to: /abs/path` for renames), or `*** Delete File: /abs/path` for deletions. Verify the patch was constructed with the standard apply_patch grammar and that paths are absolute.",
+            );
+            emit_pre_tool_use_output(&output, client);
+            return;
         }
+
+        let file_paths = parsed_file.paths();
 
         // 1. File guards: symlink check for AI config files
         if config.features.file_guards {
-            let file_paths = extract_file_paths_from_map(&hook_input.tool_name, tool_input_map);
             for file_path in &file_paths {
                 if let Some(output) =
                     check_file_guard(file_path, &hook_input.tool_name, &config.file_guards)
@@ -648,24 +644,23 @@ fn handle_pre_tool_use_hook(input: serde_json::Value, client: Client) {
         // which is read-only. The allow is scoped to the scratch subtree only:
         // a symlink or `..` that escapes it resolves outside the base and is
         // not matched, so writes to real project/system files are untouched.
-        if Client::is_write_tool(tool_name) && !is_plan_mode(&hook_input.permission_mode) {
-            let file_paths = extract_file_paths_from_map(&hook_input.tool_name, tool_input_map);
-            if !file_paths.is_empty()
-                && file_paths
-                    .iter()
-                    .all(|p| tool_gates::router::is_under_scratch(p))
-            {
-                let output = HookOutput::allow(Some("Scratch directory write (auto-allowed)"));
-                emit_pre_tool_use_output(&output, client);
-                return;
-            }
+        if Client::is_write_tool(tool_name)
+            && !is_plan_mode(&hook_input.permission_mode)
+            && !file_paths.is_empty()
+            && file_paths
+                .iter()
+                .all(|p| tool_gates::router::is_under_scratch(p))
+        {
+            let output = HookOutput::allow(Some("Scratch directory write (auto-allowed)"));
+            emit_pre_tool_use_output(&output, client);
+            return;
         }
 
         // 2. Security reminders: content scanning for write/edit tools
         if config.features.security_reminders && Client::is_write_tool(tool_name) {
-            if let Some(output) = check_security_reminders(
-                &hook_input.tool_name,
-                tool_input_map,
+            let content_pairs = parsed_file.content_pairs();
+            if let Some(output) = check_security_reminders_for_content(
+                &content_pairs,
                 &config.security_reminders,
                 &hook_input.session_id,
             ) {
@@ -704,62 +699,6 @@ fn handle_pre_tool_use_hook(input: serde_json::Value, client: Client) {
         // No match = pass through (no opinion)
     }
     // All other tools: pass through (blocks already checked above)
-}
-
-/// Extract all file paths from a raw tool_input map for the given tool.
-///
-/// - Claude Write/Edit and Gemini write_file/replace: read `file_path`.
-/// - Codex apply_patch: parse the unified-diff body in `command` and pull
-///   every affected path (Add/Update/Delete + rename targets).
-fn extract_file_paths_from_map(
-    tool_name: &str,
-    map: &serde_json::Map<String, serde_json::Value>,
-) -> Vec<String> {
-    let Some(spec) = file_tools::spec_for_name(tool_name) else {
-        return Vec::new();
-    };
-    match spec.payload {
-        tool_gates::file_tools::FilePayloadKind::ApplyPatch => {
-            let command = map.get("command").and_then(|v| v.as_str()).unwrap_or("");
-            if command.is_empty() {
-                return Vec::new();
-            }
-            tool_gates::apply_patch_parser::parse_patch(command)
-                .into_iter()
-                .flat_map(|f| {
-                    f.affected_paths()
-                        .into_iter()
-                        .map(|p| p.display().to_string())
-                        .collect::<Vec<_>>()
-                })
-                .filter(|p| !p.is_empty())
-                .collect()
-        }
-        tool_gates::file_tools::FilePayloadKind::Notebook => map
-            .get("notebook_path")
-            .and_then(|value| value.as_str())
-            .filter(|path| !path.is_empty())
-            .map(|path| vec![path.to_string()])
-            .unwrap_or_default(),
-        tool_gates::file_tools::FilePayloadKind::ReadMany => map
-            .get("paths")
-            .and_then(|value| value.as_array())
-            .into_iter()
-            .flatten()
-            .filter_map(|value| value.as_str())
-            .filter(|path| !path.is_empty())
-            .map(str::to_string)
-            .collect(),
-        tool_gates::file_tools::FilePayloadKind::FilePath
-        | tool_gates::file_tools::FilePayloadKind::Content
-        | tool_gates::file_tools::FilePayloadKind::Replacement
-        | tool_gates::file_tools::FilePayloadKind::NormalizedContent => map
-            .get("file_path")
-            .and_then(|value| value.as_str())
-            .filter(|path| !path.is_empty())
-            .map(|path| vec![path.to_string()])
-            .unwrap_or_default(),
-    }
 }
 
 /// Handle Bash-specific PreToolUse logic (gate engine + tracking)
@@ -1076,23 +1015,26 @@ fn handle_post_tool_use_hook(input: serde_json::Value, client: Client) {
         }
         let empty_tool_input = serde_json::Map::new();
         let tool_input_map = post_input.tool_input.as_map().unwrap_or(&empty_tool_input);
+        let content_pairs = file_tools::ParsedFileInput::new(tool_name, tool_input_map)
+            .expect("classified write tool must have a registry entry")
+            .content_pairs();
 
         let mut outputs: Vec<tool_gates::models::PostToolUseOutput> = Vec::new();
         if config.features.security_reminders {
-            if let Some(output) = tool_gates::security_reminders::check_security_reminders_post(
-                &post_input.tool_name,
-                tool_input_map,
-                &config.security_reminders,
-                &post_input.session_id,
-                client,
-            ) {
+            if let Some(output) =
+                tool_gates::security_reminders::check_security_reminders_post_for_content(
+                    &content_pairs,
+                    &config.security_reminders,
+                    &post_input.session_id,
+                    client,
+                )
+            {
                 outputs.push(output);
             }
         }
         if config.features.design_lint {
-            if let Some(output) = tool_gates::design_lint::check_design_lint_post(
-                &post_input.tool_name,
-                tool_input_map,
+            if let Some(output) = tool_gates::design_lint::check_design_lint_post_for_content(
+                &content_pairs,
                 &config.design_lint,
             ) {
                 outputs.push(output);
@@ -4011,7 +3953,9 @@ mod tests {
             .unwrap()
             .clone();
         assert_eq!(
-            extract_file_paths_from_map("NotebookEdit", &notebook),
+            file_tools::ParsedFileInput::new("NotebookEdit", &notebook)
+                .unwrap()
+                .paths(),
             ["/workspace/example.ipynb"]
         );
 
@@ -4020,7 +3964,9 @@ mod tests {
             .unwrap()
             .clone();
         assert_eq!(
-            extract_file_paths_from_map("read_many_files", &many),
+            file_tools::ParsedFileInput::new("read_many_files", &many)
+                .unwrap()
+                .paths(),
             ["/workspace/a.rs", "/workspace/b.rs"]
         );
     }

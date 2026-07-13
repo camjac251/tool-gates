@@ -81,7 +81,7 @@ pub fn handle_permission_request_for_client(
         && input.tool_name == "apply_patch"
         && config.codex.accept_project_edits
     {
-        return handle_codex_project_edit(input);
+        return handle_codex_project_edit(input, tool_input_map);
     }
 
     // Edit/Write/apply_patch tools: auto-approve in worktree contexts.
@@ -93,7 +93,7 @@ pub fn handle_permission_request_for_client(
     let can_consider_worktree_write =
         input.agent_id.is_some() || (client == Client::Codex && input.tool_name == "apply_patch");
     if Client::is_write_tool(&input.tool_name) && can_consider_worktree_write {
-        return handle_file_permission_request(input);
+        return handle_file_permission_request(input, tool_input_map);
     }
 
     // MCP tools in acceptEdits mode: consult `[[accept_edits_mcp]]` rules.
@@ -203,8 +203,9 @@ pub fn handle_permission_request_for_client(
 /// file, return `None` so the client's normal approval path decides.
 fn handle_file_permission_request(
     input: &PermissionRequestInput,
+    tool_input_map: &serde_json::Map<String, serde_json::Value>,
 ) -> Option<PermissionRequestOutput> {
-    let paths = collect_paths_for_permission(input);
+    let paths = collect_paths_for_permission(input, tool_input_map);
     if paths.is_empty() {
         return None;
     }
@@ -246,9 +247,12 @@ fn handle_file_permission_request(
 /// settings.json `Write`/`Edit` rule. Returns `Some(allow)` to suppress the
 /// Codex prompt, `Some(deny)` when a settings deny rule matches, or `None` to
 /// let the normal prompt fire.
-fn handle_codex_project_edit(input: &PermissionRequestInput) -> Option<PermissionRequestOutput> {
+fn handle_codex_project_edit(
+    input: &PermissionRequestInput,
+    tool_input_map: &serde_json::Map<String, serde_json::Value>,
+) -> Option<PermissionRequestOutput> {
     let config = crate::config::load();
-    let paths = collect_paths_for_permission(input);
+    let paths = collect_paths_for_permission(input, tool_input_map);
     let settings = Settings::load(&input.cwd);
     decide_codex_project_edit(
         &paths,
@@ -320,34 +324,14 @@ fn decide_codex_project_edit(
 /// Collect every file path this PermissionRequest would write to. Read from
 /// `file_path` for Claude/Gemini tools, `notebook_path` for NotebookEdit, and
 /// the parsed unified-diff body for Codex `apply_patch`.
-fn collect_paths_for_permission(input: &PermissionRequestInput) -> Vec<String> {
-    match crate::file_tools::spec_for_name(&input.tool_name).map(|spec| spec.payload) {
-        Some(crate::file_tools::FilePayloadKind::ApplyPatch) => {
-            let command = input.get_command();
-            if command.is_empty() {
-                return Vec::new();
-            }
-            crate::apply_patch_parser::parse_patch(&command)
-                .into_iter()
-                .flat_map(|f| {
-                    f.affected_paths()
-                        .into_iter()
-                        .map(|p| p.display().to_string())
-                        .collect::<Vec<_>>()
-                })
-                .filter(|p| !p.is_empty())
-                .collect()
-        }
-        Some(_) => {
-            let path = input.get_file_path();
-            if path.is_empty() {
-                Vec::new()
-            } else {
-                vec![path]
-            }
-        }
-        None => Vec::new(),
-    }
+fn collect_paths_for_permission(
+    input: &PermissionRequestInput,
+    tool_input_map: &serde_json::Map<String, serde_json::Value>,
+) -> Vec<String> {
+    let map = input.tool_input.as_map().unwrap_or(tool_input_map);
+    crate::file_tools::ParsedFileInput::new(&input.tool_name, map)
+        .map(|parsed| parsed.paths())
+        .unwrap_or_default()
 }
 
 /// Handle PermissionRequest for MCP tools under `acceptEdits` mode.
@@ -507,9 +491,10 @@ mod tests {
             r#"{"hook_event_name":"PermissionRequest","tool_name":"NotebookEdit","tool_input":{"notebook_path":"/workspace/example.ipynb","new_source":"value = 1"}}"#,
         )
         .expect("parse NotebookEdit request");
+        let tool_input_map = input.tool_input.as_map().unwrap();
 
         assert_eq!(
-            collect_paths_for_permission(&input),
+            collect_paths_for_permission(&input, tool_input_map),
             vec!["/workspace/example.ipynb"]
         );
     }
@@ -1116,7 +1101,8 @@ mod tests {
                 &worktree.to_string_lossy(),
             );
             assert!(
-                handle_file_permission_request(&input).is_none(),
+                handle_file_permission_request(&input, input.tool_input.as_map().unwrap())
+                    .is_none(),
                 "PermissionRequest must pass symlink escapes to the normal prompt"
             );
         }
@@ -1135,7 +1121,8 @@ mod tests {
             assert!(is_worktree_context(&resolved, &worktree.to_string_lossy()));
             let input = make_file_input("Write", "link/new/file.rs", &worktree.to_string_lossy());
             assert!(
-                handle_file_permission_request(&input).is_some(),
+                handle_file_permission_request(&input, input.tool_input.as_map().unwrap())
+                    .is_some(),
                 "PermissionRequest must allow symlinks contained by the worktree"
             );
         }
