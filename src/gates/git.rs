@@ -122,9 +122,11 @@ pub fn check_git(cmd: &CommandInfo) -> GateResult {
     }
 
     let config = crate::config::get();
-    if !config.features.git_aliases {
+    if !config.features.git_aliases || !needs_alias_lookup(cmd) {
         // Alias resolution disabled. Empty map -> no alias ever resolves;
-        // the gate falls through to the existing TOML behavior.
+        // the gate falls through to the existing TOML behavior. Known git
+        // subcommands also take this path so they do not force the alias-map
+        // LazyLock and spawn `git config --global` in each hook process.
         return check_git_with_alias_map(cmd, &HashMap::new());
     }
     if config.git_aliases.include_local_repo {
@@ -137,6 +139,38 @@ pub fn check_git(cmd: &CommandInfo) -> GateResult {
         return check_git_with_alias_map(cmd, &merged);
     }
     check_git_with_alias_map(cmd, &git_aliases::GLOBAL_ALIASES)
+}
+
+/// Return whether this invocation can benefit from consulting the alias map.
+///
+/// Built-in commands must win over aliases, so loading aliases for them is
+/// both unnecessary and expensive in the short-lived hook process.
+fn needs_alias_lookup(cmd: &CommandInfo) -> bool {
+    if cmd.program != "git"
+        || cmd.args.is_empty()
+        || cmd.args.iter().any(|a| a == "--dry-run" || a == "-n")
+    {
+        return false;
+    }
+
+    let Some((_, subcommand)) = extract_subcommand(&cmd.args) else {
+        return false;
+    };
+
+    !subcommand.starts_with('-') && !is_known_builtin(cmd, subcommand)
+}
+
+fn is_known_builtin(cmd: &CommandInfo, subcommand: &str) -> bool {
+    let subcmd_probe = CommandInfo {
+        program: cmd.program.clone(),
+        args: vec![subcommand.to_string()],
+        raw: cmd.raw.clone(),
+        scratch_vars: Default::default(),
+    };
+    check_git_declarative(&subcmd_probe)
+        .is_some_and(|r| matches!(r.decision, Decision::Allow | Decision::Block))
+        || GIT_ASK.contains_key(subcommand)
+        || matches!(subcommand, "branch" | "tag")
 }
 
 /// Test entry point that lets callers inject a synthetic alias map. Production
@@ -193,16 +227,7 @@ pub fn check_git_with_alias_map(
     // Allow or Block is a real git command and must not be treated as an alias,
     // so probe it with the bare subcommand. Known asks (commit, push, ...) are
     // tracked in GIT_ASK.
-    let subcmd_probe = CommandInfo {
-        program: cmd.program.clone(),
-        args: vec![subcommand.to_string()],
-        raw: cmd.raw.clone(),
-        scratch_vars: Default::default(),
-    };
-    let known_builtin = check_git_declarative(&subcmd_probe)
-        .is_some_and(|r| matches!(r.decision, Decision::Allow | Decision::Block))
-        || GIT_ASK.contains_key(subcommand)
-        || matches!(subcommand, "branch" | "tag");
+    let known_builtin = is_known_builtin(cmd, subcommand);
 
     let normalized_cmd = CommandInfo {
         program: cmd.program.clone(),
@@ -274,6 +299,25 @@ mod tests {
         // non-git Bash calls.
         let result = check_git(&make_cmd("cargo", &["check"]));
         assert_eq!(result.decision, Decision::Skip);
+    }
+
+    #[test]
+    fn only_unknown_subcommands_need_alias_lookup() {
+        for args in [
+            &["status"][..],
+            &["commit", "-m", "message"],
+            &["-C", "/path", "diff"],
+            &["--version"],
+            &["custom", "--dry-run"],
+        ] {
+            assert!(
+                !needs_alias_lookup(&cmd(args)),
+                "built-in or short-circuited invocation loaded aliases: {args:?}"
+            );
+        }
+
+        assert!(needs_alias_lookup(&cmd(&["custom"])));
+        assert!(needs_alias_lookup(&cmd(&["-C", "/path", "custom"])));
     }
 
     // === Read Commands ===
