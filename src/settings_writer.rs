@@ -2,11 +2,9 @@
 //!
 //! Supports adding and removing permission rules from settings files.
 
-use fs2::FileExt;
 use serde_json::{Value, json};
-use std::fs::{self, OpenOptions};
-use std::io::{Read, Seek, Write};
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 /// Scope for settings files
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -127,57 +125,13 @@ fn with_exclusive_settings_path<F, R>(path: &PathBuf, f: F) -> std::io::Result<R
 where
     F: FnOnce(&mut Value) -> R,
 {
-    // Ensure parent directory exists
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-
-    // Open file for read+write with exclusive lock
-    let mut file = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(path)?;
-
-    #[allow(clippy::incompatible_msrv)] // fs2 crate method, not std
-    file.lock_exclusive()?;
-
-    // Read current contents
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-
-    // Parse. An empty file is a fresh settings file. A non-empty file that fails
-    // to parse must NOT be overwritten: returning an error here leaves the file
-    // intact (truncation happens further down) instead of silently replacing the
-    // user's hooks/env/permissions with `{}` plus the new rule. Mirrors the
-    // installer's fail-closed policy.
-    let mut settings: Value = if contents.is_empty() {
-        json!({})
-    } else {
-        serde_json::from_str(&contents).map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("{} is not valid JSON: {e}", path.display()),
-            )
-        })?
-    };
-
-    // Execute the modification function
-    let result = f(&mut settings);
-
-    // Write back
-    file.set_len(0)?;
-    file.seek(std::io::SeekFrom::Start(0))?;
-
-    let json = serde_json::to_string_pretty(&settings)? + "\n";
-    file.write_all(json.as_bytes())?;
-    file.flush()?;
-
-    #[allow(clippy::incompatible_msrv)] // fs2 crate method, not std
-    file.unlock()?;
-
-    Ok(result)
+    crate::json_file::update_json(
+        Path::new(path),
+        crate::json_file::EmptyPolicy::EmptyObject,
+        true,
+        |settings| Ok(f(settings)),
+    )
+    .map(|outcome| outcome.result)
 }
 
 /// Add a permission rule to settings.json
@@ -473,11 +427,8 @@ mod tests {
         let path = temp.path().join("settings.json");
 
         // Seed a valid file with an unrelated key and the pattern already in ask.
-        fs::write(
-            &path,
-            r#"{"env":{"FOO":"bar"},"permissions":{"ask":["Bash(deploy:*)"]}}"#,
-        )
-        .unwrap();
+        let original = r#"{"env":{"FOO":"bar"},"permissions":{"ask":["Bash(deploy:*)"]}}"#;
+        fs::write(&path, original).unwrap();
 
         add_rule(Scope::User, "deploy:*", RuleType::Allow).unwrap();
 
@@ -487,6 +438,19 @@ mod tests {
         assert!(!ask.iter().any(|r| r == "Bash(deploy:*)")); // moved out of ask
         let allow = v["permissions"]["allow"].as_array().unwrap();
         assert!(allow.iter().any(|r| r == "Bash(deploy:*)")); // into allow
+
+        let backups = fs::read_dir(temp.path())
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("settings.json.backup-")
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(backups.len(), 1, "one pre-update backup must be retained");
+        assert_eq!(fs::read_to_string(backups[0].path()).unwrap(), original);
 
         unsafe { std::env::remove_var("CLAUDE_CONFIG_DIR") };
     }

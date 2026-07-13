@@ -58,6 +58,8 @@ serde-wasm-bindgen = { version = "0.6", optional = true }
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # File locking for concurrent access
 fs2 = "0.4"
+# Collision-resistant same-directory files for atomic config replacement
+tempfile = "3"
 # UUID for pending entry IDs
 uuid = { version = "1", features = ["v4"] }
 # TUI for interactive review
@@ -87,7 +89,6 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(lib_only)'] }
 
 [dev-dependencies]
 proptest = "1"    # Property-based/fuzz testing
-tempfile = "3"    # Temporary directories for settings.json tests
 serial_test = "3" # Serialize tests that mutate process-global env vars
 
 [build-dependencies]

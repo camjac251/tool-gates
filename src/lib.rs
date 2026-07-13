@@ -71,6 +71,8 @@ pub mod sim;
 // decision path. Excluded from the `wasm` feature build; always present
 // natively, so the binary, tests, and msrv check are unaffected.
 #[cfg(not(feature = "wasm"))]
+pub mod json_file;
+#[cfg(not(feature = "wasm"))]
 pub mod pending;
 #[cfg(not(feature = "wasm"))]
 pub mod post_tool_use;
