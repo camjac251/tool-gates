@@ -1,5 +1,50 @@
 # Changelog
 
+## [1.32.1](https://github.com/camjac251/tool-gates/compare/v1.32.0...v1.32.1) - 2026-07-13
+
+### Fixed
+
+- *(gemini)* report the installed hook set
+- *(build)* stabilize equal-priority rule order
+- *(wasm)* isolate the disk-backed hint tracker
+- *(gemini)* remove inert post-use hooks
+- *(hooks)* cover notebook edits end to end
+- *(doctor)* align diagnostics with runtime config
+- *(cache)* preserve dedup state across sessions
+- *(agy)* make allowlist updates transactional
+- *(hooks)* make client hook installs transactional
+- *(settings)* make permission updates transactional
+- *(security)* truncate generated reasons on character boundaries
+- *(blocks)* normalize URL hosts before domain checks
+- *(permissions)* resolve symlinks before path approval
+- *(gates)* preserve privilege wrapper decisions
+- *(parser)* expose commands embedded by env split strings
+- *(parser)* inspect substitutions inside quoted arguments
+- *(ci)* restore stable clippy compatibility
+
+### Other
+
+- update the doctor status example
+- *(docs)* isolate concurrency by ref
+- *(docs)* pin the documentation toolchain
+- run the MSRV check independently
+- enforce the committed dependency graph
+- *(state)* disambiguate file locks
+- *(build)* skip unchanged generated output
+- *(security)* filter rules before scanning
+- *(security)* prefilter raw command scans
+- *(wasm)* exclude host timekeeping
+- *(cache)* isolate tracker persistence
+- *(git)* defer alias discovery for built-ins
+- *(permissions)* reuse one config snapshot
+- *(files)* reuse parsed patch context
+- *(hooks)* decode each payload once
+- *(files)* centralize tool registry
+- *(hooks)* centralize pre-use output contracts
+- *(pending)* exercise the real queue persistence
+- *(hooks)* fail harnesses on binary errors
+- *(wasm)* keep simulator coverage compiling
+
 ## [1.32.0](https://github.com/camjac251/tool-gates/compare/v1.31.1...v1.32.0) - 2026-07-08
 
 ### Added
