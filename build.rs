@@ -1928,6 +1928,21 @@ fn generate_floor_row(p: &SecurityPattern) -> String {
         FloorScan::CommentStripped => "comment_stripped",
     };
     let name = floor_static_name(&p.id);
+    let substring_guard = if p.requires_substring.is_empty() {
+        None
+    } else {
+        let checks = p
+            .requires_substring
+            .iter()
+            .map(|s| format!("{scan}.contains(\"{}\")", escape_rust_string(s)))
+            .collect::<Vec<_>>();
+        let expression = checks.join(" || ");
+        Some(if checks.len() == 1 {
+            expression
+        } else {
+            format!("({expression})")
+        })
+    };
 
     // within = command_substitution: iterate each match, check the dangerous
     // inner substrings, and echo the (30-character-truncated) match into the reason.
@@ -1938,6 +1953,9 @@ fn generate_floor_row(p: &SecurityPattern) -> String {
             .map(|s| format!("\"{}\"", escape_rust_string(s)))
             .collect();
         let (prefix, suffix) = split_match_placeholder(&p.reason);
+        if let Some(guard) = &substring_guard {
+            out.push_str(&format!("    if {guard} {{\n"));
+        }
         out.push_str(&format!("    for cap in {name}.captures_iter({scan}) {{\n"));
         out.push_str("        let m = cap.get(0).map_or(\"\", |x| x.as_str());\n");
         out.push_str(&format!(
@@ -1961,20 +1979,14 @@ fn generate_floor_row(p: &SecurityPattern) -> String {
         ));
         out.push_str("        }\n");
         out.push_str("    }\n");
+        if substring_guard.is_some() {
+            out.push_str("    }\n");
+        }
         return out;
     }
 
     // Plain regex row, with an optional cheap substring pre-guard.
-    let guard = if p.requires_substring.is_empty() {
-        String::new()
-    } else {
-        let checks: Vec<String> = p
-            .requires_substring
-            .iter()
-            .map(|s| format!("{scan}.contains(\"{}\")", escape_rust_string(s)))
-            .collect();
-        format!("({}) && ", checks.join(" || "))
-    };
+    let guard = substring_guard.map_or_else(String::new, |guard| format!("{guard} && "));
     out.push_str(&format!(
         "    if {guard}{name}.is_match({scan}) {{\n        return Some(FloorHit {{ tier: {tier}, reason: \"{reason}\".to_string() }});\n    }}\n",
         reason = escape_rust_string(&p.reason),

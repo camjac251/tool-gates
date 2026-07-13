@@ -22,30 +22,35 @@ description = "Raw-string security floor matched before parsing"
 id = "pipe-bash"
 regex = '\|\s*bash\b|\|\s*/bin/bash\b|\|\s*/usr/bin/bash\b'
 tier = "hard_ask"
+requires_substring = ["bash"]
 reason = "Piping to bash runs whatever upstream returns, with no chance to inspect. Save the output to a file first, review it, then run."
 
 [[patterns]]
 id = "pipe-sh"
 regex = '\|\s*sh\b|\|\s*/bin/sh\b|\|\s*/usr/bin/sh\b'
 tier = "hard_ask"
+requires_substring = ["|"]
 reason = "Piping to sh runs whatever upstream returns, with no chance to inspect. Save the output to a file first, review it, then run."
 
 [[patterns]]
 id = "pipe-zsh"
 regex = '\|\s*zsh\b|\|\s*/bin/zsh\b|\|\s*/usr/bin/zsh\b'
 tier = "hard_ask"
+requires_substring = ["zsh"]
 reason = "Piping to zsh runs whatever upstream returns, with no chance to inspect. Save the output to a file first, review it, then run."
 
 [[patterns]]
 id = "pipe-sudo"
 regex = '\|\s*sudo\b|\|\s*/usr/bin/sudo\b'
 tier = "hard_ask"
+requires_substring = ["sudo"]
 reason = "Piping to sudo elevates upstream output. Same risk as `curl | bash` with full privileges; save and review the upstream content first."
 
 [[patterns]]
 id = "pipe-doas"
 regex = '\|\s*doas\b'
 tier = "hard_ask"
+requires_substring = ["doas"]
 reason = "Piping to doas elevates upstream output. Same risk as `curl | bash` with full privileges; save and review the upstream content first."
 
 # --- Pipe to interpreter (soft ask) ------------------------------------------
@@ -54,24 +59,28 @@ reason = "Piping to doas elevates upstream output. Same risk as `curl | bash` wi
 id = "pipe-python"
 regex = '\|\s*python[0-9.]*\b'
 tier = "soft_ask"
+requires_substring = ["python"]
 reason = "Piping to python runs upstream as a script. Save to a file first, review it, then run."
 
 [[patterns]]
 id = "pipe-perl"
 regex = '\|\s*perl\b'
 tier = "soft_ask"
+requires_substring = ["perl"]
 reason = "Piping to perl runs upstream as a script. Save to a file first, review it, then run."
 
 [[patterns]]
 id = "pipe-ruby"
 regex = '\|\s*ruby\b'
 tier = "soft_ask"
+requires_substring = ["ruby"]
 reason = "Piping to ruby runs upstream as a script. Save to a file first, review it, then run."
 
 [[patterns]]
 id = "pipe-node"
 regex = '\|\s*node\b'
 tier = "soft_ask"
+requires_substring = ["node"]
 reason = "Piping to node runs upstream as a script. Save to a file first, review it, then run."
 
 # --- eval / source (hard ask, soft ask) --------------------------------------
@@ -80,12 +89,14 @@ reason = "Piping to node runs upstream as a script. Save to a file first, review
 id = "eval"
 regex = '(^|[;&|\n\r])\s*eval\s'
 tier = "hard_ask"
+requires_substring = ["eval"]
 reason = "`eval` runs arbitrary code constructed from variables. Prefer parameter expansion (`${var}`), array indexing, or `case` statements; if eval is truly needed, validate the input first."
 
 [[patterns]]
 id = "source"
 regex = '(^|[;&|\n\r])\s*source\s+\S'
 tier = "soft_ask"
+requires_substring = ["source"]
 reason = "`source` runs the file in the current shell and inherits its `export`s, aliases, and `cd`s. Verify the file's contents before approving."
 
 [[patterns]]
@@ -191,6 +202,7 @@ reason = "fd executing `rm`/`mv`/`chmod`/`chown`/`dd`/`shred` per match via -x/-
 id = "rg-exec"
 regex = '\b(?:rg|ripgrep)\b[^;&|]*--(?:pre(?:-glob)?|hostname-bin)(?:[=\s]|$)'
 tier = "hard_ask"
+requires_substring = ["--pre", "--hostname-bin"]
 reason = "ripgrep `--pre`/`--pre-glob`/`--hostname-bin` run an external program (a per-file preprocessor or a hostname helper), i.e. arbitrary code execution. Run that program directly and inspect it first."
 
 # --- Overwriting-write flags on otherwise read-only tools (soft ask) ---------
@@ -199,30 +211,35 @@ reason = "ripgrep `--pre`/`--pre-glob`/`--hostname-bin` run an external program 
 id = "sort-output"
 regex = '\bsort\b[^;&|]*(?:\s-o(?:[=\s]|$)|--output\b)'
 tier = "soft_ask"
+requires_substring = ["sort"]
 reason = "`sort -o`/`--output` overwrites the target file without warning, and the target can be the input file itself. Verify the path."
 
 [[patterns]]
 id = "pg-dump-file"
 regex = '\bpg_dump(?:all)?\b[^;&|]*(?:\s-f(?:[=\s]|$)|--file\b)'
 tier = "soft_ask"
+requires_substring = ["pg_dump"]
 reason = "`pg_dump -f`/`--file` writes the dump to a file and overwrites it. Omit `-f` to send the dump to stdout, or verify the path."
 
 [[patterns]]
 id = "gitleaks-report"
 regex = '\bgitleaks\b[^;&|]*(?:\s-r(?:[=\s]|$)|--report-path\b)'
 tier = "soft_ask"
+requires_substring = ["gitleaks"]
 reason = "`gitleaks -r`/`--report-path` writes a report file to the given path, overwriting it. Verify the destination."
 
 [[patterns]]
 id = "unrar-extract"
 regex = '\bunrar\s+(?:x|e)\b'
 tier = "soft_ask"
+requires_substring = ["unrar"]
 reason = "`unrar x`/`e` extracts archive contents to disk and can overwrite files. Use `unrar l` to list without extracting, or verify the destination."
 
 [[patterns]]
 id = "net-mutate"
 regex = '\bip\b[^;&|]*\b(?:add|del|delete|set|flush|change|replace)\b|\broute\b[^;&|]*\b(?:add|del|delete)\b|\bifconfig\b[^;&|]*\b(?:up|down|netmask|mtu|promisc|add|del)\b|\barp\b[^;&|]*\s-[dsf]\b'
 tier = "soft_ask"
+requires_substring = ["ip", "route", "ifconfig", "arp"]
 reason = "Network configuration change (`ip/route ... add|del|set`, `ifconfig ... up|down`, `arp -d|-s`). Verify the interface and values; routing and interface changes can disrupt connectivity."
 
 # --- Command substitution wrapping a destructive command (hard ask) ----------
@@ -237,6 +254,7 @@ regex = '\$\([^)]+\)'
 tier = "hard_ask"
 scan = "comment_stripped"
 within = "command_substitution"
+requires_substring = ["$("]
 inner_contains_any = ["rm ", "rm\t", "mv ", "chmod ", "chown ", "dd "]
 reason_args = ["match"]
 reason = "`$(...)` command substitution contains a dangerous inner command (`{match}`). It runs and injects its output into the outer command, so the destructive call executes even when nested. Run it separately first, then use the literal result."
@@ -247,6 +265,7 @@ regex = '`[^`]+`'
 tier = "hard_ask"
 scan = "comment_stripped"
 within = "command_substitution"
+requires_substring = ["`"]
 inner_contains_any = ["rm ", "rm\t", "mv ", "chmod ", "chown ", "dd "]
 reason_args = ["match"]
 reason = "Backtick substitution contains a dangerous inner command (`{match}`). It runs and injects its output into the outer command, so the destructive call executes even when nested. Run it separately first, then use the literal result. Prefer `$(...)`."
@@ -258,6 +277,7 @@ id = "leading-semicolon"
 regex = '^\s*;'
 tier = "soft_ask"
 scan = "comment_stripped"
+requires_substring = [";"]
 reason = "Command starts with `;`. Usually a paste artifact or shell-injection attempt; review the full command before approving."
 
 # --- Output redirection (soft ask, Rust handler) -----------------------------

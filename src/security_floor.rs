@@ -219,6 +219,10 @@ pub fn fd_exec(_comment_stripped: &str, unquoted: &str) -> Option<FloorHit> {
 /// and exempts `/dev/null` and the session scratch dir. Registered as
 /// `handler = "redirect_targets"` in `rules/security.toml`.
 pub fn redirect_targets(comment_stripped: &str, unquoted: &str) -> Option<FloorHit> {
+    if !unquoted.as_bytes().contains(&b'>') {
+        return None;
+    }
+
     // A tracked scratch variable lets `S=$TOOL_GATES_SCRATCH/x; echo > "$S/f"`
     // skip the redirect ask, the same as the inline path would.
     let scratch_vars = crate::parser::extract_scratch_var_map(comment_stripped);

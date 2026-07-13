@@ -15932,64 +15932,64 @@ static FLOOR_LEADING_SEMICOLON_RE: LazyLock<Regex> = LazyLock::new(|| {
 /// `comment_stripped` has comments removed (quotes intact); `unquoted` also
 /// has quoted strings blanked. Returns the first matching row's tier + reason.
 pub fn check_security_floor(comment_stripped: &str, unquoted: &str) -> Option<FloorHit> {
-    if FLOOR_PIPE_BASH_RE.is_match(unquoted) {
+    if unquoted.contains("bash") && FLOOR_PIPE_BASH_RE.is_match(unquoted) {
         return Some(FloorHit { tier: FloorTier::HardAsk, reason: "Piping to bash runs whatever upstream returns, with no chance to inspect. Save the output to a file first, review it, then run.".to_string() });
     }
-    if FLOOR_PIPE_SH_RE.is_match(unquoted) {
+    if unquoted.contains("|") && FLOOR_PIPE_SH_RE.is_match(unquoted) {
         return Some(FloorHit { tier: FloorTier::HardAsk, reason: "Piping to sh runs whatever upstream returns, with no chance to inspect. Save the output to a file first, review it, then run.".to_string() });
     }
-    if FLOOR_PIPE_ZSH_RE.is_match(unquoted) {
+    if unquoted.contains("zsh") && FLOOR_PIPE_ZSH_RE.is_match(unquoted) {
         return Some(FloorHit { tier: FloorTier::HardAsk, reason: "Piping to zsh runs whatever upstream returns, with no chance to inspect. Save the output to a file first, review it, then run.".to_string() });
     }
-    if FLOOR_PIPE_SUDO_RE.is_match(unquoted) {
+    if unquoted.contains("sudo") && FLOOR_PIPE_SUDO_RE.is_match(unquoted) {
         return Some(FloorHit { tier: FloorTier::HardAsk, reason: "Piping to sudo elevates upstream output. Same risk as `curl | bash` with full privileges; save and review the upstream content first.".to_string() });
     }
-    if FLOOR_PIPE_DOAS_RE.is_match(unquoted) {
+    if unquoted.contains("doas") && FLOOR_PIPE_DOAS_RE.is_match(unquoted) {
         return Some(FloorHit { tier: FloorTier::HardAsk, reason: "Piping to doas elevates upstream output. Same risk as `curl | bash` with full privileges; save and review the upstream content first.".to_string() });
     }
-    if FLOOR_PIPE_PYTHON_RE.is_match(unquoted) {
+    if unquoted.contains("python") && FLOOR_PIPE_PYTHON_RE.is_match(unquoted) {
         return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "Piping to python runs upstream as a script. Save to a file first, review it, then run.".to_string() });
     }
-    if FLOOR_PIPE_PERL_RE.is_match(unquoted) {
+    if unquoted.contains("perl") && FLOOR_PIPE_PERL_RE.is_match(unquoted) {
         return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "Piping to perl runs upstream as a script. Save to a file first, review it, then run.".to_string() });
     }
-    if FLOOR_PIPE_RUBY_RE.is_match(unquoted) {
+    if unquoted.contains("ruby") && FLOOR_PIPE_RUBY_RE.is_match(unquoted) {
         return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "Piping to ruby runs upstream as a script. Save to a file first, review it, then run.".to_string() });
     }
-    if FLOOR_PIPE_NODE_RE.is_match(unquoted) {
+    if unquoted.contains("node") && FLOOR_PIPE_NODE_RE.is_match(unquoted) {
         return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "Piping to node runs upstream as a script. Save to a file first, review it, then run.".to_string() });
     }
-    if FLOOR_EVAL_RE.is_match(unquoted) {
+    if unquoted.contains("eval") && FLOOR_EVAL_RE.is_match(unquoted) {
         return Some(FloorHit { tier: FloorTier::HardAsk, reason: "`eval` runs arbitrary code constructed from variables. Prefer parameter expansion (`${var}`), array indexing, or `case` statements; if eval is truly needed, validate the input first.".to_string() });
     }
-    if FLOOR_SOURCE_RE.is_match(unquoted) {
+    if unquoted.contains("source") && FLOOR_SOURCE_RE.is_match(unquoted) {
         return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`source` runs the file in the current shell and inherits its `export`s, aliases, and `cd`s. Verify the file's contents before approving.".to_string() });
     }
     if FLOOR_DOT_SOURCE_RE.is_match(unquoted) {
         return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`.` is equivalent to `source`: runs the file in the current shell and inherits its `export`s and aliases. Verify the file's contents before approving.".to_string() });
     }
-    if (unquoted.contains("xargs")) && FLOOR_XARGS_RM_RE.is_match(unquoted) {
+    if unquoted.contains("xargs") && FLOOR_XARGS_RM_RE.is_match(unquoted) {
         return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "xargs piping to `rm` runs it once per input line. Verify the upstream filter; mistakes cascade.".to_string() });
     }
-    if (unquoted.contains("xargs")) && FLOOR_XARGS_MV_RE.is_match(unquoted) {
+    if unquoted.contains("xargs") && FLOOR_XARGS_MV_RE.is_match(unquoted) {
         return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "xargs piping to `mv` runs it once per input line. Verify the upstream filter; mistakes cascade.".to_string() });
     }
-    if (unquoted.contains("xargs")) && FLOOR_XARGS_CP_RE.is_match(unquoted) {
+    if unquoted.contains("xargs") && FLOOR_XARGS_CP_RE.is_match(unquoted) {
         return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "xargs piping to `cp` runs it once per input line. Verify the upstream filter; mistakes cascade.".to_string() });
     }
-    if (unquoted.contains("xargs")) && FLOOR_XARGS_CHMOD_RE.is_match(unquoted) {
+    if unquoted.contains("xargs") && FLOOR_XARGS_CHMOD_RE.is_match(unquoted) {
         return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "xargs piping to `chmod` runs it once per input line. Verify the upstream filter; mistakes cascade.".to_string() });
     }
-    if (unquoted.contains("xargs")) && FLOOR_XARGS_CHOWN_RE.is_match(unquoted) {
+    if unquoted.contains("xargs") && FLOOR_XARGS_CHOWN_RE.is_match(unquoted) {
         return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "xargs piping to `chown` runs it once per input line. Verify the upstream filter; mistakes cascade.".to_string() });
     }
-    if (unquoted.contains("xargs")) && FLOOR_XARGS_DD_RE.is_match(unquoted) {
+    if unquoted.contains("xargs") && FLOOR_XARGS_DD_RE.is_match(unquoted) {
         return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "xargs piping to `dd` runs it once per input line. Verify the upstream filter; mistakes cascade.".to_string() });
     }
-    if (unquoted.contains("xargs")) && FLOOR_XARGS_SHRED_RE.is_match(unquoted) {
+    if unquoted.contains("xargs") && FLOOR_XARGS_SHRED_RE.is_match(unquoted) {
         return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "xargs piping to `shred` runs it once per input line. Verify the upstream filter; mistakes cascade.".to_string() });
     }
-    if (unquoted.contains("xargs")) && FLOOR_XARGS_KUBECTL_DELETE_RE.is_match(unquoted) {
+    if unquoted.contains("xargs") && FLOOR_XARGS_KUBECTL_DELETE_RE.is_match(unquoted) {
         return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "xargs piping to `kubectl delete` runs delete once per input line. Verify the upstream filter; mistakes cascade across many resources.".to_string() });
     }
     if (unquoted.contains("find ") || unquoted.contains("find\t"))
@@ -16010,59 +16010,71 @@ pub fn check_security_floor(comment_stripped: &str, unquoted: &str) -> Option<Fl
     if let Some(hit) = crate::security_floor::fd_exec(comment_stripped, unquoted) {
         return Some(hit);
     }
-    if FLOOR_RG_EXEC_RE.is_match(unquoted) {
+    if (unquoted.contains("--pre") || unquoted.contains("--hostname-bin"))
+        && FLOOR_RG_EXEC_RE.is_match(unquoted)
+    {
         return Some(FloorHit { tier: FloorTier::HardAsk, reason: "ripgrep `--pre`/`--pre-glob`/`--hostname-bin` run an external program (a per-file preprocessor or a hostname helper), i.e. arbitrary code execution. Run that program directly and inspect it first.".to_string() });
     }
-    if FLOOR_SORT_OUTPUT_RE.is_match(unquoted) {
+    if unquoted.contains("sort") && FLOOR_SORT_OUTPUT_RE.is_match(unquoted) {
         return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`sort -o`/`--output` overwrites the target file without warning, and the target can be the input file itself. Verify the path.".to_string() });
     }
-    if FLOOR_PG_DUMP_FILE_RE.is_match(unquoted) {
+    if unquoted.contains("pg_dump") && FLOOR_PG_DUMP_FILE_RE.is_match(unquoted) {
         return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`pg_dump -f`/`--file` writes the dump to a file and overwrites it. Omit `-f` to send the dump to stdout, or verify the path.".to_string() });
     }
-    if FLOOR_GITLEAKS_REPORT_RE.is_match(unquoted) {
+    if unquoted.contains("gitleaks") && FLOOR_GITLEAKS_REPORT_RE.is_match(unquoted) {
         return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`gitleaks -r`/`--report-path` writes a report file to the given path, overwriting it. Verify the destination.".to_string() });
     }
-    if FLOOR_UNRAR_EXTRACT_RE.is_match(unquoted) {
+    if unquoted.contains("unrar") && FLOOR_UNRAR_EXTRACT_RE.is_match(unquoted) {
         return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`unrar x`/`e` extracts archive contents to disk and can overwrite files. Use `unrar l` to list without extracting, or verify the destination.".to_string() });
     }
-    if FLOOR_NET_MUTATE_RE.is_match(unquoted) {
+    if (unquoted.contains("ip")
+        || unquoted.contains("route")
+        || unquoted.contains("ifconfig")
+        || unquoted.contains("arp"))
+        && FLOOR_NET_MUTATE_RE.is_match(unquoted)
+    {
         return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "Network configuration change (`ip/route ... add|del|set`, `ifconfig ... up|down`, `arp -d|-s`). Verify the interface and values; routing and interface changes can disrupt connectivity.".to_string() });
     }
-    for cap in FLOOR_DOLLAR_SUBST_RE.captures_iter(comment_stripped) {
-        let m = cap.get(0).map_or("", |x| x.as_str());
-        if ["rm ", "rm\t", "mv ", "chmod ", "chown ", "dd "]
-            .into_iter()
-            .any(|d| m.contains(d))
-        {
-            let truncated = m.char_indices().nth(30).map_or(m, |(idx, _)| &m[..idx]);
-            let mut reason =
-                String::from("`$(...)` command substitution contains a dangerous inner command (`");
-            reason.push_str(truncated);
-            reason.push_str("`). It runs and injects its output into the outer command, so the destructive call executes even when nested. Run it separately first, then use the literal result.");
-            return Some(FloorHit {
-                tier: FloorTier::HardAsk,
-                reason,
-            });
+    if comment_stripped.contains("$(") {
+        for cap in FLOOR_DOLLAR_SUBST_RE.captures_iter(comment_stripped) {
+            let m = cap.get(0).map_or("", |x| x.as_str());
+            if ["rm ", "rm\t", "mv ", "chmod ", "chown ", "dd "]
+                .into_iter()
+                .any(|d| m.contains(d))
+            {
+                let truncated = m.char_indices().nth(30).map_or(m, |(idx, _)| &m[..idx]);
+                let mut reason = String::from(
+                    "`$(...)` command substitution contains a dangerous inner command (`",
+                );
+                reason.push_str(truncated);
+                reason.push_str("`). It runs and injects its output into the outer command, so the destructive call executes even when nested. Run it separately first, then use the literal result.");
+                return Some(FloorHit {
+                    tier: FloorTier::HardAsk,
+                    reason,
+                });
+            }
         }
     }
-    for cap in FLOOR_BACKTICK_SUBST_RE.captures_iter(comment_stripped) {
-        let m = cap.get(0).map_or("", |x| x.as_str());
-        if ["rm ", "rm\t", "mv ", "chmod ", "chown ", "dd "]
-            .into_iter()
-            .any(|d| m.contains(d))
-        {
-            let truncated = m.char_indices().nth(30).map_or(m, |(idx, _)| &m[..idx]);
-            let mut reason =
-                String::from("Backtick substitution contains a dangerous inner command (`");
-            reason.push_str(truncated);
-            reason.push_str("`). It runs and injects its output into the outer command, so the destructive call executes even when nested. Run it separately first, then use the literal result. Prefer `$(...)`.");
-            return Some(FloorHit {
-                tier: FloorTier::HardAsk,
-                reason,
-            });
+    if comment_stripped.contains("`") {
+        for cap in FLOOR_BACKTICK_SUBST_RE.captures_iter(comment_stripped) {
+            let m = cap.get(0).map_or("", |x| x.as_str());
+            if ["rm ", "rm\t", "mv ", "chmod ", "chown ", "dd "]
+                .into_iter()
+                .any(|d| m.contains(d))
+            {
+                let truncated = m.char_indices().nth(30).map_or(m, |(idx, _)| &m[..idx]);
+                let mut reason =
+                    String::from("Backtick substitution contains a dangerous inner command (`");
+                reason.push_str(truncated);
+                reason.push_str("`). It runs and injects its output into the outer command, so the destructive call executes even when nested. Run it separately first, then use the literal result. Prefer `$(...)`.");
+                return Some(FloorHit {
+                    tier: FloorTier::HardAsk,
+                    reason,
+                });
+            }
         }
     }
-    if FLOOR_LEADING_SEMICOLON_RE.is_match(comment_stripped) {
+    if comment_stripped.contains(";") && FLOOR_LEADING_SEMICOLON_RE.is_match(comment_stripped) {
         return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "Command starts with `;`. Usually a paste artifact or shell-injection attempt; review the full command before approving.".to_string() });
     }
     if let Some(hit) = crate::security_floor::redirect_targets(comment_stripped, unquoted) {
