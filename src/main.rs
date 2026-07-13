@@ -1466,6 +1466,59 @@ fn sync_hook_entries(
     }
 }
 
+fn sync_expected_hook_events(
+    settings: &mut serde_json::Value,
+    settings_path: &std::path::Path,
+    expected_events: &[(String, Vec<serde_json::Value>)],
+) -> std::io::Result<Vec<String>> {
+    let hooks = validate_and_ensure_hooks_object(settings, settings_path)?;
+    let mut changes = Vec::new();
+
+    for (event, expected) in expected_events {
+        ensure_event_array(hooks, event, settings_path)?;
+        match sync_hook_entries(&mut hooks[event], expected) {
+            None => eprintln!("✓ {event} hook(s) up to date"),
+            Some(ref change) if change == "added" => {
+                changes.push(event.clone());
+                eprintln!("+ Adding {event} hook(s)");
+            }
+            Some(change) => {
+                changes.push(event.clone());
+                eprintln!("~ Updating {event} matcher(s) ({change})");
+            }
+        }
+    }
+
+    Ok(changes)
+}
+
+fn install_expected_hook_events(
+    settings_path: &std::path::Path,
+    empty_policy: tool_gates::json_file::EmptyPolicy,
+    expected_events: &[(String, Vec<serde_json::Value>)],
+    dry_run: bool,
+) -> std::io::Result<(Vec<String>, bool)> {
+    if dry_run {
+        let mut settings = tool_gates::json_file::read_json(settings_path, empty_policy)?;
+        let changes = sync_expected_hook_events(&mut settings, settings_path, expected_events)?;
+        if !changes.is_empty() {
+            eprintln!("\n--dry-run: Would write to {}", settings_path.display());
+            eprintln!("\nResulting hooks configuration:");
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&settings["hooks"]).map_err(std::io::Error::other)?
+            );
+        }
+        return Ok((changes, false));
+    }
+
+    let outcome =
+        tool_gates::json_file::update_json(settings_path, empty_policy, true, |settings| {
+            sync_expected_hook_events(settings, settings_path, expected_events)
+        })?;
+    Ok((outcome.result, outcome.changed))
+}
+
 /// Install hooks into settings.json
 fn install_hooks(scope: &str, dry_run: bool) {
     let binary_path = get_binary_path();
@@ -1476,96 +1529,37 @@ fn install_hooks(scope: &str, dry_run: bool) {
     eprintln!("Target: {} ({})", settings_path.display(), scope);
     eprintln!();
 
-    // Read existing settings or create new
-    let mut settings: serde_json::Value = if settings_path.exists() {
-        match std::fs::read_to_string(&settings_path) {
-            Ok(content) => match serde_json::from_str(&content) {
-                Ok(v) => v,
-                Err(e) => {
-                    eprintln!("Error: Failed to parse {}: {}", settings_path.display(), e);
-                    std::process::exit(1);
-                }
-            },
-            Err(e) => {
-                eprintln!("Error: Failed to read {}: {}", settings_path.display(), e);
-                std::process::exit(1);
-            }
-        }
-    } else {
-        serde_json::json!({})
-    };
-
-    let hooks = validate_and_ensure_hooks_object(&mut settings, &settings_path);
     let pre_tool_use_entry = generate_hook_entry(&binary_path, PRE_TOOL_USE_MATCHER);
     let mcp_tool_use_entry = generate_hook_entry(&binary_path, MCP_TOOL_USE_MATCHER);
     let perm_request_entry = generate_hook_entry(&binary_path, PERMISSION_REQUEST_MATCHER);
     let mcp_perm_request_entry = generate_hook_entry(&binary_path, MCP_TOOL_USE_MATCHER);
     let perm_denied_entry = generate_hook_entry(&binary_path, PERMISSION_DENIED_MATCHER);
     let post_tool_use_entry = generate_hook_entry(&binary_path, POST_TOOL_USE_MATCHER);
-    let mut changes = Vec::new();
-
-    // Sync PreToolUse hooks (built-in tools + MCP tools as separate entries)
-    ensure_event_array(hooks, "PreToolUse", &settings_path);
-    match sync_hook_entries(
-        &mut hooks["PreToolUse"],
-        &[pre_tool_use_entry, mcp_tool_use_entry],
-    ) {
-        None => eprintln!("✓ PreToolUse hooks up to date"),
-        Some(ref change) if change == "added" => {
-            changes.push("PreToolUse");
-            eprintln!("+ Adding PreToolUse hooks (built-in tools + MCP)");
-        }
-        Some(change) => {
-            changes.push("PreToolUse");
-            eprintln!("~ Updating PreToolUse matchers ({})", change);
-        }
-    }
-
-    // Sync PermissionRequest hooks (Bash + Write/Edit for worktree approval, MCP
-    // for [[accept_edits_mcp]] subagent approval).
-    ensure_event_array(hooks, "PermissionRequest", &settings_path);
-    match sync_hook_entries(
-        &mut hooks["PermissionRequest"],
-        &[perm_request_entry, mcp_perm_request_entry],
-    ) {
-        None => eprintln!("✓ PermissionRequest hooks up to date"),
-        Some(ref change) if change == "added" => {
-            changes.push("PermissionRequest");
-            eprintln!("+ Adding PermissionRequest hooks (built-in tools + MCP)");
-        }
-        Some(change) => {
-            changes.push("PermissionRequest");
-            eprintln!("~ Updating PermissionRequest matchers ({})", change);
-        }
-    }
-
-    // Sync PermissionDenied hook (auto-mode classifier retry guidance)
-    ensure_event_array(hooks, "PermissionDenied", &settings_path);
-    match sync_hook_entries(&mut hooks["PermissionDenied"], &[perm_denied_entry]) {
-        None => eprintln!("✓ PermissionDenied hook up to date"),
-        Some(ref change) if change == "added" => {
-            changes.push("PermissionDenied");
-            eprintln!("+ Adding PermissionDenied hook (auto-mode retry)");
-        }
-        Some(change) => {
-            changes.push("PermissionDenied");
-            eprintln!("~ Updating PermissionDenied matcher ({change})");
-        }
-    }
-
-    // Sync PostToolUse hook (Bash tracking + file security reminders)
-    ensure_event_array(hooks, "PostToolUse", &settings_path);
-    match sync_hook_entries(&mut hooks["PostToolUse"], &[post_tool_use_entry]) {
-        None => eprintln!("✓ PostToolUse hook up to date"),
-        Some(ref change) if change == "added" => {
-            changes.push("PostToolUse");
-            eprintln!("+ Adding PostToolUse hook (Bash tracking + file security)");
-        }
-        Some(change) => {
-            changes.push("PostToolUse");
-            eprintln!("~ Updating PostToolUse matcher ({})", change);
-        }
-    }
+    let expected_events = vec![
+        (
+            "PreToolUse".to_string(),
+            vec![pre_tool_use_entry, mcp_tool_use_entry],
+        ),
+        (
+            "PermissionRequest".to_string(),
+            vec![perm_request_entry, mcp_perm_request_entry],
+        ),
+        ("PermissionDenied".to_string(), vec![perm_denied_entry]),
+        ("PostToolUse".to_string(), vec![post_tool_use_entry]),
+    ];
+    let (changes, changed) = install_expected_hook_events(
+        &settings_path,
+        tool_gates::json_file::EmptyPolicy::Reject,
+        &expected_events,
+        dry_run,
+    )
+    .unwrap_or_else(|error| {
+        eprintln!(
+            "Error: Failed to update {}: {error}",
+            settings_path.display()
+        );
+        std::process::exit(1);
+    });
 
     if changes.is_empty() {
         eprintln!("\nAll hooks up to date.");
@@ -1573,38 +1567,12 @@ fn install_hooks(scope: &str, dry_run: bool) {
     }
 
     if dry_run {
-        eprintln!("\n--dry-run: Would write to {}", settings_path.display());
-        eprintln!("\nResulting hooks configuration:");
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&settings["hooks"]).unwrap()
-        );
         return;
     }
 
-    // Create parent directory if needed
-    if let Some(parent) = settings_path.parent() {
-        if !parent.exists() {
-            if let Err(e) = std::fs::create_dir_all(parent) {
-                eprintln!("Error: Failed to create {}: {}", parent.display(), e);
-                std::process::exit(1);
-            }
-        }
-    }
-
-    // Write settings
-    match std::fs::write(
-        &settings_path,
-        serde_json::to_string_pretty(&settings).unwrap() + "\n",
-    ) {
-        Ok(_) => {
-            eprintln!("\n✓ Installed to {}", settings_path.display());
-            eprintln!("\nHooks updated: {}", changes.join(", "));
-        }
-        Err(e) => {
-            eprintln!("Error: Failed to write {}: {}", settings_path.display(), e);
-            std::process::exit(1);
-        }
+    if changed {
+        eprintln!("\n✓ Installed to {}", settings_path.display());
+        eprintln!("\nHooks updated: {}", changes.join(", "));
     }
 }
 
@@ -1636,43 +1604,32 @@ fn install_gemini_hooks(scope: &str, dry_run: bool) {
     eprintln!("Target: {} ({})", settings_path.display(), scope);
     eprintln!();
 
-    let mut settings: serde_json::Value = if settings_path.exists() {
-        match std::fs::read_to_string(&settings_path) {
-            Ok(content) => serde_json::from_str(&content).unwrap_or_else(|e| {
-                eprintln!("Error: Failed to parse {}: {}", settings_path.display(), e);
-                std::process::exit(1);
-            }),
-            Err(e) => {
-                eprintln!("Error: Failed to read {}: {}", settings_path.display(), e);
-                std::process::exit(1);
-            }
-        }
-    } else {
-        serde_json::json!({})
-    };
-
-    let hooks = validate_and_ensure_hooks_object(&mut settings, &settings_path);
     let gemini_hooks = generate_gemini_hooks_json(&binary_path);
-    let mut changes = Vec::new();
-
-    for event in ["BeforeTool", "AfterTool"] {
-        ensure_event_array(hooks, event, &settings_path);
-        let expected: Vec<serde_json::Value> = gemini_hooks[event]
-            .as_array()
-            .map(|a| a.to_vec())
-            .unwrap_or_default();
-        match sync_hook_entries(&mut hooks[event], &expected) {
-            None => eprintln!("✓ {} hook up to date", event),
-            Some(ref change) if change == "added" => {
-                changes.push(event);
-                eprintln!("+ Adding {} hook(s)", event);
-            }
-            Some(change) => {
-                changes.push(event);
-                eprintln!("~ Updating {} matchers ({})", event, change);
-            }
-        }
-    }
+    let expected_events = ["BeforeTool", "AfterTool"]
+        .into_iter()
+        .map(|event| {
+            (
+                event.to_string(),
+                gemini_hooks[event]
+                    .as_array()
+                    .map(|entries| entries.to_vec())
+                    .unwrap_or_default(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let (changes, changed) = install_expected_hook_events(
+        &settings_path,
+        tool_gates::json_file::EmptyPolicy::Reject,
+        &expected_events,
+        dry_run,
+    )
+    .unwrap_or_else(|error| {
+        eprintln!(
+            "Error: Failed to update {}: {error}",
+            settings_path.display()
+        );
+        std::process::exit(1);
+    });
 
     if changes.is_empty() {
         eprintln!("\nAll hooks up to date.");
@@ -1680,39 +1637,15 @@ fn install_gemini_hooks(scope: &str, dry_run: bool) {
     }
 
     if dry_run {
-        eprintln!("\n--dry-run: Would write to {}", settings_path.display());
-        eprintln!("\nResulting hooks configuration:");
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&settings["hooks"]).unwrap()
-        );
         return;
     }
 
-    if let Some(parent) = settings_path.parent() {
-        if !parent.exists() {
-            if let Err(e) = std::fs::create_dir_all(parent) {
-                eprintln!("Error: Failed to create {}: {}", parent.display(), e);
-                std::process::exit(1);
-            }
-        }
-    }
-
-    match std::fs::write(
-        &settings_path,
-        serde_json::to_string_pretty(&settings).unwrap() + "\n",
-    ) {
-        Ok(_) => {
-            eprintln!("\n✓ Installed to {}", settings_path.display());
-            eprintln!("\nHooks added: {}", changes.join(", "));
-            eprintln!("\nGemini CLI hooks:");
-            eprintln!("  - BeforeTool: Command safety (allow/block/ask)");
-            eprintln!("  - AfterTool: Post-execution context");
-        }
-        Err(e) => {
-            eprintln!("Error: Failed to write {}: {}", settings_path.display(), e);
-            std::process::exit(1);
-        }
+    if changed {
+        eprintln!("\n✓ Installed to {}", settings_path.display());
+        eprintln!("\nHooks added: {}", changes.join(", "));
+        eprintln!("\nGemini CLI hooks:");
+        eprintln!("  - BeforeTool: Command safety (allow/block/ask)");
+        eprintln!("  - AfterTool: Post-execution context");
     }
 }
 
@@ -1749,43 +1682,32 @@ fn install_codex_hooks(scope: &str, dry_run: bool) {
     eprintln!("Target: {} ({})", settings_path.display(), scope);
     eprintln!();
 
-    let mut settings: serde_json::Value = if settings_path.exists() {
-        match std::fs::read_to_string(&settings_path) {
-            Ok(content) => serde_json::from_str(&content).unwrap_or_else(|e| {
-                eprintln!("Error: Failed to parse {}: {}", settings_path.display(), e);
-                std::process::exit(1);
-            }),
-            Err(e) => {
-                eprintln!("Error: Failed to read {}: {}", settings_path.display(), e);
-                std::process::exit(1);
-            }
-        }
-    } else {
-        serde_json::json!({})
-    };
-
-    let hooks = validate_and_ensure_hooks_object(&mut settings, &settings_path);
     let codex_hooks = generate_codex_hooks_json(&binary_path);
-    let mut changes = Vec::new();
-
-    for event in ["PreToolUse", "PermissionRequest", "PostToolUse"] {
-        ensure_event_array(hooks, event, &settings_path);
-        let expected: Vec<serde_json::Value> = codex_hooks[event]
-            .as_array()
-            .map(|a| a.to_vec())
-            .unwrap_or_default();
-        match sync_hook_entries(&mut hooks[event], &expected) {
-            None => eprintln!("✓ {} hook up to date", event),
-            Some(ref change) if change == "added" => {
-                changes.push(event);
-                eprintln!("+ Adding {} hook(s)", event);
-            }
-            Some(change) => {
-                changes.push(event);
-                eprintln!("~ Updating {} matchers ({})", event, change);
-            }
-        }
-    }
+    let expected_events = ["PreToolUse", "PermissionRequest", "PostToolUse"]
+        .into_iter()
+        .map(|event| {
+            (
+                event.to_string(),
+                codex_hooks[event]
+                    .as_array()
+                    .map(|entries| entries.to_vec())
+                    .unwrap_or_default(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let (changes, changed) = install_expected_hook_events(
+        &settings_path,
+        tool_gates::json_file::EmptyPolicy::Reject,
+        &expected_events,
+        dry_run,
+    )
+    .unwrap_or_else(|error| {
+        eprintln!(
+            "Error: Failed to update {}: {error}",
+            settings_path.display()
+        );
+        std::process::exit(1);
+    });
 
     if changes.is_empty() {
         eprintln!("\nAll hooks up to date.");
@@ -1793,42 +1715,16 @@ fn install_codex_hooks(scope: &str, dry_run: bool) {
     }
 
     if dry_run {
-        eprintln!("\n--dry-run: Would write to {}", settings_path.display());
-        eprintln!("\nResulting hooks configuration:");
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&settings["hooks"]).unwrap()
-        );
         return;
     }
 
-    if let Some(parent) = settings_path.parent() {
-        if !parent.exists() {
-            if let Err(e) = std::fs::create_dir_all(parent) {
-                eprintln!("Error: Failed to create {}: {}", parent.display(), e);
-                std::process::exit(1);
-            }
-        }
-    }
-
-    match std::fs::write(
-        &settings_path,
-        serde_json::to_string_pretty(&settings).unwrap() + "\n",
-    ) {
-        Ok(_) => {
-            eprintln!("\n✓ Installed to {}", settings_path.display());
-            eprintln!("\nHooks added: {}", changes.join(", "));
-            eprintln!("\nCodex CLI hooks:");
-            eprintln!(
-                "  - PreToolUse: Command safety (deny / pass-through to Codex approval flow)"
-            );
-            eprintln!("  - PermissionRequest: Subagent allow/deny");
-            eprintln!("  - PostToolUse: Tracking + Tier-2 security + modern-CLI hints");
-        }
-        Err(e) => {
-            eprintln!("Error: Failed to write {}: {}", settings_path.display(), e);
-            std::process::exit(1);
-        }
+    if changed {
+        eprintln!("\n✓ Installed to {}", settings_path.display());
+        eprintln!("\nHooks added: {}", changes.join(", "));
+        eprintln!("\nCodex CLI hooks:");
+        eprintln!("  - PreToolUse: Command safety (deny / pass-through to Codex approval flow)");
+        eprintln!("  - PermissionRequest: Subagent allow/deny");
+        eprintln!("  - PostToolUse: Tracking + Tier-2 security + modern-CLI hints");
     }
 }
 
@@ -2062,6 +1958,28 @@ fn get_antigravity_hooks_path(scope: &str) -> std::path::PathBuf {
 /// flat `{event: [...]}` / `{"hooks": {...}}` shape the other installers use, so
 /// this does a targeted merge: it overwrites only the `tool-gates` named entry
 /// and leaves any other named hooks untouched.
+fn sync_antigravity_hook(
+    root: &mut serde_json::Value,
+    hooks_path: &std::path::Path,
+    desired: &serde_json::Value,
+) -> std::io::Result<bool> {
+    if !root.is_object() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!(
+                "{} root must be a JSON object, found {}",
+                hooks_path.display(),
+                json_value_kind(root)
+            ),
+        ));
+    }
+    if root.get("tool-gates") == Some(desired) {
+        return Ok(false);
+    }
+    root["tool-gates"] = desired.clone();
+    Ok(true)
+}
+
 fn install_antigravity_hooks(scope: &str, dry_run: bool) {
     let binary_path = get_binary_path();
     let hooks_path = get_antigravity_hooks_path(scope);
@@ -2071,76 +1989,54 @@ fn install_antigravity_hooks(scope: &str, dry_run: bool) {
     eprintln!("Target: {} ({})", hooks_path.display(), scope);
     eprintln!();
 
-    let mut root: serde_json::Value = if hooks_path.exists() {
-        match std::fs::read_to_string(&hooks_path) {
-            // A fresh Antigravity install can leave an empty hooks.json; treat
-            // it as an empty object rather than a parse error.
-            Ok(content) if content.trim().is_empty() => serde_json::json!({}),
-            Ok(content) => serde_json::from_str(&content).unwrap_or_else(|e| {
-                eprintln!("Error: Failed to parse {}: {}", hooks_path.display(), e);
-                std::process::exit(1);
-            }),
-            Err(e) => {
-                eprintln!("Error: Failed to read {}: {}", hooks_path.display(), e);
-                std::process::exit(1);
-            }
-        }
-    } else {
-        serde_json::json!({})
-    };
-
-    if !root.is_object() {
-        eprintln!(
-            "Error: {} root must be a JSON object, found {}",
-            hooks_path.display(),
-            json_value_kind(&root)
-        );
-        std::process::exit(1);
-    }
-
     let generated = generate_antigravity_hooks_json(&binary_path);
     let desired = &generated["tool-gates"];
 
-    if root.get("tool-gates") == Some(desired) {
+    if dry_run {
+        let mut root = tool_gates::json_file::read_json(
+            &hooks_path,
+            tool_gates::json_file::EmptyPolicy::EmptyObject,
+        )
+        .unwrap_or_else(|error| {
+            eprintln!("Error: Failed to read {}: {error}", hooks_path.display());
+            std::process::exit(1);
+        });
+        let changed =
+            sync_antigravity_hook(&mut root, &hooks_path, desired).unwrap_or_else(|error| {
+                eprintln!("Error: Failed to update {}: {error}", hooks_path.display());
+                std::process::exit(1);
+            });
+        if changed {
+            eprintln!("\n--dry-run: Would write to {}", hooks_path.display());
+            eprintln!("\nResulting hooks configuration:");
+            println!("{}", serde_json::to_string_pretty(&root).unwrap());
+        } else {
+            eprintln!("✓ tool-gates PreToolUse hook up to date");
+            eprintln!("\nAll hooks up to date.");
+        }
+        return;
+    }
+
+    let outcome = tool_gates::json_file::update_json(
+        &hooks_path,
+        tool_gates::json_file::EmptyPolicy::EmptyObject,
+        true,
+        |root| sync_antigravity_hook(root, &hooks_path, desired),
+    )
+    .unwrap_or_else(|error| {
+        eprintln!("Error: Failed to update {}: {error}", hooks_path.display());
+        std::process::exit(1);
+    });
+
+    if !outcome.changed {
         eprintln!("✓ tool-gates PreToolUse hook up to date");
         eprintln!("\nAll hooks up to date.");
         return;
     }
 
-    root["tool-gates"] = desired.clone();
-
-    if dry_run {
-        eprintln!("\n--dry-run: Would write to {}", hooks_path.display());
-        eprintln!("\nResulting hooks configuration:");
-        println!("{}", serde_json::to_string_pretty(&root).unwrap());
-        return;
-    }
-
-    if let Some(parent) = hooks_path.parent() {
-        if !parent.exists() {
-            if let Err(e) = std::fs::create_dir_all(parent) {
-                eprintln!("Error: Failed to create {}: {}", parent.display(), e);
-                std::process::exit(1);
-            }
-        }
-    }
-
-    match std::fs::write(
-        &hooks_path,
-        serde_json::to_string_pretty(&root).unwrap() + "\n",
-    ) {
-        Ok(_) => {
-            eprintln!("\n✓ Installed to {}", hooks_path.display());
-            eprintln!("\nAntigravity CLI hooks:");
-            eprintln!(
-                "  - PreToolUse: Command safety (allow / deny / ask), file guards, secret scanning"
-            );
-        }
-        Err(e) => {
-            eprintln!("Error: Failed to write {}: {}", hooks_path.display(), e);
-            std::process::exit(1);
-        }
-    }
+    eprintln!("\n✓ Installed to {}", hooks_path.display());
+    eprintln!("\nAntigravity CLI hooks:");
+    eprintln!("  - PreToolUse: Command safety (allow / deny / ask), file guards, secret scanning");
 }
 
 /// One-word kind label for a serde_json Value, for clearer error messages
@@ -2160,49 +2056,61 @@ fn json_value_kind(v: &serde_json::Value) -> &'static str {
 ///
 /// `settings["hooks"] = ...` panics inside serde_json's Index trait when the
 /// root is `[]`, `"string"`, `42`, `null`, or anything other than an Object,
-/// and similarly when `hooks` exists but isn't an Object. Exit 1 with a clear
-/// message in both cases so a misshapen settings file produces a real error
-/// instead of a stack trace. Returns a mutable reference to the `hooks` value.
+/// and similarly when `hooks` exists but isn't an Object. Return a clear error
+/// in both cases so a misshapen settings file is preserved and the CLI
+/// boundary can exit cleanly instead of producing a stack trace. Returns a
+/// mutable reference to the `hooks` value.
 fn validate_and_ensure_hooks_object<'a>(
     settings: &'a mut serde_json::Value,
     settings_path: &std::path::Path,
-) -> &'a mut serde_json::Value {
+) -> std::io::Result<&'a mut serde_json::Value> {
     if !settings.is_object() {
-        eprintln!(
-            "Error: {} root must be a JSON object, found {}",
-            settings_path.display(),
-            json_value_kind(settings)
-        );
-        std::process::exit(1);
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!(
+                "{} root must be a JSON object, found {}",
+                settings_path.display(),
+                json_value_kind(settings)
+            ),
+        ));
     }
     if settings.get("hooks").is_none() {
         settings["hooks"] = serde_json::json!({});
     } else if !settings["hooks"].is_object() {
-        eprintln!(
-            "Error: {} `hooks` field must be a JSON object, found {}",
-            settings_path.display(),
-            json_value_kind(&settings["hooks"])
-        );
-        std::process::exit(1);
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!(
+                "{} `hooks` field must be a JSON object, found {}",
+                settings_path.display(),
+                json_value_kind(&settings["hooks"])
+            ),
+        ));
     }
-    settings.get_mut("hooks").expect("hooks key inserted above")
+    Ok(settings.get_mut("hooks").expect("hooks key inserted above"))
 }
 
-/// Ensure `hooks[event]` exists as a JSON array. Same fail-loud contract as
-/// `validate_and_ensure_hooks_object`: a wrong-shape value here would later
-/// panic inside `sync_hook_entries`'s `as_array_mut().unwrap()`.
-fn ensure_event_array(hooks: &mut serde_json::Value, event: &str, settings_path: &std::path::Path) {
+/// Ensure `hooks[event]` exists as a JSON array. Same fail-closed contract as
+/// `validate_and_ensure_hooks_object`: reject a wrong-shape value before
+/// `sync_hook_entries` reaches its `as_array_mut().unwrap()`.
+fn ensure_event_array(
+    hooks: &mut serde_json::Value,
+    event: &str,
+    settings_path: &std::path::Path,
+) -> std::io::Result<()> {
     if hooks.get(event).is_none() {
         hooks[event] = serde_json::json!([]);
     } else if !hooks[event].is_array() {
-        eprintln!(
-            "Error: {} `hooks.{}` must be a JSON array, found {}",
-            settings_path.display(),
-            event,
-            json_value_kind(&hooks[event])
-        );
-        std::process::exit(1);
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!(
+                "{} `hooks.{}` must be a JSON array, found {}",
+                settings_path.display(),
+                event,
+                json_value_kind(&hooks[event])
+            ),
+        ));
     }
+    Ok(())
 }
 
 /// Handle `tool-gates hooks` subcommand
@@ -4605,7 +4513,7 @@ mod tests {
     fn validate_and_ensure_hooks_object_creates_missing_hooks() {
         let mut settings = serde_json::json!({"otherKey": "preserved"});
         let path = std::path::Path::new("/tmp/test-settings.json");
-        let hooks = validate_and_ensure_hooks_object(&mut settings, path);
+        let hooks = validate_and_ensure_hooks_object(&mut settings, path).unwrap();
         assert!(
             hooks.is_object(),
             "hooks should be an empty object after creation"
@@ -4619,15 +4527,32 @@ mod tests {
     fn validate_and_ensure_hooks_object_returns_existing_hooks() {
         let mut settings = serde_json::json!({"hooks": {"PreToolUse": []}});
         let path = std::path::Path::new("/tmp/test-settings.json");
-        let hooks = validate_and_ensure_hooks_object(&mut settings, path);
+        let hooks = validate_and_ensure_hooks_object(&mut settings, path).unwrap();
         assert!(hooks["PreToolUse"].is_array());
+    }
+
+    #[test]
+    fn hook_shape_validation_returns_errors_without_mutating_bad_values() {
+        let path = std::path::Path::new("/tmp/test-settings.json");
+
+        let mut bad_root = serde_json::json!([]);
+        assert!(validate_and_ensure_hooks_object(&mut bad_root, path).is_err());
+        assert_eq!(bad_root, serde_json::json!([]));
+
+        let mut bad_hooks = serde_json::json!({"hooks": "not-an-object"});
+        assert!(validate_and_ensure_hooks_object(&mut bad_hooks, path).is_err());
+        assert_eq!(bad_hooks["hooks"], "not-an-object");
+
+        let mut bad_event = serde_json::json!({"PreToolUse": "not-an-array"});
+        assert!(ensure_event_array(&mut bad_event, "PreToolUse", path).is_err());
+        assert_eq!(bad_event["PreToolUse"], "not-an-array");
     }
 
     #[test]
     fn ensure_event_array_creates_missing_event() {
         let mut hooks = serde_json::json!({});
         let path = std::path::Path::new("/tmp/test-settings.json");
-        ensure_event_array(&mut hooks, "PreToolUse", path);
+        ensure_event_array(&mut hooks, "PreToolUse", path).unwrap();
         assert!(hooks["PreToolUse"].is_array());
         assert_eq!(hooks["PreToolUse"].as_array().unwrap().len(), 0);
     }
@@ -4636,7 +4561,7 @@ mod tests {
     fn ensure_event_array_preserves_existing_array() {
         let mut hooks = serde_json::json!({"PreToolUse": [{"matcher": "Bash"}]});
         let path = std::path::Path::new("/tmp/test-settings.json");
-        ensure_event_array(&mut hooks, "PreToolUse", path);
+        ensure_event_array(&mut hooks, "PreToolUse", path).unwrap();
         let arr = hooks["PreToolUse"].as_array().unwrap();
         assert_eq!(arr.len(), 1);
         assert_eq!(arr[0]["matcher"], "Bash");

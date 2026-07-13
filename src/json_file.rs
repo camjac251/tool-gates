@@ -21,6 +21,12 @@ pub struct JsonWriteResult<R> {
     pub backup_path: Option<PathBuf>,
 }
 
+pub fn read_json(path: &Path, empty_policy: EmptyPolicy) -> io::Result<Value> {
+    let target = effective_target(path)?;
+    let (existed, bytes, _) = read_snapshot(&target)?;
+    parse_snapshot(&target, existed, &bytes, empty_policy)
+}
+
 pub fn update_json<R>(
     path: &Path,
     empty_policy: EmptyPolicy,
