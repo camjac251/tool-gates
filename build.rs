@@ -17,7 +17,13 @@ mod rules_schema;
 use rules_schema::*;
 use std::collections::HashSet;
 use std::fs;
+use std::io::{self, Write};
 use std::path::Path;
+use std::process::{Command, Stdio};
+
+const GENERATED_FINGERPRINT_PREFIX: &str = "// tool-gates-generation-fingerprint: ";
+const RUSTFMT_IDENTITY: &str = "rustfmt:edition-2024:v1";
+const PRETTYPLEASE_IDENTITY: &str = "prettyplease:v1";
 
 fn main() {
     // `lib_only` marks the library/binary compile so rules_schema.rs can gate
@@ -35,7 +41,7 @@ fn main() {
     println!("cargo:rerun-if-changed=.git/refs/");
 
     // Get git version: tag if on tag, otherwise tag-commits-hash
-    let git_version = std::process::Command::new("git")
+    let git_version = Command::new("git")
         .args(["describe", "--tags", "--always"])
         .output()
         .ok()
@@ -143,34 +149,39 @@ fn main() {
 pub mod rules;
 "#;
 
-    fs::write(out_dir.join("rules.rs"), &rust_code).expect("Failed to write rules.rs");
-    fs::write(out_dir.join("mod.rs"), mod_content).expect("Failed to write mod.rs");
+    let rules_path = out_dir.join("rules.rs");
+    let rustfmt_available = rustfmt_available();
+    let preferred_fingerprint = generation_fingerprint(&rust_code, RUSTFMT_IDENTITY);
+    let fallback_fingerprint = generation_fingerprint(&rust_code, PRETTYPLEASE_IDENTITY);
+    let expected_fingerprint = if rustfmt_available {
+        preferred_fingerprint
+    } else {
+        fallback_fingerprint
+    };
+    let existing_fingerprint = existing_generation_fingerprint(&rules_path);
 
-    // Format generated files so they match cargo fmt output and don't dirty
-    // the working tree. Try rustfmt first (exact match), fall back to
-    // prettyplease (close enough, no external dependency).
-    //
-    // `--edition` must match the workspace's edition in Cargo.toml. Without
-    // it, rustfmt defaults to edition 2015 and produces slightly different
-    // line-wrapping for long string literals than workspace `cargo fmt`
-    // does on edition 2024. That divergence leaves the working tree dirty
-    // every time `cargo build` re-runs build.rs (which happens after every
-    // commit because `cargo:rerun-if-changed=.git/HEAD` is set above).
-    for file in &["rules.rs", "mod.rs"] {
-        let path = out_dir.join(file);
-        let ok = std::process::Command::new("rustfmt")
-            .args(["--edition", "2024"])
-            .arg(&path)
-            .status()
-            .is_ok_and(|s| s.success());
-        if !ok {
-            // rustfmt unavailable or failed. Use prettyplease as fallback
-            if let Ok(code) = fs::read_to_string(&path) {
-                let formatted = format_rust(&code);
-                let _ = fs::write(&path, formatted);
+    if existing_fingerprint != Some(expected_fingerprint) {
+        // `--edition` must match Cargo.toml. Formatting through stdin keeps the
+        // generated source off disk until it is complete.
+        let (formatted, fingerprint) = if rustfmt_available {
+            match format_with_rustfmt(&rust_code) {
+                Some(formatted) => (formatted, preferred_fingerprint),
+                None => (format_rust(&rust_code), fallback_fingerprint),
             }
-        }
+        } else {
+            (format_rust(&rust_code), fallback_fingerprint)
+        };
+        let content_fingerprint = generation_fingerprint(&formatted, "formatted-output");
+        let generated = format!(
+            "{GENERATED_FINGERPRINT_PREFIX}{fingerprint:016x}:{content_fingerprint:016x}\n{formatted}"
+        );
+        write_if_changed(&rules_path, generated.as_bytes()).expect("Failed to write rules.rs");
     }
+
+    // mod.rs is fixed canonical text. Formatting it on every build-script run
+    // is unnecessary; only write when its bytes actually differ.
+    write_if_changed(&out_dir.join("mod.rs"), mod_content.as_bytes())
+        .expect("Failed to write mod.rs");
 }
 
 // ============================================================================
@@ -2014,6 +2025,70 @@ fn generate_allow_call(reason: &Option<String>) -> String {
         ),
         None => "Some(GateResult::allow())".to_string(),
     }
+}
+
+fn write_if_changed(path: &Path, content: &[u8]) -> io::Result<bool> {
+    if fs::read(path).is_ok_and(|existing| existing == content) {
+        return Ok(false);
+    }
+    fs::write(path, content)?;
+    Ok(true)
+}
+
+fn rustfmt_available() -> bool {
+    Command::new("rustfmt")
+        .arg("--version")
+        .output()
+        .is_ok_and(|output| output.status.success())
+}
+
+fn format_with_rustfmt(code: &str) -> Option<String> {
+    let mut child = Command::new("rustfmt")
+        .args(["--edition", "2024", "--emit", "stdout"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .ok()?;
+    child.stdin.take()?.write_all(code.as_bytes()).ok()?;
+    let output = child.wait_with_output().ok()?;
+    if !output.status.success() {
+        eprintln!(
+            "Warning: rustfmt failed for generated rules: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+        return None;
+    }
+    String::from_utf8(output.stdout).ok()
+}
+
+fn generation_fingerprint(code: &str, formatter_identity: &str) -> u64 {
+    const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+    const PRIME: u64 = 0x0000_0100_0000_01b3;
+
+    let mut hash = OFFSET;
+    for byte in code
+        .bytes()
+        .chain(std::iter::once(0))
+        .chain(formatter_identity.bytes())
+    {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(PRIME);
+    }
+    hash
+}
+
+fn existing_generation_fingerprint(path: &Path) -> Option<u64> {
+    let content = fs::read_to_string(path).ok()?;
+    let (marker, body) = content.split_once('\n')?;
+    let (input, expected_content) = marker
+        .strip_prefix(GENERATED_FINGERPRINT_PREFIX)?
+        .split_once(':')?;
+    let expected_content = u64::from_str_radix(expected_content, 16).ok()?;
+    if generation_fingerprint(body, "formatted-output") != expected_content {
+        return None;
+    }
+    u64::from_str_radix(input, 16).ok()
 }
 
 fn format_rust(code: &str) -> String {

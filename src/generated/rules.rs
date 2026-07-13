@@ -1,3 +1,4 @@
+// tool-gates-generation-fingerprint: 0e1f786d05298b2c:102d2f701a0adc2f
 //! Auto-generated from rules/*.toml files.
 //! DO NOT EDIT - changes will be overwritten by build.rs
 
