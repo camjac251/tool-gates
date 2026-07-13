@@ -48,6 +48,12 @@ fn run_with_session(
         .write_all(stdin_json.as_bytes())
         .expect("write stdin");
     let out = child.wait_with_output().expect("wait_with_output");
+    assert!(
+        out.status.success(),
+        "tool-gates exited with {}: {}",
+        out.status,
+        String::from_utf8_lossy(&out.stderr)
+    );
     String::from_utf8(out.stdout).expect("utf8 stdout")
 }
 
@@ -82,10 +88,7 @@ fn write_outside_scratch_does_not_allow() {
         xdg.path(),
         scratch.path(),
     );
-    assert!(
-        !out.contains("\"permissionDecision\":\"allow\""),
-        "write outside scratch must not auto-allow, got: {out}"
-    );
+    assert_eq!(out, "", "write outside scratch must pass through");
 }
 
 #[test]
@@ -94,10 +97,7 @@ fn write_under_scratch_in_plan_mode_does_not_allow() {
     let scratch = tempfile::tempdir().expect("scratch");
     let target = format!("{}/p/note.txt", scratch.path().display());
     let out = run(&write_payload(&target, "plan"), xdg.path(), scratch.path());
-    assert!(
-        !out.contains("\"permissionDecision\":\"allow\""),
-        "plan mode must not auto-allow scratch writes, got: {out}"
-    );
+    assert_eq!(out, "", "plan mode must pass scratch writes through");
 }
 
 // === Claude Code native session scratchpad ===
@@ -139,10 +139,7 @@ fn write_under_claude_scratchpad_wrong_session_does_not_allow() {
         scratch.path(),
         Some("99999999-89ab-cdef-0123-456789abcdef"),
     );
-    assert!(
-        !out.contains("\"permissionDecision\":\"allow\""),
-        "another session's scratchpad must not auto-allow, got: {out}"
-    );
+    assert_eq!(out, "", "another session's scratchpad must pass through");
 }
 
 #[test]
@@ -155,10 +152,7 @@ fn write_under_claude_scratchpad_without_session_does_not_allow() {
         xdg.path(),
         scratch.path(),
     );
-    assert!(
-        !out.contains("\"permissionDecision\":\"allow\""),
-        "no session id in the env must leave the scratchpad root inert, got: {out}"
-    );
+    assert_eq!(out, "", "a missing session id must pass through");
 }
 
 #[test]
@@ -172,8 +166,5 @@ fn write_under_claude_scratchpad_in_plan_mode_does_not_allow() {
         scratch.path(),
         Some(SID),
     );
-    assert!(
-        !out.contains("\"permissionDecision\":\"allow\""),
-        "plan mode must not auto-allow scratchpad writes, got: {out}"
-    );
+    assert_eq!(out, "", "plan mode must pass scratchpad writes through");
 }

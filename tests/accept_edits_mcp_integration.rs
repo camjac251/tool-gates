@@ -31,6 +31,12 @@ fn run(stdin_json: &str, xdg: &std::path::Path) -> String {
         .write_all(stdin_json.as_bytes())
         .expect("write stdin");
     let out = child.wait_with_output().expect("wait_with_output");
+    assert!(
+        out.status.success(),
+        "tool-gates exited with {}: {}",
+        out.status,
+        String::from_utf8_lossy(&out.stderr)
+    );
     String::from_utf8(out.stdout).expect("utf8 stdout")
 }
 
@@ -78,12 +84,7 @@ tool = "mcp__serena__*"
         r#"{"hook_event_name":"PreToolUse","tool_name":"mcp__serena__find_symbol","cwd":"/tmp","permission_mode":"default","tool_input":{},"session_id":"t","tool_use_id":"toolu_t"}"#,
         tmp.path(),
     );
-    // Not allowed. Returns either empty/no-opinion output or "ask", as the rule must not
-    // fire outside acceptEdits mode.
-    assert!(
-        !out.contains("\"permissionDecision\":\"allow\""),
-        "rule should not fire in default mode, got: {out}"
-    );
+    assert_eq!(out, "", "default mode must pass through without output");
 }
 
 #[test]
@@ -120,10 +121,7 @@ fn permission_request_mcp_not_short_circuited() {
         r#"{"hook_event_name":"PermissionRequest","tool_name":"mcp__serena__find_symbol","cwd":"/tmp","permission_mode":"acceptEdits","tool_input":{},"session_id":"t"}"#,
         tmp.path(),
     );
-    assert!(
-        out.is_empty() || !out.contains("\"behavior\":\"deny\""),
-        "dispatcher must not short-circuit MCP tools: {out}"
-    );
+    assert_eq!(out, "", "dispatcher must pass MCP tools through");
 }
 
 #[test]
