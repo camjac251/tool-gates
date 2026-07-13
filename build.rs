@@ -112,11 +112,14 @@ fn main() {
         }
     }
 
-    // Sort by priority (lower = processed first)
+    // Sort by priority (lower = processed first), then by stable rule name.
+    // `read_dir` order is unspecified, and several gates intentionally share
+    // a priority, so priority alone would make generated output filesystem-
+    // dependent.
     rule_files.sort_by(|a, b| {
         let pa = a.1.meta.priority.unwrap_or(100);
         let pb = b.1.meta.priority.unwrap_or(100);
-        pa.cmp(&pb)
+        pa.cmp(&pb).then_with(|| a.0.cmp(&b.0))
     });
 
     // Generate Rust code
