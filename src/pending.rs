@@ -85,8 +85,7 @@ pub fn read_pending(filter_project: Option<&str>) -> Vec<PendingApproval> {
     };
 
     // Blocking shared lock for reading - don't silently fail
-    #[allow(clippy::incompatible_msrv)] // fs2 crate method, not std
-    if file.lock_shared().is_err() {
+    if FileExt::lock_shared(&file).is_err() {
         eprintln!("Warning: Could not acquire lock on pending file");
         return Vec::new();
     }
@@ -107,8 +106,7 @@ pub fn read_pending(filter_project: Option<&str>) -> Vec<PendingApproval> {
         }
     }
 
-    #[allow(clippy::incompatible_msrv)] // fs2 crate method, not std
-    let _ = file.unlock();
+    let _ = FileExt::unlock(&file);
 
     entries
 }
@@ -161,8 +159,7 @@ where
     }
     writer.flush()?;
 
-    #[allow(clippy::incompatible_msrv)] // fs2 crate method, not std
-    file.unlock()?;
+    FileExt::unlock(&file)?;
 
     Ok(result)
 }

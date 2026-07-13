@@ -164,8 +164,7 @@ impl TrackingStore {
         file.write_all(json.as_bytes())?;
         file.flush()?;
 
-        #[allow(clippy::incompatible_msrv)] // fs2 crate method, not std
-        file.unlock()?;
+        FileExt::unlock(&file)?;
 
         Ok(result)
     }
@@ -193,8 +192,7 @@ impl TrackingStore {
             .truncate(false)
             .open(&path)?;
 
-        #[allow(clippy::incompatible_msrv)] // fs2 crate method, not std
-        file.lock_shared()?;
+        FileExt::lock_shared(&file)?;
 
         let mut contents = String::new();
         file.read_to_string(&mut contents)?;
@@ -210,8 +208,7 @@ impl TrackingStore {
 
         let result = f(&store);
 
-        #[allow(clippy::incompatible_msrv)] // fs2 crate method, not std
-        file.unlock()?;
+        FileExt::unlock(&file)?;
 
         Ok(result)
     }

@@ -66,8 +66,7 @@ fn update_json_with_hook<R>(
     let result = mutate(&mut value)?;
 
     if value == original_value {
-        #[allow(clippy::incompatible_msrv)]
-        lock.unlock()?;
+        FileExt::unlock(&lock)?;
         return Ok(JsonWriteResult {
             result,
             changed: false,
@@ -105,8 +104,7 @@ fn update_json_with_hook<R>(
     sync_parent(parent)?;
     verify_committed(&target, &value)?;
 
-    #[allow(clippy::incompatible_msrv)]
-    lock.unlock()?;
+    FileExt::unlock(&lock)?;
     Ok(JsonWriteResult {
         result,
         changed: true,
