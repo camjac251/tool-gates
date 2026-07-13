@@ -11,19 +11,57 @@ use crate::config::BlockRule;
 use crate::models::HookOutput;
 use crate::tool_cache;
 
-/// Extract domain from a URL string (simple, no external crate).
-/// Handles ports (github.com:443) and userinfo (user@github.com).
+/// Extract the normalized host slice from an HTTP(S) URL without a URL crate.
+/// Handles case-insensitive schemes, userinfo, ports, bracketed IPv6 hosts,
+/// query/fragment authority terminators, and DNS trailing dots.
 fn extract_domain(url: &str) -> Option<&str> {
-    let stripped = url
-        .strip_prefix("https://")
-        .or_else(|| url.strip_prefix("http://"))
-        .unwrap_or(url);
-    let authority = stripped.split('/').next()?;
-    // Strip userinfo (user@host)
+    let stripped = if url
+        .get(..8)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("https://"))
+    {
+        &url[8..]
+    } else if url
+        .get(..7)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("http://"))
+    {
+        &url[7..]
+    } else {
+        return None;
+    };
+    let authority_end = stripped.find(['/', '?', '#']).unwrap_or(stripped.len());
+    let authority = &stripped[..authority_end];
     let host_port = authority.rsplit('@').next().unwrap_or(authority);
-    // Strip port (:443)
-    let domain = host_port.split(':').next()?;
-    if domain.is_empty() || !domain.contains('.') {
+
+    if let Some(bracketed) = host_port.strip_prefix('[') {
+        let close = bracketed.find(']')?;
+        let host = &bracketed[..close];
+        let remainder = &bracketed[close + 1..];
+        if !remainder.is_empty()
+            && (!remainder.starts_with(':')
+                || remainder[1..].is_empty()
+                || !remainder[1..].chars().all(|ch| ch.is_ascii_digit()))
+        {
+            return None;
+        }
+        return (!host.is_empty()).then_some(host);
+    }
+
+    let (host, port) = match host_port.split_once(':') {
+        Some((host, port)) => (host, Some(port)),
+        None => (host_port, None),
+    };
+    if host.contains(':')
+        || port.is_some_and(|port| port.is_empty() || !port.chars().all(|ch| ch.is_ascii_digit()))
+    {
+        return None;
+    }
+    let domain = host.trim_end_matches('.');
+    if domain.is_empty()
+        || !domain.contains('.')
+        || domain
+            .chars()
+            .any(|ch| ch.is_ascii_whitespace() || matches!(ch, '/' | '?' | '#'))
+    {
         return None;
     }
     Some(domain)
@@ -35,7 +73,12 @@ fn url_matches_domains(url: &str, domains: &[String]) -> bool {
         return false;
     }
     match extract_domain(url) {
-        Some(domain) => domains.iter().any(|d| d == domain),
+        Some(domain) => domains.iter().any(|configured| {
+            configured
+                .trim()
+                .trim_end_matches('.')
+                .eq_ignore_ascii_case(domain)
+        }),
         None => false,
     }
 }
@@ -57,7 +100,7 @@ fn extract_urls(tool_input: &serde_json::Map<String, serde_json::Value>) -> Vec<
 /// Recursively walk a JSON value and push every http(s) URL string into `out`.
 fn collect_url_strings(value: &serde_json::Value, out: &mut Vec<String>) {
     match value {
-        serde_json::Value::String(s) if s.starts_with("http://") || s.starts_with("https://") => {
+        serde_json::Value::String(s) if extract_domain(s).is_some() => {
             out.push(s.clone());
         }
         serde_json::Value::Array(arr) => {
@@ -202,6 +245,37 @@ mod tests {
         let input = input_with_url("https://example.com/page");
         let result = check_tool_block("mcp__firecrawl__firecrawl_scrape", &input, &rules);
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_domain_normalization_is_case_insensitive_without_false_positives() {
+        for (url, blocked_domain) in [
+            ("https://GitHub.COM/owner/repo", "github.com"),
+            ("HTTPS://github.com/owner/repo", "github.com"),
+            ("HtTpS://GitHub.Com:443/owner/repo", "github.com"),
+            ("https://github.com/owner/repo", "GITHUB.COM"),
+            ("https://github.com./owner/repo", "github.com"),
+            ("https://github.com/owner/repo", "github.com."),
+        ] {
+            let rules = vec![domain_rule("*firecrawl*", "blocked", &[blocked_domain])];
+            let input = input_with_url(url);
+            assert!(
+                check_tool_block("mcp__firecrawl__firecrawl_scrape", &input, &rules).is_some(),
+                "normalized domain should block {url} against {blocked_domain}"
+            );
+        }
+
+        for url in [
+            "https://example.com/github.com/owner/repo",
+            "https://github.com.evil.example/owner/repo",
+        ] {
+            let rules = vec![domain_rule("*firecrawl*", "blocked", &["github.com"])];
+            let input = input_with_url(url);
+            assert!(
+                check_tool_block("mcp__firecrawl__firecrawl_scrape", &input, &rules).is_none(),
+                "domain text outside the exact host must not block {url}"
+            );
+        }
     }
 
     #[test]
@@ -378,6 +452,14 @@ mod tests {
             Some("raw.githubusercontent.com")
         );
         assert_eq!(extract_domain("http://example.com"), Some("example.com"));
+        assert_eq!(
+            extract_domain("HTTPS://GitHub.COM.?q=1"),
+            Some("GitHub.COM")
+        );
+        assert_eq!(
+            extract_domain("https://[2001:db8::1]:443/path"),
+            Some("2001:db8::1")
+        );
         assert_eq!(extract_domain("not-a-url"), None);
         assert_eq!(extract_domain(""), None);
     }
