@@ -887,6 +887,39 @@ pub(crate) mod tests {
         }
     }
 
+    mod privilege_wrapper_composition {
+        use super::*;
+
+        #[test]
+        fn safe_inner_commands_keep_the_privilege_approval_floor() {
+            for command in [
+                "sudo git status",
+                "sudo -u root git status",
+                "sudo -k git status",
+                "doas git status",
+            ] {
+                let result = check_command(command);
+                assert_eq!(get_decision(&result), "ask", "wrong decision for {command}");
+                assert!(
+                    get_reason(&result).contains(command.split_whitespace().next().unwrap()),
+                    "reason must name the privilege wrapper for {command}"
+                );
+            }
+        }
+
+        #[test]
+        fn non_executing_timestamp_reset_remains_allowed() {
+            let result = check_command("sudo -k");
+            assert_eq!(get_decision(&result), "allow");
+        }
+
+        #[test]
+        fn blocked_inner_command_outranks_the_privilege_floor() {
+            let result = check_command("sudo rm -rf /");
+            assert_eq!(get_decision(&result), "deny");
+        }
+    }
+
     // === Compound Command Settings Matching ===
 
     mod compound_settings {

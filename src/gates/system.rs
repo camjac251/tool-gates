@@ -5,6 +5,7 @@
 //! - psql/mysql: parses SQL to detect read vs write
 //! - Complex blocked commands (shutdown, mkfs, etc.)
 
+use crate::gates::check_single_command;
 use crate::generated::rules::{
     check_age_declarative, check_alembic_declarative, check_ansible_declarative,
     check_apt_cache_declarative, check_apt_declarative, check_apt_mark_declarative,
@@ -284,26 +285,114 @@ fn check_make(cmd: &CommandInfo) -> GateResult {
 
 // === sudo/doas ===
 
+const PRIVILEGE_VALUE_FLAGS: &[&str] = &[
+    "-u",
+    "--user",
+    "-g",
+    "--group",
+    "-h",
+    "--host",
+    "-C",
+    "--close-from",
+    "-D",
+    "--chdir",
+    "-p",
+    "--prompt",
+    "-r",
+    "--role",
+    "-t",
+    "--type",
+    "-U",
+    "--other-user",
+    "-R",
+    "--chroot",
+    "-T",
+    "--command-timeout",
+];
+
+fn privilege_command_start(args: &[String]) -> Option<usize> {
+    let mut options_done = false;
+    let mut i = 0;
+
+    while i < args.len() {
+        let arg = &args[i];
+        if !options_done && arg == "--" {
+            options_done = true;
+            i += 1;
+            continue;
+        }
+
+        if !options_done && arg.starts_with('-') {
+            if PRIVILEGE_VALUE_FLAGS.contains(&arg.as_str()) {
+                if i + 1 >= args.len() {
+                    return None;
+                }
+                i += 2;
+            } else {
+                i += 1;
+            }
+            continue;
+        }
+
+        if arg.contains('=') {
+            i += 1;
+            continue;
+        }
+
+        return Some(i);
+    }
+
+    None
+}
+
+fn is_privilege_list_mode(args: &[String]) -> bool {
+    args.iter()
+        .any(|arg| matches!(arg.as_str(), "-l" | "-ll" | "--list" | "--list-long"))
+}
+
+fn is_non_executing_privilege_operation(args: &[String]) -> bool {
+    args.iter().any(|arg| {
+        matches!(
+            arg.as_str(),
+            "-v" | "--validate" | "-k" | "--reset-timestamp" | "-K" | "--remove-timestamp" | "-L"
+        )
+    })
+}
+
 fn check_sudo(cmd: &CommandInfo) -> GateResult {
     let args = &cmd.args;
 
-    // -l lists permissions, -v validates, -k invalidates
-    if args.iter().any(|a| a == "-l" || a == "-v" || a == "-k") {
+    if is_privilege_list_mode(args) {
         return GateResult::allow();
     }
 
-    // Find the actual command being run
-    let cmd_start = args
-        .iter()
-        .position(|a| !a.starts_with('-') && a != "sudo" && a != "doas");
-
-    if let Some(idx) = cmd_start {
+    if let Some(idx) = privilege_command_start(args) {
         let underlying_cmd = &args[idx];
         let underlying_args = &args[idx + 1..];
+        let inner = CommandInfo {
+            program: underlying_cmd.clone(),
+            args: underlying_args.to_vec(),
+            raw: cmd.raw.clone(),
+            scratch_vars: cmd.scratch_vars.clone(),
+        };
+        let inner_result = check_single_command(&inner);
 
-        // Describe what sudo is doing
+        if inner_result.decision == Decision::Block {
+            return GateResult::block(format!(
+                "{} wraps a blocked command: {}",
+                cmd.program,
+                inner_result
+                    .reason
+                    .unwrap_or_else(|| underlying_cmd.clone())
+            ));
+        }
+
         let description = describe_sudo_command(underlying_cmd, underlying_args);
         return GateResult::ask(format!("{}: {}", cmd.program, description));
+    }
+
+    if is_non_executing_privilege_operation(args) {
+        return GateResult::allow();
     }
 
     GateResult::ask(format!("{}: Running as root", cmd.program))
@@ -512,6 +601,30 @@ mod tests {
         let result = check_system(&cmd("sudo", &["apt", "install", "vim"]));
         assert_eq!(result.decision, Decision::Ask);
         assert!(result.reason.unwrap().contains("Installing packages"));
+    }
+
+    #[test]
+    fn test_sudo_reset_with_command_asks() {
+        let result = check_system(&cmd("sudo", &["-k", "git", "status"]));
+        assert_eq!(result.decision, Decision::Ask);
+    }
+
+    #[test]
+    fn test_sudo_reset_without_command_allows() {
+        let result = check_system(&cmd("sudo", &["-k"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_sudo_blocked_inner_command_blocks() {
+        let result = check_system(&cmd("sudo", &["rm", "-rf", "/"]));
+        assert_eq!(result.decision, Decision::Block);
+    }
+
+    #[test]
+    fn test_doas_safe_inner_command_asks() {
+        let result = check_system(&cmd("doas", &["git", "status"]));
+        assert_eq!(result.decision, Decision::Ask);
     }
 
     // === systemctl ===

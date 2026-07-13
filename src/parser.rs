@@ -429,14 +429,11 @@ fn extract_command(cursor: &mut TreeCursor, source: &str) -> Option<CommandInfo>
 }
 
 /// Known transparent wrapper commands that just execute their arguments.
-/// Does NOT include `sudo`/`doas` (handled separately due to flag-value pairs like `-u root`),
+/// Does NOT include `sudo`/`doas` (their approval floor is composed in the system gate),
 /// `env` (handles `VAR=value`), or `timeout` (has a positional duration arg).
 const SIMPLE_WRAPPERS: &[&str] = &[
     "time", "exec", "nice", "nohup", "strace", "ltrace", "ionice", "taskset", "command", "builtin",
 ];
-
-/// Flags for sudo/doas that consume the next argument as a value.
-const SUDO_VALUE_FLAGS: &[&str] = &["-u", "-g", "-C", "-D", "-h", "-p", "-r", "-t", "-U"];
 
 /// Check if an argument looks like a numeric value (flag argument, not a command name).
 ///
@@ -484,28 +481,6 @@ fn strip_wrapper_recursive(program: String, args: Vec<String>) -> (String, Vec<S
             return strip_wrapper_recursive(new_program, new_args);
         }
         // All args are flags or numeric values (e.g., `sudo -l`), keep as-is
-        return (program, args);
-    }
-
-    if program == "sudo" || program == "doas" {
-        // sudo/doas have flags that consume the next arg (e.g., `-u root`).
-        // Walk through args, skipping flags and their values, to find the command.
-        let mut i = 0;
-        while i < args.len() {
-            if args[i].starts_with('-') {
-                // Check if this flag consumes the next argument
-                if SUDO_VALUE_FLAGS.contains(&args[i].as_str()) {
-                    i += 1; // skip the flag's value
-                }
-                i += 1;
-                continue;
-            }
-            // First non-flag, non-value arg is the command
-            let new_program = args[i].clone();
-            let new_args = args[i + 1..].to_vec();
-            return strip_wrapper_recursive(new_program, new_args);
-        }
-        // All args are flags/values (e.g., `sudo -l`), keep as-is
         return (program, args);
     }
 
@@ -1314,19 +1289,19 @@ mod tests {
     }
 
     #[test]
-    fn test_sudo_strips_to_inner_command() {
+    fn test_sudo_preserves_wrapper_for_gate_composition() {
         let cmds = extract_commands("sudo rm -rf /");
         assert_eq!(cmds.len(), 1);
-        assert_eq!(cmds[0].program, "rm");
-        assert_eq!(cmds[0].args, vec!["-rf", "/"]);
+        assert_eq!(cmds[0].program, "sudo");
+        assert_eq!(cmds[0].args, vec!["rm", "-rf", "/"]);
     }
 
     #[test]
-    fn test_sudo_with_flags_strips() {
+    fn test_sudo_with_flags_preserves_wrapper_for_gate_composition() {
         let cmds = extract_commands("sudo -u root rm -rf /");
         assert_eq!(cmds.len(), 1);
-        assert_eq!(cmds[0].program, "rm");
-        assert_eq!(cmds[0].args, vec!["-rf", "/"]);
+        assert_eq!(cmds[0].program, "sudo");
+        assert_eq!(cmds[0].args, vec!["-u", "root", "rm", "-rf", "/"]);
     }
 
     #[test]
@@ -1380,11 +1355,11 @@ mod tests {
     }
 
     #[test]
-    fn test_doas_strips() {
+    fn test_doas_preserves_wrapper_for_gate_composition() {
         let cmds = extract_commands("doas rm -rf /");
         assert_eq!(cmds.len(), 1);
-        assert_eq!(cmds[0].program, "rm");
-        assert_eq!(cmds[0].args, vec!["-rf", "/"]);
+        assert_eq!(cmds[0].program, "doas");
+        assert_eq!(cmds[0].args, vec!["rm", "-rf", "/"]);
     }
 
     #[test]
@@ -1423,7 +1398,7 @@ mod tests {
         // `program == cmds[0].program` assertion.
         const TRANSPARENT_WRAPPERS: &[&str] = &[
             "time", "exec", "env", "nice", "nohup", "strace", "ltrace", "ionice", "taskset",
-            "timeout", "sudo", "doas", "command", "builtin",
+            "timeout", "command", "builtin",
         ];
 
         #[allow(clippy::ptr_arg)]
