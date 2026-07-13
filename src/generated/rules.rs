@@ -16034,7 +16034,7 @@ pub fn check_security_floor(comment_stripped: &str, unquoted: &str) -> Option<Fl
             .into_iter()
             .any(|d| m.contains(d))
         {
-            let truncated = if m.len() > 30 { &m[..30] } else { m };
+            let truncated = m.char_indices().nth(30).map_or(m, |(idx, _)| &m[..idx]);
             let mut reason =
                 String::from("`$(...)` command substitution contains a dangerous inner command (`");
             reason.push_str(truncated);
@@ -16051,7 +16051,7 @@ pub fn check_security_floor(comment_stripped: &str, unquoted: &str) -> Option<Fl
             .into_iter()
             .any(|d| m.contains(d))
         {
-            let truncated = if m.len() > 30 { &m[..30] } else { m };
+            let truncated = m.char_indices().nth(30).map_or(m, |(idx, _)| &m[..idx]);
             let mut reason =
                 String::from("Backtick substitution contains a dangerous inner command (`");
             reason.push_str(truncated);

@@ -1941,6 +1941,33 @@ mod tests {
         }
 
         #[test]
+        fn test_command_substitution_reason_truncation_is_unicode_safe() {
+            let dollar_boundary = format!("echo $({}é rm file.txt)", "x".repeat(27));
+            let (tier, reason) = floor_tier(&dollar_boundary);
+            assert_eq!(tier, Tier::Hard);
+            assert!(reason.contains("command substitution"));
+
+            let backtick_boundary = format!("echo `{}é rm file.txt`", "x".repeat(28));
+            let (tier, reason) = floor_tier(&backtick_boundary);
+            assert_eq!(tier, Tier::Hard);
+            assert!(reason.contains("Backtick substitution"));
+
+            let (tier, reason) = floor_tier("echo $(é rm file.txt)");
+            assert_eq!(tier, Tier::Hard);
+            assert!(reason.contains('é'));
+
+            let long_ascii = format!("echo $({}UNIQUE_TAIL rm file.txt)", "x".repeat(40));
+            let (tier, reason) = floor_tier(&long_ascii);
+            assert_eq!(tier, Tier::Hard);
+            assert!(
+                !reason.contains("UNIQUE_TAIL"),
+                "long command substitutions must still be truncated"
+            );
+
+            assert_eq!(floor_tier("echo $(printf é)").0, Tier::None);
+        }
+
+        #[test]
         fn test_floor_table_order_first_match_wins() {
             // First-match-wins ordering guards. Each command matches TWO rows;
             // the earlier row (in rules/security.toml order) must win. A file

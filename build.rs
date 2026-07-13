@@ -1930,7 +1930,7 @@ fn generate_floor_row(p: &SecurityPattern) -> String {
     let name = floor_static_name(&p.id);
 
     // within = command_substitution: iterate each match, check the dangerous
-    // inner substrings, and echo the (byte-30-truncated) match into the reason.
+    // inner substrings, and echo the (30-character-truncated) match into the reason.
     if p.within == Some(FloorWithin::CommandSubstitution) {
         let inner: Vec<String> = p
             .inner_contains_any
@@ -1944,7 +1944,9 @@ fn generate_floor_row(p: &SecurityPattern) -> String {
             "        if [{}].into_iter().any(|d| m.contains(d)) {{\n",
             inner.join(", ")
         ));
-        out.push_str("            let truncated = if m.len() > 30 { &m[..30] } else { m };\n");
+        out.push_str(
+            "            let truncated = m.char_indices().nth(30).map_or(m, |(idx, _)| &m[..idx]);\n",
+        );
         out.push_str(&format!(
             "            let mut reason = String::from(\"{}\");\n",
             escape_rust_string(&prefix)
