@@ -591,10 +591,7 @@ fn handle_pre_tool_use_hook(input: &str, client: Client) {
             .unwrap_or_default();
         for rule in &config.accept_edits_mcp {
             if rule.matches_tool(&hook_input.tool_name) && rule.conditions_met(&project_dir) {
-                let reason = rule
-                    .reason
-                    .as_deref()
-                    .and_then(|m| if m.trim().is_empty() { None } else { Some(m) });
+                let reason = rule.reason.as_deref().filter(|m| !m.trim().is_empty());
                 let output = HookOutput::allow(reason);
                 let value = output.serialize(client);
                 if !emit_hook_value(&value) && !value.is_null() {
@@ -733,10 +730,7 @@ fn handle_pre_tool_use_hook(input: &str, client: Client) {
 
             for rule in &config.auto_approve_skills {
                 if rule.matches_skill(skill_name) && rule.conditions_met(&project_dir) {
-                    let reason = rule
-                        .message
-                        .as_deref()
-                        .and_then(|m| if m.is_empty() { None } else { Some(m) });
+                    let reason = rule.message.as_deref().filter(|m| !m.is_empty());
                     let output = HookOutput::allow(reason);
                     let value = output.serialize(client);
                     emit_hook_value(&value);
