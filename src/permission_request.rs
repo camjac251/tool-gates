@@ -216,7 +216,9 @@ fn handle_file_permission_request(
         } else {
             Path::new(&input.cwd).join(raw)
         };
-        let resolved = clean_path(&joined);
+        let lexical = clean_path(&joined);
+        let resolved =
+            std::path::PathBuf::from(crate::paths::resolve_path(&lexical.to_string_lossy()));
 
         if !is_worktree_context(&resolved, &input.cwd) {
             return None;
@@ -272,16 +274,22 @@ fn decide_codex_project_edit(
         // Empty or unparseable patch: we can't reason about it, so prompt.
         return None;
     }
-    let allowed_dirs = settings.allowed_directories(cwd);
+    let allowed_dirs = settings
+        .allowed_directories(cwd)
+        .into_iter()
+        .map(|dir| crate::paths::resolve_path(&dir))
+        .collect::<Vec<_>>();
     for raw in paths {
         let joined = if Path::new(raw).is_absolute() {
             std::path::PathBuf::from(raw)
         } else {
             Path::new(cwd).join(raw)
         };
-        let resolved = clean_path(&joined);
+        let lexical = clean_path(&joined);
+        let resolved =
+            std::path::PathBuf::from(crate::paths::resolve_path(&lexical.to_string_lossy()));
         let abs = resolved.to_string_lossy().into_owned();
-        let rel = resolved
+        let rel = lexical
             .strip_prefix(cwd)
             .ok()
             .map(|p| p.to_string_lossy().into_owned());
@@ -420,8 +428,11 @@ fn is_worktree_context(resolved_path: &Path, cwd: &str) -> bool {
         if dir_name == "worktrees" {
             if let Some(parent) = ancestor.parent() {
                 if parent.file_name().and_then(|n| n.to_str()) == Some(".claude") {
-                    // cwd is under .claude/worktrees/, check file is within cwd
-                    return resolved_path.starts_with(cwd_path);
+                    // Resolve the authorization root too. Comparing a
+                    // canonical candidate to a lexical cwd would reject safe
+                    // in-tree symlinks or preserve a symlinked escape.
+                    let resolved_cwd = crate::paths::resolve_path(cwd);
+                    return resolved_path.starts_with(Path::new(&resolved_cwd));
                 }
             }
         }
@@ -1057,6 +1068,104 @@ mod tests {
             result.is_some(),
             "Should approve Edit in worktree under default permission mode"
         );
+    }
+
+    #[cfg(unix)]
+    mod symlink_containment {
+        use super::*;
+        use std::os::unix::fs::symlink;
+
+        fn create_worktree(root: &Path) -> std::path::PathBuf {
+            let worktree = root.join("project/.claude/worktrees/agent-test");
+            std::fs::create_dir_all(&worktree).expect("create worktree");
+            worktree
+        }
+
+        #[test]
+        fn worktree_symlink_escape_with_missing_descendants_prompts() {
+            let temp = tempfile::tempdir().expect("tempdir");
+            let worktree = create_worktree(temp.path());
+            let outside = temp.path().join("outside");
+            std::fs::create_dir(&outside).expect("create outside directory");
+            symlink(&outside, worktree.join("link")).expect("create escape symlink");
+
+            let requested = worktree.join("link/new/deep/file.rs");
+            let resolved =
+                std::path::PathBuf::from(crate::paths::resolve_path(&requested.to_string_lossy()));
+            assert!(!is_worktree_context(&resolved, &worktree.to_string_lossy()));
+            let input = make_file_input(
+                "Write",
+                "link/new/deep/file.rs",
+                &worktree.to_string_lossy(),
+            );
+            assert!(
+                handle_file_permission_request(&input).is_none(),
+                "PermissionRequest must pass symlink escapes to the normal prompt"
+            );
+        }
+
+        #[test]
+        fn worktree_symlink_that_stays_inside_allows_missing_descendants() {
+            let temp = tempfile::tempdir().expect("tempdir");
+            let worktree = create_worktree(temp.path());
+            let real = worktree.join("real");
+            std::fs::create_dir(&real).expect("create real directory");
+            symlink(&real, worktree.join("link")).expect("create internal symlink");
+
+            let requested = worktree.join("link/new/file.rs");
+            let resolved =
+                std::path::PathBuf::from(crate::paths::resolve_path(&requested.to_string_lossy()));
+            assert!(is_worktree_context(&resolved, &worktree.to_string_lossy()));
+            let input = make_file_input("Write", "link/new/file.rs", &worktree.to_string_lossy());
+            assert!(
+                handle_file_permission_request(&input).is_some(),
+                "PermissionRequest must allow symlinks contained by the worktree"
+            );
+        }
+
+        #[test]
+        fn codex_project_symlink_escape_prompts_unless_explicitly_widened() {
+            let temp = tempfile::tempdir().expect("tempdir");
+            let project = temp.path().join("project");
+            let outside = temp.path().join("outside");
+            std::fs::create_dir(&project).expect("create project");
+            std::fs::create_dir(&outside).expect("create outside directory");
+            symlink(&outside, project.join("link")).expect("create escape symlink");
+
+            let path = vec!["link/new/file.rs".to_string()];
+            let cwd = project.to_string_lossy();
+            let settings = Settings::default();
+            assert!(
+                decide_codex_project_edit(&path, &cwd, &settings, &default_guards(), false)
+                    .is_none(),
+                "project-only edits must resolve symlinks before containment"
+            );
+            assert!(
+                decide_codex_project_edit(&path, &cwd, &settings, &default_guards(), true)
+                    .is_some(),
+                "allow_edits_anywhere explicitly widens containment"
+            );
+        }
+
+        #[test]
+        fn codex_project_symlink_that_stays_inside_allows() {
+            let temp = tempfile::tempdir().expect("tempdir");
+            let project = temp.path().join("project");
+            let real = project.join("real");
+            std::fs::create_dir_all(&real).expect("create project target");
+            symlink(&real, project.join("link")).expect("create internal symlink");
+
+            let settings = Settings::default();
+            let cwd = project.to_string_lossy();
+            let result = decide_codex_project_edit(
+                &["link/new/file.rs".to_string()],
+                &cwd,
+                &settings,
+                &default_guards(),
+                false,
+            );
+            assert!(result.is_some(), "internal symlinks must remain usable");
+        }
     }
 
     #[test]
