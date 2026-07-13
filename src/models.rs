@@ -179,48 +179,19 @@ impl Client {
     /// differs from Claude Write/Edit (a unified-diff body in `tool_input.command`),
     /// so callers must route through the apply_patch parser to extract paths.
     pub fn is_file_tool(tool_name: &str) -> bool {
-        matches!(
-            tool_name,
-            "Read"
-                | "Write"
-                | "Edit"
-                | "NotebookEdit"
-                | "read_file"
-                | "read_many_files"
-                | "write_file"
-                | "replace"
-                | "apply_patch"
-                | "view_file"
-                | "write_to_file"
-                | "replace_file_content"
-                | "multi_replace_file_content"
-        )
+        crate::file_tools::is_file_tool(tool_name)
     }
 
     /// Check if a tool_name is a read-only file tool
     pub fn is_read_tool(tool_name: &str) -> bool {
-        matches!(
-            tool_name,
-            "Read" | "read_file" | "read_many_files" | "view_file"
-        )
+        crate::file_tools::is_read_tool(tool_name)
     }
 
     /// Check if a tool_name is a write/edit file tool.
     /// `apply_patch` is Codex's file-edit tool; it carries a unified-diff body
     /// in `tool_input.command` rather than `file_path`+`content`.
     pub fn is_write_tool(tool_name: &str) -> bool {
-        matches!(
-            tool_name,
-            "Write"
-                | "Edit"
-                | "NotebookEdit"
-                | "write_file"
-                | "replace"
-                | "apply_patch"
-                | "write_to_file"
-                | "replace_file_content"
-                | "multi_replace_file_content"
-        )
+        crate::file_tools::is_write_tool(tool_name)
     }
 
     /// Check if a tool_name represents a skill/extension tool

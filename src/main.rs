@@ -29,6 +29,7 @@ use std::env;
 use std::io::{self, Read};
 use tool_gates::config;
 use tool_gates::file_guards::check_file_guard;
+use tool_gates::file_tools::{self, FileHookEvent};
 use tool_gates::models::{
     Client, HookInput, HookOutput, PermissionDecision, PermissionDeniedInput,
     PermissionDeniedOutput, PermissionRequestDecision, PermissionRequestInput,
@@ -715,33 +716,51 @@ fn extract_file_paths_from_map(
     tool_name: &str,
     map: &serde_json::Map<String, serde_json::Value>,
 ) -> Vec<String> {
-    if tool_name == "apply_patch" {
-        let command = map.get("command").and_then(|v| v.as_str()).unwrap_or("");
-        if command.is_empty() {
-            return Vec::new();
-        }
-        return tool_gates::apply_patch_parser::parse_patch(command)
-            .into_iter()
-            .flat_map(|f| {
-                f.affected_paths()
-                    .into_iter()
-                    .map(|p| p.display().to_string())
-                    .collect::<Vec<_>>()
-            })
-            .filter(|p| !p.is_empty())
-            .collect();
-    }
-
-    let mut paths = Vec::new();
-    // file_path: Write/Edit/MultiEdit. notebook_path: NotebookEdit.
-    for key in ["file_path", "notebook_path"] {
-        if let Some(fp) = map.get(key).and_then(|v| v.as_str()) {
-            if !fp.is_empty() {
-                paths.push(fp.to_string());
+    let Some(spec) = file_tools::spec_for_name(tool_name) else {
+        return Vec::new();
+    };
+    match spec.payload {
+        tool_gates::file_tools::FilePayloadKind::ApplyPatch => {
+            let command = map.get("command").and_then(|v| v.as_str()).unwrap_or("");
+            if command.is_empty() {
+                return Vec::new();
             }
+            tool_gates::apply_patch_parser::parse_patch(command)
+                .into_iter()
+                .flat_map(|f| {
+                    f.affected_paths()
+                        .into_iter()
+                        .map(|p| p.display().to_string())
+                        .collect::<Vec<_>>()
+                })
+                .filter(|p| !p.is_empty())
+                .collect()
         }
+        tool_gates::file_tools::FilePayloadKind::Notebook => map
+            .get("notebook_path")
+            .and_then(|value| value.as_str())
+            .filter(|path| !path.is_empty())
+            .map(|path| vec![path.to_string()])
+            .unwrap_or_default(),
+        tool_gates::file_tools::FilePayloadKind::ReadMany => map
+            .get("paths")
+            .and_then(|value| value.as_array())
+            .into_iter()
+            .flatten()
+            .filter_map(|value| value.as_str())
+            .filter(|path| !path.is_empty())
+            .map(str::to_string)
+            .collect(),
+        tool_gates::file_tools::FilePayloadKind::FilePath
+        | tool_gates::file_tools::FilePayloadKind::Content
+        | tool_gates::file_tools::FilePayloadKind::Replacement
+        | tool_gates::file_tools::FilePayloadKind::NormalizedContent => map
+            .get("file_path")
+            .and_then(|value| value.as_str())
+            .filter(|path| !path.is_empty())
+            .map(|path| vec![path.to_string()])
+            .unwrap_or_default(),
     }
-    paths
 }
 
 /// Handle Bash-specific PreToolUse logic (gate engine + tracking)
@@ -1158,16 +1177,45 @@ fn get_binary_path() -> String {
         .unwrap_or_else(|| "tool-gates".to_string())
 }
 
+fn matcher_with_file_tools(
+    client: Client,
+    event: FileHookEvent,
+    before: &[&'static str],
+    after: &[&'static str],
+) -> String {
+    before
+        .iter()
+        .copied()
+        .chain(file_tools::hook_names(client, event))
+        .chain(after.iter().copied())
+        .collect::<Vec<_>>()
+        .join("|")
+}
+
 /// PreToolUse matcher for built-in tools (exact match mode).
 /// Bash (gate engine), file tools (guards), Glob/Grep (block rules).
-const PRE_TOOL_USE_MATCHER: &str = "Bash|Monitor|Read|Write|Edit|NotebookEdit|Glob|Grep|Skill";
+fn pre_tool_use_matcher() -> String {
+    matcher_with_file_tools(
+        Client::Claude,
+        FileHookEvent::PreToolUse,
+        &["Bash", "Monitor"],
+        &["Glob", "Grep", "Skill"],
+    )
+}
 
 /// PreToolUse matcher for MCP tools (regex mode).
 /// Matches all MCP tool calls; block rules in config decide what to deny.
 const MCP_TOOL_USE_MATCHER: &str = "mcp__.*";
 
 /// PermissionRequest matcher for Bash (command approval) + file tools (worktree approval).
-const PERMISSION_REQUEST_MATCHER: &str = "Bash|Monitor|Write|Edit|NotebookEdit";
+fn permission_request_matcher() -> String {
+    matcher_with_file_tools(
+        Client::Claude,
+        FileHookEvent::PermissionRequest,
+        &["Bash", "Monitor"],
+        &[],
+    )
+}
 
 /// PermissionDenied matcher for classifier denials in auto mode.
 /// Scoped to shell tools -- that's where tool-gates has gate knowledge deep
@@ -1176,7 +1224,14 @@ const PERMISSION_REQUEST_MATCHER: &str = "Bash|Monitor|Write|Edit|NotebookEdit";
 const PERMISSION_DENIED_MATCHER: &str = "Bash|Monitor";
 
 /// PostToolUse matcher for Bash (approval tracking) + file tools (security reminders).
-const POST_TOOL_USE_MATCHER: &str = "Bash|Monitor|Write|Edit|NotebookEdit";
+fn post_tool_use_matcher() -> String {
+    matcher_with_file_tools(
+        Client::Claude,
+        FileHookEvent::PostToolUse,
+        &["Bash", "Monitor"],
+        &[],
+    )
+}
 
 fn generate_hook_entry(binary_path: &str, matcher: &str) -> serde_json::Value {
     serde_json::json!({
@@ -1186,18 +1241,21 @@ fn generate_hook_entry(binary_path: &str, matcher: &str) -> serde_json::Value {
 }
 
 fn generate_hooks_json(binary_path: &str) -> serde_json::Value {
+    let pre_tool_use_matcher = pre_tool_use_matcher();
+    let permission_request_matcher = permission_request_matcher();
+    let post_tool_use_matcher = post_tool_use_matcher();
     serde_json::json!({
         "PreToolUse": [
-            generate_hook_entry(binary_path, PRE_TOOL_USE_MATCHER),
+            generate_hook_entry(binary_path, &pre_tool_use_matcher),
             generate_hook_entry(binary_path, MCP_TOOL_USE_MATCHER),
         ],
         "PermissionRequest": [
-            generate_hook_entry(binary_path, PERMISSION_REQUEST_MATCHER),
+            generate_hook_entry(binary_path, &permission_request_matcher),
             generate_hook_entry(binary_path, MCP_TOOL_USE_MATCHER),
         ],
         "PermissionDenied": [generate_hook_entry(binary_path, PERMISSION_DENIED_MATCHER)],
         "PostToolUse": [
-            generate_hook_entry(binary_path, POST_TOOL_USE_MATCHER),
+            generate_hook_entry(binary_path, &post_tool_use_matcher),
         ]
     })
 }
@@ -1215,13 +1273,24 @@ fn generate_gemini_hook_entry(binary_path: &str, matcher: &str) -> serde_json::V
 // canonical file-edit tool name. apply_patch's matcher_aliases (`Write`/
 // `Edit`) auto-fire too, so users editing the file by hand can list any of
 // those forms and the same handler runs.
-const CODEX_PRE_TOOL_USE_MATCHER: &str = "Bash|apply_patch";
+fn codex_pre_tool_use_matcher() -> String {
+    matcher_with_file_tools(Client::Codex, FileHookEvent::PreToolUse, &["Bash"], &[])
+}
 
 const CODEX_MCP_TOOL_USE_MATCHER: &str = "mcp__.*";
 
-const CODEX_PERMISSION_REQUEST_MATCHER: &str = "Bash|apply_patch";
+fn codex_permission_request_matcher() -> String {
+    matcher_with_file_tools(
+        Client::Codex,
+        FileHookEvent::PermissionRequest,
+        &["Bash"],
+        &[],
+    )
+}
 
-const CODEX_POST_TOOL_USE_MATCHER: &str = "Bash|apply_patch";
+fn codex_post_tool_use_matcher() -> String {
+    matcher_with_file_tools(Client::Codex, FileHookEvent::PostToolUse, &["Bash"], &[])
+}
 
 /// Build a Codex hook entry. The installed command embeds `--client codex`
 /// so tool-gates routes the wire format correctly when Codex spawns it.
@@ -1255,30 +1324,41 @@ fn shell_single_quote(s: &str) -> String {
 /// `[[accept_edits_mcp]]` cannot safely auto-approve MCP calls for Codex.
 /// PostToolUse covers Bash + apply_patch for tracking + security reminders.
 fn generate_codex_hooks_json(binary_path: &str) -> serde_json::Value {
+    let pre_tool_use_matcher = codex_pre_tool_use_matcher();
+    let permission_request_matcher = codex_permission_request_matcher();
+    let post_tool_use_matcher = codex_post_tool_use_matcher();
     serde_json::json!({
         "PreToolUse": [
-            generate_codex_hook_entry(binary_path, CODEX_PRE_TOOL_USE_MATCHER),
+            generate_codex_hook_entry(binary_path, &pre_tool_use_matcher),
             generate_codex_hook_entry(binary_path, CODEX_MCP_TOOL_USE_MATCHER),
         ],
         "PermissionRequest": [
-            generate_codex_hook_entry(binary_path, CODEX_PERMISSION_REQUEST_MATCHER),
+            generate_codex_hook_entry(binary_path, &permission_request_matcher),
         ],
         "PostToolUse": [
-            generate_codex_hook_entry(binary_path, CODEX_POST_TOOL_USE_MATCHER),
+            generate_codex_hook_entry(binary_path, &post_tool_use_matcher),
         ]
     })
 }
 
 /// Gemini BeforeTool matcher for shell + file + search + skill tools.
-const GEMINI_BEFORE_TOOL_MATCHER: &str = "run_shell_command|read_file|read_many_files|write_file|replace|glob|grep_search|activate_skill";
+fn gemini_before_tool_matcher() -> String {
+    matcher_with_file_tools(
+        Client::Gemini,
+        FileHookEvent::PreToolUse,
+        &["run_shell_command"],
+        &["glob", "grep_search", "activate_skill"],
+    )
+}
 
 /// Gemini BeforeTool matcher for MCP tools (single underscore prefix).
 const GEMINI_MCP_TOOL_MATCHER: &str = "mcp_.*";
 
 fn generate_gemini_hooks_json(binary_path: &str) -> serde_json::Value {
+    let before_tool_matcher = gemini_before_tool_matcher();
     serde_json::json!({
         "BeforeTool": [
-            generate_gemini_hook_entry(binary_path, GEMINI_BEFORE_TOOL_MATCHER),
+            generate_gemini_hook_entry(binary_path, &before_tool_matcher),
             generate_gemini_hook_entry(binary_path, GEMINI_MCP_TOOL_MATCHER),
         ]
     })
@@ -1289,7 +1369,14 @@ fn generate_gemini_hooks_json(binary_path: &str) -> serde_json::Value {
 /// read/write/edit, grep, glob). Antigravity's MCP tool-name format is not
 /// documented for hook matchers, so MCP block rules are not wired for
 /// Antigravity yet.
-const ANTIGRAVITY_PRE_TOOL_USE_MATCHER: &str = "run_command|view_file|write_to_file|replace_file_content|multi_replace_file_content|grep_search|find_by_name";
+fn antigravity_pre_tool_use_matcher() -> String {
+    matcher_with_file_tools(
+        Client::Antigravity,
+        FileHookEvent::PreToolUse,
+        &["run_command"],
+        &["grep_search", "find_by_name"],
+    )
+}
 
 /// Build the Antigravity hooks.json fragment for the installer.
 ///
@@ -1305,11 +1392,12 @@ const ANTIGRAVITY_PRE_TOOL_USE_MATCHER: &str = "run_command|view_file|write_to_f
 /// nothing for tool-gates to track or scan after the fact.
 fn generate_antigravity_hooks_json(binary_path: &str) -> serde_json::Value {
     let command = format!("{} --client antigravity", shell_single_quote(binary_path));
+    let matcher = antigravity_pre_tool_use_matcher();
     serde_json::json!({
         "tool-gates": {
             "PreToolUse": [
                 {
-                    "matcher": ANTIGRAVITY_PRE_TOOL_USE_MATCHER,
+                    "matcher": matcher,
                     "hooks": [{"type": "command", "command": command, "timeout": 30}]
                 }
             ]
@@ -1488,12 +1576,12 @@ fn install_hooks(scope: &str, dry_run: bool) {
     eprintln!("Target: {} ({})", settings_path.display(), scope);
     eprintln!();
 
-    let pre_tool_use_entry = generate_hook_entry(&binary_path, PRE_TOOL_USE_MATCHER);
+    let pre_tool_use_entry = generate_hook_entry(&binary_path, &pre_tool_use_matcher());
     let mcp_tool_use_entry = generate_hook_entry(&binary_path, MCP_TOOL_USE_MATCHER);
-    let perm_request_entry = generate_hook_entry(&binary_path, PERMISSION_REQUEST_MATCHER);
+    let perm_request_entry = generate_hook_entry(&binary_path, &permission_request_matcher());
     let mcp_perm_request_entry = generate_hook_entry(&binary_path, MCP_TOOL_USE_MATCHER);
     let perm_denied_entry = generate_hook_entry(&binary_path, PERMISSION_DENIED_MATCHER);
-    let post_tool_use_entry = generate_hook_entry(&binary_path, POST_TOOL_USE_MATCHER);
+    let post_tool_use_entry = generate_hook_entry(&binary_path, &post_tool_use_matcher());
     let expected_events = vec![
         (
             "PreToolUse".to_string(),
@@ -3936,6 +4024,27 @@ mod tests {
     }
 
     #[test]
+    fn file_path_extraction_uses_registered_payload_shapes() {
+        let notebook = serde_json::json!({"notebook_path": "/workspace/example.ipynb"})
+            .as_object()
+            .unwrap()
+            .clone();
+        assert_eq!(
+            extract_file_paths_from_map("NotebookEdit", &notebook),
+            ["/workspace/example.ipynb"]
+        );
+
+        let many = serde_json::json!({"paths": ["/workspace/a.rs", "/workspace/b.rs"]})
+            .as_object()
+            .unwrap()
+            .clone();
+        assert_eq!(
+            extract_file_paths_from_map("read_many_files", &many),
+            ["/workspace/a.rs", "/workspace/b.rs"]
+        );
+    }
+
+    #[test]
     fn test_check_command_git_status() {
         let output = check_command("git status");
         assert_eq!(output.decision, PermissionDecision::Allow);
@@ -4151,6 +4260,7 @@ mod tests {
         assert!(cmd.contains("--client antigravity"), "cmd: {cmd}");
         // Matcher covers the gateable Antigravity tool names.
         let matcher = pre[0]["matcher"].as_str().unwrap();
+        assert_eq!(matcher, antigravity_pre_tool_use_matcher());
         assert!(matcher.contains("run_command"), "matcher: {matcher}");
         assert!(matcher.contains("write_to_file"), "matcher: {matcher}");
     }
@@ -4418,17 +4528,17 @@ mod tests {
         // PreToolUse: built-in tools + MCP.
         let pre = obj["PreToolUse"].as_array().unwrap();
         assert_eq!(pre.len(), 2);
-        assert_eq!(pre[0]["matcher"], PRE_TOOL_USE_MATCHER);
-        assert!(PRE_TOOL_USE_MATCHER.contains("NotebookEdit"));
-        assert!(!PRE_TOOL_USE_MATCHER.contains("MultiEdit"));
+        assert_eq!(pre[0]["matcher"], pre_tool_use_matcher());
+        assert!(pre_tool_use_matcher().contains("NotebookEdit"));
+        assert!(!pre_tool_use_matcher().contains("MultiEdit"));
         assert_eq!(pre[1]["matcher"], MCP_TOOL_USE_MATCHER);
 
         // PermissionRequest must include MCP so [[accept_edits_mcp]] rules
         // fire for subagents (where PreToolUse's allow is ignored).
         let perm = obj["PermissionRequest"].as_array().unwrap();
         assert_eq!(perm.len(), 2);
-        assert_eq!(perm[0]["matcher"], PERMISSION_REQUEST_MATCHER);
-        assert!(PERMISSION_REQUEST_MATCHER.contains("NotebookEdit"));
+        assert_eq!(perm[0]["matcher"], permission_request_matcher());
+        assert!(permission_request_matcher().contains("NotebookEdit"));
         assert_eq!(perm[1]["matcher"], MCP_TOOL_USE_MATCHER);
 
         // PermissionDenied is shell-only (auto-mode classifier retry).
@@ -4439,8 +4549,8 @@ mod tests {
         // PostToolUse: shell tracking + file security.
         let post = obj["PostToolUse"].as_array().unwrap();
         assert_eq!(post.len(), 1);
-        assert_eq!(post[0]["matcher"], POST_TOOL_USE_MATCHER);
-        assert!(POST_TOOL_USE_MATCHER.contains("NotebookEdit"));
+        assert_eq!(post[0]["matcher"], post_tool_use_matcher());
+        assert!(post_tool_use_matcher().contains("NotebookEdit"));
     }
 
     #[test]
@@ -4452,6 +4562,10 @@ mod tests {
         assert!(obj.contains_key("BeforeTool"));
         assert!(!obj.contains_key("AfterTool"));
         assert_eq!(obj["BeforeTool"].as_array().unwrap().len(), 2);
+        assert_eq!(
+            obj["BeforeTool"][0]["matcher"],
+            gemini_before_tool_matcher()
+        );
     }
 
     #[test]
@@ -4559,13 +4673,11 @@ mod tests {
 
     #[test]
     fn sync_hook_entries_replaces_stale_command_with_same_matcher() {
-        let expected = vec![generate_codex_hook_entry(
-            "/new/path/tool-gates",
-            CODEX_PRE_TOOL_USE_MATCHER,
-        )];
+        let matcher = codex_pre_tool_use_matcher();
+        let expected = vec![generate_codex_hook_entry("/new/path/tool-gates", &matcher)];
         let mut hooks = serde_json::json!([
             {
-                "matcher": CODEX_PRE_TOOL_USE_MATCHER,
+                "matcher": matcher,
                 "hooks": [{"type": "command", "command": "/old/path/tool-gates", "timeout": 30}]
             }
         ]);
@@ -4581,10 +4693,8 @@ mod tests {
 
     #[test]
     fn sync_hook_entries_keeps_identical_managed_entries() {
-        let expected = vec![generate_codex_hook_entry(
-            "/new/path/tool-gates",
-            CODEX_PRE_TOOL_USE_MATCHER,
-        )];
+        let matcher = codex_pre_tool_use_matcher();
+        let expected = vec![generate_codex_hook_entry("/new/path/tool-gates", &matcher)];
         let mut hooks = serde_json::Value::Array(expected.clone());
 
         let change = sync_hook_entries(&mut hooks, &expected);

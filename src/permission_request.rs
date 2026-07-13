@@ -321,28 +321,32 @@ fn decide_codex_project_edit(
 /// `file_path` for Claude/Gemini tools, `notebook_path` for NotebookEdit, and
 /// the parsed unified-diff body for Codex `apply_patch`.
 fn collect_paths_for_permission(input: &PermissionRequestInput) -> Vec<String> {
-    if input.tool_name == "apply_patch" {
-        let command = input.get_command();
-        if command.is_empty() {
-            return Vec::new();
+    match crate::file_tools::spec_for_name(&input.tool_name).map(|spec| spec.payload) {
+        Some(crate::file_tools::FilePayloadKind::ApplyPatch) => {
+            let command = input.get_command();
+            if command.is_empty() {
+                return Vec::new();
+            }
+            crate::apply_patch_parser::parse_patch(&command)
+                .into_iter()
+                .flat_map(|f| {
+                    f.affected_paths()
+                        .into_iter()
+                        .map(|p| p.display().to_string())
+                        .collect::<Vec<_>>()
+                })
+                .filter(|p| !p.is_empty())
+                .collect()
         }
-        return crate::apply_patch_parser::parse_patch(&command)
-            .into_iter()
-            .flat_map(|f| {
-                f.affected_paths()
-                    .into_iter()
-                    .map(|p| p.display().to_string())
-                    .collect::<Vec<_>>()
-            })
-            .filter(|p| !p.is_empty())
-            .collect();
-    }
-
-    let path = input.get_file_path();
-    if path.is_empty() {
-        Vec::new()
-    } else {
-        vec![path]
+        Some(_) => {
+            let path = input.get_file_path();
+            if path.is_empty() {
+                Vec::new()
+            } else {
+                vec![path]
+            }
+        }
+        None => Vec::new(),
     }
 }
 

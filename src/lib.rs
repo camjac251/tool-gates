@@ -37,6 +37,7 @@ pub mod config;
 pub mod content_scan;
 pub mod design_lint;
 pub mod file_guards;
+pub mod file_tools;
 pub mod gates;
 pub mod generated;
 pub mod git_aliases;

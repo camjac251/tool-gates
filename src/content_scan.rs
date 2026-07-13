@@ -34,8 +34,11 @@ pub(crate) fn extract_content(
     map: &serde_json::Map<String, serde_json::Value>,
 ) -> Vec<(String, String)> {
     let mut results = Vec::new();
+    let Some(spec) = crate::file_tools::spec_for_name(tool_name) else {
+        return results;
+    };
 
-    if tool_name == "apply_patch" {
+    if spec.payload == crate::file_tools::FilePayloadKind::ApplyPatch {
         let command = map.get("command").and_then(|v| v.as_str()).unwrap_or("");
         if command.is_empty() {
             return results;
@@ -63,26 +66,27 @@ pub(crate) fn extract_content(
     }
 
     let top_file_path = map
-        .get(if tool_name == "NotebookEdit" {
-            "notebook_path"
-        } else {
-            "file_path"
-        })
+        .get(
+            if spec.payload == crate::file_tools::FilePayloadKind::Notebook {
+                "notebook_path"
+            } else {
+                "file_path"
+            },
+        )
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
 
-    // Match tool names from both Claude (Write/Edit) and Gemini (write_file/replace).
-    // Field names (file_path, content, old_string, new_string) are the same in both CLIs.
-    match tool_name {
-        "Write" | "write_file" => {
+    match spec.payload {
+        crate::file_tools::FilePayloadKind::Content
+        | crate::file_tools::FilePayloadKind::NormalizedContent => {
             if let Some(content) = map.get("content").and_then(|v| v.as_str()) {
                 if !content.is_empty() {
                     results.push((top_file_path, content.to_string()));
                 }
             }
         }
-        "Edit" | "replace" => {
+        crate::file_tools::FilePayloadKind::Replacement => {
             // Classic: single new_string
             if let Some(new_string) = map.get("new_string").and_then(|v| v.as_str()) {
                 if !new_string.is_empty() {
@@ -100,7 +104,7 @@ pub(crate) fn extract_content(
                 }
             }
         }
-        "NotebookEdit" => {
+        crate::file_tools::FilePayloadKind::Notebook => {
             let deletes_cell = map.get("edit_mode").and_then(|v| v.as_str()) == Some("delete");
             if !deletes_cell {
                 if let Some(source) = map.get("new_source").and_then(|v| v.as_str()) {
@@ -110,18 +114,9 @@ pub(crate) fn extract_content(
                 }
             }
         }
-        // Antigravity write/edit tools. main()'s payload normalization flattens
-        // the PascalCase args (CodeContent / ReplacementContent / chunked
-        // ReplacementChunks[].ReplacementContent) into the canonical `content`
-        // key before this runs, so a single content read covers all three.
-        "write_to_file" | "replace_file_content" | "multi_replace_file_content" => {
-            if let Some(content) = map.get("content").and_then(|v| v.as_str()) {
-                if !content.is_empty() {
-                    results.push((top_file_path, content.to_string()));
-                }
-            }
-        }
-        _ => {}
+        crate::file_tools::FilePayloadKind::FilePath
+        | crate::file_tools::FilePayloadKind::ReadMany
+        | crate::file_tools::FilePayloadKind::ApplyPatch => {}
     }
 
     results
