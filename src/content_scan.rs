@@ -22,6 +22,7 @@ use std::sync::{Mutex, OnceLock};
 /// - Claude `Write` / Gemini `write_file`: top-level `file_path` + `content`.
 /// - Claude `Edit` / Gemini `replace`: top-level `file_path` + `new_string`,
 ///   plus the batch `edits[].new_string` form.
+/// - Claude `NotebookEdit`: top-level `notebook_path` + `new_source`.
 /// - Codex `apply_patch`: parse the unified-diff body in `command` and emit
 ///   one `(path, added_lines)` pair per Add/Update section. Delete sections
 ///   are skipped (no content to scan).
@@ -62,7 +63,11 @@ pub(crate) fn extract_content(
     }
 
     let top_file_path = map
-        .get("file_path")
+        .get(if tool_name == "NotebookEdit" {
+            "notebook_path"
+        } else {
+            "file_path"
+        })
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
@@ -91,6 +96,16 @@ pub(crate) fn extract_content(
                         if !ns.is_empty() {
                             results.push((top_file_path.clone(), ns.to_string()));
                         }
+                    }
+                }
+            }
+        }
+        "NotebookEdit" => {
+            let deletes_cell = map.get("edit_mode").and_then(|v| v.as_str()) == Some("delete");
+            if !deletes_cell {
+                if let Some(source) = map.get("new_source").and_then(|v| v.as_str()) {
+                    if !source.is_empty() {
+                        results.push((top_file_path, source.to_string()));
                     }
                 }
             }
@@ -288,6 +303,26 @@ mod tests {
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].1, "eval(x)");
         assert_eq!(results[1].1, "safe()");
+    }
+
+    #[test]
+    fn test_extract_notebook_cell_source() {
+        let map = make_map(
+            r#"{"notebook_path":"/tmp/example.ipynb","new_source":"eval(value)","edit_mode":"replace"}"#,
+        );
+        let results = extract_content("NotebookEdit", &map);
+        assert_eq!(
+            results,
+            vec![("/tmp/example.ipynb".into(), "eval(value)".into())]
+        );
+    }
+
+    #[test]
+    fn test_extract_notebook_delete_has_no_content() {
+        let map = make_map(
+            r#"{"notebook_path":"/tmp/example.ipynb","new_source":"","edit_mode":"delete"}"#,
+        );
+        assert!(extract_content("NotebookEdit", &map).is_empty());
     }
 
     #[test]

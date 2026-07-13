@@ -318,8 +318,8 @@ fn decide_codex_project_edit(
 }
 
 /// Collect every file path this PermissionRequest would write to. Read from
-/// `file_path` for Claude/Gemini tools, from the parsed unified-diff body for
-/// Codex `apply_patch`.
+/// `file_path` for Claude/Gemini tools, `notebook_path` for NotebookEdit, and
+/// the parsed unified-diff body for Codex `apply_patch`.
 fn collect_paths_for_permission(input: &PermissionRequestInput) -> Vec<String> {
     if input.tool_name == "apply_patch" {
         let command = input.get_command();
@@ -495,6 +495,19 @@ mod tests {
 
     fn default_guards() -> crate::config::FileGuardsConfig {
         crate::config::FileGuardsConfig::default()
+    }
+
+    #[test]
+    fn notebook_edit_collects_notebook_path() {
+        let input: PermissionRequestInput = serde_json::from_str(
+            r#"{"hook_event_name":"PermissionRequest","tool_name":"NotebookEdit","tool_input":{"notebook_path":"/workspace/example.ipynb","new_source":"value = 1"}}"#,
+        )
+        .expect("parse NotebookEdit request");
+
+        assert_eq!(
+            collect_paths_for_permission(&input),
+            vec!["/workspace/example.ipynb"]
+        );
     }
 
     #[test]

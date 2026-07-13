@@ -184,7 +184,6 @@ impl Client {
             "Read"
                 | "Write"
                 | "Edit"
-                | "MultiEdit"
                 | "NotebookEdit"
                 | "read_file"
                 | "read_many_files"
@@ -214,7 +213,6 @@ impl Client {
             tool_name,
             "Write"
                 | "Edit"
-                | "MultiEdit"
                 | "NotebookEdit"
                 | "write_file"
                 | "replace"
@@ -265,6 +263,9 @@ pub struct ToolInput {
     /// File path for Read/Write/Edit tools
     #[serde(default)]
     pub file_path: Option<String>,
+    /// Notebook path for NotebookEdit.
+    #[serde(default)]
+    pub notebook_path: Option<String>,
 }
 
 /// Deserialize a string field that may arrive as `null`. Codex's hook payload
@@ -327,12 +328,17 @@ impl HookInput {
         }
     }
 
-    /// Extract file_path from `tool_input` (for Read/Write/Edit tools)
+    /// Extract the target path from `tool_input` for file tools.
     pub fn get_file_path(&self) -> String {
         match &self.tool_input {
-            ToolInputVariant::Structured(ti) => ti.file_path.clone().unwrap_or_default(),
+            ToolInputVariant::Structured(ti) => ti
+                .file_path
+                .clone()
+                .or_else(|| ti.notebook_path.clone())
+                .unwrap_or_default(),
             ToolInputVariant::Map(m) => m
                 .get("file_path")
+                .or_else(|| m.get("notebook_path"))
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string(),
@@ -342,11 +348,12 @@ impl HookInput {
 
     /// Extract all file paths from `tool_input`.
     ///
-    /// Handles single-file tools (Read/Write/Edit with `file_path`).
+    /// Handles single-file tools (`file_path`) and NotebookEdit
+    /// (`notebook_path`).
     pub fn get_file_paths(&self) -> Vec<String> {
         let mut paths = Vec::new();
 
-        // Single file_path (Read/Write/Edit)
+        // Single target path.
         let fp = self.get_file_path();
         if !fp.is_empty() {
             paths.push(fp);
@@ -920,12 +927,17 @@ pub struct PermissionRequestInput {
 }
 
 impl PermissionRequestInput {
-    /// Extract file_path from `tool_input` (for Write/Edit tools)
+    /// Extract the target path from `tool_input` for write/edit tools.
     pub fn get_file_path(&self) -> String {
         match &self.tool_input {
-            ToolInputVariant::Structured(ti) => ti.file_path.clone().unwrap_or_default(),
+            ToolInputVariant::Structured(ti) => ti
+                .file_path
+                .clone()
+                .or_else(|| ti.notebook_path.clone())
+                .unwrap_or_default(),
             ToolInputVariant::Map(m) => m
                 .get("file_path")
+                .or_else(|| m.get("notebook_path"))
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string(),
@@ -1517,6 +1529,8 @@ mod tests {
         assert!(Client::is_file_tool("Read"));
         assert!(Client::is_file_tool("Write"));
         assert!(Client::is_file_tool("Edit"));
+        assert!(Client::is_file_tool("NotebookEdit"));
+        assert!(!Client::is_file_tool("MultiEdit"));
         // Gemini tool names
         assert!(Client::is_file_tool("read_file"));
         assert!(Client::is_file_tool("read_many_files"));
@@ -1542,6 +1556,8 @@ mod tests {
     fn test_is_write_tool() {
         assert!(Client::is_write_tool("Write"));
         assert!(Client::is_write_tool("Edit"));
+        assert!(Client::is_write_tool("NotebookEdit"));
+        assert!(!Client::is_write_tool("MultiEdit"));
         assert!(Client::is_write_tool("write_file"));
         assert!(Client::is_write_tool("replace"));
         assert!(!Client::is_write_tool("Read"));

@@ -1159,15 +1159,15 @@ fn get_binary_path() -> String {
 }
 
 /// PreToolUse matcher for built-in tools (exact match mode).
-/// Bash (gate engine), Read/Write/Edit (file guards), Glob/Grep (block rules).
-const PRE_TOOL_USE_MATCHER: &str = "Bash|Monitor|Read|Write|Edit|Glob|Grep|Skill";
+/// Bash (gate engine), file tools (guards), Glob/Grep (block rules).
+const PRE_TOOL_USE_MATCHER: &str = "Bash|Monitor|Read|Write|Edit|NotebookEdit|Glob|Grep|Skill";
 
 /// PreToolUse matcher for MCP tools (regex mode).
 /// Matches all MCP tool calls; block rules in config decide what to deny.
 const MCP_TOOL_USE_MATCHER: &str = "mcp__.*";
 
 /// PermissionRequest matcher for Bash (command approval) + file tools (worktree approval).
-const PERMISSION_REQUEST_MATCHER: &str = "Bash|Monitor|Write|Edit";
+const PERMISSION_REQUEST_MATCHER: &str = "Bash|Monitor|Write|Edit|NotebookEdit";
 
 /// PermissionDenied matcher for classifier denials in auto mode.
 /// Scoped to shell tools -- that's where tool-gates has gate knowledge deep
@@ -1176,7 +1176,7 @@ const PERMISSION_REQUEST_MATCHER: &str = "Bash|Monitor|Write|Edit";
 const PERMISSION_DENIED_MATCHER: &str = "Bash|Monitor";
 
 /// PostToolUse matcher for Bash (approval tracking) + file tools (security reminders).
-const POST_TOOL_USE_MATCHER: &str = "Bash|Monitor|Write|Edit";
+const POST_TOOL_USE_MATCHER: &str = "Bash|Monitor|Write|Edit|NotebookEdit";
 
 fn generate_hook_entry(binary_path: &str, matcher: &str) -> serde_json::Value {
     serde_json::json!({
@@ -4436,6 +4436,8 @@ mod tests {
         let pre = obj["PreToolUse"].as_array().unwrap();
         assert_eq!(pre.len(), 2);
         assert_eq!(pre[0]["matcher"], PRE_TOOL_USE_MATCHER);
+        assert!(PRE_TOOL_USE_MATCHER.contains("NotebookEdit"));
+        assert!(!PRE_TOOL_USE_MATCHER.contains("MultiEdit"));
         assert_eq!(pre[1]["matcher"], MCP_TOOL_USE_MATCHER);
 
         // PermissionRequest must include MCP so [[accept_edits_mcp]] rules
@@ -4443,6 +4445,7 @@ mod tests {
         let perm = obj["PermissionRequest"].as_array().unwrap();
         assert_eq!(perm.len(), 2);
         assert_eq!(perm[0]["matcher"], PERMISSION_REQUEST_MATCHER);
+        assert!(PERMISSION_REQUEST_MATCHER.contains("NotebookEdit"));
         assert_eq!(perm[1]["matcher"], MCP_TOOL_USE_MATCHER);
 
         // PermissionDenied is shell-only (auto-mode classifier retry).
@@ -4454,6 +4457,7 @@ mod tests {
         let post = obj["PostToolUse"].as_array().unwrap();
         assert_eq!(post.len(), 1);
         assert_eq!(post[0]["matcher"], POST_TOOL_USE_MATCHER);
+        assert!(POST_TOOL_USE_MATCHER.contains("NotebookEdit"));
     }
 
     #[test]
