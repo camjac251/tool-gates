@@ -5,7 +5,7 @@ Intelligent tool permission gate using tree-sitter AST parsing. Handles Bash/Mon
 **Claude Code:** Use as PreToolUse + PermissionRequest + PermissionDenied + PostToolUse hooks (native integration)
 **Codex CLI:** Use as PreToolUse + PermissionRequest + PostToolUse hooks. Selected via the explicit `--client codex` flag baked into the installed hook command (Codex emits the same `hook_event_name` strings as Claude).
 **Antigravity CLI (`agy`):** Use as a single PreToolUse hook. Selected via the explicit `--client antigravity` flag baked into the installed hook command (Antigravity sends no `hook_event_name` and uses a distinct payload shape).
-**Gemini CLI (deprecated):** Use as BeforeTool + AfterTool hooks (requires v0.36.0+ for `ask` decision support). Google sunsets the consumer Gemini CLI on 2026-06-18; use Antigravity for new setups.
+**Gemini CLI (deprecated):** Use as a single BeforeTool hook (requires v0.36.0+ for `ask` decision support). Google sunsets the consumer Gemini CLI on 2026-06-18; use Antigravity for new setups.
 
 ## Quick Reference
 
@@ -39,7 +39,6 @@ tool-gates supports Claude Code, Codex CLI, and Antigravity CLI hook systems, pl
 | Hook | Purpose | When it runs |
 |------|---------|--------------|
 | **BeforeTool** | Route all tool types (shell, file ops, glob/grep, MCP, skills), block dangerous operations, allow safe ones, provide hints, file guards, security reminders | Before tool execution |
-| **AfterTool** | Installed for post-execution context; write-tool security scanning currently skips Gemini until Gemini-shaped post output is implemented | After command completes |
 
 **Codex CLI** (tool_name: `Bash`, `apply_patch`, `mcp__*`):
 

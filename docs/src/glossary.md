@@ -35,7 +35,7 @@
       <tr><td><code>PermissionDenied</code></td><td>Auto-mode classifier denied a command; tool-gates checks if its own engine would have allowed it, returns <code>retry: true</code> if so.</td></tr>
       <tr><td><code>PostToolUse</code></td><td>Fires after execution. Tracks successful asks into the pending queue; scans Write/Edit bodies for Tier 2 anti-patterns.</td></tr>
       <tr><td>Antigravity <code>PreToolUse</code></td><td>Antigravity CLI's single gate hook. No PermissionRequest event and no usable post payload, so PreToolUse runs the whole gate. Selected via <code>--client antigravity</code>.</td></tr>
-      <tr><td><code>BeforeTool</code> / <code>AfterTool</code></td><td>Gemini CLI's two hooks (deprecated). BeforeTool covers the main gate path; AfterTool is installed for post-execution context, but current code returns early for tracking and Tier 2 security scanning on Gemini.</td></tr>
+      <tr><td><code>BeforeTool</code></td><td>Gemini CLI's single installed hook (deprecated). It covers the main gate path; tool-gates does not install an AfterTool hook because Gemini post output is unused.</td></tr>
     </tbody>
   </table>
   <div class="sec-head">

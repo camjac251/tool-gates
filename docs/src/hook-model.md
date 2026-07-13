@@ -53,7 +53,7 @@
   </div>
   <div class="sec-head" style="margin-top:var(--s-7)">
     <p class="lbl">Gemini CLI · deprecated</p>
-    <h2>Two hooks. No subagent, no classifier.</h2>
+    <h2>One hook. No subagent, classifier, or post output.</h2>
     <p>Google sunsets the consumer Gemini CLI on 2026-06-18. tool-gates keeps this client working through the transition; new setups should use Antigravity, Google's successor CLI, below.</p>
   </div>
   <div class="lifecycle" aria-label="Tool-call lifecycle on Gemini CLI">
@@ -79,13 +79,6 @@
         <span class="lc-icon">▷</span>
         <div class="lc-title">Execute</div>
         <div class="lc-sub">The tool call runs.</div>
-      </div>
-      <div class="lc-edge"></div>
-      <div class="lc-node hook">
-        <span class="lc-icon">▸</span>
-        <span class="lc-tag">AfterTool</span>
-        <div class="lc-title">Post context</div>
-        <div class="lc-sub">Installed for post-execution context. Current Gemini handling returns early for shell tracking because Gemini does not provide <code>tool_use_id</code>, and Tier 2 write scanning is not yet plumbed for Gemini output.</div>
       </div>
     </div>
   </div>
@@ -205,5 +198,5 @@
   </p>
   <p class="note">
     <svg class="alert" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
-    <span><b>Gemini CLI has only BeforeTool and AfterTool; Antigravity CLI has only PreToolUse for tool-gates.</b> Codex CLI has no PermissionDenied event (no auto-mode classifier yet). The engine routes around what's missing. Gemini carries modern-CLI hints and Tier 3 warnings on BeforeTool; Codex moves them to PostToolUse because tool-gates emits empty stdout for non-deny PreToolUse decisions. Antigravity's Pre output has no additionalContext field, so hints and Tier 3 warnings are dropped there and deny remediation is folded into the reason.</span>
+    <span><b>Gemini CLI and Antigravity CLI each install one pre-execution hook.</b> Codex CLI has no PermissionDenied event (no auto-mode classifier yet). The engine routes around what's missing. Gemini carries modern-CLI hints and Tier 3 warnings on BeforeTool; Codex moves them to PostToolUse because tool-gates emits empty stdout for non-deny PreToolUse decisions. Antigravity's Pre output has no additionalContext field, so hints and Tier 3 warnings are dropped there and deny remediation is folded into the reason.</span>
   </p>

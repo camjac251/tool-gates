@@ -201,10 +201,9 @@
         <p class="pathline"><code>~/.gemini/config/hooks.json</code></p>
       </article>
       <article class="client">
-        <h4>Gemini CLI <span class="count">· 2 hooks · deprecated</span></h4>
+        <h4>Gemini CLI <span class="count">· 1 hook · deprecated</span></h4>
         <ul>
           <li><i></i>BeforeTool</li>
-          <li><i></i>AfterTool</li>
         </ul>
         <p class="client-note"><b>Deprecated:</b> Google sunsets the consumer Gemini CLI on 2026-06-18; use Antigravity for new setups. Requires v0.36.0+ for <code>ask</code> support. No PermissionRequest, no approval tracking; tool-gates emits <code>"block"</code> for hard blocks, and Gemini also accepts <code>"deny"</code>.</p>
         <p class="pathline"><code>~/.gemini/settings.json</code></p>

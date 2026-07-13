@@ -52,13 +52,12 @@
       <article class="install-client">
         <header>
           <h3>Gemini CLI</h3>
-          <span class="hooks-count">2 hooks</span>
+          <span class="hooks-count">1 hook</span>
         </header>
         <p><b>Deprecated:</b> Google sunsets the consumer Gemini CLI on 2026-06-18; use Antigravity for new setups. Requires Gemini CLI v0.36.0+ for <code>ask</code>-decision support on BeforeTool hooks.</p>
 <pre class="code-block"><span class="prompt">$</span> tool-gates hooks add --gemini</pre>
         <ul class="hook-list">
           <li><code>BeforeTool</code>: gates every tool call</li>
-          <li><code>AfterTool</code>: post-execution hook (no tracking/scanning yet)</li>
         </ul>
         <p class="settings-path">~/.gemini/settings.json</p>
       </article>

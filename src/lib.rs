@@ -2,19 +2,26 @@
 //!
 //! This library provides command parsing and permission
 //! checking for assistant tool calls, designed for use as hooks in Claude Code,
-//! Gemini CLI, and Codex CLI.
+//! Codex CLI, Antigravity CLI, and the deprecated Gemini CLI.
 //!
 //! **Claude Code hooks:**
 //! - `PreToolUse`: Block dangerous commands, allow safe ones, provide hints
 //! - `PermissionRequest`: Approve safe commands for subagents (where PreToolUse allow is ignored)
+//! - `PermissionDenied`: Retry commands incorrectly denied by the auto-mode classifier
 //! - `PostToolUse`: Track successful execution of approved commands
 //!
-//! **Gemini CLI hooks:**
-//! - `BeforeTool`: Same gate engine, auto-detected from `hook_event_name`
-//! - `AfterTool`: Post-execution context hook; tracking/security scanning are not plumbed yet
+//! **Codex CLI hooks:** `PreToolUse`, `PermissionRequest`, and `PostToolUse`,
+//! selected via the explicit `--client codex` flag.
+//!
+//! **Antigravity CLI hooks:** one `PreToolUse` hook selected via the explicit
+//! `--client antigravity` flag.
+//!
+//! **Gemini CLI hooks:** one `BeforeTool` hook, auto-detected from
+//! `hook_event_name`.
 //!
 //! Claude Code and Gemini CLI are auto-detected from `hook_event_name`; Codex
-//! uses the explicit `--client codex` flag because it shares Claude's event names.
+//! and Antigravity use explicit client flags because their events collide with
+//! Claude's names or omit an event name.
 //!
 //! # Example
 //!

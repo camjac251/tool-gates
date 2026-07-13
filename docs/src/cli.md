@@ -16,7 +16,7 @@
       </tr>
       <tr>
         <td><code>tool-gates hooks add --gemini</code></td>
-        <td>Wire BeforeTool and AfterTool into <code>~/.gemini/settings.json</code>.</td>
+        <td>Wire a single BeforeTool hook into <code>~/.gemini/settings.json</code>.</td>
       </tr>
       <tr>
         <td><code>tool-gates hooks add --codex</code></td>

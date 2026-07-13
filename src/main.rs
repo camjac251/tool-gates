@@ -10,7 +10,7 @@
 //! - Claude Code: `PreToolUse`, `PermissionRequest`, `PermissionDenied`, `PostToolUse` (Bash, Monitor, Write, Edit)
 //! - Codex CLI:   `PreToolUse`, `PermissionRequest`, `PostToolUse` (Bash, apply_patch, mcp__*). Selected via `--client codex`.
 //! - Antigravity CLI (`agy`): `PreToolUse` (run_command, view_file, write_to_file, replace_file_content, ...). Selected via `--client antigravity`.
-//! - Gemini CLI:  `BeforeTool`, `AfterTool` (tool_name: "run_shell_command"). Deprecated; Google sunsets the consumer Gemini CLI on 2026-06-18. Use Antigravity instead.
+//! - Gemini CLI:  `BeforeTool` (tool_name: "run_shell_command"). Deprecated; Google sunsets the consumer Gemini CLI on 2026-06-18. Use Antigravity instead.
 //!
 //! Configuration: `~/.config/tool-gates/config.toml`
 //!
@@ -1614,9 +1614,8 @@ fn install_gemini_hooks(scope: &str, dry_run: bool) {
     if changed {
         eprintln!("\n✓ Installed to {}", settings_path.display());
         eprintln!("\nHooks added: {}", changes.join(", "));
-        eprintln!("\nGemini CLI hooks:");
+        eprintln!("\nGemini CLI hook:");
         eprintln!("  - BeforeTool: Command safety (allow/block/ask)");
-        eprintln!("  - AfterTool: Post-execution context");
     }
 }
 

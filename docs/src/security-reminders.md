@@ -4,7 +4,7 @@
   <div class="sec-head" style="margin-top: var(--s-6)">
     <p class="lbl">Why Tier 2 nudges after the write</p>
     <h2>Self-correction beats re-prompting.</h2>
-    <p>Tier 2 patterns let the write succeed, then attach a <code>&lt;system-reminder&gt;</code> on <code>additionalContext</code>. Claude and Codex see the warning in the next turn and can edit the file before doing anything else; Gemini AfterTool output is not plumbed for Tier 2 yet, and Antigravity has no post hook, so on Antigravity only the Tier 1 secret deny (at PreToolUse) applies. No wasted Write call from blocking-then-retrying. Each (file, rule) pair fires at most once per session.</p>
+    <p>Tier 2 patterns let the write succeed, then attach a <code>&lt;system-reminder&gt;</code> on <code>additionalContext</code>. Claude and Codex see the warning in the next turn and can edit the file before doing anything else. Gemini and Antigravity install no post hook, so Tier 2 nudges are unavailable there. Gemini still receives Tier 1 denies and Tier 3 warnings on BeforeTool; Antigravity applies Tier 1 denies on PreToolUse but cannot carry Tier 3 additionalContext. No wasted Write call from blocking-then-retrying. Each (file, rule) pair fires at most once per session.</p>
   </div>
   <div class="rule-card">
     <header>
