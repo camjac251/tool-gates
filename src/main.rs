@@ -83,7 +83,7 @@ fn main() {
     }
 
     if args.len() > 1 && args[1] == "doctor" {
-        handle_doctor_subcommand();
+        handle_doctor_subcommand(&args[2..]);
         return;
     }
 
@@ -3242,7 +3242,20 @@ fn handle_review_subcommand(show_all: bool) {
 
 // === Doctor subcommand ===
 
-fn handle_doctor_subcommand() {
+fn print_doctor_help() {
+    eprintln!("tool-gates doctor - Check config, hooks, and cache health");
+    eprintln!();
+    eprintln!("USAGE:");
+    eprintln!("  tool-gates doctor");
+    eprintln!("  tool-gates doctor --help");
+}
+
+fn handle_doctor_subcommand(args: &[String]) {
+    if args.iter().any(|arg| arg == "--help" || arg == "-h") {
+        print_doctor_help();
+        return;
+    }
+
     let mut issues: Vec<String> = Vec::new();
     let mut ok_count = 0;
 
@@ -3252,9 +3265,7 @@ fn handle_doctor_subcommand() {
     eprintln!("  Version: {}", env!("GIT_VERSION"));
 
     // 2. Config file
-    let config_path = dirs::home_dir()
-        .map(|h| h.join(".config/tool-gates/config.toml"))
-        .unwrap_or_default();
+    let config_path = config::config_path();
     if config_path.exists() {
         match std::fs::read_to_string(&config_path) {
             Ok(content) => match toml::from_str::<config::Config>(&content) {
@@ -3262,34 +3273,25 @@ fn handle_doctor_subcommand() {
                     eprintln!("  ✓ Config: {} (valid)", config_path.display());
                     // Show feature status
                     let features = &cfg.features;
-                    let enabled: Vec<&str> = [
+                    let feature_states = [
                         ("bash_gates", features.bash_gates),
                         ("file_guards", features.file_guards),
                         ("hints", features.hints),
                         ("security_reminders", features.security_reminders),
                         ("head_tail_pipe_block", features.head_tail_pipe_block),
-                    ]
-                    .iter()
-                    .filter(|(_, v)| *v)
-                    .map(|(k, _)| *k)
-                    .collect();
-                    let disabled: Vec<&str> = [
-                        ("bash_gates", features.bash_gates),
-                        ("file_guards", features.file_guards),
-                        ("hints", features.hints),
-                        ("security_reminders", features.security_reminders),
-                        ("head_tail_pipe_block", features.head_tail_pipe_block),
-                    ]
-                    .iter()
-                    .filter(|(_, v)| !*v)
-                    .map(|(k, _)| *k)
-                    .collect();
+                        ("git_aliases", features.git_aliases),
+                        ("design_lint", features.design_lint),
+                    ];
+                    let disabled: Vec<&str> = feature_states
+                        .iter()
+                        .filter(|(_, v)| !*v)
+                        .map(|(k, _)| *k)
+                        .collect();
                     if !disabled.is_empty() {
                         eprintln!("    Features disabled: {}", disabled.join(", "));
                     } else {
                         eprintln!("    All features enabled");
                     }
-                    let _ = enabled; // suppress unused warning
                     if !cfg.auto_approve_skills.is_empty() {
                         eprintln!(
                             "    Skill auto-approve rules: {}",

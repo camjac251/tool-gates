@@ -142,7 +142,8 @@ impl Config {
     }
 }
 
-/// Feature toggles. All default to `true`.
+/// Feature toggles. Safety and integration features default to `true`;
+/// design linting is opt-in.
 #[derive(Debug, Deserialize)]
 #[serde(default)]
 pub struct Features {
@@ -583,8 +584,8 @@ static DEFAULT_BLOCK_RULES: std::sync::LazyLock<Vec<BlockRule>> = std::sync::Laz
     ]
 });
 
-/// Get the config file path.
-fn config_path() -> PathBuf {
+/// Get the config file path used by the loader and CLI diagnostics.
+pub fn config_path() -> PathBuf {
     std::env::var("XDG_CONFIG_HOME")
         .map(PathBuf::from)
         .ok()
@@ -625,12 +626,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_defaults_all_enabled() {
+    fn test_feature_defaults() {
         let config = Config::default();
         assert!(config.features.bash_gates);
         assert!(config.features.file_guards);
         assert!(config.features.hints);
+        assert!(config.features.security_reminders);
         assert!(config.features.head_tail_pipe_block);
+        assert!(config.features.git_aliases);
+        assert!(!config.features.design_lint);
         assert_eq!(config.cache.ttl_days, 7);
     }
 
