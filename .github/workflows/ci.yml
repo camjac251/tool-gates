@@ -47,23 +47,23 @@ jobs:
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
 
       - name: Build (generates code via build.rs)
-        run: cargo build
+        run: cargo build --locked
 
       - name: Format check (including generated code)
         run: cargo fmt -- --check
 
       - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --locked --all-targets -- -D warnings
 
       - name: Test
-        run: cargo test
+        run: cargo test --locked
 
       - name: Test WebAssembly feature
-        run: cargo test --features wasm --lib
+        run: cargo test --locked --features wasm --lib
 
       - name: Check binary size
         run: |
-          cargo build --release --target x86_64-unknown-linux-musl
+          cargo build --locked --release --target x86_64-unknown-linux-musl
           SIZE=$(stat -c%s target/x86_64-unknown-linux-musl/release/tool-gates)
           echo "Binary size: $SIZE bytes ($(( SIZE / 1024 / 1024 ))MB)"
           if [ "$SIZE" -gt 7000000 ]; then
@@ -93,7 +93,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
 
-      - run: cargo check
+      - run: cargo check --locked
 
   auto-merge-release:
     name: Auto-merge release PR
