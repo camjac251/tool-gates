@@ -62,11 +62,12 @@ For an interactive TUI alternative, run `tool-gates review` directly in your ter
 ```
 
 **Scopes:**
-| Scope | File | Use case |
-|-------|------|----------|
+
+| Scope             | File                          | Use case                   |
+| ----------------- | ----------------------------- | -------------------------- |
 | `local` (default) | `.claude/settings.local.json` | Personal project overrides |
-| `project` | `.claude/settings.json` | Share with team via git |
-| `user` | `~/.claude/settings.json` | All projects globally |
+| `project`         | `.claude/settings.json`       | Share with team via git    |
+| `user`            | `~/.claude/settings.json`     | All projects globally      |
 
 **Permissions:**
 
