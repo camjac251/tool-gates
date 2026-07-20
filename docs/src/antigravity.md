@@ -1,4 +1,9 @@
-  <p class="breadcrumb"><a href="index.html">Core Concepts</a> / Antigravity CLI</p>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="index.html">Core Concepts</a></li>
+      <li aria-current="page">Antigravity CLI</li>
+    </ol>
+  </nav>
   <h1 id="antigravity-h1">Antigravity CLI</h1>
   <p class="page-lede">Antigravity (<code>agy</code>) is Google's successor to the Gemini CLI. tool-gates supports it through a single PreToolUse hook with its own wire format: a payload that nests the tool under <code>toolCall</code>, a flat <code>{decision, reason}</code> output, and a <code>hooks.json</code> keyed by hook name. This page covers what tool-gates gates on Antigravity and how the pieces map.</p>
   <div class="sec-head" style="margin-top: var(--s-6)">
@@ -11,7 +16,9 @@
     <h2>tool-gates normalizes the Antigravity shape.</h2>
     <p>Antigravity sends a camelCase envelope where the tool lives under <code>toolCall.name</code> and its arguments use PascalCase keys (the command is at <code>toolCall.args.CommandLine</code>, a write target at <code>toolCall.args.TargetFile</code>). tool-gates rewrites this into its canonical internal shape so the same engine that serves Claude, Codex, and Gemini runs unchanged. The original args are preserved alongside the canonical <code>command</code> / <code>file_path</code> / <code>content</code> keys.</p>
   </div>
-  <table class="data-table">
+  <div class="data-table-frame">
+    <div class="data-table-scroll" data-table-scroll>
+      <table class="data-table">
     <thead>
       <tr><th>Antigravity tool</th><th>Maps to</th><th>Command / path source</th></tr>
     </thead>
@@ -25,12 +32,16 @@
       <tr><td><code>find_by_name</code></td><td>Glob</td><td><code>args.Pattern</code></td></tr>
     </tbody>
   </table>
+    </div>
+  </div>
   <div class="sec-head" style="margin-top: var(--s-7)">
     <p class="lbl">Decision</p>
     <h2>A flat decision, and "no opinion" defers to Antigravity.</h2>
     <p>The PreToolUse hook returns a flat JSON object on stdout. <code>decision</code> is required and is one of <code>allow</code>, <code>ask</code>, <code>deny</code>, or <code>force_ask</code>. Antigravity resolves a tool call as the <em>strictest</em> of all candidate decisions (rank order: <code>allow</code> lowest, then <code>ask</code>, <code>force_ask</code>, <code>deny</code> highest), so the hook can only tighten: <code>deny</code>/<code>ask</code>/<code>force_ask</code> win when they outrank agy's native decision, but a hook <code>allow</code> (the floor) never suppresses a prompt agy's own rules would show. Stopping the prompt for safe commands is done with agy's native <code>permissions.allow</code> list (see <a href="#allowlist">Allowlisting safe commands</a>).</p>
   </div>
-  <table class="data-table">
+  <div class="data-table-frame">
+    <div class="data-table-scroll" data-table-scroll>
+      <table class="data-table">
     <thead>
       <tr><th>tool-gates result</th><th>Antigravity output</th><th>Effect</th></tr>
     </thead>
@@ -42,6 +53,8 @@
       <tr><td>Deny</td><td><code>{"decision":"deny"}</code></td><td>Hard block. Remediation text is folded into <code>reason</code> since the Pre output has no <code>additionalContext</code> field.</td></tr>
     </tbody>
   </table>
+    </div>
+  </div>
   <p class="sub-note">The hard-ask safety floor maps to <code>force_ask</code>, not <code>ask</code>: pipe-to-shell and <code>eval</code> are ask-tier (never deny), and Antigravity's plain <code>ask</code> honors a prior "Always Allow" grant, which would let a granted command silently bypass the floor. <code>force_ask</code> always prompts. tool-gates does not emit <code>permissionOverrides</code>: a hook's <code>permissionOverrides</code> does not suppress the current call's prompt, so it would buy nothing.</p>
   <div class="sec-head" style="margin-top: var(--s-7)">
     <p class="lbl">Scope</p>
@@ -49,19 +62,19 @@
   </div>
   <div class="hook-cards">
     <article class="hook-card">
-      <h4>PreToolUse only</h4>
+      <h3>PreToolUse only</h3>
       <p>Antigravity also exposes <code>PostToolUse</code>, <code>PreInvocation</code>, <code>PostInvocation</code>, and <code>Stop</code>, but its post payload carries no tool name or input and it has no PermissionRequest event. The single PreToolUse hook is the entire gate.</p>
     </article>
     <article class="hook-card">
-      <h4>Named-hook <code>hooks.json</code></h4>
+      <h3>Named-hook <code>hooks.json</code></h3>
       <p>Antigravity's <code>hooks.json</code> is a top-level object keyed by hook name, so tool-gates owns one entry, <code>tool-gates</code>, and leaves any other named hooks untouched: <code>{"tool-gates": {"PreToolUse": [...]}}</code>.</p>
     </article>
     <article class="hook-card">
-      <h4>Secrets and file guards</h4>
+      <h3>Secrets and file guards</h3>
       <p>Write content arrives in the PreToolUse args, so Tier 1 secret scanning runs on the write before it lands. File guards apply on both reads (<code>view_file</code>) and writes for symlinked AI-config files.</p>
     </article>
     <article class="hook-card">
-      <h4>MCP not wired yet</h4>
+      <h3>MCP not wired yet</h3>
       <p>Antigravity's MCP tool-name format for hook matchers is not documented, so MCP block rules are not yet applied for Antigravity. Shell, file, grep, and glob tools are all gated.</p>
     </article>
   </div>

@@ -10,7 +10,7 @@
 //! - Claude Code: `PreToolUse`, `PermissionRequest`, `PermissionDenied`, `PostToolUse` (Bash, Monitor, Write, Edit)
 //! - Codex CLI:   `PreToolUse`, `PermissionRequest`, `PostToolUse` (Bash, apply_patch, mcp__*). Selected via `--client codex`.
 //! - Antigravity CLI (`agy`): `PreToolUse` (run_command, view_file, write_to_file, replace_file_content, ...). Selected via `--client antigravity`.
-//! - Gemini CLI:  `BeforeTool` (tool_name: "run_shell_command"). Deprecated; Google sunsets the consumer Gemini CLI on 2026-06-18. Use Antigravity instead.
+//! - Gemini CLI:  `BeforeTool` (tool_name: "run_shell_command"). Deprecated compatibility for existing setups; Google's consumer Gemini CLI sunset date was 2026-06-18. Use Antigravity instead.
 //!
 //! Configuration: `~/.config/tool-gates/config.toml`
 //!
@@ -2249,7 +2249,7 @@ fn handle_hooks_status() {
         check_antigravity_hooks(scope, path);
     }
 
-    eprintln!("\nGemini CLI (deprecated, sunsetting 2026-06-18):");
+    eprintln!("\nGemini CLI (deprecated compatibility; sunset date 2026-06-18):");
     let gemini_scopes = [
         ("user", get_gemini_settings_path("user")),
         ("project", get_gemini_settings_path("project")),
@@ -2315,7 +2315,7 @@ fn print_main_help() {
     eprintln!(
         "  rules ask-audit              List ask-rules that suppress the third prompt button"
     );
-    eprintln!("  rules export                 Generate mdBook gate docs from rules/*.toml");
+    eprintln!("  rules export                 Generate mdBook reference docs");
     eprintln!("  pending list                 List pending approvals");
     eprintln!("  pending clear                Clear pending approval queue");
     eprintln!("  review                       Interactive TUI for pending approvals");
@@ -2542,9 +2542,9 @@ fn handle_rules_subcommand(args: &[String]) {
 ///
 /// Walks `rules/*.toml` (resolved relative to the current directory, where the
 /// gate TOMLs live in the repo) and emits one gate page per gate into
-/// `<out>/gates/` plus `<out>/security-floor.md` and `<out>/hints.md`. Only
-/// `--format md` is supported today; an explicit unsupported format is a usage
-/// error rather than a silent default.
+/// `<out>/gates/` plus the security floor, hint catalog, security-reminder, and
+/// design-lint pages. Only `--format md` is supported today; an explicit
+/// unsupported format is a usage error rather than a silent default.
 fn handle_rules_export(args: &[String]) {
     if args.iter().any(|a| a == "--help" || a == "-h") {
         print_rules_export_help();
@@ -2598,24 +2598,24 @@ fn handle_rules_export(args: &[String]) {
     match tool_gates::rules_export::export_markdown(rules_path, out_path) {
         Ok(()) => {
             eprintln!(
-                "\u{2713} Exported gate docs from {} to {}",
+                "\u{2713} Exported reference docs from {} to {}",
                 rules_path.display(),
                 out_path.display()
             );
             eprintln!(
-                "  {}/gates/*.md + {}/security-floor.md + {}/hints.md",
-                out, out, out
+                "  {}/gates/*.md + {}/security-floor.md + {}/hints.md + {}/security-reminders.md + {}/design-lint.md",
+                out, out, out, out, out
             );
         }
         Err(e) => {
-            eprintln!("Error: failed to export gate docs: {e}");
+            eprintln!("Error: failed to export reference docs: {e}");
             std::process::exit(1);
         }
     }
 }
 
 fn print_rules_export_help() {
-    eprintln!("tool-gates rules export - Generate mdBook gate docs from rules/*.toml");
+    eprintln!("tool-gates rules export - Generate mdBook reference docs");
     eprintln!();
     eprintln!("USAGE:");
     eprintln!("  tool-gates rules export --format md [--out PATH] [--rules-dir PATH]");
@@ -2626,9 +2626,9 @@ fn print_rules_export_help() {
     eprintln!("      --rules-dir <path>  Source rules directory (default: rules)");
     eprintln!();
     eprintln!(
-        "Writes one <out>/gates/<gate>.md per gate plus <out>/security-floor.md and <out>/hints.md."
+        "Writes gate pages plus security-floor.md, hints.md, security-reminders.md, and design-lint.md under <out>."
     );
-    eprintln!("Output is deterministic: re-running with the same TOML is byte-identical.");
+    eprintln!("Output is deterministic: re-running with the same source inputs is byte-identical.");
 }
 
 fn handle_rules_list(args: &[String]) {
@@ -2745,7 +2745,7 @@ fn print_rules_help() {
     eprintln!("  remove      Remove a permission rule");
     eprintln!("  ask-audit   List `permissions.ask` Bash rules that suppress the");
     eprintln!("              \"Yes, and don't ask again for X\" prompt button");
-    eprintln!("  export      Generate mdBook gate docs from rules/*.toml");
+    eprintln!("  export      Generate mdBook reference docs");
     eprintln!();
     eprintln!("OPTIONS:");
     eprintln!("  -s, --scope <scope>   Filter by scope: user, project, or local");

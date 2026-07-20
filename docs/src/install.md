@@ -1,26 +1,31 @@
-  <p class="breadcrumb"><a href="index.html">Getting Started</a> / Installation</p>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="index.html">Getting Started</a></li>
+      <li aria-current="page">Installation</li>
+    </ol>
+  </nav>
   <h1 id="install-h1">Installation</h1>
   <p class="page-lede">tool-gates is a single Rust binary. Install it, then point your assistant's settings at it. The same binary serves Claude Code, Codex CLI, Antigravity CLI, and the deprecated Gemini CLI. Claude Code and Gemini CLI are auto-detected from the hook payload; Codex and Antigravity are selected by the <code>--client codex</code> / <code>--client antigravity</code> flag the installer bakes into the hook command.</p>
   <div class="step">
-    <p class="step-label">Step 1 · Install the binary</p>
+    <h2 class="step-label">Step 1 · Install the binary</h2>
     <div class="tabs">
-      <div class="tablist" role="tablist">
-        <button class="tab" data-tab="brew" role="tab" aria-selected="true">Homebrew</button>
-        <button class="tab" data-tab="bin" role="tab" aria-selected="false">Pre-built binary</button>
-        <button class="tab" data-tab="cargo" role="tab" aria-selected="false">Cargo</button>
+      <div class="tablist" role="tablist" aria-label="Installation method" aria-orientation="horizontal">
+        <button class="tab" id="install-tab-brew" data-tab="brew" role="tab" aria-selected="true" aria-controls="install-panel-brew" tabindex="0">Homebrew</button>
+        <button class="tab" id="install-tab-bin" data-tab="bin" role="tab" aria-selected="false" aria-controls="install-panel-bin" tabindex="-1">Pre-built binary</button>
+        <button class="tab" id="install-tab-cargo" data-tab="cargo" role="tab" aria-selected="false" aria-controls="install-panel-cargo" tabindex="-1">Cargo</button>
       </div>
       <div class="tab-panels">
-        <div class="tab-panel is-active" data-panel="brew" role="tabpanel">
+        <div class="tab-panel is-active" id="install-panel-brew" data-panel="brew" role="tabpanel" aria-labelledby="install-tab-brew" tabindex="0">
           <p class="step-prose">Recommended on macOS and Linux. Bottles are built for arm64 and x86_64; the formula updates automatically on every release. Homebrew installation is supported for v1.5.6 and newer.</p>
 <pre class="code-block"><span class="prompt">$</span> brew install camjac251/tap/tool-gates</pre>
           <p class="step-prose">Upgrade later with <code>brew upgrade tool-gates</code>.</p>
         </div>
-        <div class="tab-panel" data-panel="bin" role="tabpanel">
+        <div class="tab-panel" id="install-panel-bin" data-panel="bin" role="tabpanel" aria-labelledby="install-tab-bin" tabindex="0" hidden>
           <p class="step-prose">Pick the right artifact for your platform; drop it on <code>PATH</code> and mark it executable. Pre-built binaries are available for versions v1.5.4 and newer.</p>
 <pre class="code-block"><span class="prompt">$</span> curl -Lo ~/.local/bin/tool-gates https://github.com/camjac251/tool-gates/releases/latest/download/tool-gates-macos-arm64 &amp;&amp; chmod +x ~/.local/bin/tool-gates</pre>
           <p class="step-prose">Replace <code>macos-arm64</code> with <code>macos-x86_64</code>, <code>linux-arm64</code>, or <code>linux-x86_64</code> for your platform. Windows binaries are available for Bash-like environments such as Git Bash or MSYS2. PowerShell/cmd.exe command classification is not first-class yet; WSL users should use the Linux binary.</p>
         </div>
-        <div class="tab-panel" data-panel="cargo" role="tabpanel">
+        <div class="tab-panel" id="install-panel-cargo" data-panel="cargo" role="tabpanel" aria-labelledby="install-tab-cargo" tabindex="0" hidden>
           <p class="step-prose">Requires Rust 1.86 or newer. Builds from source into Cargo's bin directory.</p>
 <pre class="code-block"><span class="prompt">$</span> cargo install --git https://github.com/camjac251/tool-gates</pre>
         </div>
@@ -28,7 +33,7 @@
     </div>
   </div>
   <div class="step">
-    <p class="step-label">Step 2 · Wire it into your assistant</p>
+    <h2 class="step-label">Step 2 · Wire it into your assistant</h2>
     <p class="step-prose">Each client uses a different hook protocol. The <code>hooks add</code> subcommand writes the right settings file in the right format. Multiple clients can run side by side. Settings files don't overlap.</p>
     <div class="install-clients">
       <article class="install-client">
@@ -54,7 +59,7 @@
           <h3>Gemini CLI</h3>
           <span class="hooks-count">1 hook</span>
         </header>
-        <p><b>Deprecated:</b> Google sunsets the consumer Gemini CLI on 2026-06-18; use Antigravity for new setups. Requires Gemini CLI v0.36.0+ for <code>ask</code>-decision support on BeforeTool hooks.</p>
+        <p><b>Deprecated compatibility:</b> Google's consumer Gemini CLI sunset date was 2026-06-18. Existing tool-gates integrations remain available, but new setups should use Antigravity. Requires Gemini CLI v0.36.0+ for <code>ask</code>-decision support on BeforeTool hooks.</p>
 <pre class="code-block"><span class="prompt">$</span> tool-gates hooks add --gemini</pre>
         <ul class="hook-list">
           <li><code>BeforeTool</code>: gates every tool call</li>
@@ -99,7 +104,7 @@
     <pre class="code-block"><span class="prompt">$</span> tool-gates hooks add --antigravity --dry-run</pre>
   </div>
   <div class="step">
-    <p class="step-label">Step 3 · Verify</p>
+    <h2 class="step-label">Step 3 · Verify</h2>
     <p class="step-prose">Confirm every hook is wired across every client:</p>
     <pre class="code-block"><span class="prompt">$</span> tool-gates hooks status</pre>
     <p class="step-prose">Or pipe a tool-call payload directly into the binary and watch the decision come back:</p>
@@ -112,7 +117,7 @@
     <p class="step-prose">For a full health check on config, hooks, cache files, and legacy <code>bash-gates</code> remnants: <code>tool-gates doctor</code>.</p>
   </div>
   <div class="step">
-    <p class="step-label">Step 4 · Optional Claude Code plugin</p>
+    <h2 class="step-label">Step 4 · Optional Claude Code plugin</h2>
     <p class="step-prose">tool-gates also ships as a Claude Code plugin with two slash commands: <code>/tool-gates:review</code> opens the approval TUI, <code>/tool-gates:test-gate</code> runs a command against the gate engine without executing it. The plugin provides skills only; the hook installation above is the prerequisite.</p>
     <p class="step-prose">Add the marketplace:</p>
     <pre class="code-block"><span class="prompt">/plugin</span> marketplace add camjac251/tool-gates</pre>

@@ -1,5 +1,10 @@
 <div class="gate-head">
-  <p class="breadcrumb"><a href="../index.html">Gates</a> / Shortcut CLI</p>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="../index.html">Gates</a></li>
+      <li aria-current="page">Shortcut CLI</li>
+    </ol>
+  </nav>
   <h1>Shortcut CLI gate</h1>
   <div class="gate-meta">
     <span class="tag">priority <b>45</b></span>
@@ -7,7 +12,7 @@
     <span class="tag">covers the <b>short</b> CLI</span>
   </div>
 
-  <div class="summary" aria-label="Rule counts at a glance">
+  <section class="summary" aria-label="Rule counts at a glance">
     <div class="seg-bar" role="img" aria-label="9 allow, 21 ask, 0 block">
       <div class="seg allow" style="flex: 9"></div>
       <div class="seg ask"   style="flex: 21"></div>
@@ -18,17 +23,18 @@
       <span class="cas"><i></i><b>21</b> ask</span>
       <span class="cb"><i></i><b>0</b> block</span>
     </div>
-  </div>
+  </section>
 
   <p class="gate-lede">Community <code>short</code> CLI for Shortcut. Searches and listings are safe. Story mutations, comments, attachments, and workflow-state changes ask. The custom handler routes <code>short api</code> by HTTP method.</p>
 </div>
 
-<div class="chips" role="group" aria-label="Filter rules by decision">
+<div class="chips" role="group" aria-label="Filter rules by decision" aria-describedby="rule-filter-status">
   <button class="chip all"   data-filter="all"   aria-pressed="true"><i></i>All <span class="n">30</span></button>
   <button class="chip allow" data-filter="allow" aria-pressed="false"><i></i>Allow <span class="n">9</span></button>
   <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">21</span></button>
   <button class="chip block" data-filter="block" aria-pressed="false"><i></i>Block <span class="n">0</span></button>
 </div>
+<p class="rule-filter-status" id="rule-filter-status" role="status" aria-live="polite" aria-atomic="true">Showing all 30 rules.</p>
 
 <div class="rule-card">
   <header>

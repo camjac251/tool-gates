@@ -1,10 +1,10 @@
-//! Generate the mdBook gate documentation from `rules/*.toml`.
+//! Generate the mdBook gate, hint, and scanner reference documentation.
 //!
 //! `tool-gates rules export --format md` walks every `rules/<gate>.toml`, parses
 //! it through [`crate::rules_schema`], and emits one `<out>/gates/<gate>.md` per
-//! gate plus the cross-cut `<out>/security-floor.md` and the `<out>/hints.md`
-//! modern-CLI reference. The emitted HTML shapes are fixed by what the theme
-//! CSS in `docs/theme/` targets, so the markup here applies unchanged.
+//! gate plus the cross-cut security-floor, modern-CLI-hints, security-reminders,
+//! and design-lint references. The emitted HTML shapes are fixed by what the
+//! theme CSS in `docs/theme/` targets, so the markup here applies unchanged.
 //!
 //! Output is byte-identical on re-run: gates sort by name, programs within a
 //! gate sort by name, rules within a bucket keep their TOML order, and buckets
@@ -95,8 +95,9 @@ struct Gate {
     rule_file: RuleFile,
 }
 
-/// Walk `rules_dir`, render every gate page into `out_dir/gates/` and the
-/// security floor into `out_dir/security-floor.md`.
+/// Walk `rules_dir` and render every generated Markdown reference into
+/// `out_dir`: gate pages, security floor, hints, security reminders, and design
+/// lint.
 pub fn export_markdown(rules_dir: &Path, out_dir: &Path) -> io::Result<()> {
     let gates = load_gates(rules_dir)?;
     let floor_patterns = load_security_floor(rules_dir)?;
@@ -196,6 +197,18 @@ impl Counts {
     fn total(&self) -> usize {
         self.allow + self.ask + self.block
     }
+}
+
+fn render_filter_controls(counts: &Counts) -> String {
+    let total = counts.total();
+    let noun = if total == 1 { "rule" } else { "rules" };
+    format!(
+        "\n\n<div class=\"chips\" role=\"group\" aria-label=\"Filter rules by decision\" aria-describedby=\"rule-filter-status\">\n  <button class=\"chip all\"   data-filter=\"all\"   aria-pressed=\"true\"><i></i>All <span class=\"n\">{nt}</span></button>\n  <button class=\"chip allow\" data-filter=\"allow\" aria-pressed=\"false\"><i></i>Allow <span class=\"n\">{na}</span></button>\n  <button class=\"chip ask\"   data-filter=\"ask\"   aria-pressed=\"false\"><i></i>Ask <span class=\"n\">{nk}</span></button>\n  <button class=\"chip block\" data-filter=\"block\" aria-pressed=\"false\"><i></i>Block <span class=\"n\">{nb}</span></button>\n</div>\n<p class=\"rule-filter-status\" id=\"rule-filter-status\" role=\"status\" aria-live=\"polite\" aria-atomic=\"true\">Showing all {nt} {noun}.</p>",
+        na = counts.allow,
+        nk = counts.ask,
+        nb = counts.block,
+        nt = total,
+    )
 }
 
 /// Compute the bucket counts for a gate from its rendered rows. Driving counts
@@ -745,24 +758,18 @@ fn render_gate_head(gate: &Gate, counts: Option<&Counts>) -> String {
     let (summary_html, chips_html) = match counts {
         Some(c) => (
             format!(
-                "\n\n  <div class=\"summary\" aria-label=\"Rule counts at a glance\">\n    <div class=\"seg-bar\" role=\"img\" aria-label=\"{na} allow, {nk} ask, {nb} block\">\n      <div class=\"seg allow\" style=\"flex: {na}\"></div>\n      <div class=\"seg ask\"   style=\"flex: {nk}\"></div>\n      <div class=\"seg block\" style=\"flex: {nb}\"></div>\n    </div>\n    <div class=\"counts\">\n      <span class=\"ca\"><i></i><b>{na}</b> allow</span>\n      <span class=\"cas\"><i></i><b>{nk}</b> ask</span>\n      <span class=\"cb\"><i></i><b>{nb}</b> block</span>\n    </div>\n  </div>",
+                "\n\n  <section class=\"summary\" aria-label=\"Rule counts at a glance\">\n    <div class=\"seg-bar\" role=\"img\" aria-label=\"{na} allow, {nk} ask, {nb} block\">\n      <div class=\"seg allow\" style=\"flex: {na}\"></div>\n      <div class=\"seg ask\"   style=\"flex: {nk}\"></div>\n      <div class=\"seg block\" style=\"flex: {nb}\"></div>\n    </div>\n    <div class=\"counts\">\n      <span class=\"ca\"><i></i><b>{na}</b> allow</span>\n      <span class=\"cas\"><i></i><b>{nk}</b> ask</span>\n      <span class=\"cb\"><i></i><b>{nb}</b> block</span>\n    </div>\n  </section>",
                 na = c.allow,
                 nk = c.ask,
                 nb = c.block,
             ),
-            format!(
-                "\n\n<div class=\"chips\" role=\"group\" aria-label=\"Filter rules by decision\">\n  <button class=\"chip all\"   data-filter=\"all\"   aria-pressed=\"true\"><i></i>All <span class=\"n\">{nt}</span></button>\n  <button class=\"chip allow\" data-filter=\"allow\" aria-pressed=\"false\"><i></i>Allow <span class=\"n\">{na}</span></button>\n  <button class=\"chip ask\"   data-filter=\"ask\"   aria-pressed=\"false\"><i></i>Ask <span class=\"n\">{nk}</span></button>\n  <button class=\"chip block\" data-filter=\"block\" aria-pressed=\"false\"><i></i>Block <span class=\"n\">{nb}</span></button>\n</div>",
-                na = c.allow,
-                nk = c.ask,
-                nb = c.block,
-                nt = c.total(),
-            ),
+            render_filter_controls(c),
         ),
         None => (String::new(), String::new()),
     };
 
     format!(
-        "<div class=\"gate-head\">\n  <p class=\"breadcrumb\"><a href=\"../index.html\">Gates</a> / {name}</p>\n  <h1>{name} gate</h1>\n  <div class=\"gate-meta\">\n    {meta}\n  </div>{summary}{lede}\n</div>{chips}",
+        "<div class=\"gate-head\">\n  <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n    <ol>\n      <li><a href=\"../index.html\">Gates</a></li>\n      <li aria-current=\"page\">{name}</li>\n    </ol>\n  </nav>\n  <h1>{name} gate</h1>\n  <div class=\"gate-meta\">\n    {meta}\n  </div>{summary}{lede}\n</div>{chips}",
         name = gate.name,
         meta = meta,
         summary = summary_html,
@@ -855,7 +862,7 @@ fn render_command_grid_page(gate: &Gate) -> String {
             chips.push_str(&format!("<span>{}</span>", html_escape(cmd)));
         }
         out.push_str(&format!(
-            "\n  <div class=\"cat\">\n    <h4>{title}</h4>\n    <div class=\"chips-line\">{chips}</div>\n  </div>",
+            "\n  <div class=\"cat\">\n    <h2>{title}</h2>\n    <div class=\"chips-line\">{chips}</div>\n  </div>",
             title = html_escape(&group.title),
             chips = chips,
         ));
@@ -886,7 +893,7 @@ fn card_title(base: &str, suffix: Option<&str>) -> String {
 /// gate provides one.
 fn render_gate_note(note_html: &str) -> String {
     format!(
-        "<p class=\"note\">\n  <svg class=\"alert\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"><path d=\"M12 9v4\"></path><path d=\"M12 17h.01\"></path><path d=\"M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z\"></path></svg>\n  <span>{note_html}</span>\n</p>"
+        "<p class=\"note\">\n  <svg class=\"alert\" aria-hidden=\"true\" focusable=\"false\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"><path d=\"M12 9v4\"></path><path d=\"M12 17h.01\"></path><path d=\"M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z\"></path></svg>\n  <span>{note_html}</span>\n</p>"
     )
 }
 
@@ -994,9 +1001,7 @@ fn render_security_floor(gates: &[Gate], floor: &SecurityFloorFile) -> String {
     let (hard_blocks, warn_rules) = collect_floor(gates);
 
     let mut out = String::new();
-    out.push_str(
-        "<p class=\"breadcrumb\"><a href=\"index.html\">Reference</a> / Security floor</p>\n",
-    );
+    out.push_str("<nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n  <ol>\n    <li><a href=\"index.html\">Reference</a></li>\n    <li aria-current=\"page\">Security floor</li>\n  </ol>\n</nav>\n");
     out.push_str("<h1>Security floor</h1>\n");
     out.push_str("<p class=\"page-lede\">Every <code>block</code> rule and every <code>warn = true</code> rule across all 13 gates, on one page. The hard-deny floor fires regardless of <code>settings.json</code>; warn rules ask first but are marked dangerous-but-recoverable. Generated from <code>rules/*.toml</code>; authoritative for security review.</p>\n\n");
 
@@ -1040,13 +1045,11 @@ fn hint_row(entry: &HintCatalogEntry) -> String {
 /// fixed, so the page is byte-identical on re-run.
 fn render_hints_page() -> String {
     let mut out = String::new();
-    out.push_str(
-        "<p class=\"breadcrumb\"><a href=\"index.html\">Reference</a> / Modern CLI hints</p>\n",
-    );
+    out.push_str("<nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n  <ol>\n    <li><a href=\"index.html\">Reference</a></li>\n    <li aria-current=\"page\">Modern CLI hints</li>\n  </ol>\n</nav>\n");
     out.push_str("<h1 id=\"hints-h1\">Modern CLI hints</h1>\n");
     out.push_str("<p class=\"page-lede\">When a command reaches for a legacy tool that has a sharper modern alternative, tool-gates allows the call <em>and</em> attaches a one-line suggestion via <code>additionalContext</code>. Hints never block; they ride on allow decisions. They fire only when the modern tool is installed on this machine. Generated from the hint catalog in <code>src/hints.rs</code>.</p>\n\n");
 
-    out.push_str("<div class=\"hints\">\n  <header>\n    <h3>Legacy &rarr; modern</h3>\n    <span class=\"note\">7-day cache \u{b7} <code>tool-gates --tools-status</code> to inspect</span>\n  </header>");
+    out.push_str("<div class=\"hints\">\n  <header>\n    <h2>Legacy &rarr; modern</h2>\n    <span class=\"note\">7-day cache \u{b7} <code>tool-gates --tools-status</code> to inspect</span>\n  </header>");
 
     for entry in hint_catalog() {
         out.push('\n');
@@ -1126,9 +1129,7 @@ fn render_security_reminders_page() -> String {
     };
 
     let mut out = String::new();
-    out.push_str(
-        "  <p class=\"breadcrumb\"><a href=\"index.html\">Reference</a> / Security reminders</p>\n",
-    );
+    out.push_str("  <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n    <ol>\n      <li><a href=\"index.html\">Reference</a></li>\n      <li aria-current=\"page\">Security reminders</li>\n    </ol>\n  </nav>\n");
     out.push_str("  <h1 id=\"secrems-h1\">Security reminders</h1>\n");
     out.push_str(&format!(
         "  <p class=\"page-lede\">tool-gates scans write/edit bodies for {count} anti-patterns organised into three tiers, including Claude <code>Write</code>/<code>Edit</code>, Codex <code>apply_patch</code> added lines, Antigravity <code>write_to_file</code>/<code>replace_file_content</code>/<code>multi_replace_file_content</code>, and Gemini <code>write_file</code>/<code>replace</code> before-tool checks. The hard floor denies source writes before the file ever lands, while documentation files get a post-write warning. The middle tier nudges the assistant after a write so the next action can self-correct. The top tier informs without blocking.</p>\n",
@@ -1182,9 +1183,7 @@ fn render_design_lint_page() -> String {
     ];
 
     let mut out = String::new();
-    out.push_str(
-        "  <p class=\"breadcrumb\"><a href=\"index.html\">Reference</a> / Design lint</p>\n",
-    );
+    out.push_str("  <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n    <ol>\n      <li><a href=\"index.html\">Reference</a></li>\n      <li aria-current=\"page\">Design lint</li>\n    </ol>\n  </nav>\n");
     out.push_str("  <h1 id=\"design-lint-h1\">Design lint</h1>\n");
     out.push_str("  <p class=\"page-lede\">tool-gates scans UI file write/edit bodies for generic, templated design patterns and missing UI-quality basics. It covers Claude <code>Write</code>/<code>Edit</code> and Codex <code>apply_patch</code> added lines on the PostToolUse path, the same path as the security-reminder nudges. Antigravity has no PostToolUse hook, so design-lint does not run there. Findings are a single tier: every match attaches a post-write nudge so the next action can self-correct. Nothing is blocked. The gate is opt-in (default off) and only scans UI extensions (<code>.tsx</code>, <code>.jsx</code>, <code>.vue</code>, <code>.svelte</code>, <code>.astro</code>, <code>.html</code>, <code>.css</code>, <code>.scss</code>, and similar).</p>\n");
     out.push_str("  <div class=\"sec-head\" style=\"margin-top: var(--s-6)\">\n    <p class=\"lbl\">Why it is opt-in</p>\n    <h2>A design opinion you switch on per project.</h2>\n    <p>Security reminders enforce a safety floor everywhere. These rules encode a house style for frontend output: avoid the patterns that read as generic or templated, and keep the accessibility basics. That is a deliberate choice a project opts into, so the gate defaults off. When enabled, each match attaches a <code>&lt;system-reminder&gt;</code> via <code>additionalContext</code> after the write lands. Raw color values inside a <code>:root</code> token <em>definition</em> are exempt: defining a brand token is legitimate; reaching for the same value in markup is what gets flagged.</p>\n  </div>\n");
@@ -1312,6 +1311,67 @@ mod tests {
         assert_eq!(c.ask, 1);
         assert_eq!(c.block, 1);
         assert_eq!(c.total(), 3);
+    }
+
+    #[test]
+    fn filter_controls_render_accessible_initial_status() {
+        let html = render_filter_controls(&Counts {
+            allow: 10,
+            ask: 7,
+            block: 0,
+        });
+        assert!(html.contains(r#"aria-describedby="rule-filter-status""#));
+        assert!(html.contains(
+            r#"id="rule-filter-status" role="status" aria-live="polite" aria-atomic="true""#
+        ));
+        assert!(html.contains("Showing all 17 rules."));
+        assert!(html.contains(
+            r#"data-filter="block" aria-pressed="false"><i></i>Block <span class="n">0</span>"#
+        ));
+    }
+
+    #[test]
+    fn filter_controls_use_singular_rule() {
+        let html = render_filter_controls(&Counts {
+            allow: 1,
+            ask: 0,
+            block: 0,
+        });
+        assert!(html.contains("Showing all 1 rule."));
+        assert!(!html.contains("Showing all 1 rules."));
+    }
+
+    #[test]
+    fn gate_head_uses_semantic_navigation_and_summary_landmarks() {
+        let gate = Gate {
+            stem: "git".into(),
+            name: "Git".into(),
+            priority: 10,
+            rule_file: toml::from_str("").expect("empty rule file should use defaults"),
+        };
+        let html = render_gate_head(
+            &gate,
+            Some(&Counts {
+                allow: 3,
+                ask: 2,
+                block: 1,
+            }),
+        );
+
+        assert!(html.contains(r#"<nav class="breadcrumb" aria-label="Breadcrumb">"#));
+        assert!(html.contains("<ol>"));
+        assert!(html.contains(r#"<li aria-current="page">Git</li>"#));
+        assert!(html.contains("<h1>Git gate</h1>"));
+        assert!(html.contains(r#"<section class="summary" aria-label="Rule counts at a glance">"#));
+        assert!(html.contains("</section>"));
+    }
+
+    #[test]
+    fn hints_page_uses_sequential_heading_levels() {
+        let html = render_hints_page();
+        assert!(html.contains("<h1 id=\"hints-h1\">Modern CLI hints</h1>"));
+        assert!(html.contains("<h2>Legacy &rarr; modern</h2>"));
+        assert!(!html.contains("<h3>Legacy &rarr; modern</h3>"));
     }
 
     /// Count the generated `.rule-row` divs on a page.

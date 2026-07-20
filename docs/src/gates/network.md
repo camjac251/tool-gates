@@ -1,5 +1,10 @@
 <div class="gate-head">
-  <p class="breadcrumb"><a href="../index.html">Gates</a> / Network & HTTP</p>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="../index.html">Gates</a></li>
+      <li aria-current="page">Network & HTTP</li>
+    </ol>
+  </nav>
   <h1>Network & HTTP gate</h1>
   <div class="gate-meta">
     <span class="tag">priority <b>35</b></span>
@@ -8,7 +13,7 @@
     <span class="tag">custom handlers <b>check_curl</b>, <b>check_netcat</b></span>
   </div>
 
-  <div class="summary" aria-label="Rule counts at a glance">
+  <section class="summary" aria-label="Rule counts at a glance">
     <div class="seg-bar" role="img" aria-label="19 allow, 18 ask, 1 block">
       <div class="seg allow" style="flex: 19"></div>
       <div class="seg ask"   style="flex: 18"></div>
@@ -19,17 +24,18 @@
       <span class="cas"><i></i><b>18</b> ask</span>
       <span class="cb"><i></i><b>1</b> block</span>
     </div>
-  </div>
+  </section>
 
   <p class="gate-lede">Outbound network operations. GET requests and head checks pass through; everything mutating, downloading, or interactive pauses for approval. The reverse-shell variant of netcat (<code>nc -e</code>) is the one hard block this gate owns.</p>
 </div>
 
-<div class="chips" role="group" aria-label="Filter rules by decision">
+<div class="chips" role="group" aria-label="Filter rules by decision" aria-describedby="rule-filter-status">
   <button class="chip all"   data-filter="all"   aria-pressed="true"><i></i>All <span class="n">38</span></button>
   <button class="chip allow" data-filter="allow" aria-pressed="false"><i></i>Allow <span class="n">19</span></button>
   <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">18</span></button>
   <button class="chip block" data-filter="block" aria-pressed="false"><i></i>Block <span class="n">1</span></button>
 </div>
+<p class="rule-filter-status" id="rule-filter-status" role="status" aria-live="polite" aria-atomic="true">Showing all 38 rules.</p>
 
 <div class="rule-card">
   <header>
@@ -258,6 +264,6 @@
 </div>
 
 <p class="note">
-  <svg class="alert" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+  <svg class="alert" aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
   <span><b>Pipe-to-shell lives in the pre-AST pass, not here.</b> A pattern like <code>curl https://… | bash</code> is denied before any program-level gate runs. The network gate only sees the <code>curl</code> in isolation; the shell pipe is caught upstream by the raw-string scanner.</span>
 </p>

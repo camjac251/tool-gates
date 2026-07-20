@@ -1,4 +1,9 @@
-  <p class="breadcrumb"><a href="index.html">Core Concepts</a> / Auto Mode</p>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="index.html">Core Concepts</a></li>
+      <li aria-current="page">Auto Mode</li>
+    </ol>
+  </nav>
   <h1 id="auto-h1">Auto Mode</h1>
   <p class="page-lede">When Claude Code runs in <code>auto</code> permission mode, a server-side classifier decides <code>ask</code> calls instead of prompting. tool-gates layers in as a deterministic pre-filter and safety floor: hard denies stay hard, allows skip the classifier, and only genuinely ambiguous calls reach the classifier.</p>
   <div class="sec-head" style="margin-top: var(--s-6)">
@@ -39,31 +44,31 @@
   </div>
   <div class="hook-cards">
     <article class="hook-card">
-      <h4>Pipe-to-shell escalates</h4>
+      <h3>Pipe-to-shell escalates</h3>
       <p>Patterns like <code>curl … | bash</code> and <code>eval "…"</code> escalate from <code>ask</code> to <code>deny</code> under auto mode. No legitimate use case in autonomous operation; the classifier doesn't get a vote.</p>
     </article>
     <article class="hook-card">
-      <h4>acceptEdits fast path is not trusted</h4>
+      <h3>acceptEdits fast path is not trusted</h3>
       <p>Claude's hardcoded <code>acceptEdits</code> Bash allow list includes <code>rm</code>, <code>rmdir</code>, <code>mv</code>, <code>cp</code>, <code>touch</code>. Under auto mode tool-gates owns the decision instead. Path-aware allows like <code>mkdir -p src/components</code> and <code>sed -i … file</code> still succeed; unapproved hardcoded bases deny before Claude's fast path can approve them.</p>
     </article>
     <article class="hook-card">
-      <h4>Pending queue stays human-only</h4>
+      <h3>Pending queue stays human-only</h3>
       <p>The classifier decides silently; nothing it approves goes into <code>pending.jsonl</code>. The approval-learning review queue contains only patterns you explicitly clicked through.</p>
     </article>
     <article class="hook-card">
-      <h4>Classifier denials get retry hints</h4>
+      <h3>Classifier denials get retry hints</h3>
       <p>If the classifier denies a call tool-gates would have allowed (e.g. <code>cargo check</code>), the <code>PermissionDenied</code> hook returns <code>retry: true</code> and the model takes another shot.</p>
     </article>
     <article class="hook-card">
-      <h4>Skill auto-approval still fires</h4>
+      <h3>Skill auto-approval still fires</h3>
       <p><code>[[auto_approve_skills]]</code> rules are explicit trust declarations and aren't revoked by opting into the classifier.</p>
     </article>
     <article class="hook-card">
-      <h4>Configure via settings.json</h4>
+      <h3>Configure via settings.json</h3>
       <p>The classifier itself is configured via <code>autoMode.{allow, soft_deny, hard_deny, environment}</code> in <code>settings.json</code>. Inspect merged config with <code>claude auto-mode config</code> (also <code>defaults</code> and <code>critique</code>).</p>
     </article>
   </div>
   <p class="note">
-    <svg class="alert" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+    <svg class="alert" aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
     <span><b>Requires Claude Code 2.1.88+</b> for the <code>PermissionDenied</code> retry hook. Earlier auto-mode-capable builds still get the deny promotion, pattern narrowing, and pending-queue guard. The retry hint is the only version-gated feature.</span>
   </p>

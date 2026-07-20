@@ -1,5 +1,10 @@
 <div class="gate-head">
-  <p class="breadcrumb"><a href="../index.html">Gates</a> / Development Tools</p>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="../index.html">Gates</a></li>
+      <li aria-current="page">Development Tools</li>
+    </ol>
+  </nav>
   <h1>Development Tools gate</h1>
   <div class="gate-meta">
     <span class="tag">priority <b>25</b></span>
@@ -8,7 +13,7 @@
     <span class="tag">write-flag detection</span>
   </div>
 
-  <div class="summary" aria-label="Rule counts at a glance">
+  <section class="summary" aria-label="Rule counts at a glance">
     <div class="seg-bar" role="img" aria-label="80 allow, 70 ask, 0 block">
       <div class="seg allow" style="flex: 80"></div>
       <div class="seg ask"   style="flex: 70"></div>
@@ -19,17 +24,18 @@
       <span class="cas"><i></i><b>70</b> ask</span>
       <span class="cb"><i></i><b>0</b> block</span>
     </div>
-  </div>
+  </section>
 
   <p class="gate-lede">Developer tools that can modify files. Linters and type checkers run in inspection mode by default and ask when a write flag (<code>--write</code>, <code>--fix</code>, <code>-i</code>, <code>-w</code>) appears. Default <code>unknown_action</code> is <code>allow</code> because most tools in this category are read-only analysis.</p>
 </div>
 
-<div class="chips" role="group" aria-label="Filter rules by decision">
+<div class="chips" role="group" aria-label="Filter rules by decision" aria-describedby="rule-filter-status">
   <button class="chip all"   data-filter="all"   aria-pressed="true"><i></i>All <span class="n">150</span></button>
   <button class="chip allow" data-filter="allow" aria-pressed="false"><i></i>Allow <span class="n">80</span></button>
   <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">70</span></button>
   <button class="chip block" data-filter="block" aria-pressed="false"><i></i>Block <span class="n">0</span></button>
 </div>
+<p class="rule-filter-status" id="rule-filter-status" role="status" aria-live="polite" aria-atomic="true">Showing all 150 rules.</p>
 
 <div class="rule-card">
   <header>

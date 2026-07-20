@@ -7,10 +7,10 @@
       <a href="install.html" class="btn btn-ghost">Install <span class="sh">brew install camjac251/tap/tool-gates</span></a>
     </div>
     <!-- Interceptor panel: real surfaces -->
-    <div class="interceptor reveal" style="--i:4" aria-label="Example tool calls and how tool-gates decides">
+    <figure class="interceptor reveal" style="--i:4" aria-labelledby="interceptor-label">
       <div class="ix-bar">
         <span class="lights"><i></i><i></i><i></i></span>
-        <span class="label">tool-gates · intercepting</span>
+        <span class="label" id="interceptor-label">tool-gates · intercepting</span>
         <span class="meta">PreToolUse · 6 calls</span>
       </div>
       <div class="ix-stream">
@@ -66,10 +66,10 @@
         <span class="sep">·</span>
         <span>compound commands: strictest wins</span>
       </div>
-    </div>
+    </figure>
   </div>
   <!-- ===== Triad ===== -->
-  <div class="reveal" style="--i:5">
+  <div>
     <div class="sec-head">
       <p class="lbl">The decision triad</p>
       <h2>Three visible decisions. One ordering.</h2>
@@ -105,10 +105,10 @@
     <p class="triad-foot">A fourth output, <b>defer</b>, omits the decision and lets the assistant's own resolver populate the "don't ask again for X" button. Used for benign asks not covered by an explicit rule.</p>
   </div>
   <!-- ===== Compound priority strip ===== -->
-  <div class="compound reveal" style="--i:6" aria-label="Compound command resolution">
+  <section class="compound" aria-labelledby="compound-title">
     <p class="lbl">Compound resolution</p>
     <div class="cm-h">
-      <h3>Strictest wins.</h3>
+      <h2 id="compound-title">Strictest wins.</h2>
       <span class="hint">tree-sitter sees both halves of <code style="font-family:var(--font-mono);font-size:12px;color:var(--text-2);background:var(--surface-2);padding:1px 5px;border-radius:var(--r-1)">&amp;&amp;</code> · <code style="font-family:var(--font-mono);font-size:12px;color:var(--text-2);background:var(--surface-2);padding:1px 5px;border-radius:var(--r-1)">||</code> · <code style="font-family:var(--font-mono);font-size:12px;color:var(--text-2);background:var(--surface-2);padding:1px 5px;border-radius:var(--r-1)">|</code> · <code style="font-family:var(--font-mono);font-size:12px;color:var(--text-2);background:var(--surface-2);padding:1px 5px;border-radius:var(--r-1)">;</code> chains. One verdict for the whole call.</span>
     </div>
     <div class="expr">
@@ -128,9 +128,9 @@
       <span class="pill block"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"></line><line x1="18" y1="6" x2="6" y2="18"></line></svg>Block</span>
       <span style="color:var(--text-3)">the whole expression is denied; the safe half is not a redeeming feature.</span>
     </div>
-  </div>
+  </section>
   <!-- ===== Four surfaces (more than shell) ===== -->
-  <div class="reveal" style="--i:7">
+  <div>
     <div class="sec-head">
       <p class="lbl">Surfaces</p>
       <h2>More than shell.</h2>
@@ -139,32 +139,32 @@
     <div class="surfaces">
       <div class="surf">
         <div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg></div>
-        <h4>Bash · Monitor</h4>
+        <h3>Bash · Monitor</h3>
         <p>Shell commands are parsed with tree-sitter and resolved per-program. Compound chains decompose; raw-string passes catch pipe-to-shell and eval first.</p>
         <span class="ex">git push --force</span>
       </div>
       <div class="surf">
         <div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg></div>
-        <h4>Write · Edit · apply_patch</h4>
+        <h3>Write · Edit · apply_patch</h3>
         <p>File-edit bodies are scanned for 28 anti-patterns. Tier-1 secrets deny before write; symlinked AI config files (CLAUDE.md, .cursorrules) are guarded so the agent can't read through them.</p>
         <span class="ex">config.py ← AWS_KEY</span>
       </div>
       <div class="surf">
         <div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg></div>
-        <h4>MCP tools</h4>
+        <h3>MCP tools</h3>
         <p>Configurable block rules cover Glob, Grep, and firecrawl/ref/exa calls to GitHub. In <code style="font-family:var(--font-mono);font-size:12px">acceptEdits</code> mode, named MCP tools auto-approve, filling the gap Claude Code leaves open.</p>
         <span class="ex">mcp__exa.search</span>
       </div>
       <div class="surf">
         <div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg></div>
-        <h4>Skill activations</h4>
+        <h3>Skill activations</h3>
         <p><code style="font-family:var(--font-mono);font-size:12px">[[auto_approve_skills]]</code> auto-approves Skill calls based on project-directory conditions. No external hook scripts; the rule is declarative.</p>
         <span class="ex">activate_skill review</span>
       </div>
     </div>
   </div>
   <!-- ===== Four clients ===== -->
-  <div class="reveal" style="--i:8">
+  <div>
     <div class="sec-head">
       <p class="lbl">Multi-client</p>
       <h2>Four clients, one engine.</h2>
@@ -172,7 +172,7 @@
     </div>
     <div class="clients">
       <article class="client">
-        <h4>Claude Code <span class="count">· 4 hooks</span></h4>
+        <h3>Claude Code <span class="count">· 4 hooks</span></h3>
         <ul>
           <li><i></i>PreToolUse</li>
           <li><i></i>PermissionRequest</li>
@@ -183,7 +183,7 @@
         <p class="pathline"><code>~/.claude/settings.json</code></p>
       </article>
       <article class="client">
-        <h4>Codex CLI <span class="count">· 3 hooks</span></h4>
+        <h3>Codex CLI <span class="count">· 3 hooks</span></h3>
         <ul>
           <li><i></i>PreToolUse</li>
           <li><i></i>PermissionRequest</li>
@@ -193,7 +193,7 @@
         <p class="pathline"><code>~/.codex/hooks.json</code></p>
       </article>
       <article class="client">
-        <h4>Antigravity CLI <span class="count">· 1 hook</span></h4>
+        <h3>Antigravity CLI <span class="count">· 1 hook</span></h3>
         <ul>
           <li><i></i>PreToolUse</li>
         </ul>
@@ -201,18 +201,18 @@
         <p class="pathline"><code>~/.gemini/config/hooks.json</code></p>
       </article>
       <article class="client">
-        <h4>Gemini CLI <span class="count">· 1 hook · deprecated</span></h4>
+        <h3>Gemini CLI <span class="count">· 1 hook · deprecated</span></h3>
         <ul>
           <li><i></i>BeforeTool</li>
         </ul>
-        <p class="client-note"><b>Deprecated:</b> Google sunsets the consumer Gemini CLI on 2026-06-18; use Antigravity for new setups. Requires v0.36.0+ for <code>ask</code> support. No PermissionRequest, no approval tracking; tool-gates emits <code>"block"</code> for hard blocks, and Gemini also accepts <code>"deny"</code>.</p>
+        <p class="client-note"><b>Deprecated compatibility:</b> Google's consumer Gemini CLI sunset date was 2026-06-18. Existing tool-gates integrations remain available, but new setups should use Antigravity. Requires v0.36.0+ for <code>ask</code> support. No PermissionRequest, no approval tracking; tool-gates emits <code>"block"</code> for hard blocks, and Gemini also accepts <code>"deny"</code>.</p>
         <p class="pathline"><code>~/.gemini/settings.json</code></p>
       </article>
     </div>
     <p class="clients-foot"><b>One binary.</b> Routing is via <code style="font-family:var(--font-mono);font-size:0.92em">hook_event_name</code>, or the <code style="font-family:var(--font-mono);font-size:0.92em">--client</code> flag where event names collide or are absent; the same gate engine returns the right shape for the right client.</p>
   </div>
   <!-- ===== TOML proof ===== -->
-  <div class="reveal" style="--i:9">
+  <div>
     <div class="sec-head">
       <p class="lbl">Single source of truth</p>
       <h2>The TOML is the doc.</h2>
@@ -290,7 +290,7 @@
     </div>
   </div>
   <!-- ===== Modern CLI hints ===== -->
-  <div class="reveal" style="--i:10">
+  <div>
     <div class="sec-head">
       <p class="lbl">Modern CLI hints</p>
       <h2>Allow, then teach.</h2>
@@ -328,7 +328,7 @@
     </div>
   </div>
   <!-- ===== Security reminders ===== -->
-  <div class="reveal" style="--i:11">
+  <div>
     <div class="sec-head">
       <p class="lbl">Security reminders</p>
       <h2>Three tiers of write-time review.</h2>
@@ -337,7 +337,7 @@
     <div class="tiers">
       <article class="tier t1">
         <div class="row1"><span class="tname">Tier 1</span><span class="when">· PreToolUse · deny</span></div>
-        <h4>Hard-coded secrets.</h4>
+        <h3>Hard-coded secrets.</h3>
         <p>Denied before the write. The operator sees a top-level <code style="font-family:var(--font-mono);font-size:0.92em">systemMessage</code> so the block isn't silent.</p>
         <div class="examples">
           <span>AKIA…</span><span>ghp_…</span><span>BEGIN PRIVATE KEY</span><span>xoxb-…</span><span>sk_live_…</span>
@@ -345,7 +345,7 @@
       </article>
       <article class="tier t2">
         <div class="row1"><span class="tname">Tier 2</span><span class="when">· PostToolUse · context</span></div>
-        <h4>Anti-pattern in the body.</h4>
+        <h3>Anti-pattern in the body.</h3>
         <p>Write lands; the assistant sees a <code style="font-family:var(--font-mono);font-size:0.92em">&lt;system-reminder&gt;</code> in its next turn. No re-prompting, no wasted edit. Deduped per (file, rule) per session.</p>
         <div class="examples">
           <span>eval()</span><span>shell=True</span><span>dangerouslySetInnerHTML</span><span>yaml.load</span><span>SQL f-string</span>
@@ -353,7 +353,7 @@
       </article>
       <article class="tier t3">
         <div class="row1"><span class="tname">Tier 3</span><span class="when">· Pre/Post hook · allow + warn</span></div>
-        <h4>Informational only.</h4>
+        <h3>Informational only.</h3>
         <p>Pattern is allowed; a one-line warning rides on <code style="font-family:var(--font-mono);font-size:0.92em">additionalContext</code>. Fires once per session.</p>
         <div class="examples">
           <span>verify=False</span><span>chmod 777</span><span>MD5/SHA1</span><span>CORS *</span><span>autoescape=False</span><span>Math.random()</span><span>createHash md5/sha1</span>

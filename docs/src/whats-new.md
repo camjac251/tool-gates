@@ -1,6 +1,17 @@
-  <p class="breadcrumb"><a href="index.html">Reference</a> / Recent Releases</p>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="index.html">Reference</a></li>
+      <li aria-current="page">Recent Releases</li>
+    </ol>
+  </nav>
   <h1 id="whatsnew-h1">Recent Releases</h1>
-  <p class="page-lede">Release cadence is fast. Below is a curated set of recent versions and what shipped. Full history at <a href="https://github.com/camjac251/tool-gates/blob/main/CHANGELOG.md" target="_blank" rel="noopener">CHANGELOG.md</a>.</p>
+  <p class="page-lede">Release cadence is fast. Start with the latest eight versions, then open the historical archive when you need an earlier change. The complete release history remains in <a href="https://github.com/camjac251/tool-gates/blob/main/CHANGELOG.md" target="_blank" rel="noopener">CHANGELOG.md</a>.</p>
+  <section class="release-current" aria-labelledby="release-current-title">
+    <header class="sec-head release-section-head">
+      <span class="lbl">Current window</span>
+      <h2 id="release-current-title">Latest eight releases</h2>
+      <p>From v1.31.1 through v1.25.0, newest first.</p>
+    </header>
   <div class="config-block">
     <header>
       <h3>v1.31.1 · June 25, 2026</h3>
@@ -144,6 +155,17 @@
       </div>
     </div>
   </div>
+  </section>
+  <details class="release-archive" id="release-archive" aria-labelledby="release-archive-title">
+    <summary>
+      <h2 class="release-summary" id="release-archive-title">
+        <span class="release-summary-kicker">Historical archive</span>
+        <span class="release-summary-title">Browse 46 earlier releases</span>
+        <span class="release-summary-range">v1.24.1 to v1.1.0</span>
+        <span class="release-summary-icon" aria-hidden="true"></span>
+      </h2>
+    </summary>
+    <div class="release-archive-list">
   <div class="config-block">
     <header>
       <h3>v1.24.1 · June 16, 2026</h3>
@@ -949,7 +971,9 @@
       </div>
     </div>
   </div>
+    </div>
+  </details>
   <p class="note">
-    <svg class="alert" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+    <svg class="alert" aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
     <span><b>Release automation via release-plz.</b> Push to main triggers a version-bump PR; merging it cuts the GitHub release with cross-compiled binaries (linux x86_64/arm64, macos x86_64/arm64, windows x86_64/arm64) and updates the Homebrew tap. MSRV is Rust 1.86. Note: Releases prior to v1.5.4 have been purged on GitHub and do not have downloadable pre-built assets; Homebrew tap installation requires v1.5.6 or newer.</span>
   </p>

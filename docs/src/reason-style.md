@@ -1,4 +1,9 @@
-  <p class="breadcrumb"><a href="index.html">Development</a> / Reason Style</p>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="index.html">Development</a></li>
+      <li aria-current="page">Reason Style</li>
+    </ol>
+  </nav>
   <h1 id="reason-h1">Reason Style Guide</h1>
   <p class="page-lede">Every <code>reason</code> string in <code>rules/*.toml</code> is sent to the AI agent as <code>permissionDecisionReason</code>. Treat each one as a help-menu entry, not a security disclaimer. The reasons are the docs.</p>
   <div class="sec-head" style="margin-top: var(--s-6)">
@@ -14,22 +19,22 @@
   </div>
   <div class="hook-cards">
     <article class="hook-card" style="border-color: color-mix(in oklab, var(--allow) 25%, var(--border))">
-      <h4 style="color: var(--allow)">Good</h4>
+      <h3 style="color: var(--allow)">Good</h3>
       <p>"Hard reset discards uncommitted changes in the working tree and index. Safer: <code>git stash</code> first, or <code>git reset --soft</code> to keep changes staged."</p>
       <p class="hook-detail">Says what happens, then offers a safer alternative the agent can suggest.</p>
     </article>
     <article class="hook-card" style="border-color: color-mix(in oklab, var(--allow) 25%, var(--border))">
-      <h4 style="color: var(--allow)">Good</h4>
+      <h3 style="color: var(--allow)">Good</h3>
       <p>"Drops a stash permanently. Run <code>git stash list</code> first to confirm the index; cannot be undone."</p>
       <p class="hook-detail">Reversibility note plus a concrete pre-check command.</p>
     </article>
     <article class="hook-card" style="border-color: color-mix(in oklab, var(--block) 25%, var(--border))">
-      <h4 style="color: var(--block)">Bad: label only</h4>
+      <h3 style="color: var(--block)">Bad: label only</h3>
       <p>"git stash drop"</p>
       <p class="hook-detail">Tells the agent nothing it didn't already know from the command name.</p>
     </article>
     <article class="hook-card" style="border-color: color-mix(in oklab, var(--block) 25%, var(--border))">
-      <h4 style="color: var(--block)">Bad: authorization hedge</h4>
+      <h3 style="color: var(--block)">Bad: authorization hedge</h3>
       <p>"Port scanning. Only scan networks you own or have written authorization to test."</p>
       <p class="hook-detail">The reason teaches the agent about the operation; it doesn't gate access. Leave authorization to the operator.</p>
     </article>
@@ -38,7 +43,9 @@
     <p class="lbl">Rules</p>
     <h2>Hard requirements.</h2>
   </div>
-  <table class="data-table">
+  <div class="data-table-frame">
+    <div class="data-table-scroll" data-table-scroll>
+      <table class="data-table">
     <thead>
       <tr><th>Rule</th><th>Why</th></tr>
     </thead>
@@ -50,7 +57,9 @@
       <tr><td>Terse for procedural mutations</td><td>One sentence for routine ones like <code>"Installing packages"</code> or <code>"Formatting files"</code>. Add a second sentence only when there's a non-obvious risk worth teaching.</td></tr>
     </tbody>
   </table>
+    </div>
+  </div>
   <p class="note">
-    <svg class="alert" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+    <svg class="alert" aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
     <span><b>The style applies to source-level prompts too.</b> Strings in <code>src/router.rs</code>, <code>src/security_reminders.rs</code>, and <code>src/hints.rs</code> follow the same rules. If you add a hard-deny pattern or a new modern-CLI hint, write its prompt in this voice.</span>
   </p>

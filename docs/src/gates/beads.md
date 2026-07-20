@@ -1,5 +1,10 @@
 <div class="gate-head">
-  <p class="breadcrumb"><a href="../index.html">Gates</a> / Beads Tracker (bd)</p>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="../index.html">Gates</a></li>
+      <li aria-current="page">Beads Tracker (bd)</li>
+    </ol>
+  </nav>
   <h1>Beads Tracker (bd) gate</h1>
   <div class="gate-meta">
     <span class="tag">priority <b>22</b></span>
@@ -7,7 +12,7 @@
     <span class="tag">aliases <b>beads</b> → <b>bd</b></span>
   </div>
 
-  <div class="summary" aria-label="Rule counts at a glance">
+  <section class="summary" aria-label="Rule counts at a glance">
     <div class="seg-bar" role="img" aria-label="106 allow, 114 ask, 0 block">
       <div class="seg allow" style="flex: 106"></div>
       <div class="seg ask"   style="flex: 114"></div>
@@ -18,17 +23,18 @@
       <span class="cas"><i></i><b>114</b> ask</span>
       <span class="cb"><i></i><b>0</b> block</span>
     </div>
-  </div>
+  </section>
 
   <p class="gate-lede">Beads git-native issue tracker. Reads are safe; writes ask. Nothing is hard-blocked because every beads state mutation is recoverable through git or remote sync. Two <code>warn = true</code> rules: <code>bd admin reset</code> and <code>bd reset</code> drop the local database.</p>
 </div>
 
-<div class="chips" role="group" aria-label="Filter rules by decision">
+<div class="chips" role="group" aria-label="Filter rules by decision" aria-describedby="rule-filter-status">
   <button class="chip all"   data-filter="all"   aria-pressed="true"><i></i>All <span class="n">220</span></button>
   <button class="chip allow" data-filter="allow" aria-pressed="false"><i></i>Allow <span class="n">106</span></button>
   <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">114</span></button>
   <button class="chip block" data-filter="block" aria-pressed="false"><i></i>Block <span class="n">0</span></button>
 </div>
+<p class="rule-filter-status" id="rule-filter-status" role="status" aria-live="polite" aria-atomic="true">Showing all 220 rules.</p>
 
 <div class="rule-card">
   <header>

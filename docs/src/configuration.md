@@ -1,9 +1,14 @@
-  <p class="breadcrumb"><a href="index.html">Reference</a> / Configuration</p>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="index.html">Reference</a></li>
+      <li aria-current="page">Configuration</li>
+    </ol>
+  </nav>
   <h1 id="config-h1">Configuration</h1>
   <p class="page-lede">tool-gates works without a config file, and most users never write one. When you do, it lives at <code>~/.config/tool-gates/config.toml</code> and covers feature toggles, tool blocking, MCP and Skill auto-approval, file guards, hints, cache, and git aliases.</p>
   <div class="config-block">
     <header>
-      <h3>Feature toggles</h3>
+      <h2>Feature toggles</h2>
       <span class="src-tag">defaults shown</span>
     </header>
     <div class="config-body">
@@ -27,7 +32,7 @@
   </div>
   <div class="config-block">
     <header>
-      <h3>Tool blocking</h3>
+      <h2>Tool blocking</h2>
       <span class="src-tag">documented</span>
     </header>
     <div class="config-body">
@@ -50,7 +55,7 @@
   </div>
   <div class="config-block">
     <header>
-      <h3>MCP accept-edits approval</h3>
+      <h2>MCP accept-edits approval</h2>
       <span class="src-tag">documented</span>
     </header>
     <div class="config-body">
@@ -74,7 +79,7 @@
   </div>
   <div class="config-block">
     <header>
-      <h3>Skill auto-approval</h3>
+      <h2>Skill auto-approval</h2>
       <span class="src-tag">documented</span>
     </header>
     <div class="config-body">
@@ -95,7 +100,7 @@
   </div>
   <div class="config-block">
     <header>
-      <h3>File guards</h3>
+      <h2>File guards</h2>
       <span class="src-tag">documented</span>
     </header>
     <div class="config-body">
@@ -114,7 +119,7 @@
   </div>
   <div class="config-block">
     <header>
-      <h3>Hints</h3>
+      <h2>Hints</h2>
       <span class="src-tag">documented</span>
     </header>
     <div class="config-body">
@@ -130,7 +135,7 @@
   </div>
   <div class="config-block">
     <header>
-      <h3>Cache</h3>
+      <h2>Cache</h2>
       <span class="src-tag">documented</span>
     </header>
     <div class="config-body">
@@ -146,7 +151,7 @@
   </div>
   <div class="config-block">
     <header>
-      <h3>Git aliases</h3>
+      <h2>Git aliases</h2>
       <span class="src-tag">documented</span>
     </header>
     <div class="config-body">
@@ -162,7 +167,7 @@
   </div>
   <div class="config-block">
     <header>
-      <h3>Security reminders</h3>
+      <h2>Security reminders</h2>
       <span class="src-tag">documented</span>
     </header>
     <div class="config-body">
@@ -181,7 +186,7 @@
   </div>
   <div class="config-block">
     <header>
-      <h3>Design lint</h3>
+      <h2>Design lint</h2>
       <span class="src-tag">documented</span>
     </header>
     <div class="config-body">
@@ -199,7 +204,7 @@
   </div>
   <div class="config-block">
     <header>
-      <h3>Codex settings</h3>
+      <h2>Codex settings</h2>
       <span class="src-tag">defaults shown</span>
     </header>
     <div class="config-body">
@@ -216,7 +221,7 @@
     </div>
   </div>
   <p class="note">
-    <svg class="alert" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+    <svg class="alert" aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
     <span><b>Codex command gating lives outside this file.</b> Codex's built-in safe-read auto-approval is governed by execpolicy rules in <code>~/.codex/rules/</code>, not tool-gates config. To route those reads through tool-gates, see the <a href="codex.html">Codex approval model</a>. The one Codex setting that does live here, <code>[codex] accept_project_edits</code>, auto-approves in-project edits on Codex (<code>apply_patch</code> plus file-editing shell commands); that same page covers it.</span>
   </p>
   <p class="config-path">

@@ -1,11 +1,16 @@
-  <p class="breadcrumb"><a href="index.html">Core Concepts</a> / Hook Model</p>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="index.html">Core Concepts</a></li>
+      <li aria-current="page">Hook Model</li>
+    </ol>
+  </nav>
   <h1 id="hook-h1">Hook Model</h1>
-  <p class="page-lede">Claude Code exposes many hook points; tool-gates registers on the four that gate tool calls. Each one closes a gap the others can't. Codex CLI and Antigravity CLI expose fewer of them; the engine routes around what's missing. Gemini CLI is supported but deprecated, since Google sunsets the consumer Gemini CLI on 2026-06-18 in favor of Antigravity.</p>
+  <p class="page-lede">Claude Code exposes many hook points; tool-gates registers on the four that gate tool calls. Each one closes a gap the others can't. Codex CLI and Antigravity CLI expose fewer of them; the engine routes around what's missing. Gemini CLI remains available as a deprecated compatibility path for existing setups; Google's consumer CLI sunset date was 2026-06-18.</p>
   <p class="note">This page shows when each hook runs. Mode-specific policy lives one layer up in <a href="modes.html">Permission Modes</a>.</p>
-  <div class="lifecycle" aria-label="Tool-call lifecycle through tool-gates on Claude Code">
+  <figure class="lifecycle" aria-labelledby="claude-lifecycle-label">
     <div class="lc-bar">
       <span class="lights"><i></i><i></i><i></i></span>
-      <span class="lc-label">tool-call lifecycle · Claude Code</span>
+      <span class="lc-label" id="claude-lifecycle-label">tool-call lifecycle · Claude Code</span>
     </div>
     <div class="lc-track">
       <div class="lc-node start">
@@ -50,16 +55,16 @@
         <div class="lc-sub">Successful asks queue for promotion to <code>settings.json</code>. Write/Edit bodies pass the Tier 2 anti-pattern scanner; nudges ride on <code>additionalContext</code>.</div>
       </div>
     </div>
-  </div>
+  </figure>
   <div class="sec-head" style="margin-top:var(--s-7)">
     <p class="lbl">Gemini CLI · deprecated</p>
     <h2>One hook. No subagent, classifier, or post output.</h2>
-    <p>Google sunsets the consumer Gemini CLI on 2026-06-18. tool-gates keeps this client working through the transition; new setups should use Antigravity, Google's successor CLI, below.</p>
+    <p>Google's consumer Gemini CLI sunset date was 2026-06-18. tool-gates retains this client for existing integrations; new setups should use Antigravity, Google's successor CLI, below.</p>
   </div>
-  <div class="lifecycle" aria-label="Tool-call lifecycle on Gemini CLI">
+  <figure class="lifecycle" aria-labelledby="gemini-lifecycle-label">
     <div class="lc-bar">
       <span class="lights"><i></i><i></i><i></i></span>
-      <span class="lc-label">tool-call lifecycle · Gemini CLI · v0.36.0+</span>
+      <span class="lc-label" id="gemini-lifecycle-label">tool-call lifecycle · Gemini CLI · v0.36.0+</span>
     </div>
     <div class="lc-track">
       <div class="lc-node start">
@@ -81,15 +86,15 @@
         <div class="lc-sub">The tool call runs.</div>
       </div>
     </div>
-  </div>
+  </figure>
   <div class="sec-head" style="margin-top:var(--s-7)">
     <p class="lbl">Codex CLI</p>
     <h2>Three hooks. Strict wire format; hints move to PostToolUse.</h2>
   </div>
-  <div class="lifecycle" aria-label="Tool-call lifecycle on Codex CLI">
+  <figure class="lifecycle" aria-labelledby="codex-lifecycle-label">
     <div class="lc-bar">
       <span class="lights"><i></i><i></i><i></i></span>
-      <span class="lc-label">tool-call lifecycle · Codex CLI</span>
+      <span class="lc-label" id="codex-lifecycle-label">tool-call lifecycle · Codex CLI</span>
     </div>
     <div class="lc-track">
       <div class="lc-node start">
@@ -126,19 +131,19 @@
         <div class="lc-sub">Tier 2 anti-pattern nudges land here. Modern-CLI hints and Tier 3 warnings also ride this hook on Codex (a tool-gates routing choice; Codex itself accepts <code>additionalContext</code> on PreToolUse too). Codex's <code>PostToolUse</code> rejects fields like <code>updatedMCPToolOutput</code> as unsupported, which causes validation failures. tool-gates strips them dynamically. No PermissionDenied event because Codex has no auto-mode classifier yet.</div>
       </div>
     </div>
-  </div>
+  </figure>
   <p class="note">
-    <svg class="alert" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+    <svg class="alert" aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
     <span><b>On Codex, a tool-gates <code>ask</code> only becomes a prompt under <code>approval_policy = "untrusted"</code>.</b> Codex's built-in safe-read list, the execpolicy lever that routes those reads through tool-gates, and the two settings that silently disable prompting are covered in the <a href="codex.html">Codex approval model</a>.</span>
   </p>
   <div class="sec-head" style="margin-top:var(--s-7)">
     <p class="lbl">Antigravity CLI (agy)</p>
     <h2>One hook. Distinct payload shape; flat decision.</h2>
   </div>
-  <div class="lifecycle" aria-label="Tool-call lifecycle on Antigravity CLI">
+  <figure class="lifecycle" aria-labelledby="antigravity-lifecycle-label">
     <div class="lc-bar">
       <span class="lights"><i></i><i></i><i></i></span>
-      <span class="lc-label">tool-call lifecycle · Antigravity CLI · agy</span>
+      <span class="lc-label" id="antigravity-lifecycle-label">tool-call lifecycle · Antigravity CLI · agy</span>
     </div>
     <div class="lc-track">
       <div class="lc-node start">
@@ -160,9 +165,9 @@
         <div class="lc-sub">The tool call runs.</div>
       </div>
     </div>
-  </div>
+  </figure>
   <p class="note">
-    <svg class="alert" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+    <svg class="alert" aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
     <span><b>Antigravity drives the whole gate from one PreToolUse hook.</b> It also exposes <code>PostToolUse</code>, <code>PreInvocation</code>, <code>PostInvocation</code>, and <code>Stop</code>, but its post payload carries no tool name or input and it has no PermissionRequest event, so PreToolUse is the entire gate. Its <code>hooks.json</code> is a top-level object keyed by hook name (<code>{"tool-gates": {"PreToolUse": [...]}}</code>), unlike the flat event map the other clients use.</span>
   </p>
   <div class="sec-head" style="margin-top:var(--s-7)">
@@ -172,31 +177,31 @@
   </div>
   <div class="hook-cards">
     <article class="hook-card">
-      <h4>PreToolUse</h4>
+      <h3>PreToolUse</h3>
       <p>The main gate. Bash / Monitor, Read / Write / Edit, Glob / Grep, MCP, and Skill calls pass through and get a decision back.</p>
       <p class="hook-detail">Also injects modern-CLI hints via <code>additionalContext</code>, blocks Tier 1 secrets in source Write/Edit bodies, and enforces file guards on symlinked AI-config files like <code>CLAUDE.md</code> and <code>.cursorrules</code>.</p>
     </article>
     <article class="hook-card">
-      <h4>PermissionRequest</h4>
+      <h3>PermissionRequest</h3>
       <p>Claude's subagents ignore PreToolUse's <code>allow</code>. This hook re-runs the gate for them so the same policy applies to delegated work.</p>
       <p class="hook-detail">Also fires when Claude's resolver wants to ask about a path outside cwd; tool-gates can promote that to <code>deny</code> if the engine knows the call is dangerous.</p>
     </article>
     <article class="hook-card">
-      <h4>PermissionDenied</h4>
+      <h3>PermissionDenied</h3>
       <p>Auto mode runs a server-side classifier instead of prompting the human. The classifier sometimes denies calls tool-gates would allow.</p>
       <p class="hook-detail">tool-gates re-checks. If the engine agrees the call is safe, this hook returns <code>retry: true</code> and the model tries again. Requires Claude Code 2.1.88+.</p>
     </article>
     <article class="hook-card">
-      <h4>PostToolUse</h4>
+      <h3>PostToolUse</h3>
       <p>Fires after the call runs. Used for approval learning (queue successful asks) and Tier 2 anti-pattern nudges on Write/Edit content.</p>
       <p class="hook-detail">On Codex, tool-gates currently carries Tier 3 informational warnings and modern-CLI hints here rather than on PreToolUse.</p>
     </article>
   </div>
   <p class="note">
-    <svg class="alert" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+    <svg class="alert" aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
     <span><b>Reasoning Effort level.</b> In newer versions of the CLI, an <code>effort</code> field (Zod object <code>{ level: "adaptive" | "low" | "medium" | "high" }</code>) is injected into all hook event payloads, conveying the active turn's reasoning intensity.</span>
   </p>
   <p class="note">
-    <svg class="alert" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+    <svg class="alert" aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
     <span><b>Gemini CLI and Antigravity CLI each install one pre-execution hook.</b> Codex CLI has no PermissionDenied event (no auto-mode classifier yet). The engine routes around what's missing. Gemini carries modern-CLI hints and Tier 3 warnings on BeforeTool; Codex moves them to PostToolUse because tool-gates emits empty stdout for non-deny PreToolUse decisions. Antigravity's Pre output has no additionalContext field, so hints and Tier 3 warnings are dropped there and deny remediation is folded into the reason.</span>
   </p>

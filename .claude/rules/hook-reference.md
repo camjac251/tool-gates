@@ -12,7 +12,7 @@ tool-gates supports four clients:
 - **Claude Code**: `PreToolUse` / `PermissionRequest` / `PermissionDenied` / `PostToolUse` events. Detected from `hook_event_name`.
 - **Codex CLI**: `PreToolUse` / `PermissionRequest` / `PostToolUse` events. **Cannot** be detected from `hook_event_name` (Codex shares Claude's event names verbatim). Selected via the explicit `--client codex` argv flag, which the installer bakes into the hook command.
 - **Antigravity CLI** (`agy`): a single `PreToolUse` hook. Sends **no** `hook_event_name` and uses a distinct payload shape (`toolCall.name` + PascalCase args). Selected via the explicit `--client antigravity` argv flag, which the installer bakes into the hook command.
-- **Gemini CLI** (deprecated): `BeforeTool` / `AfterTool` events. Detected from `hook_event_name`. Google sunsets the consumer Gemini CLI on 2026-06-18; use Antigravity for new setups.
+- **Gemini CLI** (deprecated compatibility): `BeforeTool` / `AfterTool` events. Detected from `hook_event_name`. Google's consumer Gemini CLI sunset date was 2026-06-18; use Antigravity for new setups.
 
 The `Client` enum in `models.rs` maps the chosen client to the appropriate serialization format, tool name mapping, and exit code behavior.
 

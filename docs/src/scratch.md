@@ -1,4 +1,9 @@
-  <p class="breadcrumb"><a href="index.html">Core Concepts</a> / Scratch Directory</p>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="index.html">Core Concepts</a></li>
+      <li aria-current="page">Scratch Directory</li>
+    </ol>
+  </nav>
   <h1 id="scratch-h1">Scratch Directory</h1>
   <p class="page-lede">A friction-free, session-scoped working directory for an agent's throwaway files: patch diffs, fetch dumps, screenshots, draft PR bodies, captured build output. Writes whose target resolves under a recognized scratch root (<code>$TOOL_GATES_SCRATCH</code>, or Claude Code's native session scratchpad) auto-allow in every permission mode, so agents stop prompting for intermediate work.</p>
 
@@ -60,7 +65,7 @@
   </div>
   <p class="step-prose">The auto-allow is destination-gated and one-directional. You can write, move, or copy <em>into</em> scratch without a prompt, but moving or copying <em>out</em> of scratch to anywhere else (the project, <code>/etc</code>, <code>~/.ssh</code>) prompts like any normal write. Reading a file from elsewhere <em>into</em> scratch (<code>cp /etc/x scratch/</code>) is allowed by design: the write lands in scratch, the read is harmless, and nothing leaves the machine.</p>
   <p class="note">
-    <svg class="alert" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+    <svg class="alert" aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
     <span><b>It only upgrades <code>ask</code> to <code>allow</code>, never relaxes a block.</b> Targets are canonicalized first (symlinks and <code>..</code> resolved), so a path that escapes the base still gates. A dangerous-path block, a <code>settings.json</code> deny, and the AI-config <a href="settings-precedence.html">file guards</a> all still win. On <a href="modes.html">plan mode</a> the file-tool path skips the upgrade entirely. The upgrade is a wire <code>allow</code>, so whether it removes the prompt depends on the client: a true allow on Claude, a fall-through to the approval policy on Codex, and inert on Gemini and Antigravity, where the native engine keeps the stricter decision so scratch writes still prompt.</span>
   </p>
 

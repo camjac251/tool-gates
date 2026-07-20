@@ -1,5 +1,10 @@
 <div class="gate-head">
-  <p class="breadcrumb"><a href="../index.html">Gates</a> / Filesystem Operations</p>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="../index.html">Gates</a></li>
+      <li aria-current="page">Filesystem Operations</li>
+    </ol>
+  </nav>
   <h1>Filesystem Operations gate</h1>
   <div class="gate-meta">
     <span class="tag">priority <b>30</b></span>
@@ -8,7 +13,7 @@
     <span class="tag"><b>tar -t</b> / <b>unzip -l</b> are read-only</span>
   </div>
 
-  <div class="summary" aria-label="Rule counts at a glance">
+  <section class="summary" aria-label="Rule counts at a glance">
     <div class="seg-bar" role="img" aria-label="3 allow, 13 ask, 6 block">
       <div class="seg allow" style="flex: 3"></div>
       <div class="seg ask"   style="flex: 13"></div>
@@ -19,17 +24,18 @@
       <span class="cas"><i></i><b>13</b> ask</span>
       <span class="cb"><i></i><b>6</b> block</span>
     </div>
-  </div>
+  </section>
 
   <p class="gate-lede">Everything that touches disk: <b>rm</b>, <b>mv</b>, <b>cp</b>, <b>mkdir</b>, <b>chmod</b>, <b>chown</b>, <b>ln</b>, <b>sed -i</b>, archives. This gate owns the destructive block floor. Patterns like <code>rm -rf /</code> are denied here so they can never reach the shell. Read-only archive listing is exempt.</p>
 </div>
 
-<div class="chips" role="group" aria-label="Filter rules by decision">
+<div class="chips" role="group" aria-label="Filter rules by decision" aria-describedby="rule-filter-status">
   <button class="chip all"   data-filter="all"   aria-pressed="true"><i></i>All <span class="n">22</span></button>
   <button class="chip allow" data-filter="allow" aria-pressed="false"><i></i>Allow <span class="n">3</span></button>
   <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">13</span></button>
   <button class="chip block" data-filter="block" aria-pressed="false"><i></i>Block <span class="n">6</span></button>
 </div>
+<p class="rule-filter-status" id="rule-filter-status" role="status" aria-live="polite" aria-atomic="true">Showing all 22 rules.</p>
 
 <div class="rule-card">
   <header>
@@ -178,6 +184,6 @@
 </div>
 
 <p class="note">
-  <svg class="alert" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+  <svg class="alert" aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
   <span><b>The block floor is path-aware, not pattern-matched.</b> The <code>check_rm</code> custom handler normalises paths (<code>//</code> → <code>/</code>, <code>/.</code> → <code>/</code>) before checking, and routes traversal patterns (<code>..</code>, <code>../</code>, bare <code>*</code>) to ask-with-warn instead of denying. Authoring this declaratively in TOML alone would miss cases.</span>
 </p>

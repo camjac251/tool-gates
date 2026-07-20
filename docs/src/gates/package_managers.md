@@ -1,5 +1,10 @@
 <div class="gate-head">
-  <p class="breadcrumb"><a href="../index.html">Gates</a> / Package Managers</p>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="../index.html">Gates</a></li>
+      <li aria-current="page">Package Managers</li>
+    </ol>
+  </nav>
   <h1>Package Managers gate</h1>
   <div class="gate-meta">
     <span class="tag">priority <b>20</b></span>
@@ -7,7 +12,7 @@
     <span class="tag">covers <b>npm · pnpm · yarn · bun · pip · uv · cargo · go · poetry · pipx · conda · mise</b></span>
   </div>
 
-  <div class="summary" aria-label="Rule counts at a glance">
+  <section class="summary" aria-label="Rule counts at a glance">
     <div class="seg-bar" role="img" aria-label="233 allow, 220 ask, 0 block">
       <div class="seg allow" style="flex: 233"></div>
       <div class="seg ask"   style="flex: 220"></div>
@@ -18,17 +23,18 @@
       <span class="cas"><i></i><b>220</b> ask</span>
       <span class="cb"><i></i><b>0</b> block</span>
     </div>
-  </div>
+  </section>
 
   <p class="gate-lede">Language package managers. Listing, inspecting, and auditing are safe. Installing, removing, publishing, and running arbitrary scripts ask. No hard blocks at this layer (the dangerous floor is filesystem-level).</p>
 </div>
 
-<div class="chips" role="group" aria-label="Filter rules by decision">
+<div class="chips" role="group" aria-label="Filter rules by decision" aria-describedby="rule-filter-status">
   <button class="chip all"   data-filter="all"   aria-pressed="true"><i></i>All <span class="n">453</span></button>
   <button class="chip allow" data-filter="allow" aria-pressed="false"><i></i>Allow <span class="n">233</span></button>
   <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">220</span></button>
   <button class="chip block" data-filter="block" aria-pressed="false"><i></i>Block <span class="n">0</span></button>
 </div>
+<p class="rule-filter-status" id="rule-filter-status" role="status" aria-live="polite" aria-atomic="true">Showing all 453 rules.</p>
 
 <div class="rule-card">
   <header>
@@ -2320,6 +2326,6 @@
 </div>
 
 <p class="note">
-  <svg class="alert" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+  <svg class="alert" aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
   <span><b>Custom handlers per package manager.</b> Each program has a small Rust handler (<code>check_npm</code>, <code>check_pnpm</code>, <code>check_yarn</code>, <code>check_pip</code>, <code>check_uv</code>, <code>check_poetry</code>, <code>check_pipx</code>, <code>check_mise</code>) that recognises devtool delegation (e.g. <code>npm eslint</code> routes to the devtools gate), bare invocations (<code>yarn</code> = install), and per-package-manager idioms like <code>pip install --dry-run</code>.</span>
 </p>

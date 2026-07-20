@@ -1,5 +1,10 @@
 <div class="gate-head">
-  <p class="breadcrumb"><a href="../index.html">Gates</a> / GitHub CLI</p>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="../index.html">Gates</a></li>
+      <li aria-current="page">GitHub CLI</li>
+    </ol>
+  </nav>
   <h1>GitHub CLI gate</h1>
   <div class="gate-meta">
     <span class="tag">priority <b>10</b></span>
@@ -7,7 +12,7 @@
     <span class="tag"><b>api</b> method-aware via custom handler</span>
   </div>
 
-  <div class="summary" aria-label="Rule counts at a glance">
+  <section class="summary" aria-label="Rule counts at a glance">
     <div class="seg-bar" role="img" aria-label="44 allow, 88 ask, 2 block">
       <div class="seg allow" style="flex: 44"></div>
       <div class="seg ask"   style="flex: 88"></div>
@@ -18,17 +23,18 @@
       <span class="cas"><i></i><b>88</b> ask</span>
       <span class="cb"><i></i><b>2</b> block</span>
     </div>
-  </div>
+  </section>
 
   <p class="gate-lede">GitHub CLI. Listing, viewing, searching, and read API are safe. Mutations ask. Two patterns are hard-blocked: deleting a repository (irreversible) and logging out (no way to re-authenticate without user interaction).</p>
 </div>
 
-<div class="chips" role="group" aria-label="Filter rules by decision">
+<div class="chips" role="group" aria-label="Filter rules by decision" aria-describedby="rule-filter-status">
   <button class="chip all"   data-filter="all"   aria-pressed="true"><i></i>All <span class="n">134</span></button>
   <button class="chip allow" data-filter="allow" aria-pressed="false"><i></i>Allow <span class="n">44</span></button>
   <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">88</span></button>
   <button class="chip block" data-filter="block" aria-pressed="false"><i></i>Block <span class="n">2</span></button>
 </div>
+<p class="rule-filter-status" id="rule-filter-status" role="status" aria-live="polite" aria-atomic="true">Showing all 134 rules.</p>
 
 <div class="rule-card">
   <header>
@@ -737,6 +743,6 @@
 </div>
 
 <p class="note">
-  <svg class="alert" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+  <svg class="alert" aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
   <span><b>Two-pattern block floor.</b> <code>gh repo delete</code> and <code>gh auth logout</code> are the only hard blocks: the first destroys repo history and metadata irreversibly; the second leaves the agent with no way to re-authenticate. Every other mutation asks.</span>
 </p>

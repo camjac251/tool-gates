@@ -1,5 +1,10 @@
 <div class="gate-head">
-  <p class="breadcrumb"><a href="../index.html">Gates</a> / Git</p>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="../index.html">Gates</a></li>
+      <li aria-current="page">Git</li>
+    </ol>
+  </nav>
   <h1>Git gate</h1>
   <div class="gate-meta">
     <span class="tag">priority <b>10</b></span>
@@ -8,7 +13,7 @@
     <span class="tag">aliases resolved from <b>~/.gitconfig</b></span>
   </div>
 
-  <div class="summary" aria-label="Rule counts at a glance">
+  <section class="summary" aria-label="Rule counts at a glance">
     <div class="seg-bar" role="img" aria-label="45 allow, 60 ask, 0 block">
       <div class="seg allow" style="flex: 45"></div>
       <div class="seg ask"   style="flex: 60"></div>
@@ -19,17 +24,18 @@
       <span class="cas"><i></i><b>60</b> ask</span>
       <span class="cb"><i></i><b>0</b> block</span>
     </div>
-  </div>
+  </section>
 
   <p class="gate-lede">Read-only history and inspection commands pass through. Anything that writes to the tree, the index, or a remote pauses for approval. <b>git</b> is never hard-blocked from this gate. The dangerous floor lives in the filesystem rules and the pre-AST raw-string pass.</p>
 </div>
 
-<div class="chips" role="group" aria-label="Filter rules by decision">
+<div class="chips" role="group" aria-label="Filter rules by decision" aria-describedby="rule-filter-status">
   <button class="chip all"   data-filter="all"   aria-pressed="true"><i></i>All <span class="n">105</span></button>
   <button class="chip allow" data-filter="allow" aria-pressed="false"><i></i>Allow <span class="n">45</span></button>
   <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">60</span></button>
   <button class="chip block" data-filter="block" aria-pressed="false"><i></i>Block <span class="n">0</span></button>
 </div>
+<p class="rule-filter-status" id="rule-filter-status" role="status" aria-live="polite" aria-atomic="true">Showing all 105 rules.</p>
 
 <div class="rule-card">
   <header>
@@ -581,6 +587,6 @@
 </div>
 
 <p class="note">
-  <svg class="alert" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+  <svg class="alert" aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
   <span><b>Hard blocks live in other gates.</b> The git gate never denies outright. A pattern like <code>curl … | bash</code> is caught by the pre-AST raw-string pass before any gate runs. Destructive filesystem patterns like <code>rm -rf /</code> are denied in <a href="filesystem.html">filesystem.toml</a>.</span>
 </p>

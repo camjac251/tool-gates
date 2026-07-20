@@ -1,4 +1,9 @@
-  <p class="breadcrumb"><a href="index.html">Reference</a> / Review TUI</p>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="index.html">Reference</a></li>
+      <li aria-current="page">Review TUI</li>
+    </ol>
+  </nav>
   <h1 id="review-tui-h1">Review TUI</h1>
   <p class="page-lede"><code>tool-gates review</code> is where ask decisions become permanent rules. Every command you clicked through lands in a queue; the TUI lets you promote, deny, or dismiss each one, and manage the allow/deny rules already in your <code>settings.json</code>. It is keyboard-first, color-and-symbol coded, and biased toward the safe choice: the wider a rule reaches, the more friction it asks for.</p>
 
@@ -15,7 +20,9 @@
     <h2>Three tabs: a queue and two rule managers.</h2>
     <p>Press <code>Tab</code> to cycle, or <code>1</code> / <code>2</code> / <code>3</code> to jump. The active tab is underlined.</p>
   </div>
-  <table class="data-table">
+  <div class="data-table-frame">
+    <div class="data-table-scroll" data-table-scroll>
+      <table class="data-table">
     <thead>
       <tr><th>View</th><th>Shows</th><th>Primary actions</th></tr>
     </thead>
@@ -25,6 +32,8 @@
       <tr><td><b>Denied</b></td><td>Existing <code>deny</code> rules across scopes.</td><td><code>x</code> remove (with confirm)</td></tr>
     </tbody>
   </table>
+    </div>
+  </div>
 
   <div class="sec-head">
     <p class="lbl">Pending</p>
@@ -60,7 +69,9 @@
 </div>
 </div>
   <p class="step-prose">Each segment of a command is prefixed with a glyph and colored by its decision, so the encoding survives a no-color terminal or color blindness:</p>
-  <table class="data-table">
+  <div class="data-table-frame">
+    <div class="data-table-scroll" data-table-scroll>
+      <table class="data-table">
     <thead><tr><th>Glyph</th><th>Decision</th><th>Meaning</th></tr></thead>
     <tbody>
       <tr><td><span class="gly gly-allow">&#10003;</span></td><td><b>allow</b></td><td>A gate already permits this segment. No rule needed.</td></tr>
@@ -68,6 +79,8 @@
       <tr><td><span class="gly gly-block">&#10007;</span></td><td><b>block</b></td><td>A hard safety-floor deny. Cannot be approved here.</td></tr>
     </tbody>
   </table>
+    </div>
+  </div>
   <p class="step-prose">For a compound command (<code>&amp;&amp;</code>, <code>||</code>, <code>|</code>, <code>;</code>) the panel shows every segment and underlines the one in focus; <code>[</code> and <code>]</code> step between the actionable ones. The rows beneath are the rule itself:</p>
   <ul class="prose-list">
     <li><b>Pattern</b>: the settings.json pattern that would be written. <code>&larr;</code> / <code>&rarr;</code> cycle from the narrowest form (this exact command) out to the broadest the gate considers safe to suggest. High-stakes programs deliberately offer only the narrow forms.</li>
@@ -80,7 +93,9 @@
     <h2>The wider the rule, the louder the panel.</h2>
     <p>Two meters score the rule you are about to write. <b>Reach</b> is the scope (just you &rarr; the team &rarr; the whole machine); <b>breadth</b> is the pattern width (one command &rarr; a family &rarr; an entire program). Both fill and redden together, and their combination sets the risk level.</p>
   </div>
-  <table class="data-table">
+  <div class="data-table-frame">
+    <div class="data-table-scroll" data-table-scroll>
+      <table class="data-table">
     <thead><tr><th>Risk</th><th>When</th><th>Approve</th></tr></thead>
     <tbody>
       <tr><td><span class="risk-chip risk-safe">safe</span></td><td>One exact command, local, low-stakes program.</td><td>Single keystroke.</td></tr>
@@ -88,6 +103,8 @@
       <tr><td><span class="risk-chip risk-danger">DANGER</span></td><td>A wide rule applied to every project, a high-stakes tool reaching the whole team, or a whole-program glob over network / exec / destructive commands.</td><td>Requires an explicit <code>y</code> confirm.</td></tr>
     </tbody>
   </table>
+    </div>
+  </div>
   <p class="step-prose">Only <span class="risk-chip risk-danger">DANGER</span> writes demand confirmation. The approve button relabels itself to <code>a Approve (confirm)</code> and pressing <code>a</code> arms an inline prompt; <code>y</code> commits, any other key cancels. This is the anti-rubber-stamp guard: you cannot widen trust to the whole machine by leaning on one key.</p>
 
   <div class="sec-head">
@@ -146,7 +163,7 @@
 </div>
 </div>
   <p class="note">
-    <svg class="alert" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+    <svg class="alert" aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
     <span><b>Removal edits real settings files.</b> A global rule in the Approved or Denied view lives in <code>~/.claude/settings.json</code>; removing it there affects every project on the machine. The confirm prompt names the scope so you see the reach before committing.</span>
   </p>
 
@@ -195,7 +212,9 @@
     <h2>One key, one meaning.</h2>
     <p>Arrows always move within the active list. There is no panel-focus mode to track; the same key does the same thing wherever you are.</p>
   </div>
-  <table class="data-table">
+  <div class="data-table-frame">
+    <div class="data-table-scroll" data-table-scroll>
+      <table class="data-table">
     <thead><tr><th>Key</th><th>Action</th><th>Where</th></tr></thead>
     <tbody>
       <tr><td>&uarr; &darr; · j / k</td><td>Move within the active list</td><td>everywhere</td></tr>
@@ -214,7 +233,9 @@
       <tr><td>q · Esc</td><td>Quit</td><td>everywhere</td></tr>
     </tbody>
   </table>
+    </div>
+  </div>
   <p class="note">
-    <svg class="alert" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+    <svg class="alert" aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
     <span><b>Only human approvals queue.</b> Under auto mode the classifier decides silently; nothing it approves reaches <code>pending.jsonl</code>. The queue stays focused on the patterns you explicitly clicked through. Prefer the command line? <code>tool-gates pending list</code>, <code>tool-gates approve</code>, and <code>tool-gates rules remove</code> do the same writes without the TUI. See the <a href="approval-learning.html">Approval Learning</a> and <a href="cli.html">CLI Reference</a> pages.</span>
   </p>

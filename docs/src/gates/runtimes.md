@@ -1,5 +1,10 @@
 <div class="gate-head">
-  <p class="breadcrumb"><a href="../index.html">Gates</a> / Language Runtimes</p>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="../index.html">Gates</a></li>
+      <li aria-current="page">Language Runtimes</li>
+    </ol>
+  </nav>
   <h1>Language Runtimes gate</h1>
   <div class="gate-meta">
     <span class="tag">priority <b>27</b></span>
@@ -7,7 +12,7 @@
     <span class="tag">covers <b>python · node · ruby · deno · php · lua · java · dotnet · swift · elixir</b></span>
   </div>
 
-  <div class="summary" aria-label="Rule counts at a glance">
+  <section class="summary" aria-label="Rule counts at a glance">
     <div class="seg-bar" role="img" aria-label="48 allow, 37 ask, 0 block">
       <div class="seg allow" style="flex: 48"></div>
       <div class="seg ask"   style="flex: 37"></div>
@@ -18,17 +23,18 @@
       <span class="cas"><i></i><b>37</b> ask</span>
       <span class="cb"><i></i><b>0</b> block</span>
     </div>
-  </div>
+  </section>
 
   <p class="gate-lede">Language runtime invocations. Version and syntax-check flags are safe. Anything that executes code (inline via <code>-c</code>/<code>-e</code> or a script file) asks. No blocks at this layer; the filesystem-level floor catches the destructive cases.</p>
 </div>
 
-<div class="chips" role="group" aria-label="Filter rules by decision">
+<div class="chips" role="group" aria-label="Filter rules by decision" aria-describedby="rule-filter-status">
   <button class="chip all"   data-filter="all"   aria-pressed="true"><i></i>All <span class="n">85</span></button>
   <button class="chip allow" data-filter="allow" aria-pressed="false"><i></i>Allow <span class="n">48</span></button>
   <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">37</span></button>
   <button class="chip block" data-filter="block" aria-pressed="false"><i></i>Block <span class="n">0</span></button>
 </div>
+<p class="rule-filter-status" id="rule-filter-status" role="status" aria-live="polite" aria-atomic="true">Showing all 85 rules.</p>
 
 <div class="rule-card">
   <header>

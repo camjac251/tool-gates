@@ -1,4 +1,9 @@
-  <p class="breadcrumb"><a href="index.html">Core Concepts</a> / Permission Modes</p>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="index.html">Core Concepts</a></li>
+      <li aria-current="page">Permission Modes</li>
+    </ol>
+  </nav>
   <h1 id="modes-h1">Permission Modes</h1>
   <p class="page-lede">Clients send <code>permission_mode</code> with hook events, but each client gives that value a different shape. tool-gates treats mode as a policy layer above the normal gate decision so the same shell rule can behave differently in planning, batch-edit, and classifier-driven sessions.</p>
 
@@ -7,7 +12,9 @@
       <p class="lbl">Mode matrix</p>
       <h2 id="mode-matrix">What changes by mode.</h2>
     </div>
-    <table class="data-table">
+    <div class="data-table-frame">
+      <div class="data-table-scroll" data-table-scroll>
+        <table class="data-table">
       <thead>
         <tr><th>Mode</th><th>Clients</th><th>tool-gates behavior</th></tr>
       </thead>
@@ -44,6 +51,8 @@
         </tr>
       </tbody>
     </table>
+      </div>
+    </div>
   </section>
 
   <section aria-labelledby="codex-axis">

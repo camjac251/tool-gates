@@ -1,6 +1,7 @@
-// tool-gates mdBook theme behavior: chip filter (scoped to the document), tab
-// switcher, version-pill fetcher, and the command-simulator shell (curated
-// SIMS). Routing, theming, the sidebar, and search are mdBook's, not this file's.
+// tool-gates mdBook theme behavior: filters, tabs, version metadata, simulator,
+// search focus, responsive drawer state, theme switching, copy controls, and
+// overflow-table affordances. mdBook still owns routing and the underlying
+// search/sidebar engines; this file adapts their state to the custom chrome.
 //
 // mdBook navigates with full page loads, so this runs once per page. Re-query
 // the DOM each time; never cache element references across navigations.
@@ -8,43 +9,87 @@
   "use strict";
 
   /* ===== Tab switcher (Installation page) ===== */
+  function activateTab(btn, shouldFocus) {
+    var key = btn.getAttribute("data-tab");
+    var scope = btn.closest(".tabs");
+    if (!scope || !key) return;
+
+    scope.querySelectorAll(".tab[data-tab]").forEach((tab) => {
+      var selected = tab === btn;
+      tab.setAttribute("aria-selected", selected ? "true" : "false");
+      tab.tabIndex = selected ? 0 : -1;
+    });
+    scope.querySelectorAll(".tab-panel[data-panel]").forEach((panel) => {
+      var selected = panel.getAttribute("data-panel") === key;
+      panel.classList.toggle("is-active", selected);
+      panel.hidden = !selected;
+    });
+
+    if (shouldFocus) btn.focus();
+  }
+
   function initTabs() {
-    document.querySelectorAll(".tab[data-tab]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        var key = btn.getAttribute("data-tab");
-        var scope = btn.closest(".tabs");
-        if (!scope) return;
-        scope.querySelectorAll(".tab").forEach((b) => {
-          b.setAttribute("aria-selected", b === btn ? "true" : "false");
-        });
-        scope.querySelectorAll(".tab-panel").forEach((p) => {
-          p.classList.toggle("is-active", p.getAttribute("data-panel") === key);
+    document.querySelectorAll(".tabs").forEach((scope) => {
+      var tabs = Array.from(scope.querySelectorAll(".tab[data-tab]"));
+      tabs.forEach((btn, index) => {
+        btn.addEventListener("click", () => activateTab(btn, false));
+        btn.addEventListener("keydown", (event) => {
+          var nextIndex;
+          if (event.key === "ArrowRight") nextIndex = (index + 1) % tabs.length;
+          else if (event.key === "ArrowLeft") nextIndex = (index - 1 + tabs.length) % tabs.length;
+          else if (event.key === "Home") nextIndex = 0;
+          else if (event.key === "End") nextIndex = tabs.length - 1;
+          else return;
+
+          event.preventDefault();
+          event.stopPropagation();
+          activateTab(tabs[nextIndex], true);
         });
       });
+
+      var selected = tabs.find((tab) => tab.getAttribute("aria-selected") === "true") || tabs[0];
+      if (selected) activateTab(selected, false);
     });
   }
 
   /* ===== Chip filter (gate pages) ===== */
   // Rescoped from per-.view to the whole document: each gate page is its own
   // document under mdBook, so the chips and rule-rows live at document scope.
+  function applyChipFilter(selectedChip) {
+    var filter = selectedChip.getAttribute("data-filter");
+    var visibleCount = 0;
+    document.querySelectorAll(".chip[data-filter]").forEach((chip) => {
+      chip.setAttribute("aria-pressed", chip === selectedChip ? "true" : "false");
+    });
+    document.querySelectorAll(".rule-row").forEach((row) => {
+      var match = filter === "all" || row.getAttribute("data-decision") === filter;
+      row.classList.toggle("is-hidden", !match);
+      if (match) visibleCount += 1;
+    });
+    document.querySelectorAll(".rule-card").forEach((card) => {
+      var anyVisible = card.querySelectorAll(".rule-row:not(.is-hidden)").length > 0;
+      card.hidden = !anyVisible;
+    });
+
+    var status = document.getElementById("rule-filter-status");
+    if (!status) return;
+    var labels = { allow: "Allow", ask: "Ask", block: "Block" };
+    var noun = visibleCount === 1 ? "rule" : "rules";
+    if (filter === "all") {
+      status.textContent = "Showing all " + visibleCount + " " + noun + ".";
+    } else if (visibleCount === 0) {
+      status.textContent = "No " + labels[filter] + " rules in this gate.";
+    } else {
+      status.textContent = "Showing " + visibleCount + " " + labels[filter] + " " + noun + ".";
+    }
+    status.classList.toggle("is-empty", visibleCount === 0);
+  }
+
   function initChipFilter() {
     var chips = document.querySelectorAll(".chip[data-filter]");
     if (!chips.length) return;
-    chips.forEach((c) => {
-      c.addEventListener("click", () => {
-        var f = c.getAttribute("data-filter");
-        document.querySelectorAll(".chip[data-filter]").forEach((x) => {
-          x.setAttribute("aria-pressed", x === c ? "true" : "false");
-        });
-        document.querySelectorAll(".rule-row").forEach((r) => {
-          var match = f === "all" || r.getAttribute("data-decision") === f;
-          r.classList.toggle("is-hidden", !match);
-        });
-        document.querySelectorAll(".rule-card").forEach((card) => {
-          var anyVisible = card.querySelectorAll(".rule-row:not(.is-hidden)").length > 0;
-          card.style.display = anyVisible ? "" : "none";
-        });
-      });
+    chips.forEach((chip) => {
+      chip.addEventListener("click", () => applyChipFilter(chip));
     });
   }
 
@@ -465,20 +510,40 @@
   // is stashed under SIMS["__custom"] so the verbatim runSim() draws it exactly
   // like a curated example (stage reveal, pill, reason). No-op if the command
   // is blank or the engine somehow is not ready.
+  function setCustomStatus(message, state) {
+    var status = document.getElementById("simCustomStatus");
+    if (!status) return;
+    status.textContent = message || "";
+    if (state) status.setAttribute("data-state", state);
+    else status.removeAttribute("data-state");
+  }
+
   function runCustom(rawCmd) {
     var cmd = (rawCmd || "").trim();
-    if (!cmd || !wasmReady || !wasmDecide) return;
-    var resp;
+    if (!cmd) {
+      setCustomStatus("Enter a command to run through the gate.", "error");
+      return false;
+    }
+    if (!wasmReady || !wasmDecide) {
+      setCustomStatus(
+        "The live engine is not ready. Curated examples are still available.",
+        "error",
+      );
+      return false;
+    }
     try {
-      resp = wasmDecide(cmd, "default", currentSettingsJson || null);
+      var resp = wasmDecide(cmd, "default", currentSettingsJson || null);
+      SIMS.__custom = normalizeWasmSim(resp);
     } catch (err) {
       if (typeof console !== "undefined" && console.warn) {
         console.warn("tool-gates: decide() threw for", cmd, err);
       }
-      return;
+      setCustomStatus("The engine could not evaluate that command. Try another command.", "error");
+      return false;
     }
-    SIMS.__custom = normalizeWasmSim(resp);
     runSim("__custom");
+    setCustomStatus("Evaluated " + cmd + ".", "success");
+    return true;
   }
 
   function reEvaluateCurrent() {
@@ -492,32 +557,51 @@
     }
   }
 
+  function setUploadFeedback(statusMessage, errorMessage) {
+    var status = document.getElementById("settingsUploadStatus");
+    var error = document.getElementById("settingsUploadError");
+    if (status) status.textContent = statusMessage || "";
+    if (error) {
+      error.textContent = errorMessage || "";
+      error.hidden = !errorMessage;
+    }
+  }
+
   function handleFiles(files) {
     if (!files?.length) return;
+    setUploadFeedback("Reading " + files.length + (files.length === 1 ? " file…" : " files…"), "");
 
-    var promises = Array.prototype.map.call(
-      files,
-      (file) =>
-        new Promise((resolve) => {
-          var reader = new FileReader();
-          reader.onload = (e) => {
-            try {
-              var json = JSON.parse(e.target.result);
-              resolve({ name: file.name, data: json, error: null });
-            } catch (err) {
-              resolve({ name: file.name, data: null, error: err.message });
-            }
-          };
-          reader.onerror = () => {
-            resolve({ name: file.name, data: null, error: "Failed to read file" });
-          };
-          reader.readAsText(file);
-        }),
-    );
+    var promises = Array.prototype.map.call(files, (file) => {
+      var sourceKey =
+        file.webkitRelativePath || [file.name, file.size, file.lastModified].join(":");
+      return new Promise((resolve) => {
+        var reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            var json = JSON.parse(e.target.result);
+            resolve({ name: file.name, sourceKey: sourceKey, data: json, error: null });
+          } catch (err) {
+            resolve({ name: file.name, sourceKey: sourceKey, data: null, error: err.message });
+          }
+        };
+        reader.onerror = () => {
+          resolve({
+            name: file.name,
+            sourceKey: sourceKey,
+            data: null,
+            error: "Failed to read file",
+          });
+        };
+        reader.readAsText(file);
+      });
+    });
 
     Promise.all(promises).then((results) => {
+      var loaded = [];
+      var failures = [];
       results.forEach((res) => {
         if (res.error) {
+          failures.push(res.name + ": " + res.error);
           if (typeof console !== "undefined" && console.warn) {
             console.warn("tool-gates: Error loading settings file " + res.name + ": " + res.error);
           }
@@ -535,30 +619,52 @@
           });
         }
 
-        // Replace if already exists with same name
+        // Replace only a re-upload of the same source file. Distinct settings
+        // files commonly share the basename settings.json and must all merge.
         var existingIdx = -1;
         for (var i = 0; i < uploadedSettingsFiles.length; i++) {
-          if (uploadedSettingsFiles[i].name === res.name) {
+          if (uploadedSettingsFiles[i].sourceKey === res.sourceKey) {
             existingIdx = i;
             break;
           }
         }
+        var retainedFile = {
+          name: res.name,
+          sourceKey: res.sourceKey,
+          data: res.data,
+          rulesCount: rulesCount,
+        };
         if (existingIdx !== -1) {
-          uploadedSettingsFiles[existingIdx] = {
-            name: res.name,
-            data: res.data,
-            rulesCount: rulesCount,
-          };
+          uploadedSettingsFiles[existingIdx] = retainedFile;
         } else {
-          uploadedSettingsFiles.push({ name: res.name, data: res.data, rulesCount: rulesCount });
+          uploadedSettingsFiles.push(retainedFile);
+        }
+        var loadedIdx = loaded.findIndex((file) => file.sourceKey === res.sourceKey);
+        if (loadedIdx !== -1) {
+          loaded[loadedIdx] = retainedFile;
+        } else {
+          loaded.push(retainedFile);
         }
       });
 
       mergeAndApplySettings();
+      var loadedRules = loaded.reduce((total, file) => total + file.rulesCount, 0);
+      var loadedMessage = "";
+      if (loaded.length) {
+        loadedMessage =
+          "Loaded " +
+          loaded.length +
+          (loaded.length === 1 ? " settings file" : " settings files") +
+          " with " +
+          loadedRules +
+          (loadedRules === 1 ? " rule." : " rules.");
+      }
+      var errorMessage = failures.length ? "Could not load " + failures.join("; ") + "." : "";
+      setUploadFeedback(loadedMessage, errorMessage);
     });
   }
 
-  function mergeAndApplySettings() {
+  function mergeAndApplySettings(focusIndex) {
     var merged = {
       permissions: {
         allow: [],
@@ -589,32 +695,42 @@
       currentSettingsJson = "";
     }
 
-    updateSettingsUI();
+    updateSettingsUI(focusIndex);
     reEvaluateCurrent();
   }
 
-  function updateSettingsUI() {
+  function updateSettingsUI(focusIndex) {
     var panel = document.getElementById("activeSettingsPanel");
     var list = document.getElementById("activeSettingsRulesList");
     if (!panel || !list) return;
 
     if (uploadedSettingsFiles.length === 0) {
-      panel.style.display = "none";
+      panel.hidden = true;
       list.innerHTML = "";
+      if (Number.isInteger(focusIndex)) {
+        document.getElementById("settingsFileInput")?.focus({ preventScroll: true });
+      }
       return;
     }
 
-    panel.style.display = "block";
+    panel.hidden = false;
     var html = "";
     uploadedSettingsFiles.forEach((file, idx) => {
       var label = file.rulesCount + " " + (file.rulesCount === 1 ? "rule" : "rules");
       html += '<div class="settings-file-badge">';
-      html += '<span class="file-name">' + escapeHtml(file.name) + "</span>";
+      html +=
+        '<span class="file-name" title="' +
+        escapeHtml(file.name) +
+        '">' +
+        escapeHtml(file.name) +
+        "</span>";
       html += '<span class="file-meta">(' + label + ")</span>";
       html +=
-        '<button class="remove-file-btn" data-file-index="' +
+        '<button class="remove-file-btn" type="button" data-file-index="' +
         idx +
-        '" aria-label="Remove settings file">&times;</button>';
+        '" aria-label="Remove ' +
+        escapeHtml(file.name) +
+        '">&times;</button>';
       html += "</div>";
     });
     list.innerHTML = html;
@@ -624,11 +740,19 @@
       btn.addEventListener("click", () => {
         var idx = parseInt(btn.getAttribute("data-file-index"), 10);
         if (!Number.isNaN(idx) && idx >= 0 && idx < uploadedSettingsFiles.length) {
+          var removedName = uploadedSettingsFiles[idx].name;
           uploadedSettingsFiles.splice(idx, 1);
-          mergeAndApplySettings();
+          mergeAndApplySettings(Math.min(idx, uploadedSettingsFiles.length - 1));
+          setUploadFeedback("Removed " + removedName + ".", "");
         }
       });
     });
+
+    if (Number.isInteger(focusIndex) && focusIndex >= 0) {
+      list
+        .querySelector('.remove-file-btn[data-file-index="' + focusIndex + '"]')
+        ?.focus({ preventScroll: true });
+    }
   }
 
   function escapeHtml(str) {
@@ -645,6 +769,7 @@
     if (!simStages) return;
     document.querySelectorAll(".sim-chip").forEach((chip) => {
       chip.addEventListener("click", () => {
+        setCustomStatus("", "");
         runSim(chip.getAttribute("data-sim"));
       });
     });
@@ -733,12 +858,9 @@
     var clearBtn = document.getElementById("clearSettingsBtn");
 
     if (dropZone && fileInput) {
-      dropZone.addEventListener("click", () => {
-        fileInput.click();
-      });
-
       fileInput.addEventListener("change", (e) => {
         handleFiles(e.target.files);
+        e.target.value = "";
       });
 
       // Drag and drop events
@@ -780,7 +902,8 @@
     if (clearBtn) {
       clearBtn.addEventListener("click", () => {
         uploadedSettingsFiles = [];
-        mergeAndApplySettings();
+        mergeAndApplySettings(-1);
+        setUploadFeedback("Cleared all settings files.", "");
       });
     }
 
@@ -794,16 +917,228 @@
   // toggle or focus the search bar. Instead, we listen for a focus event on
   // the search input. If focused and search is still hidden/uninitialized, we
   // trigger the toggle's click handler once to load the search index on demand.
+  function normalizeSearchBreadcrumbs(resultList) {
+    resultList.querySelectorAll("li > a").forEach((link) => {
+      // mdBook currently renders breadcrumb anchors as plain text. Preserve any
+      // future structured markup instead of flattening it.
+      if (link.children.length) return;
+
+      var unique = [];
+      link.textContent
+        .split("»")
+        .map((part) => part.trim().replace(/\s+[+×]$/, ""))
+        .filter(Boolean)
+        .forEach((part) => {
+          if (!unique.includes(part)) unique.push(part);
+        });
+
+      var concise = unique.length > 2 ? [unique[0], unique[unique.length - 1]] : unique;
+      var nextLabel = concise.join(" › ");
+      if (nextLabel.length > 96) nextLabel = `${nextLabel.slice(0, 95).trimEnd()}…`;
+      if (nextLabel && nextLabel !== link.textContent) link.textContent = nextLabel;
+    });
+  }
+
   function initInlineSearch() {
     var searchbar = document.getElementById("mdbook-searchbar");
     if (!searchbar) return;
+    var resultList = document.getElementById("mdbook-searchresults");
+    var resultOuter = document.getElementById("mdbook-searchresults-outer");
+    var wrapper = document.getElementById("mdbook-search-wrapper");
+
+    function restoreSearchExitFocus() {
+      requestAnimationFrame(() => {
+        var toggle = document.getElementById("mdbook-search-toggle");
+        var target =
+          toggle?.offsetParent !== null ? toggle : document.getElementById("mdbook-sidebar-toggle");
+        target?.focus({ preventScroll: true });
+      });
+    }
+
+    function searchResultsVisible() {
+      return Boolean(
+        resultOuter &&
+          !wrapper?.classList.contains("hidden") &&
+          !resultOuter.classList.contains("hidden") &&
+          resultOuter.getClientRects().length,
+      );
+    }
+
+    function focusResult(link) {
+      if (!link || !resultList) return;
+      resultList.querySelectorAll("li.focus").forEach((item) => {
+        item.classList.remove("focus");
+      });
+      var item = link.closest("li");
+      if (!item) return;
+      item.classList.add("focus");
+      link.focus({ preventScroll: true });
+      if (!resultOuter) return;
+      var itemTop = item.offsetTop;
+      var itemBottom = itemTop + item.offsetHeight;
+      var viewTop = resultOuter.scrollTop;
+      var viewBottom = viewTop + resultOuter.clientHeight;
+      if (itemTop < viewTop) resultOuter.scrollTop = itemTop;
+      else if (itemBottom > viewBottom)
+        resultOuter.scrollTop = itemBottom - resultOuter.clientHeight;
+    }
+
+    if (resultList) {
+      var observer = new MutationObserver(() => normalizeSearchBreadcrumbs(resultList));
+      observer.observe(resultList, { childList: true, subtree: true });
+      normalizeSearchBreadcrumbs(resultList);
+
+      resultList.addEventListener("focusin", (event) => {
+        var link = event.target.closest?.("li > a");
+        if (link) focusResult(link);
+      });
+      resultList.addEventListener("keydown", (event) => {
+        var link = event.target.closest?.("li > a");
+        if (!link) return;
+        var item = link.closest("li");
+        if (event.key === "Escape") {
+          restoreSearchExitFocus();
+          return;
+        }
+        if (event.key === "Enter") {
+          event.stopPropagation();
+          return;
+        }
+        if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+        event.preventDefault();
+        event.stopPropagation();
+        var sibling =
+          event.key === "ArrowDown" ? item?.nextElementSibling : item?.previousElementSibling;
+        var nextLink = sibling?.querySelector("a");
+        if (nextLink) {
+          focusResult(nextLink);
+        } else if (event.key === "ArrowUp") {
+          item?.classList.remove("focus");
+          searchbar.focus({ preventScroll: true });
+          searchbar.select();
+        }
+      });
+    }
+    searchbar.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        restoreSearchExitFocus();
+        return;
+      }
+      if (event.key !== "ArrowDown" || !resultList || !searchResultsVisible()) return;
+      var firstLink = resultList.querySelector("li > a");
+      if (!firstLink) return;
+      event.preventDefault();
+      event.stopPropagation();
+      focusResult(firstLink);
+    });
     searchbar.addEventListener("focus", () => {
       var toggle = document.getElementById("mdbook-search-toggle");
-      var wrapper = document.getElementById("mdbook-search-wrapper");
-      if (wrapper && wrapper.classList.contains("hidden") && toggle) {
+      if (wrapper?.classList.contains("hidden") && toggle) {
         toggle.click();
       }
     });
+  }
+
+  /* ===== Sidebar keyboard + ARIA synchronization ===== */
+  function initSidebarAccessibility() {
+    var control = document.getElementById("mdbook-sidebar-toggle");
+    var closeButton = document.getElementById("mdbook-sidebar-close");
+    var checkbox = document.getElementById("mdbook-sidebar-toggle-anchor");
+    var sidebar = document.getElementById("mdbook-sidebar");
+    var pageWrapper = document.getElementById("mdbook-page-wrapper");
+    if (!control || !checkbox || !sidebar) return;
+    var root = document.documentElement;
+    var mobileDrawer = window.matchMedia("(max-width: 1079px)");
+    var focusAfterChange = null;
+
+    function sidebarFocusables() {
+      return Array.from(
+        sidebar.querySelectorAll(
+          'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => element.getClientRects().length > 0);
+    }
+
+    function syncSidebarState() {
+      var expanded = checkbox.checked;
+      if (pageWrapper) pageWrapper.inert = mobileDrawer.matches && expanded;
+      if (!expanded && focusAfterChange === "close" && document.activeElement !== control) {
+        control.focus({ preventScroll: true });
+      } else if (!expanded && sidebar.contains(document.activeElement)) {
+        control.focus({ preventScroll: true });
+      }
+      control.setAttribute("aria-expanded", expanded ? "true" : "false");
+      sidebar.setAttribute("aria-hidden", expanded ? "false" : "true");
+      sidebar.querySelectorAll("a, button").forEach((element) => {
+        element.tabIndex = expanded ? 0 : -1;
+      });
+
+      if (mobileDrawer.matches && expanded) {
+        requestAnimationFrame(() => {
+          var focusables = sidebarFocusables();
+          (closeButton || focusables[0])?.focus({ preventScroll: true });
+        });
+      }
+      focusAfterChange = null;
+    }
+
+    function setSidebarExpanded(expanded, focusTarget) {
+      focusAfterChange = focusTarget || null;
+      if (expanded && sidebar.style.display === "none") sidebar.style.display = "";
+      checkbox.checked = expanded;
+      checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+
+    control.addEventListener("click", () => {
+      setSidebarExpanded(!checkbox.checked, checkbox.checked ? "close" : "open");
+    });
+    closeButton?.addEventListener("click", () => setSidebarExpanded(false, "close"));
+    checkbox.addEventListener("change", syncSidebarState);
+
+    document.addEventListener(
+      "keydown",
+      (event) => {
+        if (!mobileDrawer.matches || !checkbox.checked) return;
+        if (event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
+          setSidebarExpanded(false, "close");
+          return;
+        }
+        if (event.key !== "Tab") return;
+        var focusables = sidebarFocusables();
+        if (!focusables.length) return;
+        var first = focusables[0];
+        var last = focusables[focusables.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      },
+      true,
+    );
+
+    new MutationObserver(() => {
+      var visible = root.classList.contains("sidebar-visible");
+      if (visible === checkbox.checked) return;
+      if (visible) sidebar.style.display = "";
+      checkbox.checked = visible;
+      checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+    }).observe(root, { attributes: true, attributeFilter: ["class"] });
+
+    mobileDrawer.addEventListener("change", () => {
+      var closeHadFocus = document.activeElement === closeButton;
+      if (!mobileDrawer.matches && pageWrapper) pageWrapper.inert = false;
+      syncSidebarState();
+      if (!mobileDrawer.matches && closeHadFocus) {
+        requestAnimationFrame(() => control.focus({ preventScroll: true }));
+      }
+    });
+    new MutationObserver(syncSidebarState).observe(sidebar, { childList: true, subtree: true });
+    syncSidebarState();
   }
 
   /* ===== Binary theme toggle (moon/sun, right side) ===== */
@@ -818,6 +1153,15 @@
     var btn = document.getElementById("tgThemeToggle");
     if (!btn) return;
     var root = document.documentElement;
+
+    function syncThemeLabel() {
+      var label = root.classList.contains("tg-dark")
+        ? "Switch to light theme"
+        : "Switch to dark theme";
+      btn.title = label;
+      btn.setAttribute("aria-label", label);
+    }
+
     btn.addEventListener("click", () => {
       var isDark = root.classList.contains("tg-dark");
       var next = isDark ? "tg-light" : "tg-dark";
@@ -829,7 +1173,11 @@
       try {
         localStorage.setItem("mdbook-theme", next);
       } catch (_e) {}
+      syncThemeLabel();
+      window.syncToolGatesThemeColor?.();
     });
+    syncThemeLabel();
+    window.syncToolGatesThemeColor?.();
   }
 
   /* ===== Code block copy buttons ===== */
@@ -889,7 +1237,17 @@
       var text = getCodeToCopy(pre);
       navigator.clipboard.writeText(text).then(
         () => {
+          btn.classList.remove("is-error");
           btn.classList.add("is-success");
+          btn.title = "Copied to clipboard";
+          btn.setAttribute("aria-label", "Copied to clipboard");
+          var copyStatus = document.getElementById("tg-copy-status");
+          if (copyStatus) {
+            copyStatus.textContent = "";
+            requestAnimationFrame(() => {
+              copyStatus.textContent = "Command copied to clipboard.";
+            });
+          }
 
           // Reset the success feedback timer on rapid clicks to prevent indicator visual glitching.
           if (timeoutId) {
@@ -898,10 +1256,30 @@
 
           timeoutId = setTimeout(() => {
             btn.classList.remove("is-success");
+            btn.title = "Copy to clipboard";
+            btn.setAttribute("aria-label", "Copy to clipboard");
             timeoutId = null;
           }, 800);
         },
         (err) => {
+          btn.classList.remove("is-success");
+          btn.classList.add("is-error");
+          btn.title = "Copy failed";
+          btn.setAttribute("aria-label", "Copy failed");
+          var copyStatus = document.getElementById("tg-copy-status");
+          if (copyStatus) {
+            copyStatus.textContent = "";
+            requestAnimationFrame(() => {
+              copyStatus.textContent = "Copy failed. Select the command and copy it manually.";
+            });
+          }
+          if (timeoutId) clearTimeout(timeoutId);
+          timeoutId = setTimeout(() => {
+            btn.classList.remove("is-error");
+            btn.title = "Copy to clipboard";
+            btn.setAttribute("aria-label", "Copy to clipboard");
+            timeoutId = null;
+          }, 1600);
           console.error("Failed to copy text: ", err);
         },
       );
@@ -925,7 +1303,58 @@
     });
   }
 
+  /* ===== Responsive data tables ===== */
+  function initDataTables() {
+    document.querySelectorAll("[data-table-scroll]").forEach((scroll, index) => {
+      var frame = scroll.closest(".data-table-frame");
+      if (!frame) return;
+      var cursor = frame.previousElementSibling;
+      var heading = null;
+      while (cursor && !heading) {
+        heading = cursor.matches?.("h2, h3") ? cursor : cursor.querySelector?.("h2, h3");
+        cursor = cursor.previousElementSibling;
+      }
+      if (!heading) heading = document.querySelector("main h1");
+      if (heading && !heading.id) heading.id = "data-table-heading-" + (index + 1);
+
+      function syncOverflow() {
+        var maxScroll = Math.max(0, scroll.scrollWidth - scroll.clientWidth);
+        var overflowing = maxScroll > 1;
+        if (overflowing) {
+          scroll.setAttribute("role", "region");
+          scroll.tabIndex = 0;
+          if (heading) scroll.setAttribute("aria-labelledby", heading.id);
+          else scroll.setAttribute("aria-label", "Scrollable data table");
+        } else {
+          scroll.removeAttribute("role");
+          scroll.removeAttribute("tabindex");
+          scroll.removeAttribute("aria-labelledby");
+          scroll.removeAttribute("aria-label");
+        }
+        frame.classList.toggle("can-scroll-start", overflowing && scroll.scrollLeft > 1);
+        frame.classList.toggle("can-scroll-end", overflowing && scroll.scrollLeft < maxScroll - 1);
+      }
+
+      scroll.addEventListener("scroll", syncOverflow, { passive: true });
+      scroll.addEventListener("keydown", (event) => {
+        if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+          event.stopPropagation();
+        }
+      });
+      if (typeof ResizeObserver === "function") {
+        var observer = new ResizeObserver(syncOverflow);
+        observer.observe(scroll);
+        var table = scroll.querySelector("table");
+        if (table) observer.observe(table);
+      } else {
+        window.addEventListener("resize", syncOverflow);
+      }
+      syncOverflow();
+    });
+  }
+
   function init() {
+    initSidebarAccessibility();
     initTabs();
     initChipFilter();
     initVersionPill();
@@ -933,6 +1362,7 @@
     initSimulator();
     initThemeToggle();
     initCopyButtons();
+    initDataTables();
   }
 
   if (document.readyState === "loading") {

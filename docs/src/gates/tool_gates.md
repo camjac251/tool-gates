@@ -1,5 +1,10 @@
 <div class="gate-head">
-  <p class="breadcrumb"><a href="../index.html">Gates</a> / Tool Gates CLI</p>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="../index.html">Gates</a></li>
+      <li aria-current="page">Tool Gates CLI</li>
+    </ol>
+  </nav>
   <h1>Tool Gates CLI gate</h1>
   <div class="gate-meta">
     <span class="tag">priority <b>23</b></span>
@@ -7,7 +12,7 @@
     <span class="tag">aliases <b>bash-gates</b> → <b>tool-gates</b></span>
   </div>
 
-  <div class="summary" aria-label="Rule counts at a glance">
+  <section class="summary" aria-label="Rule counts at a glance">
     <div class="seg-bar" role="img" aria-label="10 allow, 7 ask, 0 block">
       <div class="seg allow" style="flex: 10"></div>
       <div class="seg ask"   style="flex: 7"></div>
@@ -18,17 +23,18 @@
       <span class="cas"><i></i><b>7</b> ask</span>
       <span class="cb"><i></i><b>0</b> block</span>
     </div>
-  </div>
+  </section>
 
   <p class="gate-lede">tool-gates protects itself. Read-only queries (inspecting the pending queue, listing rules, hook status, doctor) skip prompting. Writes to settings files or the cache ask. See the <a href="../cli.html">CLI reference</a> for the full subcommand set.</p>
 </div>
 
-<div class="chips" role="group" aria-label="Filter rules by decision">
+<div class="chips" role="group" aria-label="Filter rules by decision" aria-describedby="rule-filter-status">
   <button class="chip all"   data-filter="all"   aria-pressed="true"><i></i>All <span class="n">17</span></button>
   <button class="chip allow" data-filter="allow" aria-pressed="false"><i></i>Allow <span class="n">10</span></button>
   <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">7</span></button>
   <button class="chip block" data-filter="block" aria-pressed="false"><i></i>Block <span class="n">0</span></button>
 </div>
+<p class="rule-filter-status" id="rule-filter-status" role="status" aria-live="polite" aria-atomic="true">Showing all 17 rules.</p>
 
 <div class="rule-card">
   <header>

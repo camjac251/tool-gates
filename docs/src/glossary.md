@@ -1,11 +1,18 @@
-  <p class="breadcrumb"><a href="index.html">Reference</a> / Glossary</p>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="index.html">Reference</a></li>
+      <li aria-current="page">Glossary</li>
+    </ol>
+  </nav>
   <h1 id="glossary-h1">Glossary</h1>
   <p class="page-lede">Vocabulary that recurs across the docs. Grouped by where the term first appears in the pipeline.</p>
   <div class="sec-head" style="margin-top: var(--s-6)">
     <p class="lbl">Tool names</p>
     <h2>What each client calls each tool type.</h2>
   </div>
-  <table class="data-table">
+  <div class="data-table-frame">
+    <div class="data-table-scroll" data-table-scroll>
+      <table class="data-table">
     <thead>
       <tr><th>Term</th><th>Meaning</th></tr>
     </thead>
@@ -21,11 +28,15 @@
       <tr><td><code>mcp__&lt;server&gt;__&lt;tool&gt;</code></td><td>MCP tool name. Double underscore separator on Claude / Codex; single on Gemini (<code>mcp_*</code>).</td></tr>
     </tbody>
   </table>
+    </div>
+  </div>
   <div class="sec-head">
     <p class="lbl">Hook events</p>
     <h2>When tool-gates fires.</h2>
   </div>
-  <table class="data-table">
+  <div class="data-table-frame">
+    <div class="data-table-scroll" data-table-scroll>
+      <table class="data-table">
     <thead>
       <tr><th>Term</th><th>Meaning</th></tr>
     </thead>
@@ -38,11 +49,15 @@
       <tr><td><code>BeforeTool</code></td><td>Gemini CLI's single installed hook (deprecated). It covers the main gate path; tool-gates does not install an AfterTool hook because Gemini post output is unused.</td></tr>
     </tbody>
   </table>
+    </div>
+  </div>
   <div class="sec-head">
     <p class="lbl">Permission modes</p>
     <h2>What the assistant is allowed to do without prompting.</h2>
   </div>
-  <table class="data-table">
+  <div class="data-table-frame">
+    <div class="data-table-scroll" data-table-scroll>
+      <table class="data-table">
     <thead>
       <tr><th>Term</th><th>Meaning</th></tr>
     </thead>
@@ -55,11 +70,15 @@
       <tr><td><code>approval_policy</code> (Codex)</td><td>Codex's own axis for whether a tool-gates <code>ask</code> surfaces a prompt: <code>untrusted</code> prompts for every non-safe command, <code>on-request</code> and <code>on-failure</code> lean on the sandbox and mostly don't, <code>never</code> never asks. See the <a href="codex.html">Codex approval model</a>.</td></tr>
     </tbody>
   </table>
+    </div>
+  </div>
   <div class="sec-head">
     <p class="lbl">Decisions</p>
     <h2>What tool-gates returns.</h2>
   </div>
-  <table class="data-table">
+  <div class="data-table-frame">
+    <div class="data-table-scroll" data-table-scroll>
+      <table class="data-table">
     <thead>
       <tr><th>Term</th><th>Meaning</th></tr>
     </thead>
@@ -71,11 +90,15 @@
       <tr><td><code>warn</code></td><td>Marker on an <code>ask</code> rule (<code>warn = true</code>) flagging a dangerous-but-recoverable operation (git push --force, git reset --hard). Surfaces in the Security floor cross-cut.</td></tr>
     </tbody>
   </table>
+    </div>
+  </div>
   <div class="sec-head">
     <p class="lbl">Pipeline</p>
     <h2>How the engine works.</h2>
   </div>
-  <table class="data-table">
+  <div class="data-table-frame">
+    <div class="data-table-scroll" data-table-scroll>
+      <table class="data-table">
     <thead>
       <tr><th>Term</th><th>Meaning</th></tr>
     </thead>
@@ -90,11 +113,15 @@
       <tr><td>Strictest wins</td><td>For compound commands (<code>&amp;&amp;</code>, <code>||</code>, <code>|</code>, <code>;</code>) the harshest per-segment decision becomes the whole-command decision. block &gt; ask &gt; allow &gt; skip.</td></tr>
     </tbody>
   </table>
+    </div>
+  </div>
   <div class="sec-head">
     <p class="lbl">Storage and state</p>
     <h2>Where state lives.</h2>
   </div>
-  <table class="data-table">
+  <div class="data-table-frame">
+    <div class="data-table-scroll" data-table-scroll>
+      <table class="data-table">
     <thead>
       <tr><th>Term</th><th>Meaning</th></tr>
     </thead>
@@ -111,11 +138,15 @@
       <tr><td><code>tool_use_id</code></td><td>Claude Code's per-call identifier used to correlate PreToolUse with PostToolUse. Gemini doesn't provide one (so tracking is Claude-only).</td></tr>
     </tbody>
   </table>
+    </div>
+  </div>
   <div class="sec-head">
     <p class="lbl">Other</p>
     <h2>Less common but worth knowing.</h2>
   </div>
-  <table class="data-table">
+  <div class="data-table-frame">
+    <div class="data-table-scroll" data-table-scroll>
+      <table class="data-table">
     <thead>
       <tr><th>Term</th><th>Meaning</th></tr>
     </thead>
@@ -128,3 +159,5 @@
       <tr><td>Tier 1 / 2 / 3</td><td>The three security-reminder severities. T1 denies source writes before they land and warns on doc-file secrets after write; T2 nudges after via system-reminder; T3 informs via additionalContext. See the Security reminders page.</td></tr>
     </tbody>
   </table>
+    </div>
+  </div>

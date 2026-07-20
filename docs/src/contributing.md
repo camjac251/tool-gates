@@ -1,4 +1,9 @@
-  <p class="breadcrumb"><a href="index.html">Development</a> / Contributing</p>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="index.html">Development</a></li>
+      <li aria-current="page">Contributing</li>
+    </ol>
+  </nav>
   <h1 id="contrib-h1">Contributing</h1>
   <p class="page-lede">Adding a rule to an existing gate is usually a single TOML edit. Adding a new gate also needs a small Rust file. The build pipeline picks up TOML changes automatically; the generator in <code>build.rs</code> emits the Rust gate function from the TOML on every build.</p>
   <div class="sec-head" style="margin-top: var(--s-6)">
@@ -22,7 +27,9 @@
     <p class="lbl">TOML schema</p>
     <h2>Root-level fields.</h2>
   </div>
-  <table class="data-table">
+  <div class="data-table-frame">
+    <div class="data-table-scroll" data-table-scroll>
+      <table class="data-table">
     <thead>
       <tr><th>Field</th><th>Description</th></tr>
     </thead>
@@ -35,12 +42,16 @@
       <tr><td><code>[[command_groups]]</code></td><td>Docs-only command groupings for Basics gate grid categorization.</td></tr>
     </tbody>
   </table>
+    </div>
+  </div>
 
   <div class="sec-head">
     <p class="lbl">TOML schema</p>
     <h2>Program-level fields (under <code>[[programs]]</code>).</h2>
   </div>
-  <table class="data-table">
+  <div class="data-table-frame">
+    <div class="data-table-scroll" data-table-scroll>
+      <table class="data-table">
     <thead>
       <tr><th>Field</th><th>Description</th></tr>
     </thead>
@@ -57,12 +68,16 @@
       <tr><td><code>[programs.api_rules]</code></td><td>Custom HTTP API endpoint routing rules (e.g. safe methods, endpoint prefixes).</td></tr>
     </tbody>
   </table>
+    </div>
+  </div>
 
   <div class="sec-head">
     <p class="lbl">Rule conditions</p>
     <h2>How rules match (under allow/ask/block rules).</h2>
   </div>
-  <table class="data-table">
+  <div class="data-table-frame">
+    <div class="data-table-scroll" data-table-scroll>
+      <table class="data-table">
     <thead>
       <tr><th>Field</th><th>Description</th></tr>
     </thead>
@@ -79,6 +94,8 @@
       <tr><td><code>accept_edits_auto_allow</code></td><td>On <code>[[programs.ask]]</code>: auto-allow this program when the session is in <code>acceptEdits</code> mode.</td></tr>
     </tbody>
   </table>
+    </div>
+  </div>
   <div class="sec-head">
     <p class="lbl">Custom handlers</p>
     <h2>When TOML can't express it.</h2>
@@ -135,7 +152,9 @@
     <p class="lbl">Testing</p>
     <h2>Test rules.</h2>
   </div>
-  <table class="data-table">
+  <div class="data-table-frame">
+    <div class="data-table-scroll" data-table-scroll>
+      <table class="data-table">
     <thead>
       <tr><th>Rule</th><th>Why</th></tr>
     </thead>
@@ -145,7 +164,9 @@
       <tr><td>Serde output verification</td><td>Any struct serialized to JSON for Claude Code needs a test asserting exact field casing. The CLI expects camelCase. Use <code>serde_json::to_string</code> and assert key names.</td></tr>
     </tbody>
   </table>
+    </div>
+  </div>
   <p class="note">
-    <svg class="alert" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+    <svg class="alert" aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
     <span><b>Read the <a href="reason-style.html">Reason style guide</a> before writing new <code>reason</code> strings.</b> The 250-char limit, no-em-dashes rule, and authorization-hedge ban are enforced by <code>build.rs</code> and by code review.</span>
   </p>

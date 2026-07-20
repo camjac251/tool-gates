@@ -1,4 +1,9 @@
-<p class="breadcrumb"><a href="index.html">Reference</a> / Security floor</p>
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <ol>
+    <li><a href="index.html">Reference</a></li>
+    <li aria-current="page">Security floor</li>
+  </ol>
+</nav>
 <h1>Security floor</h1>
 <p class="page-lede">Every <code>block</code> rule and every <code>warn = true</code> rule across all 13 gates, on one page. The hard-deny floor fires regardless of <code>settings.json</code>; warn rules ask first but are marked dangerous-but-recoverable. Generated from <code>rules/*.toml</code>; authoritative for security review.</p>
 

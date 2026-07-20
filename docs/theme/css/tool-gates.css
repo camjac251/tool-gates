@@ -1,5 +1,5 @@
 /* tool-gates component + layout styles. */
-/* The generated gate pages (docs/src/gates/*.md, security-floor.md) depend on these class names. */
+/* Generated gate, security-floor, hints, security-reminders, and design-lint pages depend on these class names. */
 
 /* Reset */
 *,
@@ -14,12 +14,25 @@ html {
 body {
   margin: 0;
   font-family: var(--font-body);
-  font-size: 16px;
+  font-size: var(--text-body);
+  font-weight: var(--weight-regular);
   line-height: 1.65;
   color: var(--text-1);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 svg {
   display: block;
@@ -51,8 +64,7 @@ h3 {
  * (sane for stock prose, wrong here). The design zeroes all heading margins
  * and lets each component own its spacing (.sec-head, .hook-card, .config-block,
  * .tier, .client). Our global `h1,h2,h3 { margin: 0 }` above covers h1-h3, but
- * h4/h5/h6 leaked mdBook's 2em top margin onto card titles (.hook-card h4,
- * .cmd-grid .cat h4) that only set margin-bottom. Reset the whole range inside
+ * h4/h5/h6 leaked mdBook's 2em top margin onto compact component titles. Reset the whole range inside
  * content so component spacing is the single source of truth. */
 .content :where(h1, h2, h3, h4, h5, h6) {
   margin-block-start: 0;
@@ -67,7 +79,7 @@ h3 {
   background: var(--accent);
   color: var(--bg);
   border-radius: var(--r-2);
-  font-weight: 700;
+  font-weight: var(--weight-bold);
   z-index: 200;
 }
 .skip-link:focus {
@@ -120,8 +132,10 @@ textarea:focus-visible,
   backdrop-filter: blur(12px);
   border-block-end-color: var(--border);
   align-items: center;
+  flex-wrap: nowrap;
   gap: var(--s-2);
   padding: 0 var(--s-5);
+  overflow: visible;
 }
 /* mdBook centers the book title in the bar; the design puts the brand (in
  * .left-buttons) there instead, so the title is redundant. Hide it and let the
@@ -131,6 +145,7 @@ textarea:focus-visible,
 }
 #mdbook-menu-bar .left-buttons {
   flex: 1;
+  min-width: 0;
   align-items: center;
   gap: var(--s-1);
 }
@@ -176,7 +191,7 @@ textarea:focus-visible,
   gap: var(--s-3);
   color: var(--text-1);
   font-family: var(--font-mono);
-  font-weight: 500;
+  font-weight: var(--weight-emphasis);
   letter-spacing: 0.02em;
   white-space: nowrap;
 }
@@ -184,10 +199,17 @@ textarea:focus-visible,
   color: var(--text-1);
 }
 .brand .gate {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  flex: none;
   color: var(--accent);
+  background: currentColor;
+  -webkit-mask: url('{{ resource "favicon.svg" }}') center / contain no-repeat;
+  mask: url('{{ resource "favicon.svg" }}') center / contain no-repeat;
 }
 .brand b {
-  font-weight: 500;
+  font-weight: var(--weight-emphasis);
 }
 .brand .dim {
   color: var(--text-3);
@@ -195,11 +217,11 @@ textarea:focus-visible,
 .ver {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--s-2);
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-2);
-  padding: 3px 11px 3px 9px;
+  padding: var(--s-1) var(--s-3);
   background: var(--surface-1);
   border: 1px solid var(--border);
   border-radius: 9999px;
@@ -223,7 +245,7 @@ textarea:focus-visible,
   border-color: color-mix(in oklab, var(--allow) 30%, var(--border-2));
 }
 .ver .ver-num {
-  font-weight: 500;
+  font-weight: var(--weight-emphasis);
   letter-spacing: 0.01em;
 }
 
@@ -322,9 +344,10 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
 }
 
 /* Inline search visibility.
- * On desktop (min-width: 761px), it is always displayed flex and never hidden.
- * On mobile, it defaults to flex only when the .hidden class is absent. */
-@media (min-width: 761px) {
+ * At the persistent-sidebar breakpoint it is always displayed flex. Below that,
+ * the sidebar and search both use overlay controls so the header never has to
+ * share its width with an opened drawer. */
+@media (min-width: 1080px) {
   #mdbook-search-wrapper.inline-search {
     display: flex !important;
     align-items: center;
@@ -333,7 +356,7 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
     position: relative;
   }
 }
-@media (max-width: 760px) {
+@media (max-width: 1079px) {
   #mdbook-search-wrapper.inline-search:not(.hidden) {
     display: flex;
     align-items: center;
@@ -427,12 +450,56 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
   margin: 0;
   max-height: min(70vh, 520px);
   overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
   padding: var(--s-2) var(--s-4) var(--s-4);
   background: var(--surface-1);
   border: 1px solid var(--border);
   border-radius: var(--r-2);
   box-shadow: var(--shadow);
   z-index: 80;
+}
+ul#mdbook-searchresults {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: var(--s-1) 0 0;
+}
+ul#mdbook-searchresults li {
+  min-width: 0;
+  margin: 0;
+  padding: var(--s-3) 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+}
+ul#mdbook-searchresults li:last-child {
+  border-bottom: 0;
+}
+ul#mdbook-searchresults li.focus,
+ul#mdbook-searchresults li:focus-within {
+  background: var(--surface-2);
+  box-shadow: 0 0 0 var(--s-2) var(--surface-2);
+}
+ul#mdbook-searchresults li > a {
+  display: block;
+  min-width: 0;
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: var(--weight-emphasis);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+ul#mdbook-searchresults span.teaser {
+  max-width: 100%;
+  min-width: 0;
+  margin: var(--s-1) 0 0;
+  color: var(--text-2);
+  font-size: var(--text-label);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  word-break: break-word;
 }
 #mdbook-search-wrapper.hidden #mdbook-searchresults-outer {
   display: none !important;
@@ -446,53 +513,30 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
  * content as children; mdBook's .page is the inner column holding the menu-bar +
  * content, with the sidebar as a fixed sibling). Restyle visuals only. */
 .sidebar {
+  display: flex;
+  flex-direction: column;
   border-right: 1px solid var(--border);
 }
-/* mdBook scrolls the sidebar via .sidebar-scrollbox (absolute-filled: top/bottom/
- * left/right 0 inside the fixed .sidebar). The featured "Try a command" CTA is a
- * flow sibling before the scrollbox, so the absolute scrollbox would paint over
- * it. Pin the CTA flush at the very top of the sidebar and push the scrollbox's
- * top down by --cta-region to clear it. The CTA is the first thing in the
- * sidebar -- no menu-bar stripe or divider above it.
- *
- * --cta-region = top gutter (s-4) + CTA card height (~56px: 36px icon + 10px*2
- * padding) + gap below (s-4). */
-.sidebar {
-  --cta-region: calc(var(--s-4) + 56px + var(--s-4));
-}
 .sidebar .sidebar-cta {
-  position: absolute;
-  top: var(--s-4);
-  left: var(--s-5);
-  right: var(--s-3);
-  z-index: 2;
-  margin: 0;
+  position: relative;
+  inset: auto;
+  flex: none;
+  margin: var(--s-4) var(--s-3) var(--s-2) var(--s-5);
 }
 .sidebar .sidebar-scrollbox {
-  /* Re-assert the scroll-container contract: stock chrome.css sets
-   * position:absolute + top/bottom/left/right:0 + overflow-y:auto, but our top
-   * override pushes it down by --cta-region. Explicitly re-declare overflow-y +
-   * bottom + overscroll-behavior so the wheel doesn't bubble past this box when
-   * the user is inside the sidebar. Without overscroll-behavior:contain, wheel
-   * input over a list item bubbles to the window and the sidebar feels stuck. */
-  top: var(--cta-region);
-  bottom: 0;
+  position: static;
+  inset: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: auto;
+  height: auto;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: var(--s-2) var(--s-3) var(--s-7) var(--s-5);
 }
-.nav-group + .nav-group {
-  margin-top: var(--s-5);
+.sidebar-close {
+  display: none;
 }
-.nav-label {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-3);
-  margin: 0 0 var(--s-2) var(--s-3);
-}
-
 /* Section labels on mdBook's SUMMARY-built sidebar. The design groups nav
  * links under .nav-label headers ("Start", "Gates", "Reference", "Develop").
  * mdBook renders each `# Heading` line in SUMMARY.md as
@@ -519,69 +563,9 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
 #mdbook-sidebar .chapter-item:empty {
   display: none;
 }
-.nav-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.nav-list a {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
-  min-height: 32px;
-  padding: 4px var(--s-3);
-  color: var(--text-2);
-  font-size: 14px;
-  border-radius: var(--r-2);
-  transition:
-    background 140ms var(--ease),
-    color 140ms var(--ease);
-}
-.nav-list a:hover {
-  background: var(--surface-1);
-  color: var(--text-1);
-}
-.nav-list a[aria-current="page"] {
-  color: var(--text-1);
-  background: linear-gradient(
-    to right,
-    color-mix(in oklab, var(--accent) 17%, transparent) 0%,
-    color-mix(in oklab, var(--accent) 6%, transparent) 55%,
-    transparent 100%
-  );
-  font-weight: 500;
-}
-.nav-list a[aria-current="page"]::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 50%;
-  width: 3px;
-  height: 18px;
-  transform: translate(-1px, -50%);
-  background: var(--accent);
-  border-radius: 0 2px 2px 0;
-  box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 25%, transparent);
-}
-.nav-list a .prio {
-  margin-left: auto;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--text-3);
-  padding: 1px 6px;
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: var(--r-1);
-}
-.nav-list a[aria-current="page"] .prio {
-  color: var(--text-2);
-}
-
 /* Tight nav rows on mdBook's SUMMARY-built sidebar.
- * The `.nav-list a` rules above never match: mdBook emits `.chapter li a` inside
- * a `.chapter-link-wrapper` span, with no .nav-list. mdBook's own defaults are
- * loose (.chapter line-height 2.2em, .chapter-item margin-block-start 0.6em), so
+ * mdBook emits `.chapter li a` inside a `.chapter-link-wrapper` span. Its own
+ * defaults are loose (.chapter line-height 2.2em, .chapter-item margin-block-start 0.6em), so
  * these rules target the real structure to give EVERY row (Start / Reference /
  * Develop and the gate links) the tight 32px flex row. */
 #mdbook-sidebar .chapter {
@@ -622,7 +606,7 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
     color-mix(in oklab, var(--accent) 6%, transparent) 55%,
     transparent 100%
   );
-  font-weight: 500;
+  font-weight: var(--weight-emphasis);
 }
 #mdbook-sidebar .chapter li a.active::before {
   content: "";
@@ -723,35 +707,18 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
   content: "100";
 }
 
-/* Content column.
- * mdBook's .content is the scroll/padding wrapper; .content main is the centered
- * column whose width comes from --content-max-width (set in the bridge). Keep the
- * design's roomy padding on .content, and route the design's content-max
- * onto .content main so the column width matches the design without needing a
- * .wrap element (the generated + handwritten markdown injects straight into main). */
+/* Content column. mdBook's .content is the scroll/padding wrapper; .content main
+ * is the centered column whose width comes from --content-max-width. */
 .content {
   min-width: 0;
   padding: var(--s-7) var(--s-7) var(--s-9);
   overflow-y: visible;
 }
-/* --content-max-width is the absolute-px bridge var (928px). The design's
- * --content-max is 58rem, which collapses to 580px under mdBook's 1rem=10px root,
- * so the absolute var is the correct source for the centered column width. */
+/* Absolute pixels avoid mdBook's 1rem=10px root changing the intended width. */
 .content main {
   max-width: var(--content-max-width);
   margin-inline: auto;
 }
-.wrap {
-  max-width: var(--content-max);
-  margin: 0 auto;
-}
-.view {
-  display: none;
-}
-.view.is-active {
-  display: block;
-}
-
 /* Hero */
 .hero {
   position: relative;
@@ -792,7 +759,7 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--allow) 22%, transparent);
 }
 .hero h1 {
-  font-size: clamp(38.4px, 5.4vw, 64px);
+  font-size: var(--text-display);
   margin: var(--s-5) 0 var(--s-4);
   max-width: 19ch;
 }
@@ -800,7 +767,7 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
   color: var(--accent);
 }
 .hero .lede {
-  font-size: clamp(16.8px, 1.5vw, 19.2px);
+  font-size: var(--text-lead);
   color: var(--text-2);
   max-width: 64ch;
   margin: 0 0 var(--s-6);
@@ -826,7 +793,7 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
   min-height: 44px;
   padding: 0 var(--s-5);
   font: inherit;
-  font-weight: 500;
+  font-weight: var(--weight-emphasis);
   font-size: 15px;
   border-radius: var(--r-2);
   cursor: pointer;
@@ -913,6 +880,38 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
 .ix-row > * {
   padding: 10px 0;
   border-top: 1px dashed color-mix(in oklab, var(--border) 60%, transparent);
+  animation: gate-route-in 360ms var(--ease) both;
+  animation-delay: var(--row-delay, 520ms);
+}
+.ix-row:nth-child(1) {
+  --row-delay: 520ms;
+}
+.ix-row:nth-child(2) {
+  --row-delay: 550ms;
+}
+.ix-row:nth-child(3) {
+  --row-delay: 580ms;
+}
+.ix-row:nth-child(4) {
+  --row-delay: 610ms;
+}
+.ix-row:nth-child(5) {
+  --row-delay: 640ms;
+}
+.ix-row:nth-child(6) {
+  --row-delay: 670ms;
+}
+@keyframes gate-route-in {
+  from {
+    opacity: 0;
+    filter: blur(2px);
+    transform: translateX(-6px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: none;
+  }
 }
 .ix-row:first-child > * {
   border-top: 0;
@@ -932,6 +931,9 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
 }
 .ix-arrow {
   color: var(--text-3);
+  transition:
+    color 160ms var(--ease),
+    transform 160ms var(--ease);
 }
 .ix-cmd {
   color: var(--text-1);
@@ -954,6 +956,23 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
 }
 .ix-decision {
   justify-self: end;
+  animation-name: gate-decision-settle;
+}
+.ix-row:hover .ix-arrow {
+  color: var(--accent);
+  transform: translateX(2px);
+}
+@keyframes gate-decision-settle {
+  from {
+    opacity: 0;
+    filter: blur(2px);
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: none;
+  }
 }
 
 .ix-foot {
@@ -1003,7 +1022,7 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
   color: var(--text-3);
 }
 .sec-head h2 {
-  font-size: 24.8px;
+  font-size: var(--text-section);
   margin-top: 4px;
 }
 .sec-head p {
@@ -1028,7 +1047,7 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
 }
 .priority-line b {
   color: var(--text-1);
-  font-weight: 500;
+  font-weight: var(--weight-emphasis);
 }
 .priority-line .arrow {
   color: var(--text-3);
@@ -1085,7 +1104,7 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
 .triad-card h3 {
   font-family: var(--font-mono);
   font-size: 12.5px;
-  font-weight: 600;
+  font-weight: var(--weight-emphasis);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--c);
@@ -1094,7 +1113,7 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
   gap: var(--s-2);
 }
 .triad-card p {
-  font-size: 14px;
+  font-size: var(--text-body);
   color: var(--text-2);
   margin: var(--s-3) 0 0;
 }
@@ -1116,7 +1135,7 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
 }
 .triad-foot b {
   color: var(--text-2);
-  font-weight: 500;
+  font-weight: var(--weight-emphasis);
 }
 
 /* Compound priority strip */
@@ -1141,7 +1160,7 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
   flex-wrap: wrap;
   margin-top: 4px;
 }
-.compound .cm-h h3 {
+.compound .cm-h h2 {
   font-size: 18.4px;
 }
 .compound .cm-h .hint {
@@ -1199,7 +1218,7 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--c);
-  font-weight: 600;
+  font-weight: var(--weight-emphasis);
 }
 .compound .op {
   align-self: center;
@@ -1252,17 +1271,17 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
   border: 1px solid color-mix(in oklab, var(--accent) 25%, var(--border));
   border-radius: var(--r-2);
 }
-.surf h4 {
+.surf h3 {
   font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--text-card);
+  font-weight: var(--weight-emphasis);
   letter-spacing: 0.02em;
   color: var(--text-1);
   margin: 0;
 }
 .surf p {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--text-body);
   color: var(--text-2);
   line-height: 1.55;
 }
@@ -1293,10 +1312,10 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
   border: 1px solid var(--border);
   border-radius: var(--r-3);
 }
-.client h4 {
+.client h3 {
   font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--text-card);
+  font-weight: var(--weight-emphasis);
   letter-spacing: 0.02em;
   color: var(--text-1);
   margin: 0;
@@ -1304,9 +1323,9 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
   align-items: center;
   gap: var(--s-2);
 }
-.client h4 .count {
+.client h3 .count {
   color: var(--text-3);
-  font-weight: 400;
+  font-weight: var(--weight-regular);
   font-size: 11px;
 }
 .client ul {
@@ -1339,7 +1358,7 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--r-2);
-  font-size: 12.5px;
+  font-size: var(--text-body);
   color: var(--text-2);
   line-height: 1.55;
 }
@@ -1365,13 +1384,13 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
 .clients-foot {
   margin-top: var(--s-3);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-body);
   line-height: 1.7;
   color: var(--text-3);
 }
 .clients-foot b {
   color: var(--text-2);
-  font-weight: 500;
+  font-weight: var(--weight-emphasis);
 }
 .clients-foot code {
   white-space: nowrap;
@@ -1396,7 +1415,7 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
   flex-wrap: wrap;
 }
 .proof header h3 {
-  font-size: 16.8px;
+  font-size: var(--text-card);
 }
 .proof header p {
   margin: 0;
@@ -1470,7 +1489,7 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
   color: var(--text-3);
 }
 .proof .out-row .oreason {
-  font-size: 13px;
+  font-size: var(--text-body);
   color: var(--text-2);
   margin-top: 2px;
   line-height: 1.55;
@@ -1519,16 +1538,16 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
   background: var(--surface-2);
   border-bottom: 1px solid var(--border);
 }
-.hints header h3 {
+.hints header h2 {
   font-family: var(--font-mono);
   font-size: 12.5px;
-  font-weight: 600;
+  font-weight: var(--weight-emphasis);
   letter-spacing: 0.08em;
   color: var(--text-2);
   text-transform: uppercase;
 }
 .hints header .note {
-  font-size: 12.5px;
+  font-size: var(--text-label);
   color: var(--text-3);
 }
 .hint-row {
@@ -1561,13 +1580,13 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
 .hint-row .why {
   grid-column: 1 / -1;
   font-family: var(--font-body);
-  font-size: 12.5px;
+  font-size: var(--text-body);
   color: var(--text-3);
   margin-top: -2px;
 }
 .hint-row .why b {
   color: var(--text-2);
-  font-weight: 500;
+  font-weight: var(--weight-emphasis);
 }
 
 /* Security tiers */
@@ -1628,21 +1647,21 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
 }
 .tier .tname {
   color: var(--c);
-  font-weight: 600;
+  font-weight: var(--weight-emphasis);
 }
 .tier .when {
   color: var(--text-3);
 }
-.tier h4 {
+.tier h3 {
   font-family: var(--font-display);
-  font-size: 16.8px;
+  font-size: var(--text-card);
   letter-spacing: -0.01em;
   color: var(--text-1);
   margin: 0;
 }
 .tier p {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--text-body);
   color: var(--text-2);
   line-height: 1.55;
 }
@@ -1668,9 +1687,22 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
 }
 .breadcrumb {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-meta);
   color: var(--text-3);
   margin-bottom: var(--s-3);
+}
+.breadcrumb ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.breadcrumb li + li::before {
+  content: "/";
+  margin-inline-end: var(--s-2);
+  color: var(--text-3);
 }
 .breadcrumb a {
   color: var(--text-3);
@@ -1679,7 +1711,7 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
   color: var(--accent);
 }
 .gate-head h1 {
-  font-size: clamp(32px, 3.4vw, 43.2px);
+  font-size: var(--text-page);
 }
 .gate-meta {
   display: flex;
@@ -1701,32 +1733,32 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
 }
 .tag b {
   color: var(--text-1);
-  font-weight: 500;
+  font-weight: var(--weight-emphasis);
 }
 .gate-lede {
   color: var(--text-2);
   margin-top: var(--s-4);
   max-width: 68ch;
-  font-size: 16.3px;
+  font-size: var(--text-body);
 }
 
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--s-2);
   margin: var(--s-5) 0 var(--s-3);
 }
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--s-2);
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--text-2);
   background: var(--surface-1);
   border: 1px solid var(--border);
   border-radius: 9999px;
-  padding: 4px 10px;
+  padding: var(--s-1) var(--s-3);
   cursor: pointer;
   transition:
     background 140ms var(--ease),
@@ -1767,6 +1799,20 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
   color: var(--text-2);
 }
 
+.rule-filter-status {
+  margin: 0 0 var(--s-4);
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+}
+.rule-filter-status.is-empty {
+  padding: var(--s-4) var(--s-5);
+  color: var(--text-2);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-3);
+}
+
 .rule-card {
   margin-top: var(--s-5);
   background: var(--surface-1);
@@ -1785,7 +1831,7 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
 .rule-card > header h2 {
   font-family: var(--font-mono);
   font-size: 12.5px;
-  font-weight: 600;
+  font-weight: var(--weight-emphasis);
   letter-spacing: 0.08em;
   color: var(--text-2);
   text-transform: uppercase;
@@ -1842,10 +1888,10 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
 }
 .sub-note {
   color: var(--text-3);
-  font-weight: 400;
+  font-weight: var(--weight-regular);
 }
 .rule-reason {
-  font-size: 14px;
+  font-size: var(--text-body);
   color: var(--text-2);
 }
 .rule-reason code {
@@ -1863,7 +1909,7 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
   gap: 6px;
   font-family: var(--font-mono);
   font-size: 11.5px;
-  font-weight: 600;
+  font-weight: var(--weight-emphasis);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-1);
@@ -1903,7 +1949,7 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
   background: color-mix(in oklab, var(--ask) 7%, var(--surface-1));
   border: 1px solid color-mix(in oklab, var(--ask) 22%, var(--border));
   border-radius: var(--r-2);
-  font-size: 14px;
+  font-size: var(--text-body);
   color: var(--text-2);
 }
 .note svg.alert {
@@ -1913,7 +1959,7 @@ html.tg-dark #mdbook-menu-bar #tgThemeToggle .tg-icon-sun {
 }
 .note b {
   color: var(--text-1);
-  font-weight: 500;
+  font-weight: var(--weight-emphasis);
 }
 
 .empty {
@@ -2041,40 +2087,182 @@ footer.site .stamp {
     justify-self: start;
   }
 }
-@media (max-width: 760px) {
-  /* mdBook owns the mobile drawer: the #mdbook-sidebar-toggle label + checkbox
-   * slide the fixed .sidebar in/out (chrome.css transforms it on the anchor's
-   * :checked state). Don't add a custom data-nav drawer here or the two
-   * transform mechanisms fight. Visual-only tweaks below. */
-  .ver {
-    display: none;
+@media (max-width: 1079px) {
+  /* Keep mdBook's hidden checkbox as the drawer state, but make the sidebar an
+   * overlay until the same 1080px breakpoint used by initial sidebar state.
+   * This avoids mdBook's 620px push-layout rule compressing the tablet header. */
+  #mdbook-sidebar-toggle-anchor:checked ~ .page-wrapper {
+    margin-inline-start: 0;
+    transform: none;
   }
-  .nav-list a,
+  .sidebar {
+    z-index: 220;
+    box-shadow: var(--shadow);
+  }
+  #mdbook-menu-bar {
+    gap: var(--s-1);
+    padding-inline: var(--s-2);
+  }
+  #mdbook-menu-bar .right-buttons {
+    gap: 0;
+  }
+  #mdbook-menu-bar .brand {
+    flex: 0 1 auto;
+    gap: var(--s-2);
+  }
+  .ver {
+    display: none !important;
+  }
+  #mdbook-sidebar .chapter li a,
+  #mdbook-menu-bar .brand {
+    min-height: 44px;
+  }
+  /* No inline search box while the sidebar is an overlay. Restore mdBook's
+   * search toggle so the header remains compact at phone and tablet widths, and
+   * collapse the inline box to its natural full-width panel when toggled open
+   * (the 340px inline pill is too wide once the shell enters drawer mode). */
+  #mdbook-search-toggle {
+    display: inline-flex;
+  }
+  #mdbook-sidebar-toggle,
+  #mdbook-search-toggle,
+  #tgThemeToggle,
+  #mdbook-menu-bar .right-buttons > a {
+    min-width: 44px;
+    height: var(--menu-bar-height);
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+  }
+  .sidebar-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: flex-end;
+    flex: none;
+    width: 44px;
+    height: 44px;
+    margin: var(--s-2) var(--s-3) 0;
+    padding: 0;
+    color: var(--text-2);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--r-2);
+    cursor: pointer;
+  }
+  .sidebar-close:hover {
+    color: var(--text-1);
+    background: var(--surface-1);
+    border-color: var(--border);
+  }
+  .sidebar .sidebar-cta {
+    margin-top: var(--s-1);
+  }
+  #mdbook-search-wrapper.inline-search:not(.hidden) {
+    position: absolute;
+    inset: calc(100% + var(--s-2)) var(--s-2) auto;
+    width: auto;
+    z-index: 90;
+  }
+  .inline-search .searchresults-outer {
+    width: 100%;
+    max-height: calc(100vh - 132px);
+  }
+  .inline-search #mdbook-searchbar {
+    height: 44px;
+    font-size: 16px;
+    line-height: 44px;
+  }
+}
+
+@media (max-width: 760px) {
   .chip,
   .sim-chip,
   .tab,
   .sim-custom-run {
     min-height: 44px;
   }
-  /* No inline search box on mobile. Restore mdBook's search
-   * toggle icon so search stays reachable via the native mobile affordance, and
-   * collapse the inline box to its natural full-width panel when toggled open
-   * (the 340px inline pill is too wide for a narrow bar). tool-gates.js skips
-   * the desktop "keep visible" observer below 760px so .hidden is respected. */
-  #mdbook-search-toggle {
-    display: inline-grid;
+  .hero {
+    padding-top: var(--s-5);
   }
-  #mdbook-search-wrapper.inline-search:not(.hidden) {
-    position: static;
-    width: 100%;
-    order: 99;
+  .eyebrow {
+    align-items: flex-start;
+  }
+  .eyebrow .dot {
+    margin-top: 0.45em;
+  }
+  .ix-bar {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .ix-bar .meta {
     flex-basis: 100%;
+    margin-left: 28px;
+  }
+  .ix-stream {
+    display: block;
+    padding: var(--s-2) var(--s-4) var(--s-3);
+  }
+  .ix-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: var(--s-2) var(--s-3);
+    padding: var(--s-3) 0;
+    border-top: 1px dashed color-mix(in oklab, var(--border) 60%, transparent);
+  }
+  .ix-row:first-child {
+    border-top: 0;
+  }
+  .ix-row > *,
+  .ix-row:first-child > * {
+    padding: 0;
+    border-top: 0;
+  }
+  .ix-surface {
+    grid-column: 1;
+  }
+  .ix-arrow {
+    grid-column: 2;
+    justify-self: start;
+  }
+  .ix-decision {
+    grid-column: 3;
+  }
+  .ix-cmd {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    min-width: 0;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.5;
+  }
+  .ix-foot {
+    padding-inline: var(--s-4);
+  }
+  .ix-foot .sep {
+    display: none;
+  }
+}
+
+@media (max-width: 360px) {
+  #mdbook-menu-bar .right-buttons > a {
+    display: none;
+  }
+  #mdbook-menu-bar .brand {
+    gap: var(--s-2);
+    font-size: 14px;
+  }
+  #mdbook-menu-bar .brand .gate {
+    width: 18px;
+    height: 18px;
   }
 }
 
 /* ===== Info-page shared bits (Installation / Hook model) ===== */
 .page-lede {
-  font-size: clamp(16px, 1.4vw, 18.4px);
+  font-size: var(--text-lead);
   color: var(--text-2);
   max-width: 66ch;
   margin: var(--s-3) 0 var(--s-7);
@@ -2157,14 +2345,17 @@ pre.code-block .flag {
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
   transition:
+    background 160ms var(--ease),
     color 160ms var(--ease),
     border-color 160ms var(--ease);
 }
 .tab:hover {
   color: var(--text-2);
+  background: var(--surface-1);
 }
 .tab[aria-selected="true"] {
   color: var(--text-1);
+  background: color-mix(in oklab, var(--accent) 7%, var(--surface-1));
   border-bottom-color: var(--accent);
 }
 .tab-panel {
@@ -2172,12 +2363,39 @@ pre.code-block .flag {
 }
 .tab-panel.is-active {
   display: block;
+  animation: tab-panel-in 220ms var(--ease) both;
+}
+.tab-panel:focus-visible {
+  outline-offset: var(--s-2);
+}
+@keyframes tab-panel-in {
+  from {
+    opacity: 0;
+    filter: blur(2px);
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: none;
+  }
+}
+@media (max-width: 360px) {
+  .tablist {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .tab {
+    padding-inline: var(--s-1);
+    line-height: 1.3;
+    white-space: normal;
+  }
 }
 
 /* Install client cards (Installation page) */
 .install-clients {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--s-3);
   margin-top: var(--s-4);
 }
@@ -2197,7 +2415,7 @@ pre.code-block .flag {
 }
 .install-client > header h3 {
   font-family: var(--font-display);
-  font-size: 16.8px;
+  font-size: var(--text-card);
   letter-spacing: -0.01em;
 }
 .install-client .hooks-count {
@@ -2212,7 +2430,7 @@ pre.code-block .flag {
 }
 .install-client > p {
   margin: 0;
-  font-size: 13px;
+  font-size: 16px;
   color: var(--text-2);
   line-height: 1.55;
 }
@@ -2237,7 +2455,7 @@ pre.code-block .flag {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  font-size: 12.5px;
+  font-size: var(--text-body);
   color: var(--text-2);
   line-height: 1.45;
 }
@@ -2252,9 +2470,9 @@ pre.code-block .flag {
 }
 .install-client .hook-list code {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 0.86em;
   color: var(--text-1);
-  font-weight: 500;
+  font-weight: var(--weight-emphasis);
   background: transparent;
   padding: 0;
   border-radius: 0;
@@ -2270,7 +2488,7 @@ pre.code-block .flag {
 
 /* Lifecycle diagram */
 .lifecycle {
-  margin-top: var(--s-3);
+  margin: var(--s-3) 0 0;
   background: var(--surface-1);
   border: 1px solid var(--border);
   border-radius: var(--r-3);
@@ -2384,14 +2602,14 @@ pre.code-block .flag {
   grid-column: 2;
   font-family: var(--font-display);
   font-size: 16.3px;
-  font-weight: 600;
+  font-weight: var(--weight-emphasis);
   color: var(--text-1);
   letter-spacing: -0.01em;
   margin-top: 3px;
 }
 .lc-sub {
   grid-column: 2;
-  font-size: 13px;
+  font-size: var(--text-body);
   color: var(--text-2);
   line-height: 1.55;
   margin-top: 2px;
@@ -2432,22 +2650,22 @@ pre.code-block .flag {
   flex-direction: column;
   gap: var(--s-2);
 }
-.hook-card h4 {
+.hook-card h3 {
   font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--text-card);
+  font-weight: var(--weight-emphasis);
   color: var(--accent);
   letter-spacing: 0.02em;
 }
 .hook-card p {
   margin: 0;
-  font-size: 13.5px;
+  font-size: var(--text-body);
   color: var(--text-2);
   line-height: 1.55;
 }
 .hook-card .hook-detail {
   color: var(--text-3);
-  font-size: 12.5px;
+  font-size: var(--text-label);
 }
 .hook-card code {
   font-family: var(--font-mono);
@@ -2520,7 +2738,7 @@ pre.code-block .flag {
 }
 .summary .counts b {
   color: var(--text-1);
-  font-weight: 600;
+  font-weight: var(--weight-emphasis);
 }
 
 /* Warn marker on ask rules */
@@ -2542,13 +2760,15 @@ pre.code-block .flag {
 }
 
 @media (max-width: 1100px) {
-  .install-clients {
-    grid-template-columns: 1fr;
-  }
   .hook-cards {
     grid-template-columns: 1fr;
   }
   .summary {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 760px) {
+  .install-clients {
     grid-template-columns: 1fr;
   }
 }
@@ -2570,9 +2790,9 @@ pre.code-block .flag {
   gap: var(--s-3);
   flex-wrap: wrap;
 }
-.config-block > header h3 {
+.config-block > header :is(h2, h3) {
   font-family: var(--font-display);
-  font-size: 16.8px;
+  font-size: var(--text-card);
   letter-spacing: -0.01em;
 }
 .config-block > header .src-tag {
@@ -2596,7 +2816,7 @@ pre.code-block .flag {
 .config-body .config-prose {
   padding: var(--s-4) var(--s-5);
   border-left: 1px solid var(--border);
-  font-size: 13.5px;
+  font-size: var(--text-body);
   color: var(--text-2);
   line-height: 1.6;
 }
@@ -2642,7 +2862,7 @@ pre.code-block .flag {
 .config-body .sec.fixed,
 .config-body .sec.other {
   display: inline-block;
-  font-weight: 700;
+  font-weight: var(--weight-bold);
   text-transform: uppercase;
   font-size: 10.5px;
   letter-spacing: 0.06em;
@@ -2708,6 +2928,165 @@ pre.code-block .flag {
   }
 }
 
+/* Recent Releases: foreground the active window and retain the full history
+ * behind one native, keyboard-operable disclosure. */
+.release-current,
+.release-archive {
+  margin-top: var(--s-7);
+}
+.release-section-head {
+  margin: 0 0 var(--s-4);
+  padding-bottom: var(--s-4);
+  border-bottom: 1px dashed var(--border-2);
+}
+.release-summary-kicker,
+.release-summary-range {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.release-current > .config-block:first-of-type {
+  margin-top: var(--s-4);
+}
+.release-current .config-prose,
+.release-archive .config-prose {
+  font-size: 16px;
+}
+.release-archive {
+  border-block: 1px dashed var(--border-2);
+}
+.release-archive > summary {
+  padding: var(--s-4) 0;
+  cursor: pointer;
+  list-style: none;
+}
+.release-archive > summary::-webkit-details-marker {
+  display: none;
+}
+.release-archive > summary::marker {
+  content: "";
+}
+.release-archive > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: var(--s-1);
+}
+.release-summary {
+  min-height: 72px;
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 44px;
+  gap: var(--s-1) var(--s-4);
+  align-items: center;
+  min-width: 0;
+}
+.release-summary-kicker {
+  grid-column: 1;
+  grid-row: 1;
+}
+.release-summary-title {
+  grid-column: 1;
+  grid-row: 2;
+  color: var(--text-1);
+  font-family: var(--font-display);
+  font-size: var(--text-section);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  transition: color 180ms var(--ease);
+}
+.release-archive > summary:hover .release-summary-title {
+  color: var(--accent);
+}
+.release-summary-range {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+.release-summary-icon {
+  grid-column: 3;
+  grid-row: 1 / 3;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--accent);
+  background: var(--surface-2);
+  font-family: var(--font-mono);
+  font-size: 22px;
+  line-height: 1;
+  position: relative;
+  transition:
+    transform 180ms var(--ease),
+    border-color 180ms var(--ease),
+    background 180ms var(--ease);
+}
+.release-summary-icon::before,
+.release-summary-icon::after {
+  content: "";
+  position: absolute;
+  width: 12px;
+  height: 2px;
+  border-radius: var(--r-1);
+  background: currentColor;
+}
+.release-summary-icon::after {
+  transform: rotate(90deg);
+}
+.release-archive[open] .release-summary-icon {
+  transform: rotate(45deg);
+  border-color: var(--border-2);
+  background: var(--surface-3);
+}
+.release-archive-list {
+  padding: 0 0 var(--s-5);
+  border-top: 1px solid var(--border);
+}
+.release-archive-list > .config-block:first-child {
+  margin-top: var(--s-5);
+}
+@media (max-width: 760px) {
+  .release-archive > summary {
+    padding: var(--s-4) 0;
+  }
+  .release-summary {
+    min-height: 88px;
+    grid-template-columns: minmax(0, 1fr) 44px;
+    gap: var(--s-1) var(--s-3);
+  }
+  .release-summary-kicker {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .release-summary-title {
+    grid-column: 1;
+    grid-row: 2;
+    font-size: var(--text-lead);
+  }
+  .release-summary-range {
+    grid-column: 1;
+    grid-row: 3;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .release-summary-icon {
+    grid-column: 2;
+    grid-row: 1 / 4;
+  }
+  .release-current .config-block > header,
+  .release-archive .config-block > header,
+  .release-current .config-body .config-toml,
+  .release-current .config-body .config-prose,
+  .release-archive .config-body .config-toml,
+  .release-archive .config-body .config-prose {
+    padding-inline: var(--s-4);
+  }
+}
+
 /* Per-page "Edit on GitHub" link */
 .edit-page {
   margin-top: var(--s-7);
@@ -2759,17 +3138,58 @@ pre.code-block .flag {
   vertical-align: 1px;
 }
 
-/* Data tables (settings.json precedence) */
+/* Responsive data tables */
+.data-table-frame {
+  position: relative;
+  max-width: 100%;
+  margin-top: var(--s-3);
+  border-radius: var(--r-3);
+}
+.data-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+  border-radius: var(--r-3);
+}
+.data-table-scroll:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: var(--s-1);
+}
+.data-table-frame::before,
+.data-table-frame::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  top: 1px;
+  bottom: 1px;
+  width: var(--s-5);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 160ms var(--ease);
+}
+.data-table-frame::before {
+  left: 1px;
+  background: linear-gradient(to right, var(--surface-1), transparent);
+}
+.data-table-frame::after {
+  right: 1px;
+  background: linear-gradient(to left, var(--surface-1), transparent);
+}
+.data-table-frame.can-scroll-start::before,
+.data-table-frame.can-scroll-end::after {
+  opacity: 1;
+}
 .data-table {
   width: 100%;
-  margin-top: var(--s-3);
+  min-width: 800px;
+  margin: 0;
   border-collapse: separate;
   border-spacing: 0;
   font-size: 13.5px;
   background: var(--surface-1);
   border: 1px solid var(--border);
   border-radius: var(--r-3);
-  overflow: hidden;
 }
 .data-table thead th {
   text-align: left;
@@ -2781,7 +3201,7 @@ pre.code-block .flag {
   padding: var(--s-3) var(--s-4);
   background: var(--surface-2);
   border-bottom: 1px solid var(--border);
-  font-weight: 500;
+  font-weight: var(--weight-emphasis);
 }
 .data-table tbody tr + tr td {
   border-top: 1px solid var(--border);
@@ -2824,7 +3244,7 @@ pre.code-block .flag {
   background: var(--surface-2);
   border: 1px solid var(--border-2);
   color: var(--text-1);
-  font-weight: 600;
+  font-weight: var(--weight-emphasis);
   font-size: 11px;
 }
 .data-table .level-badge.top .n {
@@ -2889,7 +3309,7 @@ pre.code-block .flag {
   border: 1px solid var(--border);
   border-radius: var(--r-2);
 }
-.cmd-grid .cat h4 {
+.cmd-grid .cat h2 {
   font-family: var(--font-mono);
   font-size: 11.5px;
   letter-spacing: 0.08em;
@@ -3007,7 +3427,7 @@ pre.code-block .flag {
 }
 .sim-engine-status .sim-engine-label {
   color: var(--text-1);
-  font-weight: 500;
+  font-weight: var(--weight-emphasis);
 }
 .sim-engine-status .sim-engine-meta {
   color: var(--text-3);
@@ -3112,6 +3532,15 @@ pre.code-block .flag {
   opacity: 0.5;
   cursor: not-allowed;
 }
+.sim-custom-status {
+  min-height: 1.5em;
+  margin: var(--s-2) 0 0;
+  color: var(--text-3);
+  font-size: var(--text-label);
+}
+.sim-custom-status[data-state="error"] {
+  color: var(--block);
+}
 
 /* sim-stage extends .lc-node */
 .lc-node.sim-stage {
@@ -3206,13 +3635,13 @@ pre.code-block .flag {
   display: inline-flex;
 }
 .sim-result .sim-reason {
-  font-size: 14px;
+  font-size: var(--text-body);
   color: var(--text-2);
   line-height: 1.55;
 }
 .sim-result .sim-reason b {
   color: var(--text-1);
-  font-weight: 500;
+  font-weight: var(--weight-emphasis);
 }
 .sim-result .sim-reason code {
   font-family: var(--font-mono);
@@ -3297,7 +3726,7 @@ pre.code-block .flag {
 .sidebar-cta .cta-title {
   font-family: var(--font-body);
   font-size: 13.5px;
-  font-weight: 600;
+  font-weight: var(--weight-emphasis);
   color: var(--text-1);
   letter-spacing: -0.005em;
 }
@@ -3371,6 +3800,7 @@ pre.code-block .flag {
 }
 
 .sim-settings-upload {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -3381,7 +3811,7 @@ pre.code-block .flag {
   background: var(--surface-1);
   cursor: pointer;
   margin-top: var(--s-4);
-  margin-bottom: var(--s-4);
+  margin-bottom: var(--s-2);
   text-align: center;
   transition:
     border-color 200ms var(--ease),
@@ -3393,6 +3823,22 @@ pre.code-block .flag {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  pointer-events: none;
+}
+
+.sim-settings-upload:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 16%, transparent);
+}
+
+.settings-file-input {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
 }
 
 .sim-settings-upload:hover,
@@ -3413,19 +3859,32 @@ pre.code-block .flag {
 }
 
 .sim-settings-upload .drop-zone-text {
-  font-size: 14px;
+  font-size: var(--text-body);
   color: var(--text-2);
   margin-bottom: 4px;
 }
 
 .sim-settings-upload .drop-zone-text .highlight {
   color: var(--text-1);
-  font-weight: 500;
+  font-weight: var(--weight-emphasis);
 }
 
 .sim-settings-upload .drop-zone-sub {
-  font-size: 12px;
+  font-size: var(--text-label);
   color: var(--text-3);
+}
+
+.settings-upload-status,
+.settings-upload-error {
+  min-height: 1.5em;
+  margin: 0 0 var(--s-3);
+  font-size: var(--text-label);
+}
+.settings-upload-status {
+  color: var(--text-3);
+}
+.settings-upload-error {
+  color: var(--block);
 }
 
 .active-settings-panel {
@@ -3434,6 +3893,9 @@ pre.code-block .flag {
   border-radius: var(--r-2);
   padding: var(--s-3) var(--s-4);
   margin-bottom: var(--s-5);
+}
+.active-settings-panel[hidden] {
+  display: none;
 }
 
 .active-settings-panel .panel-header {
@@ -3445,7 +3907,7 @@ pre.code-block .flag {
 
 .active-settings-panel .panel-title {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: var(--weight-emphasis);
   color: var(--text-1);
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -3460,6 +3922,8 @@ pre.code-block .flag {
 .settings-file-badge {
   display: inline-flex;
   align-items: center;
+  min-width: 0;
+  max-width: 100%;
   gap: 6px;
   padding: 4px 8px;
   background: var(--surface-1);
@@ -3469,12 +3933,15 @@ pre.code-block .flag {
 }
 
 .settings-file-badge .file-name {
+  min-width: 0;
   font-family: var(--font-mono);
   color: var(--text-1);
-  font-weight: 500;
+  font-weight: var(--weight-emphasis);
+  overflow-wrap: anywhere;
 }
 
 .settings-file-badge .file-meta {
+  flex: none;
   color: var(--text-3);
   font-size: 11px;
 }
@@ -3484,7 +3951,9 @@ pre.code-block .flag {
   border: none;
   color: var(--text-3);
   cursor: pointer;
-  padding: 0 2px;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
   font-size: 14px;
   line-height: 1;
   display: inline-flex;
@@ -3494,6 +3963,24 @@ pre.code-block .flag {
 
 .settings-file-badge .remove-file-btn:hover {
   color: var(--block);
+}
+
+@media (max-width: 760px) {
+  .settings-file-badge {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    width: 100%;
+  }
+  .settings-file-badge .file-name {
+    grid-column: 1 / -1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .settings-file-badge .remove-file-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
 }
 
 /* Ensure line-breaks show up in the simulator reason output box */
@@ -3559,6 +4046,24 @@ pre.code-block {
   background: var(--accent);
   color: var(--surface-1);
   border-color: var(--accent);
+}
+.tg-copy-btn.is-error {
+  background: color-mix(in oklab, var(--block) 12%, var(--surface-2));
+  color: var(--block);
+  border-color: color-mix(in oklab, var(--block) 45%, var(--border));
+}
+
+@media (max-width: 760px) {
+  .tg-copy-btn {
+    top: var(--s-1);
+    right: var(--s-1);
+    width: 44px;
+    height: 44px;
+  }
+  pre.code-block,
+  .config-body .config-toml {
+    padding-right: calc(44px + var(--s-3));
+  }
 }
 
 /* Clipboard and checkmark SVG layout bounds. */
@@ -3632,7 +4137,7 @@ pre.code-block {
 .tui-row.is-selected {
   background: var(--surface-2);
   color: var(--text-1);
-  font-weight: 500;
+  font-weight: var(--weight-emphasis);
 }
 
 .tui-indicator {
@@ -3739,15 +4244,15 @@ pre.code-block {
 }
 
 .dot-close {
-  background: #ff5f56;
+  background: var(--block);
 }
 
 .dot-minimize {
-  background: #ffbd2e;
+  background: var(--ask);
 }
 
 .dot-maximize {
-  background: #27c93f;
+  background: var(--allow);
 }
 
 .terminal-title {
@@ -3757,7 +4262,7 @@ pre.code-block {
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-3);
-  font-weight: 500;
+  font-weight: var(--weight-emphasis);
   pointer-events: none;
 }
 
@@ -3812,24 +4317,24 @@ pre.code-block {
 }
 .tui-screen .c {
   color: var(--accent);
-  font-weight: 600;
+  font-weight: var(--weight-emphasis);
 }
 .tui-screen .dim {
   color: var(--text-3);
 }
 .tui-screen .danger {
   color: var(--block);
-  font-weight: 700;
+  font-weight: var(--weight-bold);
 }
 .tui-screen .ok {
   color: var(--allow);
-  font-weight: 600;
+  font-weight: var(--weight-emphasis);
 }
 
 /* Inline glyphs + risk chips for legend tables on the Review TUI page. */
 .gly {
   font-family: var(--font-mono);
-  font-weight: 700;
+  font-weight: var(--weight-bold);
 }
 .gly-allow {
   color: var(--allow);
@@ -3846,7 +4351,7 @@ pre.code-block {
   border-radius: var(--r-1);
   font-family: var(--font-mono);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: var(--weight-emphasis);
   border: 1px solid;
 }
 .risk-safe {
@@ -3863,4 +4368,17 @@ pre.code-block {
   color: var(--block);
   border-color: color-mix(in oklab, var(--block) 50%, transparent);
   background: color-mix(in oklab, var(--block) 14%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ix-row > *,
+  .tab-panel.is-active {
+    animation: none !important;
+  }
+  .ix-arrow,
+  .tab,
+  .release-summary-title,
+  .release-summary-icon {
+    transition: none !important;
+  }
 }

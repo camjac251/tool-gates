@@ -1,4 +1,9 @@
-  <p class="breadcrumb"><a href="index.html">Core Concepts</a> / Settings Precedence</p>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="index.html">Core Concepts</a></li>
+      <li aria-current="page">Settings Precedence</li>
+    </ol>
+  </nav>
   <h1 id="settings-h1">Settings Precedence</h1>
   <p class="page-lede">Four settings files contribute to the final permission set. Higher-priority files win when keys conflict. tool-gates respects every explicit rule before applying its own gate decisions.</p>
   <div class="sec-head" style="margin-top: var(--s-6)">
@@ -6,7 +11,9 @@
     <h2>Where rules live.</h2>
     <p>Top of the list wins. The same precedence applies on macOS and Linux.</p>
   </div>
-  <table class="data-table">
+  <div class="data-table-frame">
+    <div class="data-table-scroll" data-table-scroll>
+      <table class="data-table">
     <thead>
       <tr><th>Priority</th><th>Location</th><th>Use case</th></tr>
     </thead>
@@ -37,12 +44,16 @@
       </tr>
     </tbody>
   </table>
+    </div>
+  </div>
   <div class="sec-head">
     <p class="lbl">Interaction</p>
     <h2>How tool-gates respects your rules.</h2>
     <p>Your explicit settings.json rules override tool-gates' built-in decision in every case but one: a dangerous call stays blocked even if a rule allows it.</p>
   </div>
-  <table class="data-table">
+  <div class="data-table-frame">
+    <div class="data-table-scroll" data-table-scroll>
+      <table class="data-table">
     <thead>
       <tr><th>settings.json</th><th>tool-gates</th><th>Result</th></tr>
     </thead>
@@ -74,11 +85,15 @@
       </tr>
     </tbody>
   </table>
+    </div>
+  </div>
   <div class="sec-head">
     <p class="lbl">Pattern formats</p>
     <h2>How rules match commands.</h2>
   </div>
-  <table class="data-table">
+  <div class="data-table-frame">
+    <div class="data-table-scroll" data-table-scroll>
+      <table class="data-table">
     <thead>
       <tr><th>Pattern</th><th>Type</th><th>Matches</th></tr>
     </thead>
@@ -89,12 +104,14 @@
       <tr><td><code>Bash(uv run $HOME/scripts/*)</code></td><td>$HOME expansion</td><td>tool-gates expands <code>$HOME</code> in a pattern to the home directory before matching. (Claude Code itself natively expands the <code>~/</code> form.)</td></tr>
     </tbody>
   </table>
+    </div>
+  </div>
   <div class="sec-head">
     <p class="lbl">Specificity resolution</p>
     <h2>When ask and allow both match.</h2>
     <p>Specificity is the length of the non-wildcard prefix. The more specific pattern wins; exact matches are highest. Ties go to ask, the safer default. <code>Bash(mytool --verbose:*)</code> (length 16) beats <code>Bash(mytool:*)</code> (length 6), so a narrow allow can override a broad ask. Deny rules are checked first and use simple matching with no specificity comparison.</p>
   </div>
   <p class="note">
-    <svg class="alert" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+    <svg class="alert" aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
     <span>When a <code>permissions.ask</code> rule in settings.json matches, Claude Code's resolver shows a two-button prompt instead of three (the "don't ask again for X" button is suppressed). <code>tool-gates rules ask-audit</code> categorises each rule by what tool-gates would do without it (gate-covered, safety floor, indeterminate) and offers per-rule removal.</span>
   </p>

@@ -1,10 +1,15 @@
-<p class="breadcrumb"><a href="index.html">Reference</a> / Modern CLI hints</p>
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <ol>
+    <li><a href="index.html">Reference</a></li>
+    <li aria-current="page">Modern CLI hints</li>
+  </ol>
+</nav>
 <h1 id="hints-h1">Modern CLI hints</h1>
 <p class="page-lede">When a command reaches for a legacy tool that has a sharper modern alternative, tool-gates allows the call <em>and</em> attaches a one-line suggestion via <code>additionalContext</code>. Hints never block; they ride on allow decisions. They fire only when the modern tool is installed on this machine. Generated from the hint catalog in <code>src/hints.rs</code>.</p>
 
 <div class="hints">
   <header>
-    <h3>Legacy &rarr; modern</h3>
+    <h2>Legacy &rarr; modern</h2>
     <span class="note">7-day cache · <code>tool-gates --tools-status</code> to inspect</span>
   </header>
 <div class="hint-row">

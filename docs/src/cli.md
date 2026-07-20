@@ -1,11 +1,18 @@
-  <p class="breadcrumb"><a href="index.html">Reference</a> / CLI Reference</p>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="index.html">Reference</a></li>
+      <li aria-current="page">CLI Reference</li>
+    </ol>
+  </nav>
   <h1 id="cli-h1">CLI Reference</h1>
   <p class="page-lede">Every subcommand of <code>tool-gates</code>. The binary doubles as the hook entry point (reads tool-call JSON from stdin and emits a decision) and as a management CLI for inspecting and editing your settings.</p>
   <div class="sec-head" style="margin-top: var(--s-6)">
     <p class="lbl">Hook lifecycle</p>
     <h2>Install, inspect, audit.</h2>
   </div>
-  <table class="data-table">
+  <div class="data-table-frame">
+    <div class="data-table-scroll" data-table-scroll>
+      <table class="data-table">
     <thead>
       <tr><th>Command</th><th>What it does</th></tr>
     </thead>
@@ -16,7 +23,7 @@
       </tr>
       <tr>
         <td><code>tool-gates hooks add --gemini</code></td>
-        <td>Wire a single BeforeTool hook into <code>~/.gemini/settings.json</code>.</td>
+        <td>Wire the deprecated Gemini compatibility hook into <code>~/.gemini/settings.json</code> for an existing setup. New setups should use Antigravity.</td>
       </tr>
       <tr>
         <td><code>tool-gates hooks add --codex</code></td>
@@ -48,11 +55,15 @@
       </tr>
     </tbody>
   </table>
+    </div>
+  </div>
   <div class="sec-head">
     <p class="lbl">Approval learning</p>
     <h2>Pending queue and rules management.</h2>
   </div>
-  <table class="data-table">
+  <div class="data-table-frame">
+    <div class="data-table-scroll" data-table-scroll>
+      <table class="data-table">
     <thead>
       <tr><th>Command</th><th>What it does</th></tr>
     </thead>
@@ -64,15 +75,19 @@
       <tr><td><code>tool-gates rules remove '&lt;pattern&gt;' -s &lt;scope&gt;</code></td><td>Remove a specific rule from the named settings file.</td></tr>
       <tr><td><code>tool-gates rules ask-audit</code></td><td>List <code>permissions.ask</code> rules in settings.json categorised by what tool-gates would do without them (gate-covered, safety floor, indeterminate).</td></tr>
       <tr><td><code>tool-gates rules ask-audit --apply</code></td><td>Multi-select TUI for removing redundant ask rules. The third "don't ask again" button reappears for everything removed.</td></tr>
-      <tr><td><code>tool-gates rules export --format md [--out PATH] [--rules-dir PATH]</code></td><td>Regenerate <code>gates/*.md</code>, <code>security-floor.md</code>, and <code>hints.md</code> from <code>rules/*.toml</code> and the hint catalog. <code>--out</code> defaults to <code>docs/src</code>.</td></tr>
+      <tr><td><code>tool-gates rules export --format md [--out PATH] [--rules-dir PATH]</code></td><td>Regenerate <code>gates/*.md</code>, <code>security-floor.md</code>, <code>hints.md</code>, <code>security-reminders.md</code>, and <code>design-lint.md</code> from the rule, hint, and scanner catalogs. <code>--out</code> defaults to <code>docs/src</code>.</td></tr>
       <tr><td><code>tool-gates review</code></td><td>Open the interactive review TUI to promote, deny, or dismiss pending commands and manage existing rules. <code>--all</code> spans every project; the default is the current project. See <a href="review-tui.html">Review TUI</a>.</td></tr>
     </tbody>
   </table>
+    </div>
+  </div>
   <div class="sec-head">
     <p class="lbl">Diagnostics</p>
     <h2>Health check, cache, version.</h2>
   </div>
-  <table class="data-table">
+  <div class="data-table-frame">
+    <div class="data-table-scroll" data-table-scroll>
+      <table class="data-table">
     <thead>
       <tr><th>Command</th><th>What it does</th></tr>
     </thead>
@@ -84,7 +99,9 @@
       <tr><td><code>tool-gates --help</code></td><td>Print the top-level help. Each subcommand also accepts <code>--help</code>.</td></tr>
     </tbody>
   </table>
+    </div>
+  </div>
   <p class="note">
-    <svg class="alert" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+    <svg class="alert" aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
     <span><b>The CLI surfaces only the safe operations.</b> Mutating subcommands (<code>approve</code>, <code>rules remove</code>, <code>pending clear</code>, <code>hooks add</code>) ask for confirmation through the same gate engine that protects every other tool call. See the <a href="gates/tool_gates.html">tool_gates gate</a>.</span>
   </p>

@@ -1,4 +1,9 @@
-  <p class="breadcrumb"><a href="index.html">Reference</a> / Security reminders</p>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="index.html">Reference</a></li>
+      <li aria-current="page">Security reminders</li>
+    </ol>
+  </nav>
   <h1 id="secrems-h1">Security reminders</h1>
   <p class="page-lede">tool-gates scans write/edit bodies for 28 anti-patterns organised into three tiers, including Claude <code>Write</code>/<code>Edit</code>, Codex <code>apply_patch</code> added lines, Antigravity <code>write_to_file</code>/<code>replace_file_content</code>/<code>multi_replace_file_content</code>, and Gemini <code>write_file</code>/<code>replace</code> before-tool checks. The hard floor denies source writes before the file ever lands, while documentation files get a post-write warning. The middle tier nudges the assistant after a write so the next action can self-correct. The top tier informs without blocking.</p>
   <div class="sec-head" style="margin-top: var(--s-6)">

@@ -1,4 +1,9 @@
-  <p class="breadcrumb"><a href="index.html">Reference</a> / Tool Gates Doctor</p>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="index.html">Reference</a></li>
+      <li aria-current="page">Tool Gates Doctor</li>
+    </ol>
+  </nav>
   <h1 id="doctor-h1">Tool Gates Doctor</h1>
   <p class="page-lede">A read-only health check. Verifies the binary is on PATH, hooks are wired into every supported client at every relevant scope, cache files are readable, and no legacy <code>bash-gates</code> configuration remains in your settings.</p>
   <div class="sec-head" style="margin-top: var(--s-6)">
@@ -19,7 +24,9 @@
     <p class="lbl">What it checks</p>
     <h2>Coverage.</h2>
   </div>
-  <table class="data-table">
+  <div class="data-table-frame">
+    <div class="data-table-scroll" data-table-scroll>
+      <table class="data-table">
     <thead>
       <tr><th>Check</th><th>Looks for</th></tr>
     </thead>
@@ -31,7 +38,9 @@
       <tr><td>legacy</td><td>Scans settings.json for hook commands referencing the old <code>bash-gates</code> binary. Suggests <code>tool-gates hooks add</code> to fix.</td></tr>
     </tbody>
   </table>
+    </div>
+  </div>
   <p class="note">
-    <svg class="alert" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+    <svg class="alert" aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
     <span><b>Read-only.</b> doctor never modifies settings or cache. Safe to run anytime. If a check fails it prints the suggested fix without applying it.</span>
   </p>

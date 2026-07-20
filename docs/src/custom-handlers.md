@@ -1,11 +1,18 @@
-  <p class="breadcrumb"><a href="index.html">Development</a> / Custom Handlers</p>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="index.html">Development</a></li>
+      <li aria-current="page">Custom Handlers</li>
+    </ol>
+  </nav>
   <h1 id="handlers-h1">Custom Handlers</h1>
   <p class="page-lede">Each handler is a Rust function called by the gate when declarative TOML can't express the rule. The TOML declares <code>[[custom_handlers]]</code> with a program and handler name; the gate's Rust file implements the handler. Listed by gate.</p>
   <div class="sec-head" style="margin-top: var(--s-6)">
     <p class="lbl">filesystem</p>
     <h2>Path-aware logic.</h2>
   </div>
-  <table class="data-table">
+  <div class="data-table-frame">
+    <div class="data-table-scroll" data-table-scroll>
+      <table class="data-table">
     <thead>
       <tr><th>Program</th><th>Handler</th><th>What it does</th></tr>
     </thead>
@@ -14,11 +21,15 @@
       <tr><td><code>tar</code></td><td><code>check_tar</code></td><td>Decodes combined flags (<code>-tvf</code>, <code>-xf</code>, <code>-cf</code>); allows list mode, asks for extract/create.</td></tr>
     </tbody>
   </table>
+    </div>
+  </div>
   <div class="sec-head">
     <p class="lbl">network</p>
     <h2>Method and flag dispatch.</h2>
   </div>
-  <table class="data-table">
+  <div class="data-table-frame">
+    <div class="data-table-scroll" data-table-scroll>
+      <table class="data-table">
     <thead>
       <tr><th>Program</th><th>Handler</th><th>What it does</th></tr>
     </thead>
@@ -30,11 +41,15 @@
       <tr><td><code>rsync</code></td><td><code>check_rsync</code></td><td>Allows <code>--dry-run</code> / <code>-n</code>; asks on actual syncs (with <code>--delete</code> noted in the reason).</td></tr>
     </tbody>
   </table>
+    </div>
+  </div>
   <div class="sec-head">
     <p class="lbl">cloud</p>
     <h2>Multi-word subcommand patterns.</h2>
   </div>
-  <table class="data-table">
+  <div class="data-table-frame">
+    <div class="data-table-scroll" data-table-scroll>
+      <table class="data-table">
     <thead>
       <tr><th>Program</th><th>Handler</th><th>What it does</th></tr>
     </thead>
@@ -43,11 +58,15 @@
       <tr><td><code>docker</code></td><td><code>check_docker</code></td><td>Handles <code>docker compose</code> with flags between the subcommand (e.g. <code>docker compose -f x.yml config</code>).</td></tr>
     </tbody>
   </table>
+    </div>
+  </div>
   <div class="sec-head">
     <p class="lbl">system</p>
     <h2>SQL parsing, prefix matching.</h2>
   </div>
-  <table class="data-table">
+  <div class="data-table-frame">
+    <div class="data-table-scroll" data-table-scroll>
+      <table class="data-table">
     <thead>
       <tr><th>Program</th><th>Handler</th><th>What it does</th></tr>
     </thead>
@@ -62,11 +81,15 @@
       <tr><td><code>crontab</code></td><td><code>check_crontab</code></td><td>Allows <code>-l</code> (list scheduled tasks); asks on edit or write operations.</td></tr>
     </tbody>
   </table>
+    </div>
+  </div>
   <div class="sec-head">
     <p class="lbl">basics, package_managers, others</p>
     <h2>Inner-command checking, wrapper resolution.</h2>
   </div>
-  <table class="data-table">
+  <div class="data-table-frame">
+    <div class="data-table-scroll" data-table-scroll>
+      <table class="data-table">
     <thead>
       <tr><th>Program</th><th>Handler</th><th>What it does</th></tr>
     </thead>
@@ -81,7 +104,9 @@
       <tr><td><code>short</code></td><td><code>check_short_api</code></td><td>For <code>short api</code>: allows GET, asks POST / PUT / PATCH / DELETE.</td></tr>
     </tbody>
   </table>
+    </div>
+  </div>
   <p class="note">
-    <svg class="alert" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+    <svg class="alert" aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
     <span><b>The generated gate function returns <code>Skip</code> for any program with a custom handler.</b> The Rust wrapper file then takes over. Without that wiring the handler never fires; see the <a href="contributing.html">Contributing</a> page for the pattern.</span>
   </p>

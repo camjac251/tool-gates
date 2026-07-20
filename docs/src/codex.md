@@ -1,4 +1,9 @@
-  <p class="breadcrumb"><a href="index.html">Core Concepts</a> / Codex Approval Model</p>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="index.html">Core Concepts</a></li>
+      <li aria-current="page">Codex Approval Model</li>
+    </ol>
+  </nav>
   <h1 id="codex-h1">Codex Approval Model</h1>
   <p class="page-lede">On Codex, whether a tool-gates <code>ask</code> becomes a visible prompt is decided by Codex's own <code>approval_policy</code>, not by tool-gates. This page covers what tool-gates can and cannot control on Codex, and the one supported lever, execpolicy rules, that makes it authoritative over Codex's built-in safe-read list.</p>
   <div class="sec-head" style="margin-top: var(--s-6)">
@@ -6,7 +11,9 @@
     <h2>Codex's <code>approval_policy</code> owns the prompt, not tool-gates.</h2>
     <p>On Codex a tool-gates <code>ask</code> is pass-through. PreToolUse only honours <code>deny</code>, so allow, ask, and unknown all emit empty stdout and hand the decision back to Codex. Whether the user is then prompted depends entirely on Codex's <code>approval_policy</code>.</p>
   </div>
-  <table class="data-table">
+  <div class="data-table-frame">
+    <div class="data-table-scroll" data-table-scroll>
+      <table class="data-table">
     <thead>
       <tr><th><code>approval_policy</code></th><th>Does a tool-gates <code>ask</code> reach a prompt?</th></tr>
     </thead>
@@ -17,15 +24,17 @@
       <tr><td><code>never</code></td><td>No prompts at all.</td></tr>
     </tbody>
   </table>
+    </div>
+  </div>
   <p class="sub-note">These four are the common presets. Codex also has a fifth <code>granular</code> policy for fine-grained per-category approvals.</p>
   <div class="sec-head" style="margin-top: var(--s-7)">
     <p class="lbl">Under untrusted</p>
     <h2>How a command reaches tool-gates.</h2>
   </div>
-  <div class="lifecycle" aria-label="Approval flow on Codex under untrusted">
+  <figure class="lifecycle" aria-labelledby="codex-approval-flow-label">
     <div class="lc-bar">
       <span class="lights"><i></i><i></i><i></i></span>
-      <span class="lc-label">approval flow · Codex · approval_policy = untrusted</span>
+      <span class="lc-label" id="codex-approval-flow-label">approval flow · Codex · approval_policy = untrusted</span>
     </div>
     <div class="lc-track">
       <div class="lc-node start">
@@ -63,30 +72,30 @@
         <div class="lc-sub">Codex shows the prompt only when tool-gates passed through.</div>
       </div>
     </div>
-  </div>
+  </figure>
   <div class="sec-head" style="margin-top: var(--s-7)">
     <p class="lbl">Capability</p>
     <h2>What tool-gates can and cannot do on Codex.</h2>
   </div>
   <div class="hook-cards">
     <article class="hook-card">
-      <h4>Deny always works</h4>
+      <h3>Deny always works</h3>
       <p>A hard <code>deny</code> lands on both PreToolUse and PermissionRequest. The security floor (destructive <code>rm</code>, pipe-to-shell, your own deny rules) is fully enforced on Codex.</p>
     </article>
     <article class="hook-card">
-      <h4>Allow only via PermissionRequest</h4>
+      <h3>Allow only via PermissionRequest</h3>
       <p>A positive <code>allow</code> that auto-approves and suppresses the prompt is honoured only on the PermissionRequest hook, and only under <code>untrusted</code>. PreToolUse can never allow, ask, or rewrite input; tool-gates only emits Codex-shaped JSON there for hard denies. (Codex can accept <code>additionalContext</code> on PreToolUse, though tool-gates currently carries hints and Tier-3 warnings on PostToolUse.)</p>
     </article>
     <article class="hook-card">
-      <h4>Safe-reads are invisible</h4>
+      <h3>Safe-reads are invisible</h3>
       <p>Codex auto-approves <code>cat</code>, <code>ls</code>, <code>grep</code>, <code>rg</code>, <code>sed -n</code>, <code>git status/log/diff</code>, and similar reads before any hook runs. tool-gates never sees them on PermissionRequest; it can only <code>deny</code> them via PreToolUse, never turn them into a prompt. The lever to change that is execpolicy, below.</p>
     </article>
     <article class="hook-card">
-      <h4>Project edits can auto-allow</h4>
+      <h3>Project edits can auto-allow</h3>
       <p>With <code>[codex] accept_project_edits</code>, an <code>apply_patch</code> whose paths are all inside the project auto-approves on PermissionRequest, honouring your settings.json deny and ask patterns and the file guards. Opt-in, off by default; covered below.</p>
     </article>
     <article class="hook-card">
-      <h4>Strict output validation</h4>
+      <h3>Strict output validation</h3>
       <p>Codex validates hook stdout JSON stringently. Returning extra fields like <code>updatedInput</code>, <code>updatedPermissions</code>, <code>addDirectories</code>, or <code>interrupt</code> in <code>PermissionRequest</code> responses, or <code>updatedMCPToolOutput</code> in <code>PostToolUse</code> responses, results in a validation error rather than being silently ignored. tool-gates actively strips these fields to maintain hook compatibility.</p>
     </article>
   </div>
@@ -139,7 +148,7 @@
     <h2>Two settings silently disable the prompt layer.</h2>
   </div>
   <p class="note">
-    <svg class="alert" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+    <svg class="alert" aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
     <span><b>Both flip <code>approval_policy</code> to <code>on-request</code>, where mutations stop prompting.</b> Selecting <b>Default</b> in the Codex <code>/permissions</code> popup changes it for the running session only (a runtime override, not written to disk), so a restart restores your config. Enabling <b>"Approve for me"</b> (Guardian) persists <code>approval_policy = "on-request"</code> to <code>config.toml</code>. Keep <code>untrusted</code> if you want tool-gates and prompts to govern mutations.</span>
   </p>
   <div class="sec-head" style="margin-top: var(--s-7)">

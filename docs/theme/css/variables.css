@@ -1,5 +1,5 @@
 /* tool-gates theme tokens. */
-/* The :root + [data-theme] blocks plus the design-token :root; mdBook additional-css loads this first. */
+/* The :root + [data-theme] blocks plus the design-token :root; mdBook loads this core-theme override first. */
 /*
  * D2 theme mapping: mdBook 0.5 applies a theme class to <html> (its switcher
  * manages the `mdbook-theme` localStorage key and html.classList directly). A
@@ -37,6 +37,7 @@ html.ayu {
   --defer: oklch(70% 0.04 248);
   --nudge: oklch(81% 0.1 215);
   --grid-dot: oklch(60% 0.03 248 / 0.16);
+  --shadow-sm: 0 1px 2px oklch(8% 0 0 / 0.18), 0 3px 8px oklch(8% 0 0 / 0.12);
   --shadow: 0 1px 0 oklch(8% 0 0 / 0.4), 0 12px 32px oklch(8% 0 0 / 0.18);
 }
 [data-theme="light"],
@@ -61,13 +62,25 @@ html.rust {
   --defer: oklch(48% 0.02 248);
   --nudge: oklch(52% 0.11 215);
   --grid-dot: oklch(40% 0.03 248 / 0.12);
+  --shadow-sm: 0 1px 2px oklch(40% 0.01 85 / 0.08), 0 3px 8px oklch(40% 0.01 85 / 0.06);
   --shadow: 0 1px 0 oklch(80% 0.01 85 / 0.6), 0 12px 28px oklch(40% 0.01 85 / 0.1);
 }
 
 :root {
-  --font-display: "Bricolage Grotesque", Georgia, serif;
+  --font-display: "Bricolage Grotesque", "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
   --font-body: "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --text-meta: 12px;
+  --text-label: 14px;
+  --text-body: 16px;
+  --text-card: 16.8px;
+  --text-lead: clamp(16.8px, 1.5vw, 19.2px);
+  --text-section: 25px;
+  --text-page: clamp(32px, 3.4vw, 43.2px);
+  --text-display: clamp(38.4px, 5.4vw, 64px);
+  --weight-regular: 400;
+  --weight-emphasis: 500;
+  --weight-bold: 700;
   --s-1: 4px;
   --s-2: 8px;
   --s-3: 12px;
@@ -80,9 +93,7 @@ html.rust {
   --r-1: 4px;
   --r-2: 6px;
   --r-3: 10px;
-  --sidebar-w: 18rem;
   --bar-h: 56px;
-  --content-max: 58rem;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
   /* Magnifier glyph for the inline search box, masked so it picks up --text-3.
    * Mirrors the design's stroke icon (circle + handle). */

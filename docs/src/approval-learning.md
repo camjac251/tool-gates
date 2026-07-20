@@ -1,14 +1,19 @@
-  <p class="breadcrumb"><a href="index.html">Core Concepts</a> / Approval Learning</p>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="index.html">Core Concepts</a></li>
+      <li aria-current="page">Approval Learning</li>
+    </ol>
+  </nav>
   <h1 id="approval-h1">Approval Learning</h1>
   <p class="page-lede">When you click Yes on a tool-gates ask, the command joins a pending queue. The <code>tool-gates review</code> TUI lets you promote any of those patterns to a permanent rule in <code>settings.json</code>, so future matching calls auto-allow without prompting.</p>
   <div class="sec-head" style="margin-top: var(--s-6)">
     <p class="lbl">Lifecycle</p>
     <h2>Ask once, promote once, never see it again.</h2>
   </div>
-  <div class="lifecycle" aria-label="Approval-learning lifecycle">
+  <figure class="lifecycle" aria-labelledby="approval-learning-label">
     <div class="lc-bar">
       <span class="lights"><i></i><i></i><i></i></span>
-      <span class="lc-label">approval learning</span>
+      <span class="lc-label" id="approval-learning-label">approval learning</span>
     </div>
     <div class="lc-track">
       <div class="lc-node start">
@@ -37,7 +42,7 @@
         <div class="lc-sub">Future matching calls return <code>allow</code> with no prompt.</div>
       </div>
     </div>
-  </div>
+  </figure>
   <div class="sec-head">
     <p class="lbl">CLI</p>
     <h2>Inspect and promote without the TUI.</h2>
@@ -96,6 +101,6 @@
     <p>Run <code>tool-gates review</code> for a keyboard-first dashboard: pending commands with colour-and-symbol-coded segments, a blast-radius meter that escalates friction as a rule widens, and tabs for managing the <code>allow</code> / <code>deny</code> rules you already have. Full walkthrough and keymap live on the <a href="review-tui.html">Review TUI</a> page.</p>
   </div>
   <p class="note">
-    <svg class="alert" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+    <svg class="alert" aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
     <span><b>Only human approvals queue.</b> Under auto mode the classifier decides silently; nothing it approves goes into <code>pending.jsonl</code>. The review queue stays focused on patterns you explicitly clicked through.</span>
   </p>

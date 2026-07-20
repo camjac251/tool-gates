@@ -1,5 +1,10 @@
 <div class="gate-head">
-  <p class="breadcrumb"><a href="../index.html">Gates</a> / System Commands</p>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="../index.html">Gates</a></li>
+      <li aria-current="page">System Commands</li>
+    </ol>
+  </nav>
   <h1>System Commands gate</h1>
   <div class="gate-meta">
     <span class="tag">priority <b>40</b></span>
@@ -8,7 +13,7 @@
     <span class="tag">heavy block floor</span>
   </div>
 
-  <div class="summary" aria-label="Rule counts at a glance">
+  <section class="summary" aria-label="Rule counts at a glance">
     <div class="seg-bar" role="img" aria-label="273 allow, 188 ask, 36 block">
       <div class="seg allow" style="flex: 273"></div>
       <div class="seg ask"   style="flex: 188"></div>
@@ -19,17 +24,18 @@
       <span class="cas"><i></i><b>188</b> ask</span>
       <span class="cb"><i></i><b>36</b> block</span>
     </div>
-  </div>
+  </section>
 
   <p class="gate-lede">OS-level operations: power, disk, kernel modules, firewall, users, plus database clients and crypto. This gate owns the largest block floor of any gate (30+ patterns). See the <a href="../security-floor.html">Security floor</a> for the full block list.</p>
 </div>
 
-<div class="chips" role="group" aria-label="Filter rules by decision">
+<div class="chips" role="group" aria-label="Filter rules by decision" aria-describedby="rule-filter-status">
   <button class="chip all"   data-filter="all"   aria-pressed="true"><i></i>All <span class="n">497</span></button>
   <button class="chip allow" data-filter="allow" aria-pressed="false"><i></i>Allow <span class="n">273</span></button>
   <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">188</span></button>
   <button class="chip block" data-filter="block" aria-pressed="false"><i></i>Block <span class="n">36</span></button>
 </div>
+<p class="rule-filter-status" id="rule-filter-status" role="status" aria-live="polite" aria-atomic="true">Showing all 497 rules.</p>
 
 <div class="rule-card">
   <header>

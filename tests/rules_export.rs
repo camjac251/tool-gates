@@ -44,7 +44,7 @@ fn read_hints(out: &Path) -> String {
 }
 
 #[test]
-fn exports_all_gate_pages_and_floor() {
+fn exports_all_reference_pages() {
     let out = temp_out("all");
     export_markdown(&rules_dir(), &out).unwrap();
 
@@ -68,6 +68,8 @@ fn exports_all_gate_pages_and_floor() {
     }
     assert!(out.join("security-floor.md").exists());
     assert!(out.join("hints.md").exists());
+    assert!(out.join("security-reminders.md").exists());
+    assert!(out.join("design-lint.md").exists());
 
     fs::remove_dir_all(&out).ok();
 }
@@ -80,7 +82,15 @@ fn output_is_byte_identical_on_rerun() {
     export_markdown(&rules_dir(), &b).unwrap();
 
     // Compare every generated file byte-for-byte.
-    let mut files: Vec<String> = vec!["security-floor.md".to_string(), "hints.md".to_string()];
+    let mut files: Vec<String> = [
+        "security-floor.md",
+        "hints.md",
+        "security-reminders.md",
+        "design-lint.md",
+    ]
+    .into_iter()
+    .map(str::to_string)
+    .collect();
     for entry in fs::read_dir(a.join("gates")).unwrap() {
         let name = entry.unwrap().file_name().to_string_lossy().to_string();
         files.push(format!("gates/{name}"));
@@ -274,7 +284,7 @@ fn basics_renders_categorized_command_grid() {
         "grid should have category blocks"
     );
     assert!(
-        basics.contains("<h4>Display &amp; output</h4>"),
+        basics.contains("<h2>Display &amp; output</h2>"),
         "first category heading renders (HTML-escaped &)"
     );
     assert!(
@@ -330,7 +340,8 @@ fn hints_page_renders_catalog() {
 
     // Reference-page header shape.
     assert!(hints.contains("<h1 id=\"hints-h1\">Modern CLI hints</h1>"));
-    assert!(hints.contains("<p class=\"breadcrumb\">"));
+    assert!(hints.contains("<nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">"));
+    assert!(hints.contains("<li aria-current=\"page\">Modern CLI hints</li>"));
     assert!(hints.contains("<p class=\"page-lede\">"));
 
     // Design hint-panel classes so the ported CSS applies.
