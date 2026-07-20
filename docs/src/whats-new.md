@@ -10,8 +10,54 @@
     <header class="sec-head release-section-head">
       <span class="lbl">Current window</span>
       <h2 id="release-current-title">Latest eight releases</h2>
-      <p>From v1.31.1 through v1.25.0, newest first.</p>
+      <p>From v1.32.1 through v1.27.0, newest first.</p>
     </header>
+  <div class="config-block">
+    <header>
+      <h3>v1.32.1 · July 13, 2026</h3>
+      <span class="src-tag">hardening + reliability · <a href="https://github.com/camjac251/tool-gates/commit/b1d6112" target="_blank" rel="noopener">b1d6112</a></span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec fixed">Fixed</span>
+  make hook, settings, and agy config updates transactional
+  resolve symlinks before approving project edits
+  inspect quoted substitutions and env-split embedded commands
+  normalize blocked URL hosts and preserve privilege-wrapper decisions
+  repair Gemini hook reporting and notebook edit coverage
+<span class="sec other">Other</span>
+  reduce repeated config, parser, scanner, alias, and WASM work
+  stabilize generated rules, docs checks, CI, and MSRV coverage</pre>
+      </div>
+      <div class="config-prose">
+        <p>Hardens the boundaries where command parsing, path approval, and configuration persistence meet. Hook installation, settings permission changes, and the Antigravity allowlist now use transactional updates so a failed write cannot partially replace a working configuration. Project-edit approval resolves symlinks before testing scope; block rules normalize URL hosts; command inspection reaches substitutions inside quoted arguments and commands embedded in <code>env -S</code> strings; privilege wrappers keep the underlying gate decision. Gemini reports the hook set that was actually installed, notebook edits are covered end to end, and tracker state survives across sessions. The same release trims repeated parsing and filesystem work across configuration loading, security scans, Git alias discovery, and WASM builds, while tightening generated-rule, documentation, CI, and MSRV checks.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.32.0 · July 8, 2026</h3>
+      <span class="src-tag">native scratchpad + gate fixes · <a href="https://github.com/camjac251/tool-gates/commit/56ccac4" target="_blank" rel="noopener">56ccac4</a></span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  recognize Claude Code's native per-session scratchpad
+  auto-allow supported file and shell writes within that root
+<span class="sec fixed">Fixed</span>
+  honor package-manager allow rules and gate mutating subcommands
+  route unmatched system tools through the generated dispatcher
+  fail closed on malformed settings.json
+  inspect newline-separated eval/source and multibyte truncation forms
+<span class="sec other">Other</span>
+  generate reminder and design-lint docs from their scanner catalogs
+  make the raw-string security floor declarative</pre>
+      </div>
+      <div class="config-prose">
+        <p>Extends scratch handling to Claude Code's native per-session scratchpad under the system temporary directory. File tools already trusted this directory, but Bash redirects and write commands still prompted; tool-gates now recognizes the same bounded root at every scratch-aware call site. The matcher requires the current user and UUID-shaped session identifier and ends at <code>scratchpad/</code>, so sibling task and session directories remain gated. This release also honors package-manager allow rules while gating their mutating subcommands, routes unmatched system tools through the generated dispatcher, preserves malformed <code>settings.json</code> files instead of replacing them, and closes newline and multibyte parsing gaps in the raw-string safety floor. Security-reminder and design-lint reference pages are generated from their scanner catalogs, while the raw-string security floor is declarative, reducing drift between behavior and documentation.</p>
+      </div>
+    </div>
+  </div>
   <div class="config-block">
     <header>
       <h3>v1.31.1 · June 25, 2026</h3>
@@ -33,8 +79,8 @@
   </div>
   <div class="config-block">
     <header>
-      <h3>v1.31.0 · June 24, 2026</h3>
-      <span class="src-tag">Antigravity allowlist · <a href="https://github.com/camjac251/tool-gates/commit/56c3720" target="_blank" rel="noopener">56c3720</a></span>
+      <h3>v1.31.0 · June 25, 2026</h3>
+      <span class="src-tag">Antigravity allowlist · <a href="https://github.com/camjac251/tool-gates/commit/30055e3" target="_blank" rel="noopener">30055e3</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -120,6 +166,17 @@
       </div>
     </div>
   </div>
+  </section>
+  <details class="release-archive" id="release-archive" aria-labelledby="release-archive-title">
+    <summary>
+      <h2 class="release-summary" id="release-archive-title">
+        <span class="release-summary-kicker">Historical archive</span>
+        <span class="release-summary-title">Browse 48 earlier releases</span>
+        <span class="release-summary-range">v1.26.0 to v1.1.0</span>
+        <span class="release-summary-icon" aria-hidden="true"></span>
+      </h2>
+    </summary>
+    <div class="release-archive-list">
   <div class="config-block">
     <header>
       <h3>v1.26.0 · June 19, 2026</h3>
@@ -155,17 +212,6 @@
       </div>
     </div>
   </div>
-  </section>
-  <details class="release-archive" id="release-archive" aria-labelledby="release-archive-title">
-    <summary>
-      <h2 class="release-summary" id="release-archive-title">
-        <span class="release-summary-kicker">Historical archive</span>
-        <span class="release-summary-title">Browse 46 earlier releases</span>
-        <span class="release-summary-range">v1.24.1 to v1.1.0</span>
-        <span class="release-summary-icon" aria-hidden="true"></span>
-      </h2>
-    </summary>
-    <div class="release-archive-list">
   <div class="config-block">
     <header>
       <h3>v1.24.1 · June 16, 2026</h3>
@@ -890,7 +936,7 @@
   <div class="config-block">
     <header>
       <h3>v1.5.0 · March 13, 2026</h3>
-      <span class="src-tag">safeties · <a href="https://github.com/camjac251/tool-gates/commit/b5e3a1d" target="_blank" rel="noopener">b5e3a1d</a></span>
+      <span class="src-tag">safeties · <a href="https://github.com/camjac251/tool-gates/commit/f1cd14f" target="_blank" rel="noopener">f1cd14f</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -904,7 +950,7 @@
   </div>
   <div class="config-block">
     <header>
-      <h3>v1.4.0 · March 10, 2026</h3>
+      <h3>v1.4.0 · March 11, 2026</h3>
       <span class="src-tag">skills &amp; doctor · <a href="https://github.com/camjac251/tool-gates/commit/e13491d" target="_blank" rel="noopener">e13491d</a></span>
     </header>
     <div class="config-body">
