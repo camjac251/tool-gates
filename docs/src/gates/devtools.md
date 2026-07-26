@@ -14,14 +14,14 @@
   </div>
 
   <section class="summary" aria-label="Rule counts at a glance">
-    <div class="seg-bar" role="img" aria-label="80 allow, 70 ask, 0 block">
+    <div class="seg-bar" role="img" aria-label="80 allow, 71 ask, 0 block">
       <div class="seg allow" style="flex: 80"></div>
-      <div class="seg ask"   style="flex: 70"></div>
+      <div class="seg ask"   style="flex: 71"></div>
       <div class="seg block" style="flex: 0"></div>
     </div>
     <div class="counts">
       <span class="ca"><i></i><b>80</b> allow</span>
-      <span class="cas"><i></i><b>70</b> ask</span>
+      <span class="cas"><i></i><b>71</b> ask</span>
       <span class="cb"><i></i><b>0</b> block</span>
     </div>
   </section>
@@ -30,12 +30,12 @@
 </div>
 
 <div class="chips" role="group" aria-label="Filter rules by decision" aria-describedby="rule-filter-status">
-  <button class="chip all"   data-filter="all"   aria-pressed="true"><i></i>All <span class="n">150</span></button>
+  <button class="chip all"   data-filter="all"   aria-pressed="true"><i></i>All <span class="n">151</span></button>
   <button class="chip allow" data-filter="allow" aria-pressed="false"><i></i>Allow <span class="n">80</span></button>
-  <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">70</span></button>
+  <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">71</span></button>
   <button class="chip block" data-filter="block" aria-pressed="false"><i></i>Block <span class="n">0</span></button>
 </div>
-<p class="rule-filter-status" id="rule-filter-status" role="status" aria-live="polite" aria-atomic="true">Showing all 150 rules.</p>
+<p class="rule-filter-status" id="rule-filter-status" role="status" aria-live="polite" aria-atomic="true">Showing all 151 rules.</p>
 
 <div class="rule-card">
   <header>
@@ -456,7 +456,7 @@
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
       rules/devtools.toml#ask
     </a>
-    <span class="count">70 patterns</span>
+    <span class="count">71 patterns</span>
   </header>
 
 <div class="rule-row" data-decision="ask" id="devtools-ast-grep-u-update-all">
@@ -723,6 +723,11 @@
   <div class="rule-cmd"><span class="prog">semgrep</span> <span class="flag">--autofix</span> <span class="flag">--fix</span></div>
   <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
   <div class="rule-reason">semgrep --autofix: applies rule-driven code rewrites to matched files. Default semgrep only reports findings.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="devtools-sg">
+  <div class="rule-cmd"><span class="prog">sg</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason"><code>sg</code> is ambiguous: ast-grep deprecated that executable name, while some systems provide an unrelated group-switching command. Use <code>ast-grep run</code> or <code>ast-grep scan</code> explicitly.</div>
 </div>
 <div class="rule-row" data-decision="ask" id="devtools-shfmt-w">
   <div class="rule-cmd"><span class="prog">shfmt</span> <span class="flag">-w</span></div>

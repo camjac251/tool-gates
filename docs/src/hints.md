@@ -49,6 +49,12 @@
   <div class="why"><b>Tip from tool-gates:</b> Recursive by default, respects .gitignore, faster on large trees.</div>
 </div>
 <div class="hint-row">
+  <div class="old"><span class="prog">$</span> <s>sg</s></div>
+  <div class="arrow">→</div>
+  <div class="new"><span class="prog">$</span> ast-grep</div>
+  <div class="why"><b>Tip from tool-gates:</b> Uses the supported executable name and avoids collision with the unrelated system `sg` group command.</div>
+</div>
+<div class="hint-row">
   <div class="old"><span class="prog">$</span> <s>ag / ack</s></div>
   <div class="arrow">→</div>
   <div class="new"><span class="prog">$</span> rg</div>

@@ -756,6 +756,15 @@ mod tests {
     }
 
     #[test]
+    fn test_sg_asks_with_migration_guidance() {
+        let result = check_devtools(&cmd("sg", &["-p", "pattern", "src/"]));
+        assert_eq!(result.decision, Decision::Ask);
+        let reason = result.reason.as_deref().expect("sg ask should explain why");
+        assert!(reason.contains("ambiguous"));
+        assert!(reason.contains("ast-grep run"));
+    }
+
+    #[test]
     fn test_yq_read_allows() {
         let result = check_devtools(&cmd("yq", &[".key", "file.yaml"]));
         assert_eq!(result.decision, Decision::Allow);

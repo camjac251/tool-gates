@@ -387,7 +387,7 @@ When allowed commands use legacy tools, tool-gates adds hints suggesting modern 
 | Category | Hint |
 |---|---|
 | File viewing | `cat`/`head`/`tail`/`less` -> `bat` (with line-range for head/tail; `tail -f` skipped) |
-| Code search | `grep` -> `sg` for code patterns or `rg` for text. `rg` on code paths -> Probe / ChunkHound / Serena / `sg` per the system-prompt rule, routed by pattern shape (identifier / structural / natural-language / -A body capture) |
+| Code search | `grep` -> `ast-grep run` for structural patterns or `rg` for exact text. `rg` on code paths stays valid for exact lexical searches; structural, conceptual, inventory, and context-body shapes route to ast-grep / ChunkHound / Serena / Probe. `ast-grep outline` handles symbol/signature inventories. |
 | File find | `find -name P -type T` -> `fd -t T P .` |
 | Text processing | `sed s/.../.../ ` -> `sd`; `awk` by idiom -> `choose` (field), `jq` (sum), `rg -c` (line count), `numbat` (byte math), `jc` (row/field); `wc -l <file>` -> `rg -c '.' file` |
 | Listing & disk | `ls -la` -> `eza -la`; `du` -> `dust` (skips `-sh`); `tree` -> `eza -T`; `ps -e`/aux -> `procs` |

@@ -99,6 +99,12 @@ pub fn hint_catalog() -> &'static [HintCatalogEntry] {
             program_level: None,
         },
         HintCatalogEntry {
+            legacy: "sg",
+            modern: "ast-grep",
+            why: "Uses the supported executable name and avoids collision with the unrelated system `sg` group command.",
+            program_level: Some("sg"),
+        },
+        HintCatalogEntry {
             legacy: "ag / ack",
             modern: "rg",
             why: "Faster with a similar interface.",
@@ -281,6 +287,7 @@ pub fn get_modern_hint(cmd: &CommandInfo) -> Option<ModernHint> {
         "less" | "more" => Some(hint_less(cmd)),
         // Search & find
         "grep" => hint_grep(cmd),
+        "sg" => Some(hint_sg()),
         "ag" | "ack" => Some(hint_ag_ack(cmd)),
         "find" => Some(hint_find(cmd)),
         // Text processing
@@ -439,6 +446,14 @@ fn hint_tail(cmd: &CommandInfo) -> Option<ModernHint> {
     })
 }
 
+fn hint_sg() -> ModernHint {
+    ModernHint {
+        legacy_command: "sg",
+        modern_command: "ast-grep",
+        hint: "Use the supported executable explicitly: `ast-grep run` for one-shot structural search/rewrite, `ast-grep scan` for YAML rules, or `ast-grep outline` for symbol/signature inventory.".to_string(),
+    }
+}
+
 fn hint_grep(cmd: &CommandInfo) -> Option<ModernHint> {
     if cmd.args.is_empty() {
         return None;
@@ -467,13 +482,18 @@ fn hint_grep(cmd: &CommandInfo) -> Option<ModernHint> {
         &[]
     };
 
-    let code_search =
-        looks_like_code_pattern(pattern) || targets.iter().any(|t| is_strict_code_target(t));
-    if code_search {
-        let has_context = cmd
-            .args
-            .iter()
-            .any(|a| a.starts_with("-A") || a.starts_with("-B") || a.starts_with("-C"));
+    let has_context = cmd
+        .args
+        .iter()
+        .any(|a| a.starts_with("-A") || a.starts_with("-B") || a.starts_with("-C"));
+    let targets_code = targets.iter().any(|t| is_strict_code_target(t));
+    let needs_typed_search = looks_like_symbol_inventory_pattern(pattern)
+        || looks_like_code_pattern(pattern)
+        || pattern.contains('(')
+        || pattern.contains('{')
+        || is_natural_language_shape(pattern)
+        || (targets_code && has_context);
+    if needs_typed_search {
         return Some(ModernHint {
             legacy_command: "grep",
             modern_command: "ast-grep",
@@ -486,11 +506,6 @@ fn hint_grep(cmd: &CommandInfo) -> Option<ModernHint> {
         .args
         .iter()
         .any(|a| a == "-r" || a == "-R" || a == "--recursive");
-    let has_context = cmd
-        .args
-        .iter()
-        .any(|a| a.starts_with("-A") || a.starts_with("-B") || a.starts_with("-C"));
-
     let hint = if has_recursive {
         "Use `rg <pattern>` instead of `grep -r`. Recursive by default, respects .gitignore, faster."
     } else if has_context {
@@ -1112,26 +1127,49 @@ fn is_natural_language_shape(pattern: &str) -> bool {
     })
 }
 
+fn looks_like_symbol_inventory_pattern(pattern: &str) -> bool {
+    let trimmed = pattern
+        .trim()
+        .trim_start_matches('^')
+        .trim_start_matches(['(', '?', ':']);
+    [
+        "def ",
+        "async def ",
+        "class ",
+        "function ",
+        "interface ",
+        "struct ",
+        "enum ",
+        "fn ",
+    ]
+    .iter()
+    .any(|prefix| trimmed.starts_with(prefix))
+}
+
 /// Build the right hint for a code-targeted grep/rg invocation, routing to
 /// Probe/ChunkHound/Serena/ast-grep per /etc/claude-code/system-prompt.md.
 fn code_search_hint_text(pattern: &str, has_context_flag: bool) -> String {
+    if looks_like_symbol_inventory_pattern(pattern) {
+        return "Use `ast-grep outline --items structure --view signatures <path>` for symbol/signature inventory. Use `ast-grep run -p '<pattern>' <path>` when matching a specific declaration shape.".to_string();
+    }
+
     if has_context_flag {
-        return "Use `ast-grep -p 'pattern' src/` instead of `rg -A`/`-B`/`-C` for capturing function/class bodies. AST-aware matching gives exact boundaries.".to_string();
+        return "Use `ast-grep run -p '<pattern>' src/` instead of `rg -A`/`-B`/`-C` for syntax-shaped function/class bodies. AST-aware matching gives exact boundaries.".to_string();
     }
 
     if is_identifier_shape(pattern) {
-        return "Don't `rg` on code. For exact symbol lookup use `mcp__probe__search_code` with `exact: true`; for navigation (definitions, references), `mcp__serena__find_symbol`.".to_string();
+        return "Exact lexical `rg` searches in code are valid when strings and comments are intentionally in scope. For symbol semantics use `mcp__probe__search_code` with `exact: true` or `mcp__serena__find_symbol` for definitions/references.".to_string();
     }
 
     if looks_like_code_pattern(pattern) || pattern.contains('(') || pattern.contains('{') {
-        return "Don't `rg` on code. For structural patterns use `ast-grep -p '<pattern>' src/` (AST-aware, supports `$VAR` metavars).".to_string();
+        return "Use `ast-grep run -p '<pattern>' src/` for structural code patterns. It is AST-aware and supports `$VAR` metavariables.".to_string();
     }
 
     if is_natural_language_shape(pattern) {
-        return "Don't `rg` on code. For conceptual queries use `mcp__chunkhound__search` (`type: \"semantic\"`); `code_research` for cross-file flows.".to_string();
+        return "Use `mcp__chunkhound__search` (`type: \"semantic\"`) for conceptual code queries and `code_research` for cross-file flows.".to_string();
     }
 
-    "Don't `rg` on code. Use `mcp__probe__search_code` (known terms), `mcp__chunkhound__search` (conceptual), `mcp__serena__find_symbol` (symbols), or `ast-grep -p` (structural). `rg` is for non-code text only.".to_string()
+    "Use exact lexical `rg` when strings/comments are intentionally in scope, Probe for known terms, ChunkHound for concepts, Serena for symbols, or `ast-grep run -p` for structural patterns.".to_string()
 }
 
 fn hint_rg_on_code(cmd: &CommandInfo) -> Option<ModernHint> {
@@ -1160,10 +1198,9 @@ fn hint_rg_on_code(cmd: &CommandInfo) -> Option<ModernHint> {
         &[][..]
     };
 
-    // Fire when any target is a code file or code directory. Pattern-only
-    // detection (e.g. searching for `function foo` in any path) routes through
-    // hint_grep already; here we focus on the target check that matches the
-    // strict "NEVER use rg on code files" rule.
+    // Only reroute code searches when their shape calls for a semantic or
+    // structural tool. Exact lexical searches remain valid even on code paths
+    // when strings and comments are intentionally in scope.
     let targets_code = targets.iter().any(|t| is_strict_code_target(t));
     if !targets_code {
         return None;
@@ -1178,6 +1215,16 @@ fn hint_rg_on_code(cmd: &CommandInfo) -> Option<ModernHint> {
             || (s.starts_with("-B") && s.len() > 2 && s[2..].chars().all(|c| c.is_ascii_digit()))
             || (s.starts_with("-C") && s.len() > 2 && s[2..].chars().all(|c| c.is_ascii_digit()))
     });
+
+    let needs_typed_search = has_context_flag
+        || looks_like_symbol_inventory_pattern(pattern)
+        || looks_like_code_pattern(pattern)
+        || pattern.contains('(')
+        || pattern.contains('{')
+        || is_natural_language_shape(pattern);
+    if !needs_typed_search {
+        return None;
+    }
 
     Some(ModernHint {
         legacy_command: "rg",
@@ -1547,6 +1594,15 @@ mod tests {
     }
 
     #[test]
+    fn test_sg_hint_uses_supported_ast_grep_surfaces() {
+        let hint = hint_sg();
+        assert_eq!(hint.modern_command, "ast-grep");
+        assert!(hint.hint.contains("ast-grep run"));
+        assert!(hint.hint.contains("ast-grep scan"));
+        assert!(hint.hint.contains("ast-grep outline"));
+    }
+
+    #[test]
     fn test_grep_code_hint_prefers_ast_grep() {
         let hint = hint_grep(&cmd("grep", &["-r", "handleAuth(", "src/"]));
         assert!(hint.is_some());
@@ -1554,10 +1610,19 @@ mod tests {
         assert_eq!(hint.modern_command, "ast-grep");
         // Pattern has `(` so routes to structural hint mentioning ast-grep + metavars
         assert!(
-            hint.hint.contains("ast-grep -p"),
+            hint.hint.contains("ast-grep run -p"),
             "expected ast-grep suggestion, got: {}",
             hint.hint
         );
+    }
+
+    #[test]
+    fn test_grep_exact_text_on_code_prefers_rg() {
+        let hint = hint_grep(&cmd("grep", &["-r", "REDIS_URL", "src/"]));
+        assert!(hint.is_some());
+        let hint = hint.unwrap();
+        assert_eq!(hint.modern_command, "rg");
+        assert!(hint.hint.contains("Use `rg <pattern>`"));
     }
 
     #[test]
@@ -1718,7 +1783,7 @@ mod tests {
         let hint = hint.unwrap();
         assert_eq!(hint.modern_command, "ast-grep");
         assert!(
-            hint.hint.contains("ast-grep -p"),
+            hint.hint.contains("ast-grep run -p"),
             "expected ast-grep body-capture hint, got: {}",
             hint.hint
         );
@@ -1732,21 +1797,10 @@ mod tests {
     }
 
     #[test]
-    fn test_rg_identifier_on_code_suggests_probe() {
-        // Bare identifier on a code dir routes to probe + serena
+    fn test_rg_identifier_on_code_allows_exact_lexical_search() {
+        // Exact lexical searches remain valid when strings/comments are in scope.
         let hint = hint_rg_on_code(&cmd("rg", &["getUserById", "src/"]));
-        assert!(hint.is_some());
-        let hint = hint.unwrap();
-        assert!(
-            hint.hint.contains("mcp__probe__search_code"),
-            "expected probe suggestion, got: {}",
-            hint.hint
-        );
-        assert!(
-            hint.hint.contains("mcp__serena__find_symbol"),
-            "expected serena suggestion, got: {}",
-            hint.hint
-        );
+        assert!(hint.is_none());
     }
 
     #[test]
@@ -1788,7 +1842,9 @@ mod tests {
         // Single .rs file is a code target
         let hint = hint_rg_on_code(&cmd("rg", &["fn main", "src/main.rs"]));
         assert!(hint.is_some());
-        assert!(hint.unwrap().hint.contains("ast-grep -p"));
+        let hint = hint.unwrap();
+        assert!(hint.hint.contains("ast-grep outline"));
+        assert!(hint.hint.contains("ast-grep run -p"));
     }
 
     #[test]

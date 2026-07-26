@@ -84,13 +84,19 @@ accept_edits_auto_allow = true
 
 [[programs]]
 name = "ast-grep"
-aliases = ["sg"]
 unknown_action = "allow" # Default is search mode
 
 [[programs.ask]]
 reason = "ast-grep -U: applies the rewrite pattern across matched files. Default ast-grep is search-only; `-U`/`--update-all` writes the changes."
 if_flags_any = ["-U", "--update-all"]
 accept_edits_auto_allow = true
+
+[[programs]]
+name = "sg"
+unknown_action = "ask"
+
+[[programs.ask]]
+reason = "`sg` is ambiguous: ast-grep deprecated that executable name, while some systems provide an unrelated group-switching command. Use `ast-grep run` or `ast-grep scan` explicitly."
 
 # =============================================================================
 # YQ (read safe, -i/--inplace asks)

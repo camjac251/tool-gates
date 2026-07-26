@@ -1,4 +1,4 @@
-// tool-gates-generation-fingerprint: 0e1f786d05298b2c:102d2f701a0adc2f
+// tool-gates-generation-fingerprint: 5e34339314364a12:a2f2cd48d2ec2797
 //! Auto-generated from rules/*.toml files.
 //! DO NOT EDIT - changes will be overwritten by build.rs
 
@@ -6041,7 +6041,7 @@ pub fn check_sad_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 /// Check ast-grep commands declaratively
 pub fn check_ast_grep_declarative(cmd: &CommandInfo) -> Option<GateResult> {
-    if !["ast-grep", "sg"].contains(&cmd.program.as_str()) {
+    if !["ast-grep"].contains(&cmd.program.as_str()) {
         return None;
     }
 
@@ -6069,6 +6069,31 @@ pub fn check_ast_grep_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     Some(GateResult::allow())
+}
+
+// === SG (from devtools.toml) ===
+
+/// Check sg commands declaratively
+pub fn check_sg_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["sg"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+
+    // Bare ask rule - any sg invocation asks
+    Some(GateResult::ask(
+        "sg: `sg` is ambiguous: ast-grep deprecated that executable name, while some systems provide an unrelated group-switching command. Use `ast-grep run` or `ast-grep scan` explicitly.",
+    ))
 }
 
 // === YQ (from devtools.toml) ===
@@ -14311,6 +14336,9 @@ pub fn check_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if let Some(result) = check_ast_grep_declarative(cmd) {
         return Some(result);
     }
+    if let Some(result) = check_sg_declarative(cmd) {
+        return Some(result);
+    }
     if let Some(result) = check_yq_declarative(cmd) {
         return Some(result);
     }
@@ -15072,7 +15100,8 @@ pub fn check_devtools_gate(cmd: &CommandInfo) -> GateResult {
         "sd" => GateResult::skip(),                    // custom handler: check_sd
         "awk" | "gawk" | "mawk" => GateResult::skip(), // custom handler: check_awk
         "sad" => check_sad_declarative(cmd).unwrap_or_else(GateResult::skip),
-        "ast-grep" | "sg" => check_ast_grep_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "ast-grep" => check_ast_grep_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "sg" => check_sg_declarative(cmd).unwrap_or_else(GateResult::skip),
         "yq" => check_yq_declarative(cmd).unwrap_or_else(GateResult::skip),
         "jq" => check_jq_declarative(cmd).unwrap_or_else(GateResult::skip),
         "semgrep" => check_semgrep_declarative(cmd).unwrap_or_else(GateResult::skip),
@@ -15625,7 +15654,6 @@ pub static FILE_EDITING_PROGRAMS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "sd",
         "sed",
         "semgrep",
-        "sg",
         "shfmt",
         "standardrb",
         "stylelint",
@@ -15768,10 +15796,6 @@ pub fn is_file_editing_command(cmd: &CommandInfo) -> bool {
             .args
             .iter()
             .any(|a| ["--autofix", "--fix"].contains(&a.as_str())),
-        "sg" => cmd
-            .args
-            .iter()
-            .any(|a| ["-U", "--update-all"].contains(&a.as_str())),
         "shfmt" => cmd.args.iter().any(|a| ["-w"].contains(&a.as_str())),
         "standardrb" => cmd
             .args
