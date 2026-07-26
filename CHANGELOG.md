@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.32.2](https://github.com/camjac251/tool-gates/compare/v1.32.1...v1.32.2) - 2026-07-26
+
+### Fixed
+
+- *(hints)* recommend canonical ast-grep executable
+- allow full-stream ripgrep counts
+
+### Other
+
+- migrate GitHub App tokens to client IDs
+- reconcile recent releases through v1.32.1
+- redesign the documentation experience
+- keep Markdown prose unwrapped
+
 ## [1.32.1](https://github.com/camjac251/tool-gates/compare/v1.32.0...v1.32.1) - 2026-07-13
 
 ### Fixed
