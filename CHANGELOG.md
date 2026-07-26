@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.32.3](https://github.com/camjac251/tool-gates/compare/v1.32.2...v1.32.3) - 2026-07-26
+
+### Fixed
+
+- apply guardrails to executable shell strings
+- *(devtools)* distinguish ast-grep from system sg
+
 ## [1.32.2](https://github.com/camjac251/tool-gates/compare/v1.32.1...v1.32.2) - 2026-07-26
 
 ### Fixed
