@@ -20,6 +20,13 @@ use crate::generated::rules::{SAFE_COMMANDS, check_conditional_allow, check_safe
 use crate::models::{CommandInfo, Decision, GateResult};
 use crate::parser::extract_commands;
 
+fn is_shell_command_flag(arg: &str) -> bool {
+    arg == "-c"
+        || (arg.starts_with('-')
+            && !arg.starts_with("--")
+            && arg[1..].chars().any(|flag| flag == 'c'))
+}
+
 /// Check if a shell -c command is safe by parsing and checking the inner script.
 /// Handles: bash -c 'script', sh -c 'script', zsh -c 'script'
 fn check_shell_c(cmd: &CommandInfo) -> Option<GateResult> {
@@ -34,7 +41,7 @@ fn check_shell_c(cmd: &CommandInfo) -> Option<GateResult> {
     let mut script: Option<&str> = None;
     let mut i = 0;
     while i < args.len() {
-        if args[i] == "-c" {
+        if is_shell_command_flag(&args[i]) {
             if i + 1 < args.len() {
                 script = Some(&args[i + 1]);
             }
@@ -134,7 +141,7 @@ fn check_xargs(cmd: &CommandInfo) -> GateResult {
     // Case 2: Shell with -c (xargs sh -c 'script')
     if matches!(target_base, "sh" | "bash" | "zsh") {
         // Look for -c flag and script
-        if idx + 2 < args.len() && args[idx + 1] == "-c" {
+        if idx + 2 < args.len() && is_shell_command_flag(&args[idx + 1]) {
             let script = &args[idx + 2];
             return check_shell_script_safety(script);
         }
@@ -324,6 +331,12 @@ mod tests {
     #[test]
     fn test_bash_c_safe_script_allows() {
         let result = check_basics(&cmd("bash", &["-c", "echo hello && ls"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_bash_lc_safe_script_allows() {
+        let result = check_basics(&cmd("bash", &["-lc", "echo hello && ls"]));
         assert_eq!(result.decision, Decision::Allow);
     }
 

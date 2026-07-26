@@ -13,12 +13,11 @@ use crate::models::{
     CommandInfo, Decision, HookOutput, PermissionDecision, is_auto_mode, is_plan_mode,
 };
 use crate::package_json::parse_script_invocation;
-use crate::parser::{extract_commands, neutralize_heredoc_bodies};
+use crate::parser::extract_commands;
 use crate::settings::{Settings, SettingsDecision};
 
 use crate::accept_edits::should_auto_allow_in_accept_edits;
-use crate::pipe_caps::check_hard_deny_patterns;
-use crate::security_floor::check_raw_string_patterns;
+use crate::raw_floor::check_raw_floor;
 use crate::task_expansion::{check_mise_task, check_package_script};
 
 // Re-export shims so external call sites (main.rs, permission_request.rs,
@@ -42,6 +41,23 @@ pub fn check_command(command_string: &str) -> HookOutput {
     check_command_for_session(command_string, "")
 }
 
+/// Run the raw-string safety floor shared by top-level commands and quoted
+/// scripts passed to local shell wrappers such as `bash -c`.
+///
+/// Returns `Some` only when a hard deny or raw-string ask applies. Callers can
+/// continue into parsed gate evaluation when this returns `None`.
+pub(crate) fn check_raw_security_floor(command_string: &str) -> Option<HookOutput> {
+    let checks = check_raw_floor(command_string);
+    if let Some(output) = checks.hard_deny {
+        return Some(output);
+    }
+
+    // Check for patterns at the raw string level. The hard-ask floor must be
+    // force-promptable on Antigravity (force_ask), never suppressible by an
+    // "Always Allow" grant; soft asks stay overridable.
+    checks.hard_ask.map(HookOutput::forced).or(checks.soft_ask)
+}
+
 /// Check a bash command with session-scoped hint dedup.
 ///
 /// When `session_id` is non-empty, each hint fires at most once per session.
@@ -50,25 +66,7 @@ pub fn check_command_for_session(command_string: &str, session_id: &str) -> Hook
         return HookOutput::no_opinion();
     }
 
-    // Blank quoted-heredoc body text before raw-string scanning. The body is
-    // stdin data, not executed shell, so patterns like `| head` in a commit
-    // message must not trip the deny rules. Unquoted bodies are left intact
-    // (their `$(...)` / backtick substitutions still execute).
-    let scan_owned = neutralize_heredoc_bodies(command_string);
-    let scan_string = scan_owned.as_deref().unwrap_or(command_string);
-
-    // Hard-deny raw-string patterns (e.g. `| head` / `| tail` pipes) come first:
-    // they have no legitimate use case and never fall through to ask/allow.
-    if let Some(output) = check_hard_deny_patterns(scan_string) {
-        return output;
-    }
-
-    // Check for patterns at the raw string level
-    // These require approval regardless of how they're parsed
-    let (hard_ask, soft_ask) = check_raw_string_patterns(scan_string);
-    // The hard-ask floor must be force-promptable on Antigravity (force_ask),
-    // never suppressible by an "Always Allow" grant; soft asks stay overridable.
-    if let Some(result) = hard_ask.map(HookOutput::forced).or(soft_ask) {
+    if let Some(result) = check_raw_security_floor(command_string) {
         return result;
     }
 
@@ -386,16 +384,13 @@ fn check_command_with_settings_and_session_inner(
     // (pipe-to-shell, eval) have no legitimate use case and belong in the
     // deterministic safety floor, so promote them to deny instead of ask.
     //
-    // Blank quoted-heredoc body text first: it is stdin data, not executed
-    // shell. Unquoted bodies stay intact so their substitutions still scan.
-    let scan_owned = neutralize_heredoc_bodies(command_string);
-    let scan_string = scan_owned.as_deref().unwrap_or(command_string);
-    if let Some(output) = check_hard_deny_patterns(scan_string) {
+    let raw_checks = check_raw_floor(command_string);
+    if let Some(output) = raw_checks.hard_deny {
         return output;
     }
     // hard-ask is force-promptable (force_ask on Antigravity); soft asks stay overridable.
-    let (hard_ask, soft_ask) = check_raw_string_patterns(scan_string);
-    if let Some(result) = hard_ask.map(HookOutput::forced) {
+    let soft_ask = raw_checks.soft_ask;
+    if let Some(result) = raw_checks.hard_ask.map(HookOutput::forced) {
         if is_auto_mode(permission_mode) {
             return HookOutput::deny(
                 &result

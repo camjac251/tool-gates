@@ -234,7 +234,7 @@ name = "Basic Utilities"
 description = "Safe read-only shell commands"
 priority = 100
 lede = "The default-safe list. Unlike other gates, basics doesn't define per-program rules: it's one big <code>safe_commands = […]</code> array of commands that are always allowed without prompting. Lowest priority (100) so other gates' specific rules win first."
-note = """<b>Three custom handlers extend the list.</b> <code>check_xargs</code> allows <code>xargs</code> only when the target command is itself in <code>safe_commands</code>; otherwise asks. <code>check_shell_c</code> parses <code>bash -c '…'</code> / <code>sh -c '…'</code> / <code>zsh -c '…'</code> and checks every command in the inner script. <code>check_command_builtin</code> handles <code>command -v</code> / <code>-V</code> and evaluates other invocations through the gate engine."""
+note = """<b>Three custom handlers extend the list.</b> <code>check_xargs</code> allows <code>xargs</code> only when the target command is itself in <code>safe_commands</code>; otherwise asks. <code>check_shell_c</code> parses <code>bash -c/-lc '…'</code> / <code>sh -c '…'</code> / <code>zsh -c '…'</code> and runs the raw security floor, then checks every command in the inner script. <code>check_command_builtin</code> handles <code>command -v</code> / <code>-V</code> and evaluates other invocations through the gate engine."""
 behavior_tags = ["structure <b>safe_commands</b> array", "~180 commands"]
 
 [meta.card_titles]
@@ -468,7 +468,7 @@ commands = [
 [[custom_handlers]]
 program = "xargs"
 handler = "check_xargs"
-description = "Allow xargs only when target command is in safe_commands list, also handles xargs sh -c 'script'"
+description = "Allow xargs only when target command is in safe_commands list, also applies the raw security floor to xargs sh -c 'script'"
 
 # bash/sh/zsh -c 'script' needs custom handling to parse and check the inner script
 [[custom_handlers]]
@@ -479,14 +479,14 @@ description = "command -v/-V always allowed (read-only lookup); command <cmd> ev
 [[custom_handlers]]
 program = "bash"
 handler = "check_shell_c"
-description = "Parse bash -c 'script' and check each command in script is safe"
+description = "Apply the raw security floor to bash -c/-lc 'script', then check each inner command"
 
 [[custom_handlers]]
 program = "sh"
 handler = "check_shell_c"
-description = "Parse sh -c 'script' and check each command in script is safe"
+description = "Apply the raw security floor to sh -c 'script', then check each inner command"
 
 [[custom_handlers]]
 program = "zsh"
 handler = "check_shell_c"
-description = "Parse zsh -c 'script' and check each command in script is safe"
+description = "Apply the raw security floor to zsh -c 'script', then check each inner command"

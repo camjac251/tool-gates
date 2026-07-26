@@ -465,9 +465,12 @@ fn hint_grep(cmd: &CommandInfo) -> Option<ModernHint> {
     while let Some(arg) = iter.next() {
         match arg.as_str() {
             // Flags with a following value
-            "-e" | "--regexp" | "-f" | "--file" => {
+            "-e" | "--regexp" | "-f" | "--file" | "-A" | "--after-context" | "-B"
+            | "--before-context" | "-C" | "--context" => {
                 if let Some(value) = iter.next() {
-                    non_flag_args.push(value.as_str());
+                    if matches!(arg.as_str(), "-e" | "--regexp" | "-f" | "--file") {
+                        non_flag_args.push(value.as_str());
+                    }
                 }
             }
             _ if !arg.starts_with('-') => non_flag_args.push(arg.as_str()),
@@ -476,23 +479,23 @@ fn hint_grep(cmd: &CommandInfo) -> Option<ModernHint> {
     }
 
     let pattern = non_flag_args.first().copied().unwrap_or("");
-    let targets = if non_flag_args.len() > 1 {
-        &non_flag_args[1..]
-    } else {
-        &[]
-    };
 
-    let has_context = cmd
-        .args
-        .iter()
-        .any(|a| a.starts_with("-A") || a.starts_with("-B") || a.starts_with("-C"));
-    let targets_code = targets.iter().any(|t| is_strict_code_target(t));
+    let has_context = cmd.args.iter().any(|a| {
+        a.starts_with("-A")
+            || a.starts_with("-B")
+            || a.starts_with("-C")
+            || a == "--after-context"
+            || a.starts_with("--after-context=")
+            || a == "--before-context"
+            || a.starts_with("--before-context=")
+            || a == "--context"
+            || a.starts_with("--context=")
+    });
     let needs_typed_search = looks_like_symbol_inventory_pattern(pattern)
         || looks_like_code_pattern(pattern)
         || pattern.contains('(')
         || pattern.contains('{')
-        || is_natural_language_shape(pattern)
-        || (targets_code && has_context);
+        || is_natural_language_shape(pattern);
     if needs_typed_search {
         return Some(ModernHint {
             legacy_command: "grep",
@@ -1182,7 +1185,8 @@ fn hint_rg_on_code(cmd: &CommandInfo) -> Option<ModernHint> {
     let mut iter = cmd.args.iter();
     while let Some(arg) = iter.next() {
         match arg.as_str() {
-            "-e" | "--regexp" | "-f" | "--file" | "-g" | "--glob" | "-t" | "--type" => {
+            "-e" | "--regexp" | "-f" | "--file" | "-g" | "--glob" | "-t" | "--type" | "-A"
+            | "--after-context" | "-B" | "--before-context" | "-C" | "--context" => {
                 // Skip the flag's value.
                 iter.next();
             }
@@ -1211,13 +1215,18 @@ fn hint_rg_on_code(cmd: &CommandInfo) -> Option<ModernHint> {
         s == "-A"
             || s == "-B"
             || s == "-C"
+            || s == "--after-context"
+            || s.starts_with("--after-context=")
+            || s == "--before-context"
+            || s.starts_with("--before-context=")
+            || s == "--context"
+            || s.starts_with("--context=")
             || (s.starts_with("-A") && s.len() > 2 && s[2..].chars().all(|c| c.is_ascii_digit()))
             || (s.starts_with("-B") && s.len() > 2 && s[2..].chars().all(|c| c.is_ascii_digit()))
             || (s.starts_with("-C") && s.len() > 2 && s[2..].chars().all(|c| c.is_ascii_digit()))
     });
 
-    let needs_typed_search = has_context_flag
-        || looks_like_symbol_inventory_pattern(pattern)
+    let needs_typed_search = looks_like_symbol_inventory_pattern(pattern)
         || looks_like_code_pattern(pattern)
         || pattern.contains('(')
         || pattern.contains('{')
@@ -1626,6 +1635,15 @@ mod tests {
     }
 
     #[test]
+    fn test_grep_exact_text_context_on_code_prefers_rg() {
+        let hint = hint_grep(&cmd("grep", &["-A5", "REDIS_URL", "src/"]));
+        assert!(hint.is_some());
+        let hint = hint.unwrap();
+        assert_eq!(hint.modern_command, "rg");
+        assert!(hint.hint.contains("Same -A/-B/-C flags"));
+    }
+
+    #[test]
     fn test_find_hint() {
         let hint = hint_find(&cmd("find", &[".", "-name", "*.rs"]));
         assert!(hint.hint.contains("fd *.rs ."));
@@ -1790,6 +1808,13 @@ mod tests {
     }
 
     #[test]
+    fn test_rg_body_capture_hint_with_separate_context_value() {
+        let hint = hint_rg_on_code(&cmd("rg", &["-A", "20", "function handleAuth", "src/"]));
+        assert!(hint.is_some());
+        assert!(hint.unwrap().hint.contains("ast-grep run -p"));
+    }
+
+    #[test]
     fn test_rg_context_on_logs_no_hint() {
         // rg -A on non-code targets is fine
         let hint = hint_rg_on_code(&cmd("rg", &["-A5", "ERROR", "logs/"]));
@@ -1800,6 +1825,14 @@ mod tests {
     fn test_rg_identifier_on_code_allows_exact_lexical_search() {
         // Exact lexical searches remain valid when strings/comments are in scope.
         let hint = hint_rg_on_code(&cmd("rg", &["getUserById", "src/"]));
+        assert!(hint.is_none());
+    }
+
+    #[test]
+    fn test_rg_identifier_context_on_code_allows_exact_lexical_search() {
+        // Context around an exact identifier is still a lexical search, not
+        // syntax-shaped body capture.
+        let hint = hint_rg_on_code(&cmd("rg", &["-C", "3", "getUserById", "src/"]));
         assert!(hint.is_none());
     }
 

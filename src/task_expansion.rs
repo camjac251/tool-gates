@@ -8,10 +8,9 @@ use crate::models::{Decision, HookOutput, PermissionDecision, is_auto_mode};
 use crate::package_json::{
     find_package_json, get_script_command, load_package_json, parse_script_invocation,
 };
-use crate::parser::{extract_commands, neutralize_heredoc_bodies};
-use crate::pipe_caps::check_hard_deny_patterns;
+use crate::parser::extract_commands;
+use crate::raw_floor::check_raw_floor;
 use crate::router::gate_ask_output_for_mode;
-use crate::security_floor::check_raw_string_patterns;
 use crate::settings::Settings;
 
 /// Check a mise task by expanding it to its underlying commands.
@@ -187,16 +186,12 @@ pub(crate) fn check_command_expanded(
     // hard-ask patterns promote to deny under auto mode (see
     // `check_command_with_settings_and_session` for rationale).
     //
-    // Blank quoted-heredoc body text first: it is stdin data, not executed
-    // shell. Unquoted bodies stay intact so their substitutions still scan.
-    let scan_owned = neutralize_heredoc_bodies(command_string);
-    let scan_string = scan_owned.as_deref().unwrap_or(command_string);
-    if let Some(output) = check_hard_deny_patterns(scan_string) {
+    let raw_checks = check_raw_floor(command_string);
+    if let Some(output) = raw_checks.hard_deny {
         return output;
     }
     // hard-ask is force-promptable (force_ask on Antigravity); soft asks stay overridable.
-    let (hard_ask, soft_ask) = check_raw_string_patterns(scan_string);
-    if let Some(output) = hard_ask.map(HookOutput::forced) {
+    if let Some(output) = raw_checks.hard_ask.map(HookOutput::forced) {
         if is_auto_mode(permission_mode) {
             return HookOutput::deny(
                 &output
@@ -206,7 +201,7 @@ pub(crate) fn check_command_expanded(
         }
         return output;
     }
-    if let Some(output) = soft_ask {
+    if let Some(output) = raw_checks.soft_ask {
         return output;
     }
 

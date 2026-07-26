@@ -372,7 +372,7 @@ Unlike `acceptEdits`, this fires in **all** permission modes (skipped only in pl
 
 ## Security Checks
 
-Before AST parsing, `router.rs` runs raw string checks on the command (after stripping comments). These catch patterns like pipe-to-shell (`| bash`), `eval`, `source`, `xargs rm`, destructive `find`/`fd`, dangerous command substitution, semicolon injection, and output redirection. See `check_raw_string_patterns()` in `router.rs` for the full list.
+Before AST parsing, `router.rs` runs raw string checks on the command and on scripts passed to local `bash -c`/`bash -lc`, `sh -c`, and `zsh -c` wrappers (after stripping comments). These catch patterns like pipe-to-shell (`| bash`), `eval`, `source`, `xargs rm`, destructive `find`/`fd`, dangerous command substitution, semicolon injection, and output redirection. See `check_raw_string_patterns()` in `router.rs` for the full list.
 
 A separate pre-parse pass (`check_hard_deny_patterns()` in `router.rs`) handles feature-toggleable hard-deny patterns. Today that's `| head` / `| tail` truncation pipes (plus `sed -n '1,Np'` / `awk 'NR<=N'` first-N slices and `| rg .` catch-all filters), gated on `features.head_tail_pipe_block` and hard-denied for every producer (the producer only selects the deny-message wording). Runs before `check_raw_string_patterns` in all three entry points (`check_command_for_session`, `check_command_with_settings_and_session`, `check_command_expanded`).
 
