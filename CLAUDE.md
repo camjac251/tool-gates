@@ -724,6 +724,7 @@ Carve-outs that always pass through:
 
 - Streaming `| tail -f` / `| tail -F` (the Monitor tool's log-watching idiom)
 - Top-N rankings `... | sort ... | head -N` / `tail -N` (sort consumes all input, so the slice is the selection, not a cap)
+- Full-stream count output with `... | rg -c .`, `rg --count .`, or `rg --count-matches .`; combining count mode with `-m` / `--max-count` remains blocked
 - `head`/`tail` inside `$(...)` / backticks (a programmatic pick feeding a variable)
 - Quoted literals like `rg '| head' file.txt` where `| head` is a search pattern, not a shell pipe
 - No upstream pipe, e.g. `head file.txt` or `tail -n 20 README.md`

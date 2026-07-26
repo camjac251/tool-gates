@@ -813,6 +813,48 @@ mod tests {
         }
 
         #[test]
+        fn test_rg_full_count_not_truncation() {
+            for cmd in [
+                "mytool list | rg -c .",
+                "mytool list | rg -c '.'",
+                "mytool list | rg --count \".*\"",
+                "mytool list | rg --count-matches .",
+            ] {
+                let result = check_command(cmd);
+                let reason = get_reason(&result);
+                let denied_truncation =
+                    get_decision(&result) == "deny" && reason.contains("truncate");
+
+                assert!(
+                    !denied_truncation,
+                    "full-stream count must not hit the truncation backstop: {cmd}\ngot: {reason}"
+                );
+            }
+        }
+
+        #[test]
+        fn test_rg_count_with_max_count_still_denies() {
+            for cmd in [
+                "mytool list | rg -m 5 .",
+                "mytool list | rg -c -m 5 .",
+                "mytool list | rg -m 5 -c .",
+                "mytool list | rg --count --max-count 5 .",
+            ] {
+                let result = check_command(cmd);
+
+                assert_eq!(
+                    get_decision(&result),
+                    "deny",
+                    "maximum-count catch-all must remain denied: {cmd}"
+                );
+                assert!(
+                    get_reason(&result).contains("truncate"),
+                    "expected truncation rationale for: {cmd}"
+                );
+            }
+        }
+
+        #[test]
         fn test_rg_real_filter_not_truncation() {
             // A real content filter is NOT a fake counter: `rg 'pattern'` keeps
             // only matching lines, the sanctioned alternative. Must never hit the

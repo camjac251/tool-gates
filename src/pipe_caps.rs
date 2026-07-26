@@ -38,14 +38,26 @@ static SED_AWK_TRUNC_RE: LazyLock<Regex> = LazyLock::new(|| {
 /// of head/tail. The agent pipes to rg with a match-anything pattern purely to
 /// cap volume, which silently drops everything past the cap. Matches ONLY the
 /// catch-all forms (`.`, `.*`, `''`, `""`, `'.'`, `'.*'`) after optional flags
-/// (incl. `-m N`), anchored to the end of the pipe segment. A real content
-/// filter like `rg 'FAILED'`, `rg error`, or `rg -m 5 '.rs'` is NOT matched, so
-/// legitimate filtering is untouched; only the no-op pattern is caught.
+/// (incl. `-m N`), anchored to the end of the pipe segment. Pure `-c` /
+/// `--count` output is exempted below because it consumes the complete stream.
+/// A real content filter like `rg 'FAILED'`, `rg error`, or `rg -m 5 '.rs'` is
+/// NOT matched, so legitimate filtering is untouched; only the no-op pattern
+/// is caught.
 static RG_COUNTER_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r#"\|&?\s*rg\s+(?:-{1,2}[A-Za-z-]+\s+(?:\d+\s+)?)*(?:\.|\.\*|''|""|'\.'|'\.\*'|"\."|"\.\*")\s*(?:$|[|;&])"#,
     )
     .expect("RG_COUNTER_RE must compile")
+});
+
+/// Full-stream count output is aggregation, not truncation. This exception is
+/// intentionally limited to a lone count flag followed by a catch-all pattern.
+/// Combining count output with `-m` / `--max-count` remains denied.
+static RG_FULL_COUNT_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r#"^\|&?\s*rg\s+(?:-c|--count(?:-matches)?)\s+(?:\.|\.\*|''|""|'\.'|'\.\*'|"\."|"\.\*")\s*(?:$|[|;&])"#,
+    )
+    .expect("RG_FULL_COUNT_RE must compile")
 });
 
 /// Hard-deny raw-string patterns: no ask tier, no settings override, no mode carve-out.
@@ -314,11 +326,15 @@ fn check_head_tail_pipe(command_string: &str) -> Option<HookOutput> {
     }
 
     // Backstop: `| rg .` / `| rg -m N .` bare-catch-all fake filter, denied for
-    // every producer (mirrors head/tail). Scan `stripped` because the
-    // catch-all pattern may be quoted (`rg ''`); the offset is valid in
-    // `unquoted` too (length-preserving strip). A real `rg 'pattern'` content
-    // filter does not match RG_COUNTER_RE, so legitimate filtering passes.
+    // every producer (mirrors head/tail). Scan `stripped` because the catch-all
+    // pattern may be quoted (`rg ''`); the offset is valid in `unquoted` too
+    // (length-preserving strip). Pure count output consumes the entire stream
+    // and is exempted. A real `rg 'pattern'` content filter does not match
+    // RG_COUNTER_RE, so legitimate filtering passes.
     for cap in RG_COUNTER_RE.find_iter(&stripped) {
+        if RG_FULL_COUNT_RE.is_match(cap.as_str()) {
+            continue;
+        }
         let offset = cap.start();
         // Offset is from `stripped`; skip if it does not map to a valid char
         // boundary in `unquoted` (multibyte-in-quotes divergence).
