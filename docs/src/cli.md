@@ -93,7 +93,7 @@
     </thead>
     <tbody>
       <tr><td><code>tool-gates doctor</code></td><td>Verify config, hook installation, cache files, and flag legacy <code>bash-gates</code> remnants. <a href="doctor.html">More on the doctor page</a>.</td></tr>
-      <tr><td><code>tool-gates --tools-status</code></td><td>Print which modern CLI tools (bat, rg, fd, sg, etc.) are detected on PATH. The hint engine uses this cache.</td></tr>
+      <tr><td><code>tool-gates --tools-status</code></td><td>Print which modern CLI tools (bat, rg, fd, ast-grep, etc.) are detected on PATH. The hint engine uses this cache.</td></tr>
       <tr><td><code>tool-gates --refresh-tools</code></td><td>Re-scan the system for modern CLI tools and rewrite <code>~/.cache/tool-gates/available-tools.json</code>. Run after installing new tools.</td></tr>
       <tr><td><code>tool-gates --version</code></td><td>Print the version.</td></tr>
       <tr><td><code>tool-gates --help</code></td><td>Print the top-level help. Each subcommand also accepts <code>--help</code>.</td></tr>

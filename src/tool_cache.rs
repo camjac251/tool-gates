@@ -27,8 +27,7 @@ const MODERN_TOOLS: &[&str] = &[
     // Code search
     "rg",
     "ripgrep", // ripgrep - faster grep (may be installed as either)
-    "sg",
-    "ast-grep", // ast-grep (often invoked as sg)
+    "ast-grep",
     // File finding
     "fd",
     "fdfind", // fd is sometimes fdfind on Debian/Ubuntu
@@ -104,12 +103,6 @@ impl ToolCache {
                     || self.tools.get("ripgrep").copied().unwrap_or(false)
                     || reprobed_positive("rg")
                     || reprobed_positive("ripgrep")
-            }
-            "sg" => {
-                self.tools.get("sg").copied().unwrap_or(false)
-                    || self.tools.get("ast-grep").copied().unwrap_or(false)
-                    || reprobed_positive("sg")
-                    || reprobed_positive("ast-grep")
             }
             "tldr" => {
                 self.tools.get("tldr").copied().unwrap_or(false)
@@ -295,7 +288,6 @@ pub fn refresh_tool(tool: &str) -> bool {
         "bat" => &["bat", "batcat"],
         "fd" => &["fd", "fdfind"],
         "rg" => &["rg", "ripgrep"],
-        "sg" => &["sg", "ast-grep"],
         "tldr" => &["tldr", "tealdeer"],
         other => &[other],
     };
@@ -419,11 +411,9 @@ mod tests {
         let mut cache = ToolCache::default();
         cache.tools.insert("batcat".to_string(), true);
         cache.tools.insert("fdfind".to_string(), true);
-        cache.tools.insert("ast-grep".to_string(), true);
 
         assert!(cache.is_available("bat"), "bat alias should work");
         assert!(cache.is_available("fd"), "fd alias should work");
-        assert!(cache.is_available("sg"), "sg alias should work");
         assert!(
             !cache.is_available("rg"),
             "missing tool should return false"

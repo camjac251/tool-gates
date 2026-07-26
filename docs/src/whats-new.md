@@ -331,12 +331,12 @@
     <div class="config-body">
       <div class="config-toml">
 <pre><span class="sec added">Added</span>
-  enforce no-rg-on-code rule, route to probe/chunkhound/serena/sg
+  enforce no-rg-on-code rule, route to probe/chunkhound/serena/ast-grep
 <span class="sec other">Other</span>
   hints catalog, systemMessage tiering, length guard</pre>
       </div>
       <div class="config-prose">
-        <p>Enforces a rule against running rg on code files. It routes searches to specialized tools such as probe, chunkhound, serena, and sg. It introduces a hints catalog, system message tiering, and a length guard.</p>
+        <p>Enforces a rule against running rg on code files. It routes searches to specialized tools such as probe, chunkhound, serena, and ast-grep. It introduces a hints catalog, system message tiering, and a length guard.</p>
       </div>
     </div>
   </div>

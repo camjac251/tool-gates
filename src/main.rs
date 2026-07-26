@@ -768,7 +768,7 @@ fn handle_bash_pre_tool_use(hook_input: &HookInput, client: Client) {
 
         // For compound commands, prepend patterns from the first program.
         // Settings patterns match the full command string as a prefix,
-        // so only the first program's pattern (e.g. sg:*) actually works
+        // so only the first program's pattern (e.g. ast-grep:*) actually works
         // to allow the entire pipeline. Per-subcommand patterns (e.g.
         // python3:*) are informational and cover standalone usage.
         if commands.len() > 1 {

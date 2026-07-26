@@ -246,7 +246,7 @@
 
 ### Added
 
-- *(hints)* enforce no-rg-on-code rule, route to probe/chunkhound/serena/sg
+- *(hints)* enforce no-rg-on-code rule, route to probe/chunkhound/serena/ast-grep
 
 ### Other
 
@@ -668,7 +668,7 @@
 - Redesign review TUI with grouped commands and multi-project support
 - Allow sd in pipe mode (no file args)
 - Add choose to safe commands
-- Prefer sg for code grep and add actionable find rewrites
+- Prefer ast-grep for code grep and add actionable find rewrites
 - Add project skills for testing and hook reference
 - Implement project list toggle with cursor navigation
 - Handle `command` builtin as transparent wrapper

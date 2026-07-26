@@ -1075,8 +1075,8 @@ mod tests {
         fn test_jsx_self_closing_not_redirection() {
             // JSX self-closing tags (/>) should not be flagged as redirection
             for cmd in [
-                r#"sg -p '<input $$PROPS />' src/"#,
-                r#"sg -p '<Input $$$PROPS />' src/"#,
+                r#"ast-grep -p '<input $$PROPS />' src/"#,
+                r#"ast-grep -p '<Input $$$PROPS />' src/"#,
                 r#"ast-grep -p '<Component foo="bar" />' src/"#,
                 r#"rg "<br />" src/"#,
             ] {
@@ -1094,7 +1094,7 @@ mod tests {
             // ast-grep metavariables ending with > (like $$> or $$$>) should not be flagged
             for cmd in [
                 r#"ast-grep -p '<Button $$>' src/ --json 2>/dev/null"#,
-                r#"sg -p '<div $$$>' src/"#,
+                r#"ast-grep -p '<div $$$>' src/"#,
                 r#"ast-grep -p '<$TAG $$>' --json src/"#,
             ] {
                 let result = check_command(cmd);

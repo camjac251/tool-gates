@@ -44,7 +44,7 @@ pub struct HintCatalogEntry {
     /// When `Some(program)`, this pairing is an unconditional substitute keyed
     /// on the bare program name, so the docs generator can surface it on that
     /// program's allow row. `None` marks flag- or subcommand-conditional
-    /// pairings (e.g. `grep` -> rg/sg by pattern shape) that the generator
+    /// pairings (e.g. `grep` -> rg/ast-grep by pattern shape) that the generator
     /// leaves off allow rows.
     pub program_level: Option<&'static str>,
 }
@@ -476,7 +476,7 @@ fn hint_grep(cmd: &CommandInfo) -> Option<ModernHint> {
             .any(|a| a.starts_with("-A") || a.starts_with("-B") || a.starts_with("-C"));
         return Some(ModernHint {
             legacy_command: "grep",
-            modern_command: "sg",
+            modern_command: "ast-grep",
             hint: code_search_hint_text(pattern, has_context),
         });
     }
@@ -1113,10 +1113,10 @@ fn is_natural_language_shape(pattern: &str) -> bool {
 }
 
 /// Build the right hint for a code-targeted grep/rg invocation, routing to
-/// Probe/ChunkHound/Serena/sg per /etc/claude-code/system-prompt.md.
+/// Probe/ChunkHound/Serena/ast-grep per /etc/claude-code/system-prompt.md.
 fn code_search_hint_text(pattern: &str, has_context_flag: bool) -> String {
     if has_context_flag {
-        return "Use `sg -p 'pattern' src/` instead of `rg -A`/`-B`/`-C` for capturing function/class bodies. AST-aware matching gives exact boundaries.".to_string();
+        return "Use `ast-grep -p 'pattern' src/` instead of `rg -A`/`-B`/`-C` for capturing function/class bodies. AST-aware matching gives exact boundaries.".to_string();
     }
 
     if is_identifier_shape(pattern) {
@@ -1124,14 +1124,14 @@ fn code_search_hint_text(pattern: &str, has_context_flag: bool) -> String {
     }
 
     if looks_like_code_pattern(pattern) || pattern.contains('(') || pattern.contains('{') {
-        return "Don't `rg` on code. For structural patterns use `sg -p '<pattern>' src/` (AST-aware, supports `$VAR` metavars).".to_string();
+        return "Don't `rg` on code. For structural patterns use `ast-grep -p '<pattern>' src/` (AST-aware, supports `$VAR` metavars).".to_string();
     }
 
     if is_natural_language_shape(pattern) {
         return "Don't `rg` on code. For conceptual queries use `mcp__chunkhound__search` (`type: \"semantic\"`); `code_research` for cross-file flows.".to_string();
     }
 
-    "Don't `rg` on code. Use `mcp__probe__search_code` (known terms), `mcp__chunkhound__search` (conceptual), `mcp__serena__find_symbol` (symbols), or `sg -p` (structural). `rg` is for non-code text only.".to_string()
+    "Don't `rg` on code. Use `mcp__probe__search_code` (known terms), `mcp__chunkhound__search` (conceptual), `mcp__serena__find_symbol` (symbols), or `ast-grep -p` (structural). `rg` is for non-code text only.".to_string()
 }
 
 fn hint_rg_on_code(cmd: &CommandInfo) -> Option<ModernHint> {
@@ -1181,7 +1181,7 @@ fn hint_rg_on_code(cmd: &CommandInfo) -> Option<ModernHint> {
 
     Some(ModernHint {
         legacy_command: "rg",
-        modern_command: "sg",
+        modern_command: "ast-grep",
         hint: code_search_hint_text(pattern, has_context_flag),
     })
 }
@@ -1547,15 +1547,15 @@ mod tests {
     }
 
     #[test]
-    fn test_grep_code_hint_prefers_sg() {
+    fn test_grep_code_hint_prefers_ast_grep() {
         let hint = hint_grep(&cmd("grep", &["-r", "handleAuth(", "src/"]));
         assert!(hint.is_some());
         let hint = hint.unwrap();
-        assert_eq!(hint.modern_command, "sg");
-        // Pattern has `(` so routes to structural hint mentioning sg + metavars
+        assert_eq!(hint.modern_command, "ast-grep");
+        // Pattern has `(` so routes to structural hint mentioning ast-grep + metavars
         assert!(
-            hint.hint.contains("sg -p"),
-            "expected sg suggestion, got: {}",
+            hint.hint.contains("ast-grep -p"),
+            "expected ast-grep suggestion, got: {}",
             hint.hint
         );
     }
@@ -1712,14 +1712,14 @@ mod tests {
 
     #[test]
     fn test_rg_body_capture_hint() {
-        // rg -A on a code dir suggests sg for body capture
+        // rg -A on a code dir suggests ast-grep for body capture
         let hint = hint_rg_on_code(&cmd("rg", &["-A20", "function handleAuth", "src/"]));
         assert!(hint.is_some());
         let hint = hint.unwrap();
-        assert_eq!(hint.modern_command, "sg");
+        assert_eq!(hint.modern_command, "ast-grep");
         assert!(
-            hint.hint.contains("sg -p"),
-            "expected sg body-capture hint, got: {}",
+            hint.hint.contains("ast-grep -p"),
+            "expected ast-grep body-capture hint, got: {}",
             hint.hint
         );
     }
@@ -1788,7 +1788,7 @@ mod tests {
         // Single .rs file is a code target
         let hint = hint_rg_on_code(&cmd("rg", &["fn main", "src/main.rs"]));
         assert!(hint.is_some());
-        assert!(hint.unwrap().hint.contains("sg -p"));
+        assert!(hint.unwrap().hint.contains("ast-grep -p"));
     }
 
     #[test]
