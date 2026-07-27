@@ -230,25 +230,22 @@ fn head_tail_message(producer: &str, segment: &str) -> String {
     let trimmed = segment.trim();
     if producer == "gh" {
         return format!(
-            "`{trimmed}` blocked. Never truncate `gh` output: it drops rows and cuts \
-             `gh api` JSON mid-array. Re-run with `gh ... --limit N` for lists or \
-             `gh api ... --jq '.[0:N]'` for JSON."
+            "`{trimmed}` blocked: this consumer-side cap truncates `gh` output and can drop rows or \
+             cut JSON. Keep the full response; if the task needs a subset, use `gh`'s native options."
         );
     }
     if BUILD_PRODUCERS.contains(&producer) {
         return format!(
-            "`{trimmed}` blocked. Never truncate `{producer}` output: the errors you need are at \
-             the end and a volume cap drops them. Re-run uncapped, or filter at a real match with \
-             `rg 'pattern'`."
+            "`{trimmed}` blocked: this consumer-side cap truncates `{producer}` output and can hide \
+             diagnostics. Run it uncapped; if the task needs matching lines, filter by a real pattern \
+             without limiting the stream."
         );
     }
     // Any other producer (ls, fd, rg, find, git log, cat, custom scripts).
     format!(
-        "`{trimmed}` blocked. Never truncate output by capping the pipe: it discards everything past \
-         the cap. Cap at the source instead (`rg -m N`, `fd --max-results N`, `git log -n N`), use \
-         Read or `bat -r START:END` for files, or re-run uncapped. Allowed: \
-         `... | sort -rn | head -N` for top-N, `tail -f` for live logs, and head/tail inside \
-         `$(...)` for a programmatic pick."
+        "`{trimmed}` blocked: a consumer-side cap truncates unseen output. If the task needs a bounded \
+         result, use the producer's native limit; otherwise run uncapped and inspect the persisted \
+         output. Use Read or a bat range for files."
     )
 }
 

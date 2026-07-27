@@ -583,6 +583,32 @@ mod tests {
         }
 
         #[test]
+        fn test_head_tail_pipe_messages_state_recovery_without_recipe_catalogs() {
+            let generic_result = check_command("ls | head -5");
+            let generic = get_reason(&generic_result);
+            assert!(generic.contains("consumer-side cap"));
+            assert!(generic.contains("producer's native limit"));
+            assert!(!generic.contains("rg -m"));
+            assert!(!generic.contains("fd --max-results"));
+            assert!(!generic.contains("sort -rn"));
+            assert!(generic.len() <= 250);
+
+            let build_result = check_command("cargo test | head -20");
+            let build = get_reason(&build_result);
+            assert!(build.contains("hide diagnostics"));
+            assert!(build.contains("uncapped"));
+            assert!(!build.contains("rg 'pattern'"));
+            assert!(build.len() <= 250);
+
+            let github_result = check_command("gh api repos/o/r/pulls | head -5");
+            let github = get_reason(&github_result);
+            assert!(github.contains("drop rows or cut JSON"));
+            assert!(github.contains("native options"));
+            assert!(!github.contains("--jq"));
+            assert!(github.len() <= 250);
+        }
+
+        #[test]
         fn test_head_tail_wrapped_builds_deny() {
             // Launcher wrappers must not hide a build/gh producer from the cap
             // check: `timeout 60 npm test | tail` is still a truncated build.
@@ -715,10 +741,10 @@ mod tests {
             // alternative and stay stock-safe: never `max_output` /
             // `output_tail`, which are patched-build-only Bash params.
             let cases = [
-                ("gh pr list | head -20", "--limit"),
-                ("gh api repos/o/r/pulls | head -5", "--jq"),
-                ("cargo test 2>&1 | tail -40", "at the end"),
-                ("pnpm test | head -30", "rg 'pattern'"),
+                ("gh pr list | head -20", "native options"),
+                ("gh api repos/o/r/pulls | head -5", "native options"),
+                ("cargo test 2>&1 | tail -40", "hide diagnostics"),
+                ("pnpm test | head -30", "real pattern"),
             ];
             for (cmd, needle) in cases {
                 let result = check_command(cmd);

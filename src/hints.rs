@@ -355,6 +355,9 @@ fn hint_cat(cmd: &CommandInfo) -> Option<ModernHint> {
     })
 }
 
+const PIPE_CAP_HINT: &str = "Preserve complete output. If the task needs a bounded result, use the \
+producer's native limit; otherwise run uncapped and inspect the persisted output.";
+
 fn hint_head(cmd: &CommandInfo) -> Option<ModernHint> {
     let mut lines = "10".to_string();
     let mut file = String::new();
@@ -380,9 +383,7 @@ fn hint_head(cmd: &CommandInfo) -> Option<ModernHint> {
         return Some(ModernHint {
             legacy_command: "head",
             modern_command: "rg",
-            hint: "Cap at the source, don't truncate the pipe: `rg -m N`, `--limit N`, \
-                   `git log -n N`, or `sort -rn | head -N` for top-N. Use Read for files."
-                .to_string(),
+            hint: PIPE_CAP_HINT.to_string(),
         });
     }
 
@@ -410,7 +411,7 @@ fn hint_tail(cmd: &CommandInfo) -> Option<ModernHint> {
             }
         } else if arg.starts_with("-n") && arg.len() > 2 {
             lines = arg[2..].to_string();
-        } else if arg == "-f" || arg == "--follow" {
+        } else if arg == "-f" || arg == "-F" || arg == "--follow" || arg.starts_with("--follow=") {
             follow = true;
         } else if !arg.starts_with('-') {
             file = arg.clone();
@@ -429,10 +430,7 @@ fn hint_tail(cmd: &CommandInfo) -> Option<ModernHint> {
         return Some(ModernHint {
             legacy_command: "tail",
             modern_command: "rg",
-            hint: "Cap at the source, don't truncate the pipe: `rg -m N`, `--limit N`, \
-                   `git log -n N`, or `sort -rn | tail -N` for bottom-N. Use Read for files; \
-                   live logs via `tail -f` through the Monitor tool."
-                .to_string(),
+            hint: PIPE_CAP_HINT.to_string(),
         });
     }
 
@@ -1568,14 +1566,18 @@ mod tests {
         // source-side cap instead of staying silent.
         let hint = hint_head(&cmd("head", &["-n", "10"])).expect("pipe head should hint");
         assert_eq!(hint.modern_command, "rg");
-        assert!(hint.hint.contains("rg -m N") && hint.hint.contains("Read"));
+        assert!(hint.hint.contains("Preserve complete output"));
+        assert!(hint.hint.contains("producer's native limit"));
+        assert!(!hint.hint.contains("rg -m N"));
     }
 
     #[test]
     fn test_tail_pipe_self_correct_hint() {
         let hint = hint_tail(&cmd("tail", &["-n", "10"])).expect("pipe tail should hint");
         assert_eq!(hint.modern_command, "rg");
-        assert!(hint.hint.contains("rg -m N") && hint.hint.contains("Read"));
+        assert!(hint.hint.contains("Preserve complete output"));
+        assert!(hint.hint.contains("producer's native limit"));
+        assert!(!hint.hint.contains("rg -m N"));
     }
 
     #[test]
@@ -1591,6 +1593,15 @@ mod tests {
         // tail -f doesn't get a hint - it's the right tool for the job
         let hint = hint_tail(&cmd("tail", &["-f", "file.txt"]));
         assert!(hint.is_none(), "tail -f should not get a hint");
+
+        let retrying_hint = hint_tail(&cmd("tail", &["-F", "file.txt"]));
+        assert!(retrying_hint.is_none(), "tail -F should not get a hint");
+
+        let named_hint = hint_tail(&cmd("tail", &["--follow=name", "file.txt"]));
+        assert!(
+            named_hint.is_none(),
+            "tail --follow=name should not get a hint"
+        );
     }
 
     #[test]
