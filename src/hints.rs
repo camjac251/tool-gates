@@ -355,8 +355,8 @@ fn hint_cat(cmd: &CommandInfo) -> Option<ModernHint> {
     })
 }
 
-const PIPE_CAP_HINT: &str = "Preserve complete output. If the task needs a bounded result, use the \
-producer's native limit; otherwise run uncapped and inspect the persisted output.";
+const PIPE_CAP_HINT: &str = "This cap discards unseen output. When the task asks for a bounded result, \
+use the producer's native limit; otherwise run uncapped and inspect the persisted output.";
 
 fn hint_head(cmd: &CommandInfo) -> Option<ModernHint> {
     let mut lines = "10".to_string();
@@ -1089,7 +1089,7 @@ fn is_identifier_shape(pattern: &str) -> bool {
 
 /// Natural-language shape: 3+ alphabetic words separated by spaces, no regex
 /// metacharacters or special chars. Heuristic for "the user is asking a
-/// conceptual question, route to ChunkHound semantic".
+/// conceptual question, route to semantic code search when available.
 fn is_natural_language_shape(pattern: &str) -> bool {
     let trimmed = pattern.trim_matches(|c| c == '"' || c == '\'');
     if trimmed.len() < 8 {
@@ -1147,8 +1147,7 @@ fn looks_like_symbol_inventory_pattern(pattern: &str) -> bool {
     .any(|prefix| trimmed.starts_with(prefix))
 }
 
-/// Build the right hint for a code-targeted grep/rg invocation, routing to
-/// Probe/ChunkHound/Serena/ast-grep per /etc/claude-code/system-prompt.md.
+/// Build the right hint for a code-targeted grep/rg invocation.
 fn code_search_hint_text(pattern: &str, has_context_flag: bool) -> String {
     if looks_like_symbol_inventory_pattern(pattern) {
         return "Use `ast-grep outline --items structure --view signatures <path>` for symbol/signature inventory. Use `ast-grep run -p '<pattern>' <path>` when matching a specific declaration shape.".to_string();
@@ -1159,7 +1158,7 @@ fn code_search_hint_text(pattern: &str, has_context_flag: bool) -> String {
     }
 
     if is_identifier_shape(pattern) {
-        return "Exact lexical `rg` searches in code are valid when strings and comments are intentionally in scope. For symbol semantics use `mcp__probe__search_code` with `exact: true` or `mcp__serena__find_symbol` for definitions/references.".to_string();
+        return "Exact lexical `rg` is valid when strings and comments are in scope. For definitions or references, use an available symbol-aware tool.".to_string();
     }
 
     if looks_like_code_pattern(pattern) || pattern.contains('(') || pattern.contains('{') {
@@ -1167,10 +1166,10 @@ fn code_search_hint_text(pattern: &str, has_context_flag: bool) -> String {
     }
 
     if is_natural_language_shape(pattern) {
-        return "Use `mcp__chunkhound__search` (`type: \"semantic\"`) for conceptual code queries and `code_research` for cross-file flows.".to_string();
+        return "For conceptual code queries or cross-file behavior, use semantic code search when available.".to_string();
     }
 
-    "Use exact lexical `rg` when strings/comments are intentionally in scope, Probe for known terms, ChunkHound for concepts, Serena for symbols, or `ast-grep run -p` for structural patterns.".to_string()
+    "Choose by intent: exact lexical text uses `rg`; symbols use an available symbol-aware tool; concepts use semantic search when available; syntax shapes use `ast-grep run -p`.".to_string()
 }
 
 fn hint_rg_on_code(cmd: &CommandInfo) -> Option<ModernHint> {
@@ -1484,15 +1483,20 @@ fn hint_tar(cmd: &CommandInfo) -> Option<ModernHint> {
     None
 }
 
-/// Format hints as a single context string for Claude.
+const MAX_HINTS_PER_RESPONSE: usize = 3;
+
+/// Format a bounded, deduplicated set of hints as context for the agent.
 pub fn format_hints(hints: &[ModernHint]) -> String {
     if hints.is_empty() {
         return String::new();
     }
 
+    let mut seen = std::collections::HashSet::new();
     hints
         .iter()
         .map(|h| h.hint.as_str())
+        .filter(|hint| seen.insert(*hint))
+        .take(MAX_HINTS_PER_RESPONSE)
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -1535,6 +1539,24 @@ mod tests {
     // get_modern_hint() filters by tool availability which varies by environment.
 
     #[test]
+    fn format_hints_deduplicates_and_caps_turn_context() {
+        let hints = [
+            ("cat", "first"),
+            ("head", "second"),
+            ("tail", "second"),
+            ("grep", "third"),
+            ("find", "fourth"),
+        ]
+        .map(|(legacy_command, hint)| ModernHint {
+            legacy_command,
+            modern_command: "tool",
+            hint: hint.to_string(),
+        });
+
+        assert_eq!(format_hints(&hints), "first\nsecond\nthird");
+    }
+
+    #[test]
     fn test_cat_hint() {
         let hint = hint_cat(&cmd("cat", &["file.rs"]));
         assert!(hint.is_some());
@@ -1566,7 +1588,7 @@ mod tests {
         // source-side cap instead of staying silent.
         let hint = hint_head(&cmd("head", &["-n", "10"])).expect("pipe head should hint");
         assert_eq!(hint.modern_command, "rg");
-        assert!(hint.hint.contains("Preserve complete output"));
+        assert!(hint.hint.contains("discards unseen output"));
         assert!(hint.hint.contains("producer's native limit"));
         assert!(!hint.hint.contains("rg -m N"));
     }
@@ -1575,7 +1597,7 @@ mod tests {
     fn test_tail_pipe_self_correct_hint() {
         let hint = hint_tail(&cmd("tail", &["-n", "10"])).expect("pipe tail should hint");
         assert_eq!(hint.modern_command, "rg");
-        assert!(hint.hint.contains("Preserve complete output"));
+        assert!(hint.hint.contains("discards unseen output"));
         assert!(hint.hint.contains("producer's native limit"));
         assert!(!hint.hint.contains("rg -m N"));
     }
@@ -1848,16 +1870,13 @@ mod tests {
     }
 
     #[test]
-    fn test_rg_natural_language_suggests_chunkhound() {
-        // Multi-word English phrase on code routes to chunkhound semantic
+    fn test_rg_natural_language_suggests_available_semantic_search() {
+        // Multi-word English phrase routes to an available semantic search surface.
         let hint = hint_rg_on_code(&cmd("rg", &["where authentication is handled", "src/"]));
         assert!(hint.is_some());
         let hint = hint.unwrap();
-        assert!(
-            hint.hint.contains("mcp__chunkhound__search"),
-            "expected chunkhound suggestion, got: {}",
-            hint.hint
-        );
+        assert!(hint.hint.contains("semantic code search when available"));
+        assert!(!hint.hint.contains("mcp__"));
     }
 
     #[test]
