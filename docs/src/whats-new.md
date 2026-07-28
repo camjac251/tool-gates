@@ -10,12 +10,12 @@
     <header class="sec-head release-section-head">
       <span class="lbl">Current window</span>
       <h2 id="release-current-title">Latest eight versions</h2>
-      <p>From pending v1.32.4 through v1.30.0, newest first.</p>
+      <p>From v1.32.4 through v1.30.0, newest first.</p>
     </header>
   <div class="config-block">
     <header>
-      <h3>v1.32.4 · July 27, 2026</h3>
-      <span class="src-tag">bounded hint feedback · release pending</span>
+      <h3>v1.32.4 · July 28, 2026</h3>
+      <span class="src-tag">bounded hint feedback · <a href="https://github.com/camjac251/tool-gates/commit/372c3c6" target="_blank" rel="noopener">372c3c6</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
