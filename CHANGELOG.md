@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.32.4](https://github.com/camjac251/tool-gates/compare/v1.32.3...v1.32.4) - 2026-07-28
+
+### Fixed
+
+- *(hints)* bound contextual tool guidance
+- *(hints)* keep output recovery guidance concise
+
+### Other
+
+- align maintainer guidance with recent releases
+
 ## [1.32.3](https://github.com/camjac251/tool-gates/compare/v1.32.2...v1.32.3) - 2026-07-26
 
 ### Fixed
