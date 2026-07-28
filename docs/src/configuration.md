@@ -24,7 +24,8 @@
       </div>
       <div class="config-prose">
         <p>Each subsystem can be turned off independently. Toggles merge with defaults; missing keys keep their default value.</p>
-        <p><code>head_tail_pipe_block</code> denies <code>| head -N</code> and <code>| tail -N</code> pipes so the agent caps output at the source with <code>rg -m N</code>, <code>fd --max-results N</code>, or <code>bat -r START:END</code>. Streaming <code>tail -f</code>/<code>-F</code> is exempt.</p>
+        <p><code>head_tail_pipe_block</code> denies consumer-side <code>| head -N</code> and <code>| tail -N</code> caps for every producer so the agent uses a source-native bound such as <code>rg -m N</code>, <code>fd --max-results N</code>, or <code>bat -r START:END</code>. The producer changes the recovery message, not the decision. First-N slices through <code>sed</code> or <code>awk</code>, plus catch-all <code>| rg .</code> filters, use the same floor.</p>
+        <p>Streaming <code>tail -f</code>/<code>-F</code>, top-N selection after <code>sort</code>, and picks inside command substitutions or backticks are exempt. Quoted literals and standalone <code>head</code>/<code>tail</code> calls with no upstream pipe are not caps. Complete-stream aggregation with <code>rg -c .</code>, <code>--count</code>, or <code>--count-matches</code> is also exempt, but combining count mode with <code>-m</code>/<code>--max-count</code> remains blocked.</p>
         <p><code>git_aliases</code> resolves user-defined aliases against <code>~/.gitconfig</code> so <code>git st</code> runs through the same allow/ask rules as <code>git status</code>.</p>
         <p><code>design_lint</code> is the one opt-in subsystem (default <code>false</code>): a frontend design-quality linter for UI writes. Security reminders cover the safety floor; this one covers style. Set it <code>true</code> to enable.</p>
       </div>
@@ -94,6 +95,7 @@
       <div class="config-prose">
         <p>Auto-approve Skill calls based on directory conditions. Explicit trust declaration; no external hook scripts needed.</p>
         <p><code>if_project_has</code> requires the project directory to contain one of the listed files or directories. <code>if_project_under</code> requires the project to be at or under one of the listed paths.</p>
+        <p>The project directory comes from <code>CLAUDE_PROJECT_DIR</code> or, for Gemini compatibility, <code>GEMINI_PROJECT_DIR</code>. If neither is set, directory-conditioned rules fail closed.</p>
         <p>Honoured under auto mode too. <code>[[auto_approve_skills]]</code> rules aren't revoked by opting into the classifier.</p>
       </div>
     </div>
@@ -161,7 +163,8 @@
       </div>
       <div class="config-prose">
         <p>Repo-local aliases (in <code>$REPO/.git/config</code>) are off by default. A malicious alias in a third-party repo should not silently inherit alias trust on first checkout.</p>
-        <p>Built-in commands always win over aliases (<code>alias.status = log</code> does not shadow real <code>status</code>). Shell-prefixed aliases (<code>!cmd</code>) never resolve; they ask.</p>
+        <p>Built-in commands always win over aliases (<code>alias.status = log</code> does not shadow real <code>status</code>). Shell-prefixed aliases (<code>!cmd</code>) never resolve; they ask. Chained aliases resolve up to five levels with cycle detection; a cycle or depth overflow also asks.</p>
+        <p>The global alias map is read once per process. When local aliases are enabled, the repository map is read for the current project and shadows the global map.</p>
       </div>
     </div>
   </div>

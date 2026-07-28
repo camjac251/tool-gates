@@ -135,6 +135,7 @@
       <tr><td><code>~/.cache/tool-gates/pending.jsonl</code></td><td>The pending-approval queue. Successful asks land here for promotion via <code>tool-gates review</code>.</td></tr>
       <tr><td><code>~/.cache/tool-gates/tracking.json</code></td><td>PreToolUse → PostToolUse correlation (24h TTL).</td></tr>
       <tr><td><code>~/.cache/tool-gates/available-tools.json</code></td><td>Modern-CLI tool detection cache (7-day TTL).</td></tr>
+      <tr><td><code>~/.cache/tool-gates/hint-tracker.json</code></td><td>Session-scoped deduplication state for modern-CLI hints and security warnings.</td></tr>
       <tr><td><code>tool_use_id</code></td><td>Claude Code's per-call identifier used to correlate PreToolUse with PostToolUse. Gemini doesn't provide one (so tracking is Claude-only).</td></tr>
     </tbody>
   </table>

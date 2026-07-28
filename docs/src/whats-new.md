@@ -9,9 +9,62 @@
   <section class="release-current" aria-labelledby="release-current-title">
     <header class="sec-head release-section-head">
       <span class="lbl">Current window</span>
-      <h2 id="release-current-title">Latest eight releases</h2>
-      <p>From v1.32.1 through v1.27.0, newest first.</p>
+      <h2 id="release-current-title">Latest eight versions</h2>
+      <p>From pending v1.32.4 through v1.30.0, newest first.</p>
     </header>
+  <div class="config-block">
+    <header>
+      <h3>v1.32.4 · July 27, 2026</h3>
+      <span class="src-tag">bounded hint feedback · release pending</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec fixed">Fixed</span>
+  keep output-cap recovery guidance concise
+  skip file-viewing hints for tail -F and --follow forms
+  deduplicate and cap feedback at three hints per response
+  avoid unavailable project-scoped tool names in search guidance</pre>
+      </div>
+      <div class="config-prose">
+        <p>Keeps corrective feedback useful without letting it flood the agent's context. Consumer-side <code>head</code>/<code>tail</code> caps still explain that unseen output is lost, but recovery advice now states the invariant: use the producer's native limit when the task needs a bounded result; otherwise run uncapped and inspect persisted output. File-viewing hints now skip retrying and named <code>tail</code> follow forms. Compound calls deduplicate repeated suggestions and attach at most three unique hints per response. Code-search guidance describes available symbol-aware and semantic capabilities instead of naming project-scoped MCP tools that may not be loaded.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.32.3 · July 26, 2026</h3>
+      <span class="src-tag">nested-shell guardrails + search routing · <a href="https://github.com/camjac251/tool-gates/commit/f10e982" target="_blank" rel="noopener">f10e982</a></span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec fixed">Fixed</span>
+  apply guardrails inside bash/sh/zsh -c and -lc scripts
+  inspect xargs-invoked shell scripts with the same raw floor
+  distinguish ast-grep from the unrelated system sg command
+  classify rg context searches after consuming their flag values</pre>
+      </div>
+      <div class="config-prose">
+        <p>Extends the raw security floor into executable strings passed to local shell wrappers and <code>xargs ... shell -c</code>, including combined flags such as <code>-lc</code>. Nested truncation, pipe-to-shell, and other raw-pattern checks now receive the same decision as their top-level forms. Direct <code>sg</code> use asks with migration guidance because that name can resolve to either the deprecated ast-grep alias or the unrelated system group command. Search hints also consume split <code>rg -A</code>/<code>-B</code>/<code>-C</code> values before classifying the pattern, so exact identifier searches remain lexical while declarations, body captures, inventories, and conceptual queries get the appropriate structural or semantic guidance.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.32.2 · July 26, 2026</h3>
+      <span class="src-tag">complete counts + canonical ast-grep · <a href="https://github.com/camjac251/tool-gates/commit/1d4a4d7" target="_blank" rel="noopener">1d4a4d7</a></span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec fixed">Fixed</span>
+  allow full-stream rg count modes without treating them as caps
+  keep count modes combined with max-count blocked
+  replace deprecated sg recommendations with ast-grep</pre>
+      </div>
+      <div class="config-prose">
+        <p>Allows <code>rg -c .</code>, <code>--count</code>, and <code>--count-matches</code> through the output-cap floor because they consume the complete stream and emit a scalar rather than discard unseen rows. Combining count mode with <code>-m</code> or <code>--max-count</code> remains blocked. Actionable search guidance now uses the canonical <code>ast-grep</code> executable instead of the deprecated <code>sg</code> name.</p>
+      </div>
+    </div>
+  </div>
   <div class="config-block">
     <header>
       <h3>v1.32.1 · July 13, 2026</h3>
@@ -111,6 +164,17 @@
       </div>
     </div>
   </div>
+  </section>
+  <details class="release-archive" id="release-archive" aria-labelledby="release-archive-title">
+    <summary>
+      <h2 class="release-summary" id="release-archive-title">
+        <span class="release-summary-kicker">Historical archive</span>
+        <span class="release-summary-title">Browse 51 earlier releases</span>
+        <span class="release-summary-range">v1.29.0 to v1.1.0</span>
+        <span class="release-summary-icon" aria-hidden="true"></span>
+      </h2>
+    </summary>
+    <div class="release-archive-list">
   <div class="config-block">
     <header>
       <h3>v1.29.0 · June 23, 2026</h3>
@@ -166,17 +230,6 @@
       </div>
     </div>
   </div>
-  </section>
-  <details class="release-archive" id="release-archive" aria-labelledby="release-archive-title">
-    <summary>
-      <h2 class="release-summary" id="release-archive-title">
-        <span class="release-summary-kicker">Historical archive</span>
-        <span class="release-summary-title">Browse 48 earlier releases</span>
-        <span class="release-summary-range">v1.26.0 to v1.1.0</span>
-        <span class="release-summary-icon" aria-hidden="true"></span>
-      </h2>
-    </summary>
-    <div class="release-archive-list">
   <div class="config-block">
     <header>
       <h3>v1.26.0 · June 19, 2026</h3>

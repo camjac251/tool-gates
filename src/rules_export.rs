@@ -1003,7 +1003,7 @@ fn render_security_floor(gates: &[Gate], floor: &SecurityFloorFile) -> String {
     let mut out = String::new();
     out.push_str("<nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n  <ol>\n    <li><a href=\"index.html\">Reference</a></li>\n    <li aria-current=\"page\">Security floor</li>\n  </ol>\n</nav>\n");
     out.push_str("<h1>Security floor</h1>\n");
-    out.push_str("<p class=\"page-lede\">Every <code>block</code> rule and every <code>warn = true</code> rule across all 13 gates, on one page. The hard-deny floor fires regardless of <code>settings.json</code>; warn rules ask first but are marked dangerous-but-recoverable. Generated from <code>rules/*.toml</code>; authoritative for security review.</p>\n\n");
+    out.push_str("<p class=\"page-lede\">Every <code>block</code> rule and every <code>warn = true</code> rule across all 13 gates, on one page. The hard-deny floor fires regardless of <code>settings.json</code>; warn rules ask first but are marked dangerous-but-recoverable. The raw-string catalog runs against top-level commands and executable strings inside supported local shell wrappers, including shells invoked through <code>xargs</code>. Generated from <code>rules/*.toml</code>; authoritative for security review.</p>\n\n");
 
     if !floor.patterns.is_empty() {
         out.push_str(&render_floor_patterns(floor));
@@ -1039,15 +1039,16 @@ fn hint_row(entry: &HintCatalogEntry) -> String {
 }
 
 /// Render `hints.md`: the "Modern CLI hints" reference page generated from the
-/// full [`hint_catalog`]. Hints ride on allow decisions (they never block) and
-/// teach a sharper modern tool. Uses the design's `.hints` / `.hint-row`
+/// full [`hint_catalog`]. Hints may accompany applicable allow and ask
+/// decisions but never determine the decision; they teach a sharper modern
+/// tool. Uses the design's `.hints` / `.hint-row`
 /// classes so the ported theme CSS applies. Deterministic: the catalog order is
 /// fixed, so the page is byte-identical on re-run.
 fn render_hints_page() -> String {
     let mut out = String::new();
     out.push_str("<nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n  <ol>\n    <li><a href=\"index.html\">Reference</a></li>\n    <li aria-current=\"page\">Modern CLI hints</li>\n  </ol>\n</nav>\n");
     out.push_str("<h1 id=\"hints-h1\">Modern CLI hints</h1>\n");
-    out.push_str("<p class=\"page-lede\">When a command reaches for a legacy tool that has a sharper modern alternative, tool-gates allows the call <em>and</em> attaches a one-line suggestion via <code>additionalContext</code>. Hints never block; they ride on allow decisions. They fire only when the modern tool is installed on this machine. Generated from the hint catalog in <code>src/hints.rs</code>.</p>\n\n");
+    out.push_str("<p class=\"page-lede\">When a command reaches for a legacy tool that has a sharper modern alternative, tool-gates may attach a one-line suggestion via <code>additionalContext</code>. Hints never determine the permission decision; applicable allow and ask responses can carry them. They fire only when the modern tool is installed on this machine. Repeated suggestions are deduplicated, and each response carries at most three unique hints. Code-search guidance names capabilities rather than project-scoped tools that may not be loaded. Generated from the hint catalog in <code>src/hints.rs</code>.</p>\n\n");
 
     out.push_str("<div class=\"hints\">\n  <header>\n    <h2>Legacy &rarr; modern</h2>\n    <span class=\"note\">7-day cache \u{b7} <code>tool-gates --tools-status</code> to inspect</span>\n  </header>");
 
@@ -1371,6 +1372,9 @@ mod tests {
         let html = render_hints_page();
         assert!(html.contains("<h1 id=\"hints-h1\">Modern CLI hints</h1>"));
         assert!(html.contains("<h2>Legacy &rarr; modern</h2>"));
+        assert!(html.contains("Hints never determine the permission decision"));
+        assert!(html.contains("at most three unique hints"));
+        assert!(html.contains("project-scoped tools that may not be loaded"));
         assert!(!html.contains("<h3>Legacy &rarr; modern</h3>"));
     }
 

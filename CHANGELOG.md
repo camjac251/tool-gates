@@ -16,7 +16,6 @@
 
 ### Other
 
-- migrate GitHub App tokens to client IDs
 - reconcile recent releases through v1.32.1
 - redesign the documentation experience
 - keep Markdown prose unwrapped

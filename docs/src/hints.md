@@ -5,7 +5,7 @@
   </ol>
 </nav>
 <h1 id="hints-h1">Modern CLI hints</h1>
-<p class="page-lede">When a command reaches for a legacy tool that has a sharper modern alternative, tool-gates allows the call <em>and</em> attaches a one-line suggestion via <code>additionalContext</code>. Hints never block; they ride on allow decisions. They fire only when the modern tool is installed on this machine. Generated from the hint catalog in <code>src/hints.rs</code>.</p>
+<p class="page-lede">When a command reaches for a legacy tool that has a sharper modern alternative, tool-gates may attach a one-line suggestion via <code>additionalContext</code>. Hints never determine the permission decision; applicable allow and ask responses can carry them. They fire only when the modern tool is installed on this machine. Repeated suggestions are deduplicated, and each response carries at most three unique hints. Code-search guidance names capabilities rather than project-scoped tools that may not be loaded. Generated from the hint catalog in <code>src/hints.rs</code>.</p>
 
 <div class="hints">
   <header>

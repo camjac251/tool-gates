@@ -107,6 +107,11 @@
 <span class="k">handler</span>     = <span class="s">"check_ruff"</span>
 <span class="k">description</span> = <span class="s">"ruff format asks unless --check or --diff present"</span></pre>
   <p class="step-prose">Then implement <code>check_ruff</code> in the gate file. The generated gate returns <code>Skip</code> for this program, letting the custom handler take over.</p>
+  <p class="step-prose">Custom handlers return one of the same four gate results used by the generated functions:</p>
+<pre class="code-block"><span class="k">GateResult</span>::skip()               <span class="comment">// this gate has no opinion</span>
+<span class="k">GateResult</span>::allow()              <span class="comment">// explicitly safe</span>
+<span class="k">GateResult</span>::ask(<span class="s">"Description"</span>)  <span class="comment">// mutation or unresolved risk</span>
+<span class="k">GateResult</span>::block(<span class="s">"Explanation"</span>) <span class="comment">// deterministic safety floor</span></pre>
   <div class="sec-head">
     <p class="lbl">Adding a new gate</p>
     <h2>Three steps.</h2>

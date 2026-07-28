@@ -61,5 +61,5 @@
   </div>
   <p class="note">
     <svg class="alert" aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
-    <span><b>The style applies to source-level prompts too.</b> Strings in <code>src/router.rs</code>, <code>src/security_reminders.rs</code>, and <code>src/hints.rs</code> follow the same rules. If you add a hard-deny pattern or a new modern-CLI hint, write its prompt in this voice.</span>
+    <span><b>The style applies to source-level prompts too.</b> Strings in <code>src/router.rs</code>, <code>src/pipe_caps.rs</code>, <code>src/security_reminders.rs</code>, and <code>src/hints.rs</code> follow the same rules. If you add a hard-deny pattern or a new modern-CLI hint, write its prompt in this voice.</span>
   </p>

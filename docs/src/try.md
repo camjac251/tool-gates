@@ -78,7 +78,7 @@
     <div class="lc-track" id="simStages">
       <div class="lc-node sim-stage" data-stage="raw">
         <span class="lc-icon">▸</span>
-        <span class="lc-tag">router.rs</span>
+        <span class="lc-tag">raw_floor.rs</span>
         <div class="lc-title">Raw-string scan</div>
         <div class="sim-stage-note">awaiting input…</div>
       </div>

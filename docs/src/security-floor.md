@@ -5,7 +5,7 @@
   </ol>
 </nav>
 <h1>Security floor</h1>
-<p class="page-lede">Every <code>block</code> rule and every <code>warn = true</code> rule across all 13 gates, on one page. The hard-deny floor fires regardless of <code>settings.json</code>; warn rules ask first but are marked dangerous-but-recoverable. Generated from <code>rules/*.toml</code>; authoritative for security review.</p>
+<p class="page-lede">Every <code>block</code> rule and every <code>warn = true</code> rule across all 13 gates, on one page. The hard-deny floor fires regardless of <code>settings.json</code>; warn rules ask first but are marked dangerous-but-recoverable. The raw-string catalog runs against top-level commands and executable strings inside supported local shell wrappers, including shells invoked through <code>xargs</code>. Generated from <code>rules/*.toml</code>; authoritative for security review.</p>
 
 <div class="rule-card">
   <header>

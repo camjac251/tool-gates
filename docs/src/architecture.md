@@ -20,9 +20,9 @@
       <div class="lc-edge"></div>
       <div class="lc-node hook">
         <span class="lc-icon">▸</span>
-        <span class="lc-tag">router.rs</span>
+        <span class="lc-tag">raw_floor.rs</span>
         <div class="lc-title">Raw-string scan</div>
-        <div class="lc-sub">Pre-AST string checks before parsing. Catches <code>| bash</code>, <code>eval</code>, <code>source</code>, <code>xargs rm</code>, destructive <code>find</code>/<code>fd</code>, dangerous command substitution, semicolon injection, output redirection. Hard-deny patterns (head/tail pipe) run first.</div>
+        <div class="lc-sub">Shared pre-AST checks cover the top-level command plus executable strings inside local shell wrappers and <code>xargs ... shell -c</code>. The hard/soft-ask catalog lives in <code>security_floor.rs</code>; output-cap hard denials live in <code>pipe_caps.rs</code> and run first.</div>
       </div>
       <div class="lc-edge"></div>
       <div class="lc-node hook">
@@ -53,6 +53,23 @@
       </div>
     </div>
   </figure>
+  <div class="sec-head">
+    <p class="lbl">Task expansion</p>
+    <h2>Wrapper tasks are evaluated by their contents.</h2>
+    <p>A task runner's name is not enough to classify its effects. Tool Gates resolves supported task definitions, checks the commands they invoke, and uses the strictest resulting decision.</p>
+  </div>
+  <div class="hook-cards">
+    <article class="hook-card">
+      <h3>mise tasks</h3>
+      <p><code>mise run &lt;task&gt;</code>, <code>mise r &lt;task&gt;</code>, and direct <code>mise &lt;task&gt;</code> forms expand from <code>mise.toml</code> or <code>.mise.toml</code>. Dependencies run first, circular dependencies are ignored after the first visit, and a task's <code>dir</code> applies to its command. Built-in mise subcommands are never mistaken for task names.</p>
+      <p class="hook-detail">The mise-generated <code>eval "set -- ${usage_args-}"</code> argument-forwarding prefix, including supported splat and array forms, is stripped before the security floor checks the actual task body.</p>
+    </article>
+    <article class="hook-card">
+      <h3>package scripts</h3>
+      <p><code>npm run</code>, <code>pnpm run</code>, <code>yarn run</code>, and <code>bun run</code> resolve the named script from the nearest <code>package.json</code>. Non-built-in pnpm, yarn, and bun shorthand forms resolve the same way.</p>
+      <p class="hook-detail"><code>bun &lt;file&gt;</code> and <code>bun run &lt;file&gt;</code> stay file execution when the argument contains a path separator or a recognized code-file extension; they are not looked up as script names.</p>
+    </article>
+  </div>
   <div class="sec-head" style="margin-top: var(--s-7)">
     <p class="lbl">Why the order matters</p>
     <h2>Each stage closes a gap the next can't.</h2>

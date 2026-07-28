@@ -87,6 +87,7 @@
   </table>
     </div>
   </div>
+  <p class="step-prose">When a <code>permissions.deny</code> rule matches, the decision reason names the exact <code>Bash(...)</code> pattern. This lets the agent identify the configured boundary that rejected the command instead of receiving a generic settings denial.</p>
   <div class="sec-head">
     <p class="lbl">Pattern formats</p>
     <h2>How rules match commands.</h2>
