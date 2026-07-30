@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.33.1](https://github.com/camjac251/tool-gates/compare/v1.33.0...v1.33.1) - 2026-07-30
+
+### Fixed
+
+- *(doctor)* flag clients running different tool-gates builds
+
+### Other
+
+- add v1.33.0 to Recent Releases
+
 ## [1.33.0](https://github.com/camjac251/tool-gates/compare/v1.32.4...v1.33.0) - 2026-07-30
 
 ### Added
