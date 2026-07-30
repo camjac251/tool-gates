@@ -255,7 +255,7 @@ pub fn redirect_targets(comment_stripped: &str, unquoted: &str) -> Option<FloorH
             let target_str = raw.trim_matches(|c| c == '"' || c == '\'');
             // Skip /dev/null (discarding output) and the session scratch dir.
             if target_str != "/dev/null" && !is_under_scratch_with_vars(target_str, &scratch_vars) {
-                return Some(redirect_hit());
+                return Some(redirect_hit(target_str));
             }
         }
     }
@@ -266,7 +266,7 @@ pub fn redirect_targets(comment_stripped: &str, unquoted: &str) -> Option<FloorH
                 .unwrap_or(target.as_str());
             let target_str = raw.trim_matches(|c| c == '"' || c == '\'');
             if target_str != "/dev/null" && !is_under_scratch_with_vars(target_str, &scratch_vars) {
-                return Some(redirect_hit());
+                return Some(redirect_hit(target_str));
             }
         }
     }
@@ -278,7 +278,7 @@ pub fn redirect_targets(comment_stripped: &str, unquoted: &str) -> Option<FloorH
                 .unwrap_or(target.as_str());
             let target_str = raw.trim_matches(|c| c == '"' || c == '\'');
             if target_str != "/dev/null" && !is_under_scratch_with_vars(target_str, &scratch_vars) {
-                return Some(redirect_hit());
+                return Some(redirect_hit(target_str));
             }
         }
     }
@@ -286,13 +286,24 @@ pub fn redirect_targets(comment_stripped: &str, unquoted: &str) -> Option<FloorH
 }
 
 /// The shared soft-ask hit for every redirect form.
-fn redirect_hit() -> FloorHit {
+///
+/// Writing one named file is the most common shell shape there is, so the
+/// classifier normally judges it. A sensitive destination is the exception:
+/// clobbering `/etc/passwd` or `~/.ssh/authorized_keys` is not the kind of
+/// call to resolve without a person, and this handler already knows the
+/// resolved target.
+fn redirect_hit(target: &str) -> FloorHit {
+    let sensitive = crate::accept_edits::is_sensitive_path(target);
     FloorHit {
         tier: FloorTier::SoftAsk,
-        reason: "Output redirection (`>`, `>>`, `tee`) writes to a file. Verify the target path; `>` overwrites without warning.".to_string(),
-        // Writing one named file is the single most common shell shape there
-        // is, and the classifier can see the target path. Let it judge.
-        hold_in_auto: false,
+        reason: if sensitive {
+            format!(
+                "Output redirection writes to `{target}`, a system or credential path. `>` overwrites without warning."
+            )
+        } else {
+            "Output redirection (`>`, `>>`, `tee`) writes to a file. Verify the target path; `>` overwrites without warning.".to_string()
+        },
+        hold_in_auto: sensitive,
     }
 }
 
@@ -1432,6 +1443,46 @@ mod tests {
             // the mechanism auto mode exists to provide.
             let result = check_command_with_settings("npm install foo", "/tmp", "auto");
             assert_eq!(result.decision, PermissionDecision::Defer);
+        }
+
+        #[test]
+        fn test_sensitive_redirect_targets_hold_under_auto_mode() {
+            // Deferring every redirect uniformly would put a clobber of
+            // /etc/passwd or an authorized_keys rewrite in front of the
+            // classifier instead of a person. The handler already resolves the
+            // target, so a sensitive one keeps its ask.
+            for command in [
+                "echo x > /etc/hosts",
+                "echo x > /etc/passwd",
+                "echo x > ~/.ssh/authorized_keys",
+                "cat f > /usr/bin/thing",
+                "echo x > ~/.aws/credentials",
+            ] {
+                let result = check_command_with_settings(command, "/tmp", "auto");
+                assert_eq!(
+                    result.decision,
+                    PermissionDecision::Ask,
+                    "{command} writes somewhere sensitive and must reach a human"
+                );
+            }
+
+            // An ordinary destination is the common case and still defers.
+            for command in [
+                "echo x > /tmp/ok.log",
+                "echo x > ./local.log",
+                "cargo build > /tmp/b.log 2>&1",
+            ] {
+                let result = check_command_with_settings(command, "/tmp", "auto");
+                assert_eq!(
+                    result.decision,
+                    PermissionDecision::Defer,
+                    "{command} should still reach the classifier"
+                );
+            }
+
+            // /dev/null is exempt entirely.
+            let discarded = check_command_with_settings("echo x > /dev/null", "/tmp", "auto");
+            assert_eq!(discarded.decision, PermissionDecision::Allow);
         }
 
         #[test]

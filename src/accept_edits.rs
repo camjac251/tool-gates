@@ -33,6 +33,19 @@ pub(crate) fn should_auto_allow_in_accept_edits(
 /// 2. Security-critical user paths (always blocked): ~/.ssh, ~/.gnupg, ~/.aws, etc.
 /// 3. Regular user dotfiles (allowed): ~/.bashrc, ~/.prettierrc, ~/.config/app.yaml
 fn targets_sensitive_path(cmd: &CommandInfo) -> bool {
+    cmd.args
+        .iter()
+        // Skip flags
+        .filter(|arg| !arg.starts_with('-'))
+        .any(|arg| is_sensitive_path(arg))
+}
+
+/// Check whether a single path argument names something sensitive.
+///
+/// Split out of [`targets_sensitive_path`] so callers holding one resolved path
+/// rather than a whole command can ask the same question. The redirect floor
+/// uses it to decide whether a `>` target is worth a human decision.
+pub(crate) fn is_sensitive_path(arg: &str) -> bool {
     // System directories - always blocked (system-wide impact)
     const BLOCKED_SYSTEM_PREFIXES: &[&str] = &[
         "/etc/", "/usr/", "/bin/", "/sbin/", "/var/", "/opt/", "/boot/", "/root/", "/lib/",
@@ -87,61 +100,53 @@ fn targets_sensitive_path(cmd: &CommandInfo) -> bool {
         "Gemfile.lock",
     ];
 
-    for arg in &cmd.args {
-        // Skip flags
-        if arg.starts_with('-') {
-            continue;
+    // Expand ~, $HOME, $USER via the shared helper. If a recognized
+    // variable is present but can't be resolved, fail closed: we can't
+    // verify the target isn't sensitive, so treat it as if it were.
+    let expanded = match crate::gates::helpers::expand_path_vars(arg) {
+        Some(e) => e,
+        None => return true,
+    };
+
+    // Check system directory prefixes (always blocked)
+    for prefix in BLOCKED_SYSTEM_PREFIXES {
+        if expanded.starts_with(prefix) {
+            return true;
         }
-
-        // Expand ~, $HOME, $USER via the shared helper. If a recognized
-        // variable is present but can't be resolved, fail closed: we can't
-        // verify the target isn't sensitive, so treat it as if it were.
-        let expanded = match crate::gates::helpers::expand_path_vars(arg) {
-            Some(e) => e,
-            None => return true,
-        };
-
-        // Check system directory prefixes (always blocked)
-        for prefix in BLOCKED_SYSTEM_PREFIXES {
-            if expanded.starts_with(prefix) {
-                return true;
-            }
-        }
-
-        // Check security-critical directories (always blocked)
-        for pattern in BLOCKED_SECURITY_DIRS {
-            if expanded.contains(pattern) || arg.contains(pattern) {
-                return true;
-            }
-        }
-
-        // Check specific credential files (always blocked)
-        for pattern in BLOCKED_CREDENTIAL_FILES {
-            if expanded.contains(pattern) || arg.contains(pattern) {
-                return true;
-            }
-        }
-
-        // Check git hook patterns (always blocked)
-        for pattern in BLOCKED_GIT_PATTERNS {
-            if expanded.contains(pattern) || arg.contains(pattern) {
-                return true;
-            }
-        }
-
-        // Check lock files (exact filename match at end of path)
-        for lock_file in LOCK_FILES {
-            if arg.ends_with(lock_file) {
-                return true;
-            }
-        }
-
-        // Note: Regular dotfiles like ~/.bashrc, ~/.zshrc, ~/.prettierrc,
-        // ~/.config/app.yaml are now ALLOWED for editing in acceptEdits mode.
-        // The targets_outside_allowed_dirs check will still apply if the user
-        // hasn't added their home directory to additionalDirectories.
     }
 
+    // Check security-critical directories (always blocked)
+    for pattern in BLOCKED_SECURITY_DIRS {
+        if expanded.contains(pattern) || arg.contains(pattern) {
+            return true;
+        }
+    }
+
+    // Check specific credential files (always blocked)
+    for pattern in BLOCKED_CREDENTIAL_FILES {
+        if expanded.contains(pattern) || arg.contains(pattern) {
+            return true;
+        }
+    }
+
+    // Check git hook patterns (always blocked)
+    for pattern in BLOCKED_GIT_PATTERNS {
+        if expanded.contains(pattern) || arg.contains(pattern) {
+            return true;
+        }
+    }
+
+    // Check lock files (exact filename match at end of path)
+    for lock_file in LOCK_FILES {
+        if arg.ends_with(lock_file) {
+            return true;
+        }
+    }
+
+    // Note: Regular dotfiles like ~/.bashrc, ~/.zshrc, ~/.prettierrc,
+    // ~/.config/app.yaml are now ALLOWED for editing in acceptEdits mode.
+    // The targets_outside_allowed_dirs check will still apply if the user
+    // hasn't added their home directory to additionalDirectories.
     false
 }
 
