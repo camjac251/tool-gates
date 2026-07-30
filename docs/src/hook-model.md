@@ -107,7 +107,7 @@
         <span class="lc-icon">▸</span>
         <span class="lc-tag">PreToolUse</span>
         <div class="lc-title">Decide (deny only)</div>
-        <div class="lc-sub">Codex's parser rejects <code>permissionDecision: "allow"</code> and <code>"ask"</code>, so tool-gates emits empty stdout for those and hands the decision back to Codex. Only hard blocks emit <code>permissionDecision: "deny"</code>. Whether the user is then prompted is governed by Codex's <code>approval_policy</code>, not tool-gates; see the <a href="codex.html">Codex approval model</a>.</div>
+        <div class="lc-sub">Codex's parser rejects <code>permissionDecision: "allow"</code> and <code>"ask"</code>, so tool-gates emits empty stdout for those and hands the decision back to Codex. Only hard blocks emit <code>permissionDecision: "deny"</code>, together with a required nonempty <code>permissionDecisionReason</code> that Codex displays as hook feedback. Whether the user is then prompted is governed by Codex's <code>approval_policy</code>, not tool-gates; see the <a href="codex.html">Codex approval model</a>.</div>
       </div>
       <div class="lc-edge"></div>
       <div class="lc-node hook conditional">

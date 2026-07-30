@@ -5,7 +5,7 @@
     </ol>
   </nav>
   <h1 id="reason-h1">Reason Style Guide</h1>
-  <p class="page-lede">Every <code>reason</code> string in <code>rules/*.toml</code> is sent to the AI agent as <code>permissionDecisionReason</code>. Treat each one as a help-menu entry, not a security disclaimer. The reasons are the docs.</p>
+  <p class="page-lede">Every <code>reason</code> string in <code>rules/*.toml</code> is sent as <code>permissionDecisionReason</code>. The agent receives it, and Codex also displays deny reasons to the operator as hook feedback. Treat each one as a client-neutral help-menu entry, not a security disclaimer. The reasons are the docs.</p>
   <div class="sec-head" style="margin-top: var(--s-6)">
     <p class="lbl">Format</p>
     <h2>Two sentences, max.</h2>
@@ -54,6 +54,7 @@
       <tr><td>No em-dashes</td><td>Periods separate clauses; ASCII-only quotes. Em-dashes are a style smell in agent-facing prose.</td></tr>
       <tr><td>No authorization hedges</td><td>Don't write "verify you have permission" or "only do this on resources you own". The reason teaches; it doesn't gate.</td></tr>
       <tr><td>Generic placeholders only</td><td>Use <code>&lt;file&gt;</code>, <code>&lt;path&gt;</code>, <code>&lt;host&gt;</code>, <code>&lt;user&gt;</code>, <code>&lt;region&gt;</code>, <code>&lt;resource&gt;</code>, <code>&lt;key&gt;</code>, <code>&lt;pid&gt;</code>. Never embed real hostnames, IPs, usernames, paths, or service names. Tests and reasons are public.</td></tr>
+      <tr><td>Client-neutral recovery</td><td>Shared reasons and hints reach Claude, Codex, Antigravity, and Gemini. Avoid client-only tool names; keep client-specific guidance in the relevant serializer or client page.</td></tr>
       <tr><td>Terse for procedural mutations</td><td>One sentence for routine ones like <code>"Installing packages"</code> or <code>"Formatting files"</code>. Add a second sentence only when there's a non-obvious risk worth teaching.</td></tr>
     </tbody>
   </table>

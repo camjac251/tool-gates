@@ -77,7 +77,7 @@ Run `mise run build-wasm` when a change affects the browser simulator or the WAS
 - Every `[[programs.ask]]` and `[[programs.block]]` rule needs a `reason`. `build.rs` rejects reasons longer than 250 characters. Follow `docs/src/reason-style.md`.
 - `build.rs` runs `rustfmt --edition 2024` on generated Rust. Keep that explicit edition because generated formatting otherwise drifts when the build cache is invalidated.
 - Wire-format structs are external contracts. Any serialized field added or changed for a client needs a test that asserts its exact JSON key casing and allowed shape.
-- `HookOutput::deny()` is silent in the operator UI by default. Call `.user_visible()` only for denials that must emit a top-level `systemMessage`, such as Tier 1 secret blocks; routine gate and settings denials stay silent.
+- `HookOutput::deny()` always carries a reason. On Claude, it omits the optional top-level `systemMessage` unless `.user_visible()` is called for a denial such as a Tier 1 secret block. Codex displays every deny reason as hook feedback regardless of `.user_visible()`.
 
 ## Client Integration Invariants
 

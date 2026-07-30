@@ -417,20 +417,18 @@ impl PermissionDecision {
     }
 }
 
-/// Provider-agnostic hook output.
-/// Serialized differently for Claude Code vs Gemini CLI at output time.
+/// Provider-agnostic hook output serialized per client at output time.
 #[derive(Debug, Clone)]
 pub struct HookOutput {
     pub decision: PermissionDecision,
     pub reason: Option<String>,
     pub context: Option<String>,
     pub updated_command: Option<String>,
-    /// When true and decision is `Deny`, emit a top-level `systemMessage`
-    /// alongside the nested `permissionDecisionReason` so the user sees a
-    /// UI warning. Tier-1 secret blocks use this; routine denies (head/tail
-    /// pipe blocks, settings.json deny rules, procedural gate denies) do
-    /// not, to avoid UI noise from frequent blocks the agent already knows
-    /// the rule for.
+    /// When true and decision is `Deny`, the Claude serializer emits a
+    /// top-level `systemMessage` alongside the nested
+    /// `permissionDecisionReason`. Tier-1 secret blocks use this; routine
+    /// denies omit the extra Claude warning. Codex ignores this flag because
+    /// every deny reason is required and displayed as hook feedback.
     pub surface_to_user: bool,
     /// When true and the decision is `Ask`, the Antigravity serializer emits
     /// `force_ask` instead of `ask`, so the prompt fires even when the user has
@@ -566,8 +564,10 @@ impl HookOutput {
 
     /// Return deny with additional context explaining the danger.
     ///
-    /// Default behavior: does NOT emit a top-level `systemMessage`. Chain
-    /// `.user_visible()` for Tier-1 secret blocks.
+    /// Default behavior: does NOT emit a top-level `systemMessage` on the
+    /// Claude wire format. Chain `.user_visible()` for Tier-1 secret blocks.
+    /// Codex still carries the deny reason and context as visible hook
+    /// feedback.
     pub fn deny_with_context(reason: &str, context: &str) -> Self {
         Self {
             decision: PermissionDecision::Deny,
@@ -580,11 +580,11 @@ impl HookOutput {
         }
     }
 
-    /// Mark this deny as user-visible. Emits a top-level `systemMessage`
-    /// on the Claude wire format alongside `permissionDecisionReason`, so
-    /// the user sees a UI warning instead of only the agent seeing the
-    /// block reason. Use for Tier-1 secret blocks and other denies where
-    /// silent agent retries would mask the issue.
+    /// Request an additional user-visible warning on Claude. Emits a top-level
+    /// `systemMessage` alongside `permissionDecisionReason`. Use for Tier-1
+    /// secret blocks and other denies where silent agent retries would mask
+    /// the issue. Codex ignores this flag because its required deny reason is
+    /// already displayed as hook feedback.
     pub fn user_visible(mut self) -> Self {
         self.surface_to_user = true;
         self
@@ -622,10 +622,10 @@ impl HookOutput {
     /// Defer:   `{"hookSpecificOutput":{"hookEventName":"PreToolUse",...}}` (no permissionDecision)
     /// Others:  `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow",...}}`
     ///
-    /// Deny additionally surfaces the reason through top-level `systemMessage`
-    /// so the user sees a visible warning instead of only the agent seeing
-    /// `permissionDecisionReason`. Tier-1 secret blocks and head/tail pipe
-    /// denies are otherwise silent from the user's perspective.
+    /// When `surface_to_user` is true, Deny additionally surfaces the reason
+    /// through top-level `systemMessage`. Routine denies omit that extra
+    /// Claude warning while the agent still receives
+    /// `permissionDecisionReason`.
     fn to_claude_json(&self) -> serde_json::Value {
         if self.decision == PermissionDecision::Approve {
             return serde_json::json!({ "decision": "approve" });
@@ -667,10 +667,10 @@ impl HookOutput {
             serde_json::Value::Object(hso),
         );
 
-        // Only emit a user-visible warning when the call site opted in.
+        // Only emit the extra Claude warning when the call site opted in.
         // Routine denies (head/tail pipe blocks, settings.json deny matches,
-        // procedural gate denies) stay silent at the UI level; Tier-1 secret
-        // blocks call `.user_visible()` to flip this on.
+        // procedural gate denies) omit it; Tier-1 secret blocks call
+        // `.user_visible()` to flip this on.
         if self.decision == PermissionDecision::Deny && self.surface_to_user {
             let user_msg = self
                 .reason
@@ -1342,10 +1342,10 @@ mod tests {
 
     #[test]
     fn test_claude_deny_default_no_system_message() {
-        // Routine denies stay silent at the UI level. The agent still sees
-        // `permissionDecisionReason`; the user does not get a duplicated
-        // UI warning for high-frequency procedural blocks (head/tail pipe,
-        // matched settings.json deny rules, etc.).
+        // Routine Claude denies omit the extra top-level warning. The agent
+        // still sees `permissionDecisionReason`; the user does not get a
+        // duplicated warning for high-frequency procedural blocks (head/tail
+        // pipe, matched settings.json deny rules, etc.).
         let output = HookOutput::deny("Blocked: pipe to head");
         let value = output.to_claude_json();
         assert!(
@@ -1810,8 +1810,9 @@ mod tests {
     }
 
     #[test]
-    fn test_codex_deny_shape() {
+    fn test_codex_routine_deny_carries_feedback_reason() {
         let output = HookOutput::deny("Dangerous command");
+        assert!(!output.surface_to_user);
         let value = output.serialize(Client::Codex);
         assert!(!value.is_null(), "Codex Deny must produce JSON, got Null");
         let hso = value

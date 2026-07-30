@@ -243,9 +243,9 @@ fn head_tail_message(producer: &str, segment: &str) -> String {
     }
     // Any other producer (ls, fd, rg, find, git log, cat, custom scripts).
     format!(
-        "`{trimmed}` blocked: a consumer-side cap truncates unseen output. If the task needs a bounded \
-         result, use the producer's native limit; otherwise run uncapped and inspect the persisted \
-         output. Use Read or a bat range for files."
+        "`{trimmed}` blocked: a consumer-side cap truncates unseen output. Use the producer's native \
+         limit; otherwise run uncapped, persist complete output for range inspection, or read a \
+         source file range directly."
     )
 }
 

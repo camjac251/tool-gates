@@ -80,7 +80,7 @@
   <div class="hook-cards">
     <article class="hook-card">
       <h3>Deny always works</h3>
-      <p>A hard <code>deny</code> lands on both PreToolUse and PermissionRequest. The security floor (destructive <code>rm</code>, pipe-to-shell, your own deny rules) is fully enforced on Codex.</p>
+      <p>A hard <code>deny</code> lands on both PreToolUse and PermissionRequest. The security floor (destructive <code>rm</code>, pipe-to-shell, your own deny rules) is fully enforced on Codex. Every PreToolUse deny includes a nonempty <code>permissionDecisionReason</code>, which Codex displays to the operator as hook feedback.</p>
     </article>
     <article class="hook-card">
       <h3>Allow only via PermissionRequest</h3>

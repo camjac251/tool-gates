@@ -504,11 +504,11 @@ pub fn check_security_reminders_for_content(
         for m in &matches {
             match m.tier {
                 Tier::Deny => {
-                    // Tier-1 secret blocks surface to the user via
-                    // systemMessage. Routine denies (head/tail, settings.json
-                    // matches) stay silent at the UI level; secret leaks
-                    // deserve a visible warning so the agent can't quietly
-                    // retry around them.
+                    // Tier-1 secret blocks request Claude's extra
+                    // systemMessage. Routine denies omit that extra warning;
+                    // Codex still displays every required deny reason as hook
+                    // feedback. Secret leaks deserve the additional Claude
+                    // warning so the agent cannot quietly retry around them.
                     return Some(
                         HookOutput::deny_with_context(
                             &format!("Security: {}", m.rule_name),

@@ -351,7 +351,10 @@ fn hint_cat(cmd: &CommandInfo) -> Option<ModernHint> {
     Some(ModernHint {
         legacy_command: "cat",
         modern_command: "bat",
-        hint: format!("Use Read to view `{file}`. `bat {file}` only if piping/redirecting."),
+        hint: format!(
+            "Use `bat {file}` to view the file in the terminal; keep `cat` for concatenation or \
+             byte-for-byte streaming."
+        ),
     })
 }
 
@@ -391,9 +394,7 @@ fn hint_head(cmd: &CommandInfo) -> Option<ModernHint> {
     Some(ModernHint {
         legacy_command: "head",
         modern_command: "bat",
-        hint: format!(
-            "Use Read to view `{file}`. `bat -r {bat_range} {file}` only if piping the slice."
-        ),
+        hint: format!("Use `bat -r {bat_range} {file}` to view that file range directly."),
     })
 }
 
@@ -438,9 +439,7 @@ fn hint_tail(cmd: &CommandInfo) -> Option<ModernHint> {
     Some(ModernHint {
         legacy_command: "tail",
         modern_command: "bat",
-        hint: format!(
-            "Use Read to view `{file}`. `bat -r {bat_range} {file}` only if piping the slice."
-        ),
+        hint: format!("Use `bat -r {bat_range} {file}` to view that file range directly."),
     })
 }
 
@@ -1562,8 +1561,8 @@ mod tests {
         assert!(hint.is_some());
         let hint = hint.unwrap();
         assert_eq!(hint.modern_command, "bat");
-        // Read-first: the Read tool is preferred over a Bash `bat` slice.
-        assert!(hint.hint.contains("Read"));
+        assert!(hint.hint.contains("bat file.rs"));
+        assert!(!hint.hint.contains("Use Read"));
     }
 
     #[test]
@@ -1580,6 +1579,7 @@ mod tests {
         let hint = hint.unwrap();
         assert_eq!(hint.modern_command, "bat");
         assert!(hint.hint.contains("-r :50"));
+        assert!(!hint.hint.contains("Use Read"));
     }
 
     #[test]
@@ -1608,6 +1608,7 @@ mod tests {
         assert!(hint.is_some());
         let hint = hint.unwrap();
         assert!(hint.hint.contains("-r -30:"));
+        assert!(!hint.hint.contains("Use Read"));
     }
 
     #[test]

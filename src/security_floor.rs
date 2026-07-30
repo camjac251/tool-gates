@@ -790,6 +790,21 @@ mod tests {
         }
 
         #[test]
+        fn test_generic_truncation_message_is_client_neutral() {
+            let result = check_command("git log | sed -n '1,10p'");
+            assert_eq!(get_decision(&result), "deny");
+            let reason = get_reason(&result);
+            assert!(
+                reason.contains("read a source file range directly"),
+                "expected client-neutral range guidance\ngot: {reason}"
+            );
+            assert!(
+                !reason.contains("Use Read"),
+                "shared deny reason must not name a client-only tool\ngot: {reason}"
+            );
+        }
+
+        #[test]
         fn test_sed_awk_truncation_backstop() {
             // Backstop: first-N sed/awk truncation is denied for every producer
             // (the head/tail rule's side door).
