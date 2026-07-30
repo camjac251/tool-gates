@@ -10,8 +10,34 @@
     <header class="sec-head release-section-head">
       <span class="lbl">Current window</span>
       <h2 id="release-current-title">Latest eight versions</h2>
-      <p>From v1.32.4 through v1.30.0, newest first.</p>
+      <p>From v1.33.0 through v1.31.0, newest first.</p>
     </header>
+  <div class="config-block">
+    <header>
+      <h3>v1.33.0 · July 30, 2026</h3>
+      <span class="src-tag">auto-mode classifier routing · <a href="https://github.com/camjac251/tool-gates/commit/a9a93f2" target="_blank" rel="noopener">a9a93f2</a></span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  defer gate asks under auto mode so the classifier adjudicates
+  auto = "prompt" holds a prompt the classifier cannot bypass
+  record whether a human or the classifier approved a queue entry
+<span class="sec fixed">Fixed</span>
+  scope the acceptEdits base guard to the whole command chain
+  reach 27 cloud rules that subcommand lookups could never match
+  apply git rules to path-qualified invocations
+  consult the gcloud catalog at every argument count
+  allow ten rules whose own reason text refutes the ask</pre>
+      </div>
+      <div class="config-prose">
+        <p>Routes the gate catalog through auto mode's classifier instead of around it. Claude Code returns a hook <code>ask</code> to the user without consulting that classifier, so emitting one under auto excluded every declarative rule from the mechanism the mode exists to provide; <code>defer</code> is the decision that reaches it. Replaying a local approval history puts roughly four in five previously-prompted commands on the classifier path.</p>
+        <p>Irreversible, externally visible work opts out. <code>auto = "prompt"</code> on an ask rule keeps a prompt the classifier cannot bypass, and now covers registry publishes, credential and key mutation, infrastructure teardown, remote state overwrites, and the commands that rewrite tool-gates' own permission config. The disposition survives wrapper expansion, so a mise task or package script that reaches <code>npm publish</code> inherits the hold. The same marker applies to raw-floor rows, holding the patterns that run a destructive command once per match (<code>find -delete</code>, <code>find -exec</code>, <code>fd -x</code>, <code>xargs</code>) while redirects, <code>source</code>, and pipe-to-interpreter defer.</p>
+        <p>The acceptEdits base-command guard now requires every sub-command in a chain, matching when Claude's own fast path can fire, so <code>mkdir -p dist &amp;&amp; cargo build</code> no longer denies under auto. Its outcome drops from deny to ask, and base names resolve through quoting, a leading backslash, and transparent prefixes so <code>\rm</code> and <code>stdbuf -o0 rm</code> cannot slip past. The approval queue records entries under auto tagged with whether a person answered a prompt or the classifier resolved a defer unseen, and the review list shows the difference so a rule is never granted on a silent approval.</p>
+        <p>Three long-standing catalog bugs surfaced while tracing that work. Declarative subcommand lookups only ever built a two-word key, leaving all 27 three-word cloud rules unreachable. The Git gate rejected path-qualified invocations, so <code>/usr/bin/git push --force</code> lost every Git rule. The gcloud handler consulted its catalog only below three arguments, so a rule matched its bare form and nothing else. Ten rules whose reason text already described read-only or locally regenerable behavior became allows, among them <code>helm repo update</code>, <code>gh run watch</code>, <code>mise activate</code>, <code>ninja clean</code>, <code>meson compile</code>, and <code>git fetch</code> without its ref-rewriting flags.</p>
+      </div>
+    </div>
+  </div>
   <div class="config-block">
     <header>
       <h3>v1.32.4 · July 28, 2026</h3>
@@ -146,6 +172,17 @@
       </div>
     </div>
   </div>
+  </section>
+  <details class="release-archive" id="release-archive" aria-labelledby="release-archive-title">
+    <summary>
+      <h2 class="release-summary" id="release-archive-title">
+        <span class="release-summary-kicker">Historical archive</span>
+        <span class="release-summary-title">Browse 52 earlier releases</span>
+        <span class="release-summary-range">v1.30.0 to v1.1.0</span>
+        <span class="release-summary-icon" aria-hidden="true"></span>
+      </h2>
+    </summary>
+    <div class="release-archive-list">
   <div class="config-block">
     <header>
       <h3>v1.30.0 · June 23, 2026</h3>
@@ -164,17 +201,6 @@
       </div>
     </div>
   </div>
-  </section>
-  <details class="release-archive" id="release-archive" aria-labelledby="release-archive-title">
-    <summary>
-      <h2 class="release-summary" id="release-archive-title">
-        <span class="release-summary-kicker">Historical archive</span>
-        <span class="release-summary-title">Browse 51 earlier releases</span>
-        <span class="release-summary-range">v1.29.0 to v1.1.0</span>
-        <span class="release-summary-icon" aria-hidden="true"></span>
-      </h2>
-    </summary>
-    <div class="release-archive-list">
   <div class="config-block">
     <header>
       <h3>v1.29.0 · June 23, 2026</h3>
