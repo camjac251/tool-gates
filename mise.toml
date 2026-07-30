@@ -4,7 +4,7 @@ lefthook = "latest"
 # Non-Rust formatters/linters enforced in lefthook pre-commit and CI (format.yml).
 # Pinned so local and CI format identically (a version skew makes CI reject
 # locally-clean formatting). Keep in sync with .github/workflows/format.yml.
-prettier = "3.8.3"
+prettier = "3.9.6"
 biome = "2.4.16"
 taplo = "0.10.0"
 # Documentation and WASM tools. Keep in sync with docs.yml and Cargo.lock.
