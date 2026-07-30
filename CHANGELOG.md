@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.33.0](https://github.com/camjac251/tool-gates/compare/v1.32.4...v1.33.0) - 2026-07-30
+
+### Added
+
+- *(auto-mode)* defer gate asks so the classifier can adjudicate
+
+### Other
+
+- link v1.32.4 release commit
+
 ## [1.32.4](https://github.com/camjac251/tool-gates/compare/v1.32.3...v1.32.4) - 2026-07-28
 
 ### Fixed
