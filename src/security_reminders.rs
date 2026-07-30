@@ -1069,6 +1069,12 @@ print(result.stdout)
         );
     }
 
+    // Dedup asserts that the first call's tracker write is visible to the
+    // second. Tests elsewhere relocate HOME to a TempDir and `cache_dir()`
+    // resolves through HOME, so a concurrent one can delete the directory this
+    // write targets (ENOENT -> fail open -> the warning re-shows). Join the
+    // same global serial group as those tests.
+    #[serial_test::serial]
     #[test]
     fn test_post_tool_use_dedup() {
         let session = unique_session("post-dedup");
@@ -1753,6 +1759,10 @@ mod doc_file_secret_tests {
         );
     }
 
+    // Serial for the same reason as `test_post_tool_use_dedup`: a HOME-
+    // relocating test can pull the cache directory out from under this one's
+    // tracker write.
+    #[serial_test::serial]
     #[test]
     fn test_doc_file_secret_warn_deduped() {
         let content = fake_aws_content();

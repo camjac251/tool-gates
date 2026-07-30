@@ -16,6 +16,7 @@ safe_commands = [
   # Display/output (including compressed variants)
   "echo",
   "printf",
+  "print",
   "cat",
   "zcat",
   "head",
@@ -227,6 +228,7 @@ safe_commands = [
 
   # Shell builtins (used in while read loops, etc.)
   "read",
+  "exit",
 ]
 
 [meta]
@@ -249,6 +251,7 @@ title = "Display & output"
 commands = [
   "echo",
   "printf",
+  "print",
   "cat",
   "zcat",
   "head",
@@ -462,6 +465,7 @@ commands = [
   "[[",
   "dpkg-query",
   "read",
+  "exit",
 ]
 
 # xargs needs custom handling to check target command

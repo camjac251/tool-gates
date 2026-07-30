@@ -13,14 +13,14 @@
   </div>
 
   <section class="summary" aria-label="Rule counts at a glance">
-    <div class="seg-bar" role="img" aria-label="233 allow, 220 ask, 0 block">
-      <div class="seg allow" style="flex: 233"></div>
-      <div class="seg ask"   style="flex: 220"></div>
+    <div class="seg-bar" role="img" aria-label="235 allow, 218 ask, 0 block">
+      <div class="seg allow" style="flex: 235"></div>
+      <div class="seg ask"   style="flex: 218"></div>
       <div class="seg block" style="flex: 0"></div>
     </div>
     <div class="counts">
-      <span class="ca"><i></i><b>233</b> allow</span>
-      <span class="cas"><i></i><b>220</b> ask</span>
+      <span class="ca"><i></i><b>235</b> allow</span>
+      <span class="cas"><i></i><b>218</b> ask</span>
       <span class="cb"><i></i><b>0</b> block</span>
     </div>
   </section>
@@ -30,8 +30,8 @@
 
 <div class="chips" role="group" aria-label="Filter rules by decision" aria-describedby="rule-filter-status">
   <button class="chip all"   data-filter="all"   aria-pressed="true"><i></i>All <span class="n">453</span></button>
-  <button class="chip allow" data-filter="allow" aria-pressed="false"><i></i>Allow <span class="n">233</span></button>
-  <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">220</span></button>
+  <button class="chip allow" data-filter="allow" aria-pressed="false"><i></i>Allow <span class="n">235</span></button>
+  <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">218</span></button>
   <button class="chip block" data-filter="block" aria-pressed="false"><i></i>Block <span class="n">0</span></button>
 </div>
 <p class="rule-filter-status" id="rule-filter-status" role="status" aria-live="polite" aria-atomic="true">Showing all 453 rules.</p>
@@ -43,7 +43,7 @@
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
       rules/package_managers.toml#allow
     </a>
-    <span class="count">233 patterns</span>
+    <span class="count">235 patterns</span>
   </header>
 
 <div class="rule-row" data-decision="allow" id="package_managers-bun-pm-ls">
@@ -550,6 +550,16 @@
   <div class="rule-cmd"><span class="prog">mise</span> exec</div>
   <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
   <div class="rule-reason">Runs a command with mise-managed tool versions on PATH. Devtool delegation is handled by the mise handler.</div>
+</div>
+<div class="rule-row" data-decision="allow" id="package_managers-mise-activate">
+  <div class="rule-cmd"><span class="prog">mise</span> activate</div>
+  <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
+  <div class="rule-reason">Prints the shell activation script to stdout. Nothing is executed or written; the caller decides whether to eval it.</div>
+</div>
+<div class="rule-row" data-decision="allow" id="package_managers-mise-deactivate">
+  <div class="rule-cmd"><span class="prog">mise</span> deactivate</div>
+  <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
+  <div class="rule-reason">Prints the script that undoes shell activation. Takes no arguments and writes nothing.</div>
 </div>
 <div class="rule-row" data-decision="allow" id="package_managers-mise-registry">
   <div class="rule-cmd"><span class="prog">mise</span> registry</div>
@@ -1220,7 +1230,7 @@
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
       rules/package_managers.toml#ask
     </a>
-    <span class="count">220 patterns</span>
+    <span class="count">218 patterns</span>
   </header>
 
 <div class="rule-row" data-decision="ask" id="package_managers-bun-pm-trust">
@@ -1602,16 +1612,6 @@
   <div class="rule-cmd"><span class="prog">mise</span> sync</div>
   <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
   <div class="rule-reason">Syncing tool versions</div>
-</div>
-<div class="rule-row" data-decision="ask" id="package_managers-mise-activate">
-  <div class="rule-cmd"><span class="prog">mise</span> activate</div>
-  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
-  <div class="rule-reason">Activating mise in shell</div>
-</div>
-<div class="rule-row" data-decision="ask" id="package_managers-mise-deactivate">
-  <div class="rule-cmd"><span class="prog">mise</span> deactivate</div>
-  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
-  <div class="rule-reason">Deactivating mise</div>
 </div>
 <div class="rule-row" data-decision="ask" id="package_managers-mise-implode">
   <div class="rule-cmd"><span class="prog">mise</span> implode</div>

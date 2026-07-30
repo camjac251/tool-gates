@@ -200,6 +200,27 @@ pub struct AskRule {
     /// (when the command targets files within the allowed directories).
     #[serde(default)]
     pub accept_edits_auto_allow: bool,
+    /// How this ask behaves under Claude Code auto mode.
+    #[serde(default)]
+    pub auto: AutoDisposition,
+}
+
+/// What an ask rule does when Claude Code is in auto mode.
+///
+/// Deferring lets the auto-mode classifier adjudicate with the full command
+/// and conversation context, which is usually better than a static table.
+/// Some actions are worth a guaranteed human decision anyway: the ones whose
+/// blast radius is external and irreversible, where the classifier has no
+/// more information than the rule does.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(all(feature = "schemars", lib_only), derive(JsonSchema))]
+#[serde(rename_all = "lowercase")]
+pub enum AutoDisposition {
+    /// Defer so the auto-mode classifier decides.
+    #[default]
+    Classifier,
+    /// Hold an explicit ask that the classifier cannot bypass.
+    Prompt,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -359,6 +380,10 @@ pub struct SecurityPattern {
     #[serde(default)]
     pub regex: Option<String>,
     pub tier: FloorTier,
+    /// How a `soft_ask` row behaves under Claude Code auto mode. Ignored for
+    /// `hard_ask` rows, which promote to deny there regardless.
+    #[serde(default)]
+    pub auto: AutoDisposition,
     /// Help-menu reason. For `within` rows it may contain a `{match}`
     /// placeholder replaced by the (truncated) matched substring.
     pub reason: String,

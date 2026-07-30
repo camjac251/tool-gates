@@ -70,6 +70,10 @@ pub struct CommandInfo {
 pub struct GateResult {
     pub decision: Decision,
     pub reason: Option<String>,
+    /// Hold an explicit ask under Claude Code auto mode instead of deferring
+    /// to the classifier. Set by ask rules marked `auto = "prompt"`, for
+    /// actions whose blast radius is external and irreversible.
+    pub hold_in_auto: bool,
 }
 
 impl GateResult {
@@ -78,6 +82,7 @@ impl GateResult {
         Self {
             decision: Decision::Skip,
             reason: None,
+            hold_in_auto: false,
         }
     }
 
@@ -85,6 +90,7 @@ impl GateResult {
         Self {
             decision: Decision::Allow,
             reason: None,
+            hold_in_auto: false,
         }
     }
 
@@ -92,6 +98,7 @@ impl GateResult {
         Self {
             decision: Decision::Allow,
             reason: Some(reason.into()),
+            hold_in_auto: false,
         }
     }
 
@@ -99,6 +106,7 @@ impl GateResult {
         Self {
             decision: Decision::Ask,
             reason: Some(reason.into()),
+            hold_in_auto: false,
         }
     }
 
@@ -106,7 +114,15 @@ impl GateResult {
         Self {
             decision: Decision::Block,
             reason: Some(reason.into()),
+            hold_in_auto: false,
         }
+    }
+
+    /// Keep this ask explicit under auto mode rather than deferring to the
+    /// classifier, so a human makes the call.
+    pub fn hold_in_auto(mut self) -> Self {
+        self.hold_in_auto = true;
+        self
     }
 }
 
@@ -423,6 +439,12 @@ pub struct HookOutput {
     /// The Claude/Codex/Gemini serializers ignore it: their `ask` is already
     /// authoritative per invocation and cannot be permanently granted away.
     pub force: bool,
+    /// When true, an `Ask` keeps its explicit wire form under Claude Code auto
+    /// mode instead of collapsing to `Defer`. Carries a rule's `auto = "prompt"`
+    /// disposition through wrapper expansion (mise tasks, package scripts) so a
+    /// script that runs an irreversible command is gated like the command is.
+    /// Not serialized; it only selects between `ask` and `defer` upstream.
+    pub hold_in_auto: bool,
 }
 
 impl HookOutput {
@@ -436,6 +458,7 @@ impl HookOutput {
             updated_command: None,
             surface_to_user: false,
             force: false,
+            hold_in_auto: false,
         }
     }
 
@@ -448,6 +471,7 @@ impl HookOutput {
             updated_command: None,
             surface_to_user: false,
             force: false,
+            hold_in_auto: false,
         }
     }
 
@@ -460,6 +484,7 @@ impl HookOutput {
             updated_command: None,
             surface_to_user: false,
             force: false,
+            hold_in_auto: false,
         }
     }
 
@@ -472,6 +497,7 @@ impl HookOutput {
             updated_command: None,
             surface_to_user: false,
             force: false,
+            hold_in_auto: false,
         }
     }
 
@@ -484,6 +510,7 @@ impl HookOutput {
             updated_command: None,
             surface_to_user: false,
             force: false,
+            hold_in_auto: false,
         }
     }
 
@@ -499,6 +526,7 @@ impl HookOutput {
             updated_command: None,
             surface_to_user: false,
             force: false,
+            hold_in_auto: false,
         }
     }
 
@@ -515,6 +543,7 @@ impl HookOutput {
             updated_command: Some(new_command.to_string()),
             surface_to_user: false,
             force: false,
+            hold_in_auto: false,
         }
     }
 
@@ -531,6 +560,7 @@ impl HookOutput {
             updated_command: None,
             surface_to_user: false,
             force: false,
+            hold_in_auto: false,
         }
     }
 
@@ -546,6 +576,7 @@ impl HookOutput {
             updated_command: None,
             surface_to_user: false,
             force: false,
+            hold_in_auto: false,
         }
     }
 
@@ -1133,6 +1164,28 @@ pub struct PermissionDeniedInput {
 }
 
 impl PermissionDeniedInput {
+    /// True when `reason` shows this denial did not come from the classifier
+    /// judging the command.
+    ///
+    /// Claude Code labels two other outcomes with the same classifier
+    /// decision reason, and retrying either is useless or harmful:
+    ///
+    /// - the classifier service was unreachable, so nothing was judged and a
+    ///   retry just fails again;
+    /// - the session hit its consecutive/total denial limit and fell back to
+    ///   prompting, which is a signal to stop and let the user look, not to
+    ///   push the model at it again.
+    ///
+    /// The hook payload carries no field distinguishing these, so the reason
+    /// text is the only signal. Match conservatively and fail open: an
+    /// unrecognized reason keeps today's behavior.
+    pub fn is_non_judgment_denial(&self) -> bool {
+        const CLASSIFIER_UNAVAILABLE: &str = "Classifier unavailable";
+        const DENIAL_LIMIT: &str = "Please review the transcript before continuing.";
+
+        self.reason.contains(CLASSIFIER_UNAVAILABLE) || self.reason.contains(DENIAL_LIMIT)
+    }
+
     /// Extract command string from `tool_input` (for Bash-style tools)
     pub fn get_command(&self) -> String {
         match &self.tool_input {
@@ -1333,6 +1386,7 @@ mod tests {
             updated_command: None,
             surface_to_user: true,
             force: false,
+            hold_in_auto: false,
         };
         let value = output.to_claude_json();
         assert_eq!(value["systemMessage"], "Blocked by tool-gates");
@@ -1624,6 +1678,36 @@ mod tests {
     }
 
     #[test]
+    fn test_non_judgment_denials_are_recognized() {
+        let with_reason = |reason: &str| PermissionDeniedInput {
+            reason: reason.to_string(),
+            ..Default::default()
+        };
+
+        // Classifier service was unreachable -- nothing was judged.
+        assert!(with_reason("Classifier unavailable").is_non_judgment_denial());
+
+        // Denial limit reached, both the consecutive and total wordings.
+        assert!(
+            with_reason(
+                "3 consecutive actions were blocked. Please review the transcript before continuing.\n\nLatest blocked action: rm -rf build"
+            )
+            .is_non_judgment_denial()
+        );
+        assert!(
+            with_reason(
+                "20 actions were blocked this session. Please review the transcript before continuing.\n\nLatest blocked action: curl example.com"
+            )
+            .is_non_judgment_denial()
+        );
+
+        // A real classifier judgment is retryable, and so is an unrecognized
+        // reason: the match fails open so bundle drift keeps today's behavior.
+        assert!(!with_reason("Installs an unvetted dependency").is_non_judgment_denial());
+        assert!(!with_reason("").is_non_judgment_denial());
+    }
+
+    #[test]
     fn test_is_auto_mode_normalizes_case_and_whitespace() {
         // Exact match
         assert!(is_auto_mode("auto"));
@@ -1750,6 +1834,7 @@ mod tests {
             updated_command: None,
             surface_to_user: false,
             force: false,
+            hold_in_auto: false,
         };
         let value = output.serialize(Client::Codex);
         let reason = &value["hookSpecificOutput"]["permissionDecisionReason"];
@@ -1769,6 +1854,7 @@ mod tests {
             updated_command: None,
             surface_to_user: false,
             force: false,
+            hold_in_auto: false,
         };
         let value = output.serialize(Client::Codex);
         let reason = value["hookSpecificOutput"]["permissionDecisionReason"]

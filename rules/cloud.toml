@@ -366,6 +366,7 @@ reason = "GKE create: provisions a new Kubernetes cluster. Control plane and nod
 [[programs.ask]]
 subcommand = "container clusters delete"
 reason = "GKE delete: tears down the cluster including all workloads. Cannot be reversed."
+auto = "prompt"
 
 [[programs.ask]]
 subcommand = "container clusters resize"
@@ -410,6 +411,7 @@ reason = "Cloud SQL create: provisions a managed database instance. Billing star
 [[programs.ask]]
 subcommand = "sql instances delete"
 reason = "Cloud SQL delete: removes the database instance and its data. Restore requires a prior backup; otherwise data is gone."
+auto = "prompt"
 
 [[programs.ask]]
 subcommand = "sql instances patch"
@@ -422,6 +424,7 @@ reason = "Secret Manager create: creates a new secret container. Initial payload
 [[programs.ask]]
 subcommand = "secrets delete"
 reason = "Secret Manager delete: removes the secret and all its versions. Consumers that read it will start failing immediately."
+auto = "prompt"
 
 [[programs.ask]]
 subcommand = "projects create"
@@ -552,6 +555,7 @@ reason = "Terraform console: interactive REPL against the current state. Evaluat
 [[programs.ask]]
 subcommand = "force-unlock"
 reason = "Terraform force-unlock removes a stuck state lock. Confirm no other apply is in progress; concurrent applies corrupt state."
+auto = "prompt"
 
 [[programs.ask]]
 subcommand = "apply"
@@ -560,6 +564,7 @@ reason = "Terraform apply: applies planned changes to real infrastructure. Run `
 [[programs.ask]]
 subcommand = "destroy"
 reason = "Terraform destroy: tears down resources tracked by this state. Use `-target` to scope; cannot be undone."
+auto = "prompt"
 
 [[programs.ask]]
 subcommand = "import"
@@ -594,6 +599,7 @@ reason = "Terraform state rm: drops a resource from state without destroying it 
 [[programs.ask]]
 subcommand = "state push"
 reason = "Terraform state push: overwrites remote state with local. Take a backup of remote state first."
+auto = "prompt"
 
 [[programs.ask]]
 subcommand = "state pull"
@@ -1690,7 +1696,7 @@ reason = "Helm repo add: registers a chart repository in the local Helm config. 
 subcommand = "repo remove"
 reason = "Helm repo remove: removes a chart repository from the local Helm config. Existing releases keep running."
 
-[[programs.ask]]
+[[programs.allow]]
 subcommand = "repo update"
 reason = "Helm repo update: refreshes the local index for all repos. Read-only on clusters; updates local cache files."
 
@@ -1818,6 +1824,7 @@ reason = "Pulumi up: applies the current program to the selected stack, creating
 [[programs.ask]]
 subcommand = "destroy"
 reason = "Pulumi destroy: tears down every resource tracked by the selected stack. Cannot be undone without recreating from code."
+auto = "prompt"
 
 [[programs.ask]]
 subcommand = "refresh"
@@ -1830,6 +1837,7 @@ reason = "Pulumi import: brings an existing cloud resource under Pulumi manageme
 [[programs.ask]]
 subcommand = "cancel"
 reason = "Pulumi cancel: forcibly cancels an in-progress update on the stack. Partial state on the cloud side may not match the state file."
+auto = "prompt"
 
 [[programs.ask]]
 subcommand = "new"

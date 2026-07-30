@@ -230,6 +230,7 @@ reason = "Removes a dependency from `deno.json` imports."
 [[programs.ask]]
 subcommand = "publish"
 reason = "Uploads the module to JSR. Public publish is irreversible: the version number cannot be reused."
+auto = "prompt"
 
 # =============================================================================
 # PHP

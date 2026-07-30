@@ -354,6 +354,7 @@ subcommand = "push"
 reason = "Force push overwrites upstream history. Safer: `--force-with-lease` fails if the remote moved."
 if_flags_any = ["--force", "-f"]
 warn = true
+auto = "prompt"
 
 [[programs.ask]]
 subcommand = "reset"
@@ -449,9 +450,15 @@ reason = "Creates a new git repository in the current directory. Writes a `.git/
 subcommand = "clone"
 reason = "Clones a remote repository into a new directory. Network operation; size depends on remote history."
 
-[[programs.ask]]
+[[programs.allow]]
 subcommand = "fetch"
 reason = "Downloads refs and objects from a remote. Does not modify the working tree or current branch."
+unless_flags = ["--force", "-f", "--prune", "-p"]
+
+[[programs.ask]]
+subcommand = "fetch"
+if_flags_any = ["--force", "-f", "--prune", "-p"]
+reason = "Fetch that rewrites local refs: `--force` allows non-fast-forward updates to remote-tracking branches, `--prune` deletes the ones whose upstream is gone."
 
 [[programs.ask]]
 subcommand = "mv"
@@ -506,10 +513,12 @@ reason = "Starts a binary-search session over commit history. Mutates HEAD acros
 [[programs.ask]]
 subcommand = "filter-branch"
 reason = "Rewrites commit history. Safer alternatives: `git revise --autosquash` for fixups, `git absorb` for auto-folding edits. `git-filter-repo` is the maintained replacement for filter-branch."
+auto = "prompt"
 
 [[programs.ask]]
 subcommand = "filter-repo"
 reason = "Rewrites commit history. Refuses to run on non-fresh clones; use `--force` only with intent."
+auto = "prompt"
 
 # Git notes - modifies commit metadata
 [[programs.ask]]

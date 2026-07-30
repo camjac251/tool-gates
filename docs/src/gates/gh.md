@@ -13,14 +13,14 @@
   </div>
 
   <section class="summary" aria-label="Rule counts at a glance">
-    <div class="seg-bar" role="img" aria-label="44 allow, 88 ask, 2 block">
-      <div class="seg allow" style="flex: 44"></div>
-      <div class="seg ask"   style="flex: 88"></div>
+    <div class="seg-bar" role="img" aria-label="46 allow, 86 ask, 2 block">
+      <div class="seg allow" style="flex: 46"></div>
+      <div class="seg ask"   style="flex: 86"></div>
       <div class="seg block" style="flex: 2"></div>
     </div>
     <div class="counts">
-      <span class="ca"><i></i><b>44</b> allow</span>
-      <span class="cas"><i></i><b>88</b> ask</span>
+      <span class="ca"><i></i><b>46</b> allow</span>
+      <span class="cas"><i></i><b>86</b> ask</span>
       <span class="cb"><i></i><b>2</b> block</span>
     </div>
   </section>
@@ -30,8 +30,8 @@
 
 <div class="chips" role="group" aria-label="Filter rules by decision" aria-describedby="rule-filter-status">
   <button class="chip all"   data-filter="all"   aria-pressed="true"><i></i>All <span class="n">134</span></button>
-  <button class="chip allow" data-filter="allow" aria-pressed="false"><i></i>Allow <span class="n">44</span></button>
-  <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">88</span></button>
+  <button class="chip allow" data-filter="allow" aria-pressed="false"><i></i>Allow <span class="n">46</span></button>
+  <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">86</span></button>
   <button class="chip block" data-filter="block" aria-pressed="false"><i></i>Block <span class="n">2</span></button>
 </div>
 <p class="rule-filter-status" id="rule-filter-status" role="status" aria-live="polite" aria-atomic="true">Showing all 134 rules.</p>
@@ -65,7 +65,7 @@
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
       rules/gh.toml#allow
     </a>
-    <span class="count">44 patterns</span>
+    <span class="count">46 patterns</span>
   </header>
 
 <div class="rule-row" data-decision="allow" id="gh-issue-view">
@@ -288,6 +288,16 @@
   <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
   <div class="rule-reason">Shows a Project's fields and items. Read-only.</div>
 </div>
+<div class="rule-row" data-decision="allow" id="gh-run-watch">
+  <div class="rule-cmd"><span class="prog">gh</span> run watch</div>
+  <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
+  <div class="rule-reason">Streams the status of a workflow run until it finishes. Read-only; <code>--exit-status</code> only sets the exit code.</div>
+</div>
+<div class="rule-row" data-decision="allow" id="gh-config-clear-cache">
+  <div class="rule-cmd"><span class="prog">gh</span> config clear-cache</div>
+  <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
+  <div class="rule-reason">Clears gh's local HTTP response cache. Nothing on GitHub changes and the cache refills on the next request.</div>
+</div>
 </div>
 
 <div class="rule-card">
@@ -297,7 +307,7 @@
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
       rules/gh.toml#ask
     </a>
-    <span class="count">88 patterns</span>
+    <span class="count">86 patterns</span>
   </header>
 
 <div class="rule-row" data-decision="ask" id="gh-repo-clone">
@@ -463,7 +473,7 @@
 <div class="rule-row" data-decision="ask" id="gh-release-create">
   <div class="rule-cmd"><span class="prog">gh</span> release create</div>
   <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
-  <div class="rule-reason">Creating release</div>
+  <div class="rule-reason">Publishes a GitHub release. Consumers and package managers may pick it up immediately, and the tag it points at is public from that moment.</div>
 </div>
 <div class="rule-row" data-decision="ask" id="gh-release-delete">
   <div class="rule-cmd"><span class="prog">gh</span> release delete</div>
@@ -555,11 +565,6 @@
   <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
   <div class="rule-reason">Deleting run</div>
 </div>
-<div class="rule-row" data-decision="ask" id="gh-run-watch">
-  <div class="rule-cmd"><span class="prog">gh</span> run watch</div>
-  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
-  <div class="rule-reason">Watching run</div>
-</div>
 <div class="rule-row" data-decision="ask" id="gh-codespace-create">
   <div class="rule-cmd"><span class="prog">gh</span> codespace create</div>
   <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
@@ -620,15 +625,10 @@
   <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
   <div class="rule-reason">Setting config</div>
 </div>
-<div class="rule-row" data-decision="ask" id="gh-config-clear-cache">
-  <div class="rule-cmd"><span class="prog">gh</span> config clear-cache</div>
-  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
-  <div class="rule-reason">Clearing cache</div>
-</div>
 <div class="rule-row" data-decision="ask" id="gh-secret-set">
   <div class="rule-cmd"><span class="prog">gh</span> secret set</div>
   <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
-  <div class="rule-reason">Setting secret</div>
+  <div class="rule-reason">Writes an Actions/Codespaces/Dependabot secret. The value cannot be read back afterwards, so a wrong value is only discoverable by a failing workflow.</div>
 </div>
 <div class="rule-row" data-decision="ask" id="gh-secret-delete">
   <div class="rule-cmd"><span class="prog">gh</span> secret delete</div>

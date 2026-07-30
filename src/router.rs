@@ -92,6 +92,8 @@ fn check_command_for_session_with_commands(
     let mut block_reasons: Vec<String> = Vec::new();
     let mut ask_reasons: Vec<String> = Vec::new();
     let mut hints: Vec<crate::hints::ModernHint> = Vec::new();
+    // One irreversible sub-command holds the whole compound command's ask.
+    let mut hold_in_auto = false;
 
     for cmd in commands {
         let result = check_single_command(cmd);
@@ -109,6 +111,7 @@ fn check_command_for_session_with_commands(
                 }
             }
             Decision::Ask => {
+                hold_in_auto |= result.hold_in_auto;
                 if let Some(reason) = result.reason {
                     ask_reasons.push(reason);
                 }
@@ -156,10 +159,13 @@ fn check_command_for_session_with_commands(
             )
         };
         let hints_str = format_hints(&hints);
-        if !hints_str.is_empty() {
-            return HookOutput::ask_with_context(&combined, &hints_str);
-        }
-        return HookOutput::ask(&combined);
+        let mut output = if hints_str.is_empty() {
+            HookOutput::ask(&combined)
+        } else {
+            HookOutput::ask_with_context(&combined, &hints_str)
+        };
+        output.hold_in_auto = hold_in_auto;
+        return output;
     }
 
     let allow_reason = "Read-only operation";
@@ -258,18 +264,61 @@ pub(crate) fn check_settings_with_subcommands(
     }
 }
 
-// Claude Code acceptEdits has its own Bash base-command allowlist. When
-// tool-gates returns Defer for one of these bases, Claude can still allow the
-// command after its native path checks. Keep those fallback asks explicit
-// unless tool-gates' own path-aware acceptEdits policy approved them first.
+// Claude Code acceptEdits has its own Bash base-command allowlist, matched on
+// the bare base name with no path validation at all. When tool-gates hands the
+// decision back, Claude can allow the command through that fast path. Keep
+// those fallback asks explicit unless tool-gates' own path-aware acceptEdits
+// policy approved them first.
 const CLAUDE_ACCEPT_EDITS_BASH_BASE_ALLOWLIST: &[&str] =
     &["mkdir", "touch", "rm", "rmdir", "mv", "cp", "sed"];
 
+/// True when Claude's acceptEdits fast path could approve this whole command.
+///
+/// Claude walks every sub-command and bails to the normal permission flow the
+/// moment one is not on the base list, so the fast path only fires when *all*
+/// of them match. Requiring the same here keeps `mkdir -p dist && cargo build`
+/// out of the guard, and mirrors the `.all()` in `should_auto_allow_in_accept_edits`.
+/// Reduce a program token to the base name Claude's fast path would look up.
+///
+/// Claude strips a prefix set (`timeout`, `nice`, `stdbuf`, `nohup`, `command`,
+/// `builtin`, `noglob`, `VAR=x`) and resolves the basename before matching, so
+/// comparing the raw token here would let `stdbuf -o0 rm …` or `\rm …` slip past
+/// a guard whose whole job is to stay in lockstep with that lookup.
+fn claude_base_name(program: &str) -> &str {
+    let stripped = program
+        .trim_matches(|c| c == '"' || c == '\'')
+        .trim_start_matches('\\');
+    stripped.rsplit('/').next().unwrap_or(stripped)
+}
+
+/// Prefixes Claude sees through when resolving a Bash base command. The parser
+/// already collapses `env`/`nohup`/`timeout`-style wrappers, so this covers the
+/// ones it leaves as the program token.
+const CLAUDE_TRANSPARENT_PREFIXES: &[&str] = &[
+    "stdbuf", "noglob", "command", "builtin", "time", "nice", "timeout", "nohup",
+];
+
 fn needs_explicit_ask_to_avoid_claude_accept_edits_passthrough(commands: &[CommandInfo]) -> bool {
-    commands.iter().any(|cmd| {
-        CLAUDE_ACCEPT_EDITS_BASH_BASE_ALLOWLIST
-            .iter()
-            .any(|program| cmd.program == *program)
+    if commands.is_empty() {
+        return false;
+    }
+    commands.iter().all(|cmd| {
+        let mut base = claude_base_name(&cmd.program);
+        // Walk past a transparent prefix to the command it actually runs.
+        if CLAUDE_TRANSPARENT_PREFIXES.contains(&base) {
+            match cmd
+                .args
+                .iter()
+                .map(String::as_str)
+                .find(|a| !a.starts_with('-') && !a.contains('='))
+            {
+                Some(inner) => base = claude_base_name(inner),
+                // A bare prefix with nothing to run: Claude finds no base
+                // command either, so its fast path cannot fire.
+                None => return false,
+            }
+        }
+        CLAUDE_ACCEPT_EDITS_BASH_BASE_ALLOWLIST.contains(&base)
     })
 }
 
@@ -278,20 +327,37 @@ pub(crate) fn gate_ask_output_for_mode(
     context: Option<String>,
     permission_mode: &str,
     hard_ask_in_accept_edits: bool,
+    hold_in_auto: bool,
 ) -> HookOutput {
     if is_plan_mode(permission_mode) {
         return plan_mode_deny_output();
     }
 
     if is_auto_mode(permission_mode) {
-        if hard_ask_in_accept_edits {
-            return HookOutput::deny(&reason);
+        // A hook "ask" is handed straight back to the user: Claude Code passes
+        // it into the permission resolver's short-circuit slot, so it never
+        // reaches the auto-mode classifier and never reaches the acceptEdits
+        // fast path either. That makes "ask" a sufficient gate here -- a deny
+        // would only cost the user a decision they are entitled to make.
+        //
+        // `hold_in_auto` rules opt out of classifier adjudication for the same
+        // reason, by choice rather than necessity: their blast radius is
+        // external and irreversible.
+        if hard_ask_in_accept_edits || hold_in_auto {
+            let mut output = match context {
+                Some(context) => HookOutput::ask_with_context(&reason, &context),
+                None => HookOutput::ask(&reason),
+            };
+            // Keep the disposition on the output so an enclosing wrapper
+            // (a mise task, a package script) re-deriving its own decision
+            // from this one still sees that the ask must not be deferred.
+            output.hold_in_auto = hold_in_auto;
+            return output;
         }
-        if let Some(context) = context {
-            HookOutput::ask_with_context(&reason, &context)
-        } else {
-            HookOutput::ask(&reason)
-        }
+        // Everything else defers. Defer is the only decision that reaches the
+        // auto-mode classifier, so emitting "ask" here would exclude the whole
+        // gate catalog from the very mechanism auto mode exists to provide.
+        HookOutput::defer(reason, context)
     } else if permission_mode == "acceptEdits" && hard_ask_in_accept_edits {
         if let Some(context) = context {
             HookOutput::ask_with_context(&reason, &context)
@@ -549,7 +615,29 @@ fn check_command_with_settings_and_session_inner(
     // If raw string check flagged the command and no settings rule overrode it,
     // return the raw string result. This means pipe-to-python, output redirection,
     // etc. still ask by default, but can be permanently allowed via settings rules.
+    //
+    // Soft asks are a conservative default rather than a floor -- settings rules
+    // already override them -- so under auto mode most of them are better judged
+    // by the classifier, which sees the whole command. Two exceptions hold their
+    // ask: rows marked `auto = "prompt"` (the ones that cascade destructively
+    // across every match), and commands Claude's acceptEdits fast path could
+    // approve, where the explicit ask is what keeps them out of it.
+    // The gate's own disposition has to be consulted here too. This branch
+    // returns before the gate-ask path below, so without it an irreversible
+    // command could shed its hold just by gaining a redirect: the soft ask on
+    // `>` would win the race and defer `npm publish > log.txt`.
     if let Some(raw_result) = soft_ask {
+        if is_auto_mode(permission_mode)
+            && !raw_result.hold_in_auto
+            && !gate_result.hold_in_auto
+            && !needs_explicit_ask_to_avoid_claude_accept_edits_passthrough(&commands)
+        {
+            let reason = raw_result
+                .reason
+                .clone()
+                .unwrap_or_else(|| "Requires approval".to_string());
+            return HookOutput::defer(reason, raw_result.context.clone());
+        }
         return raw_result;
     }
 
@@ -577,6 +665,7 @@ fn check_command_with_settings_and_session_inner(
             gate_result.context.clone(),
             permission_mode,
             hard_ask_in_accept_edits,
+            gate_result.hold_in_auto,
         );
     }
 

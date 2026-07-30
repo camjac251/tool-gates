@@ -42,6 +42,8 @@ pub(crate) fn check_mise_task(task_name: &str, cwd: &str, permission_mode: &str)
     // Check each command through the gate engine
     let mut block_reasons: Vec<String> = Vec::new();
     let mut ask_reasons: Vec<String> = Vec::new();
+    // One irreversible command anywhere in the task holds the whole task's ask.
+    let mut hold_in_auto = false;
 
     for cmd_string in &commands {
         // Check each extracted command, with package.json expansion support
@@ -52,11 +54,15 @@ pub(crate) fn check_mise_task(task_name: &str, cwd: &str, permission_mode: &str)
                 let reason = result.reason.as_deref().unwrap_or("Blocked");
                 block_reasons.push(format!("mise {task_name}: {reason}"));
             }
-            PermissionDecision::Ask => {
+            // Defer means approval is still needed; under auto the inner check
+            // returns Defer where it used to return Ask, so folding it into the
+            // ignored arm would silently allow the whole task.
+            PermissionDecision::Ask | PermissionDecision::Defer => {
                 let reason = result.reason.as_deref().unwrap_or("Requires approval");
                 ask_reasons.push(format!("mise {task_name}: {reason}"));
+                hold_in_auto |= result.hold_in_auto;
             }
-            _ => {}
+            PermissionDecision::Allow | PermissionDecision::Approve => {}
         }
     }
 
@@ -77,7 +83,8 @@ pub(crate) fn check_mise_task(task_name: &str, cwd: &str, permission_mode: &str)
             ask_reasons.join("; ")
         };
         // Match the top-level ask/defer behavior for `mise <task>` shapes too.
-        return gate_ask_output_for_mode(combined, None, permission_mode, false);
+        // If any expanded command holds its ask under auto, the task does too.
+        return gate_ask_output_for_mode(combined, None, permission_mode, false, hold_in_auto);
     }
 
     // All commands are safe
@@ -146,6 +153,7 @@ pub(crate) fn check_package_script(
                 None,
                 permission_mode,
                 false,
+                result.hold_in_auto,
             )
         }
         PermissionDecision::Allow => HookOutput::allow(Some(&format!(
@@ -166,6 +174,7 @@ pub(crate) fn check_package_script(
                 None,
                 permission_mode,
                 false,
+                result.hold_in_auto,
             )
         }
     }
@@ -215,6 +224,7 @@ pub(crate) fn check_command_expanded(
     // Check each parsed command, tracking cwd changes from "cd" commands
     let mut block_reasons: Vec<String> = Vec::new();
     let mut ask_reasons: Vec<String> = Vec::new();
+    let mut hold_in_auto = false;
     let mut effective_cwd = std::path::PathBuf::from(cwd);
 
     for cmd in &commands {
@@ -239,14 +249,19 @@ pub(crate) fn check_command_expanded(
                 PermissionDecision::Deny => {
                     block_reasons.push(result.reason.unwrap_or_else(|| "Blocked".to_string()));
                 }
-                PermissionDecision::Ask => {
+                // Defer is an approval-needed outcome exactly like Ask -- under
+                // auto mode the inner check produces Defer rather than Ask, and
+                // treating it as "nothing to report" would let a nested script
+                // collapse to a blanket allow.
+                PermissionDecision::Ask | PermissionDecision::Defer => {
+                    hold_in_auto |= result.hold_in_auto;
                     ask_reasons.push(
                         result
                             .reason
                             .unwrap_or_else(|| "Requires approval".to_string()),
                     );
                 }
-                _ => {}
+                PermissionDecision::Allow | PermissionDecision::Approve => {}
             }
         } else {
             // Run through gates
@@ -268,6 +283,7 @@ pub(crate) fn check_command_expanded(
                             continue;
                         }
                     }
+                    hold_in_auto |= result.hold_in_auto;
                     ask_reasons.push(
                         result
                             .reason
@@ -298,7 +314,9 @@ pub(crate) fn check_command_expanded(
         } else {
             ask_reasons.join("; ")
         };
-        return HookOutput::ask(&combined);
+        let mut output = HookOutput::ask(&combined);
+        output.hold_in_auto = hold_in_auto;
+        return output;
     }
 
     HookOutput::allow(None)

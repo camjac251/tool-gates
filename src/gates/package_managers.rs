@@ -111,6 +111,7 @@ fn check_pm_binary_exec(cmd: &CommandInfo, pm_name: &str) -> Option<GateResult> 
                 reason: result
                     .reason
                     .map(|r| format!("{pm_name}: {underlying_program}: {r}")),
+                hold_in_auto: result.hold_in_auto,
             });
         }
     }
@@ -379,6 +380,7 @@ fn check_mise(cmd: &CommandInfo) -> GateResult {
                             reason: result
                                 .reason
                                 .map(|r| format!("mise exec {underlying_program}: {r}")),
+                            hold_in_auto: result.hold_in_auto,
                         };
                     }
                 }
@@ -453,6 +455,7 @@ fn check_python_run_command(cmd: &CommandInfo, pm_name: &str) -> Option<GateResu
                 decision: result.decision,
                 // Gate reasons already include the program name, so just add pm context
                 reason: result.reason.map(|r| format!("{pm_name} run: {r}")),
+                hold_in_auto: result.hold_in_auto,
             });
         }
     }
@@ -531,6 +534,7 @@ fn check_invoked_devtool(cmd: &CommandInfo, pm_name: &str) -> Option<GateResult>
         return Some(GateResult {
             decision: result.decision,
             reason: result.reason.map(|r| format!("{pm_name} {tool}: {r}")),
+            hold_in_auto: result.hold_in_auto,
         });
     }
 

@@ -388,7 +388,14 @@ fn check_sudo(cmd: &CommandInfo) -> GateResult {
         }
 
         let description = describe_sudo_command(underlying_cmd, underlying_args);
-        return GateResult::ask(format!("{}: {}", cmd.program, description));
+        let wrapped = GateResult::ask(format!("{}: {}", cmd.program, description));
+        // Elevating a command must not weaken its disposition: if the inner rule
+        // insists a human decides, so does the sudo form.
+        return if inner_result.hold_in_auto {
+            wrapped.hold_in_auto()
+        } else {
+            wrapped
+        };
     }
 
     if is_non_executing_privilege_operation(args) {

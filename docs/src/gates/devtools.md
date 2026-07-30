@@ -14,14 +14,14 @@
   </div>
 
   <section class="summary" aria-label="Rule counts at a glance">
-    <div class="seg-bar" role="img" aria-label="80 allow, 71 ask, 0 block">
-      <div class="seg allow" style="flex: 80"></div>
-      <div class="seg ask"   style="flex: 71"></div>
+    <div class="seg-bar" role="img" aria-label="81 allow, 77 ask, 0 block">
+      <div class="seg allow" style="flex: 81"></div>
+      <div class="seg ask"   style="flex: 77"></div>
       <div class="seg block" style="flex: 0"></div>
     </div>
     <div class="counts">
-      <span class="ca"><i></i><b>80</b> allow</span>
-      <span class="cas"><i></i><b>71</b> ask</span>
+      <span class="ca"><i></i><b>81</b> allow</span>
+      <span class="cas"><i></i><b>77</b> ask</span>
       <span class="cb"><i></i><b>0</b> block</span>
     </div>
   </section>
@@ -30,12 +30,12 @@
 </div>
 
 <div class="chips" role="group" aria-label="Filter rules by decision" aria-describedby="rule-filter-status">
-  <button class="chip all"   data-filter="all"   aria-pressed="true"><i></i>All <span class="n">151</span></button>
-  <button class="chip allow" data-filter="allow" aria-pressed="false"><i></i>Allow <span class="n">80</span></button>
-  <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">71</span></button>
+  <button class="chip all"   data-filter="all"   aria-pressed="true"><i></i>All <span class="n">158</span></button>
+  <button class="chip allow" data-filter="allow" aria-pressed="false"><i></i>Allow <span class="n">81</span></button>
+  <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">77</span></button>
   <button class="chip block" data-filter="block" aria-pressed="false"><i></i>Block <span class="n">0</span></button>
 </div>
-<p class="rule-filter-status" id="rule-filter-status" role="status" aria-live="polite" aria-atomic="true">Showing all 151 rules.</p>
+<p class="rule-filter-status" id="rule-filter-status" role="status" aria-live="polite" aria-atomic="true">Showing all 158 rules.</p>
 
 <div class="rule-card">
   <header>
@@ -44,7 +44,7 @@
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
       rules/devtools.toml#allow
     </a>
-    <span class="count">80 patterns</span>
+    <span class="count">81 patterns</span>
   </header>
 
 <div class="rule-row" data-decision="allow" id="devtools-actionlint">
@@ -277,6 +277,11 @@
   <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
   <div class="rule-reason">Prints Parcel usage help. Read-only.</div>
 </div>
+<div class="rule-row" data-decision="allow" id="devtools-parcel-serve">
+  <div class="rule-cmd"><span class="prog">parcel</span> serve</div>
+  <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
+  <div class="rule-reason">parcel serve: starts the Parcel dev server on a local port. Binds to localhost until interrupted.</div>
+</div>
 <div class="rule-row" data-decision="allow" id="devtools-patch-dry-run">
   <div class="rule-cmd"><span class="prog">patch</span> <span class="flag">--dry-run</span></div>
   <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
@@ -456,7 +461,7 @@
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
       rules/devtools.toml#ask
     </a>
-    <span class="count">71 patterns</span>
+    <span class="count">77 patterns</span>
   </header>
 
 <div class="rule-row" data-decision="ask" id="devtools-ast-grep-u-update-all">
@@ -639,6 +644,26 @@
   <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
   <div class="rule-reason">Auto-fixing markdown</div>
 </div>
+<div class="rule-row" data-decision="ask" id="devtools-markdownlint-cli2-fix">
+  <div class="rule-cmd"><span class="prog">markdownlint-cli2</span> <span class="flag">--fix</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Rewrites the Markdown files in place. Run without <code>--fix</code> first to see what would change.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="devtools-mdbook-build">
+  <div class="rule-cmd"><span class="prog">mdbook</span> build</div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Writes the rendered book into the output directory, replacing its current contents.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="devtools-mdbook-serve">
+  <div class="rule-cmd"><span class="prog">mdbook</span> serve</div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Rebuilds the book into the output directory and serves it, rewriting on every change.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="devtools-mdbook-clean">
+  <div class="rule-cmd"><span class="prog">mdbook</span> clean</div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Deletes the book output directory. Verify the configured build dir before removing it.</div>
+</div>
 <div class="rule-row" data-decision="ask" id="devtools-mix-format">
   <div class="rule-cmd"><span class="prog">mix</span> format</div>
   <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
@@ -648,11 +673,6 @@
   <div class="rule-cmd"><span class="prog">nox</span></div>
   <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
   <div class="rule-reason">nox: runs the configured sessions from <code>noxfile.py</code>. Each session creates/uses a virtualenv and runs arbitrary Python code per the noxfile.</div>
-</div>
-<div class="rule-row" data-decision="ask" id="devtools-parcel-serve">
-  <div class="rule-cmd"><span class="prog">parcel</span> serve</div>
-  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
-  <div class="rule-reason">parcel serve: starts the Parcel dev server on a local port. Binds to localhost until interrupted.</div>
 </div>
 <div class="rule-row" data-decision="ask" id="devtools-parcel-watch">
   <div class="rule-cmd"><span class="prog">parcel</span> watch</div>
@@ -698,6 +718,11 @@
   <div class="rule-cmd"><span class="prog">ruff</span> format</div>
   <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
   <div class="rule-reason">Formatting files</div>
+</div>
+<div class="rule-row" data-decision="ask" id="devtools-rumdl-fix-f">
+  <div class="rule-cmd"><span class="prog">rumdl</span> <span class="flag">--fix</span> <span class="flag">-f</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Rewrites the Markdown files in place. Run without <code>--fix</code> first to see what would change.</div>
 </div>
 <div class="rule-row" data-decision="ask" id="devtools-rustfmt">
   <div class="rule-cmd"><span class="prog">rustfmt</span></div>
@@ -753,6 +778,16 @@
   <div class="rule-cmd"><span class="prog">swiftformat</span></div>
   <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
   <div class="rule-reason">Formatting files</div>
+</div>
+<div class="rule-row" data-decision="ask" id="devtools-taplo-format">
+  <div class="rule-cmd"><span class="prog">taplo</span> format</div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Reformats TOML files in place. Pass <code>--check</code> to report differences without writing.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="devtools-taplo-fmt">
+  <div class="rule-cmd"><span class="prog">taplo</span> fmt</div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Reformats TOML files in place. Pass <code>--check</code> to report differences without writing.</div>
 </div>
 <div class="rule-row" data-decision="ask" id="devtools-tox">
   <div class="rule-cmd"><span class="prog">tox</span></div>

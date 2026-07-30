@@ -138,6 +138,12 @@ fn draw_pending_list(f: &mut Frame, app: &mut App, area: Rect) {
                 format!("   {}×", entry.count),
                 theme::text_muted(),
             ));
+            // Classifier-resolved entries were approved under auto mode without
+            // anyone seeing a prompt, so they are not evidence of consent. Mark
+            // them so an allow rule is never granted on the strength of one.
+            if entry.origin == crate::tracking::ApprovalOrigin::Classifier {
+                spans.push(Span::styled("   auto", theme::accent()));
+            }
             if is_all {
                 let proj = display_project_path(entry);
                 let short = proj.rsplit('/').next().unwrap_or(&proj).to_string();

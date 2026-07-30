@@ -1066,7 +1066,7 @@ reason = "Prints the Parcel version. Read-only."
 subcommand = "--help"
 reason = "Prints Parcel usage help. Read-only."
 
-[[programs.ask]]
+[[programs.allow]]
 subcommand = "serve"
 reason = "parcel serve: starts the Parcel dev server on a local port. Binds to localhost until interrupted."
 
@@ -1225,6 +1225,65 @@ accept_edits_auto_allow = true
 # =============================================================================
 # MEDIA / DIAGRAMS
 # =============================================================================
+
+# rumdl: Markdown linter. Reporting is read-only; `--fix` rewrites in place.
+[[programs]]
+name = "rumdl"
+unknown_action = "allow"
+reason = "Lints Markdown and reports findings. Read-only without a fix flag."
+
+[[programs.ask]]
+if_flags_any = ["--fix", "-f"]
+reason = "Rewrites the Markdown files in place. Run without `--fix` first to see what would change."
+accept_edits_auto_allow = true
+
+# markdownlint-cli2: same shape as rumdl.
+[[programs]]
+name = "markdownlint-cli2"
+unknown_action = "allow"
+reason = "Lints Markdown and reports findings. Read-only without a fix flag."
+
+[[programs.ask]]
+if_flags_any = ["--fix"]
+reason = "Rewrites the Markdown files in place. Run without `--fix` first to see what would change."
+accept_edits_auto_allow = true
+
+# taplo: TOML toolkit. `lint`/`get` inspect; `format`/`fmt` rewrite in place.
+[[programs]]
+name = "taplo"
+unknown_action = "allow"
+reason = "Inspects TOML files. Read-only outside the format subcommand."
+
+[[programs.ask]]
+subcommand = "format"
+reason = "Reformats TOML files in place. Pass `--check` to report differences without writing."
+accept_edits_auto_allow = true
+
+[[programs.ask]]
+subcommand = "fmt"
+reason = "Reformats TOML files in place. Pass `--check` to report differences without writing."
+accept_edits_auto_allow = true
+
+# mdbook: `build`/`serve` write into the book output directory.
+[[programs]]
+name = "mdbook"
+unknown_action = "allow"
+reason = "Inspects an mdBook project. Read-only outside the build and serve subcommands."
+
+[[programs.ask]]
+subcommand = "build"
+reason = "Writes the rendered book into the output directory, replacing its current contents."
+accept_edits_auto_allow = true
+
+[[programs.ask]]
+subcommand = "serve"
+reason = "Rebuilds the book into the output directory and serves it, rewriting on every change."
+accept_edits_auto_allow = true
+
+[[programs.ask]]
+subcommand = "clean"
+reason = "Deletes the book output directory. Verify the configured build dir before removing it."
+accept_edits_auto_allow = true
 
 # ffprobe: inspects media files, never writes. Always safe.
 [[programs]]

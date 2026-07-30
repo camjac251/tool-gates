@@ -71,7 +71,7 @@ mod tests {
             (&["repo", "create", "new-repo"], "Creating repository"),
             (&["repo", "clone", "owner/repo"], "Clones a repository"),
             (&["repo", "fork", "owner/repo"], "Creates a fork"),
-            (&["release", "create", "v1.0"], "Creating release"),
+            (&["release", "create", "v1.0"], "Publishes a GitHub release"),
             (&["release", "download", "v1.0"], "Downloads release asset"),
             (
                 &["run", "download", "123"],

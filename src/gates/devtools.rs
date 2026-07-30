@@ -1179,9 +1179,11 @@ mod tests {
     }
 
     #[test]
-    fn test_parcel_serve_asks() {
+    fn test_parcel_serve_allows() {
+        // Same class as `vite` and `air`, both already allowed: a local dev
+        // server writing into the configured dist dir.
         let result = check_devtools(&cmd("parcel", &["serve"]));
-        assert_eq!(result.decision, Decision::Ask);
+        assert_eq!(result.decision, Decision::Allow);
     }
 
     #[test]

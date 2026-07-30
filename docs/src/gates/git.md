@@ -14,13 +14,13 @@
   </div>
 
   <section class="summary" aria-label="Rule counts at a glance">
-    <div class="seg-bar" role="img" aria-label="45 allow, 60 ask, 0 block">
-      <div class="seg allow" style="flex: 45"></div>
+    <div class="seg-bar" role="img" aria-label="46 allow, 60 ask, 0 block">
+      <div class="seg allow" style="flex: 46"></div>
       <div class="seg ask"   style="flex: 60"></div>
       <div class="seg block" style="flex: 0"></div>
     </div>
     <div class="counts">
-      <span class="ca"><i></i><b>45</b> allow</span>
+      <span class="ca"><i></i><b>46</b> allow</span>
       <span class="cas"><i></i><b>60</b> ask</span>
       <span class="cb"><i></i><b>0</b> block</span>
     </div>
@@ -30,12 +30,12 @@
 </div>
 
 <div class="chips" role="group" aria-label="Filter rules by decision" aria-describedby="rule-filter-status">
-  <button class="chip all"   data-filter="all"   aria-pressed="true"><i></i>All <span class="n">105</span></button>
-  <button class="chip allow" data-filter="allow" aria-pressed="false"><i></i>Allow <span class="n">45</span></button>
+  <button class="chip all"   data-filter="all"   aria-pressed="true"><i></i>All <span class="n">106</span></button>
+  <button class="chip allow" data-filter="allow" aria-pressed="false"><i></i>Allow <span class="n">46</span></button>
   <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">60</span></button>
   <button class="chip block" data-filter="block" aria-pressed="false"><i></i>Block <span class="n">0</span></button>
 </div>
-<p class="rule-filter-status" id="rule-filter-status" role="status" aria-live="polite" aria-atomic="true">Showing all 105 rules.</p>
+<p class="rule-filter-status" id="rule-filter-status" role="status" aria-live="polite" aria-atomic="true">Showing all 106 rules.</p>
 
 <div class="rule-card">
   <header>
@@ -44,7 +44,7 @@
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
       rules/git.toml#allow
     </a>
-    <span class="count">45 patterns</span>
+    <span class="count">46 patterns</span>
   </header>
 
 <div class="rule-row" data-decision="allow" id="git-status">
@@ -271,6 +271,11 @@
   <div class="rule-cmd"><span class="prog">git</span> remote get-url</div>
   <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
   <div class="rule-reason">Prints the URL of a remote. Read-only.</div>
+</div>
+<div class="rule-row" data-decision="allow" id="git-fetch">
+  <div class="rule-cmd"><span class="prog">git</span> fetch</div>
+  <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
+  <div class="rule-reason">Downloads refs and objects from a remote. Does not modify the working tree or current branch.</div>
 </div>
 </div>
 
@@ -504,10 +509,10 @@
   <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
   <div class="rule-reason">Clones a remote repository into a new directory. Network operation; size depends on remote history.</div>
 </div>
-<div class="rule-row" data-decision="ask" id="git-fetch">
-  <div class="rule-cmd"><span class="prog">git</span> fetch</div>
+<div class="rule-row" data-decision="ask" id="git-fetch-force-f-prune-p">
+  <div class="rule-cmd"><span class="prog">git</span> fetch <span class="flag">--force</span> <span class="flag">-f</span> <span class="flag">--prune</span> <span class="flag">-p</span></div>
   <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
-  <div class="rule-reason">Downloads refs and objects from a remote. Does not modify the working tree or current branch.</div>
+  <div class="rule-reason">Fetch that rewrites local refs: <code>--force</code> allows non-fast-forward updates to remote-tracking branches, <code>--prune</code> deletes the ones whose upstream is gone.</div>
 </div>
 <div class="rule-row" data-decision="ask" id="git-mv">
   <div class="rule-cmd"><span class="prog">git</span> mv</div>

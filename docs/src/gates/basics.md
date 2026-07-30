@@ -19,7 +19,7 @@
 <div class="cmd-grid">
   <div class="cat">
     <h2>Display &amp; output</h2>
-    <div class="chips-line"><span>echo</span><span>printf</span><span>cat</span><span>zcat</span><span>head</span><span>tail</span><span>less</span><span>more</span><span>bat</span><span>batcat</span></div>
+    <div class="chips-line"><span>echo</span><span>printf</span><span>print</span><span>cat</span><span>zcat</span><span>head</span><span>tail</span><span>less</span><span>more</span><span>bat</span><span>batcat</span></div>
   </div>
   <div class="cat">
     <h2>Listing &amp; finding</h2>
@@ -67,7 +67,7 @@
   </div>
   <div class="cat">
     <h2>Shell built-ins &amp; misc</h2>
-    <div class="chips-line"><span>mktemp</span><span>true</span><span>false</span><span>yes</span><span>seq</span><span>expr</span><span>bc</span><span>dc</span><span>factor</span><span>sleep</span><span>wait</span><span>printenv</span><span>env</span><span>export</span><span>set</span><span>pwd</span><span>cd</span><span>pushd</span><span>popd</span><span>dirs</span><span>unalias</span><span>hash</span><span>test</span><span>[</span><span>[[</span><span>dpkg-query</span><span>read</span></div>
+    <div class="chips-line"><span>mktemp</span><span>true</span><span>false</span><span>yes</span><span>seq</span><span>expr</span><span>bc</span><span>dc</span><span>factor</span><span>sleep</span><span>wait</span><span>printenv</span><span>env</span><span>export</span><span>set</span><span>pwd</span><span>cd</span><span>pushd</span><span>popd</span><span>dirs</span><span>unalias</span><span>hash</span><span>test</span><span>[</span><span>[[</span><span>dpkg-query</span><span>read</span><span>exit</span></div>
   </div>
 </div>
 

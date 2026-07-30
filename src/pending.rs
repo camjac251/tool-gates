@@ -13,7 +13,7 @@ use std::io::{BufRead, BufReader, Seek, Write};
 use std::path::PathBuf;
 use uuid::Uuid;
 
-use crate::tracking::CommandPart;
+use crate::tracking::{ApprovalOrigin, CommandPart};
 
 /// A pending approval entry
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,6 +32,11 @@ pub struct PendingApproval {
     pub count: u32,
     pub first_seen: DateTime<Utc>,
     pub last_seen: DateTime<Utc>,
+    /// Who resolved the approval. A `Classifier` entry was deferred under
+    /// auto mode and may never have been shown to a human, so review should
+    /// not treat it as prior consent.
+    #[serde(default)]
+    pub origin: ApprovalOrigin,
 }
 
 impl PendingApproval {
@@ -55,13 +60,27 @@ impl PendingApproval {
             count: 1,
             first_seen: now,
             last_seen: now,
+            origin: ApprovalOrigin::default(),
         }
     }
 
-    /// Increment the count and update last_seen
-    pub fn increment(&mut self) {
+    /// Record who resolved the approval for this command.
+    pub fn with_origin(mut self, origin: ApprovalOrigin) -> Self {
+        self.origin = origin;
+        self
+    }
+
+    /// Increment the count and update last_seen.
+    ///
+    /// A classifier-resolved sighting keeps the entry classifier-resolved even
+    /// if an earlier one was prompted: the weaker provenance wins so review
+    /// never over-claims that a human vetted every occurrence.
+    pub fn increment(&mut self, origin: ApprovalOrigin) {
         self.count += 1;
         self.last_seen = Utc::now();
+        if origin == ApprovalOrigin::Classifier {
+            self.origin = ApprovalOrigin::Classifier;
+        }
     }
 }
 
@@ -182,7 +201,7 @@ pub fn append_pending(approval: PendingApproval) -> std::io::Result<()> {
             .iter_mut()
             .find(|e| e.command == approval.command && e.project_id == approval.project_id)
         {
-            existing.increment();
+            existing.increment(approval.origin);
             existing.patterns = approval.patterns;
             existing.breakdown = approval.breakdown;
             return;
@@ -195,7 +214,7 @@ pub fn append_pending(approval: PendingApproval) -> std::io::Result<()> {
                 e.project_id == approval.project_id
                     && compaction_key(&e.patterns).as_deref() == Some(new_key.as_str())
             }) {
-                existing.increment();
+                existing.increment(approval.origin);
                 // Keep only patterns shared by both. The broadest matching
                 // pattern survives; the specific-literal patterns drop out.
                 let new_set: std::collections::HashSet<&String> =
@@ -408,8 +427,30 @@ mod tests {
             "session1".to_string(),
         );
 
-        approval.increment();
+        approval.increment(ApprovalOrigin::Prompt);
         assert_eq!(approval.count, 2);
+    }
+
+    #[test]
+    fn test_classifier_sighting_downgrades_entry_origin() {
+        let mut approval = PendingApproval::new(
+            "npm install".to_string(),
+            vec![],
+            vec![],
+            "/tmp".to_string(),
+            "/tmp".to_string(),
+            "session1".to_string(),
+        );
+        assert_eq!(approval.origin, ApprovalOrigin::Prompt);
+
+        // A classifier-resolved sighting makes the whole entry classifier-resolved.
+        approval.increment(ApprovalOrigin::Classifier);
+        assert_eq!(approval.origin, ApprovalOrigin::Classifier);
+
+        // And a later human prompt does not restore the stronger provenance.
+        approval.increment(ApprovalOrigin::Prompt);
+        assert_eq!(approval.origin, ApprovalOrigin::Classifier);
+        assert_eq!(approval.count, 3);
     }
 
     #[test]

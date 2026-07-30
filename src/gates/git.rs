@@ -117,8 +117,23 @@ pub fn check_git(cmd: &CommandInfo) -> GateResult {
     // here, before consulting config or forcing the GLOBAL_ALIASES LazyLock
     // (which spawns `git config --global`), so no subprocess runs on the vast
     // majority of Bash calls, which are not git.
-    if cmd.program != "git" {
+    //
+    // Match on the basename, then hand the rest of the gate a program token
+    // normalized to plain "git". A path-qualified invocation is still git, and
+    // rejecting it here sent `/usr/bin/git push --force` down the
+    // unknown-program path with none of the git rules applied.
+    let base = cmd.program.rsplit('/').next().unwrap_or(&cmd.program);
+    if base != "git" {
         return GateResult::skip();
+    }
+    if base != cmd.program {
+        let normalized = CommandInfo {
+            program: base.to_string(),
+            args: cmd.args.clone(),
+            raw: cmd.raw.clone(),
+            scratch_vars: cmd.scratch_vars.clone(),
+        };
+        return check_git(&normalized);
     }
 
     let config = crate::config::get();
@@ -382,7 +397,9 @@ mod tests {
             (&["restore", "file.txt"], "restores"),
             (&["cherry-pick", "abc123"], "replays"),
             (&["revert", "abc123"], "undoes"),
-            (&["fetch", "origin"], "downloads"),
+            // A plain `git fetch` allows; only the ref-rewriting forms ask.
+            (&["fetch", "--force", "origin"], "rewrites local refs"),
+            (&["fetch", "--prune"], "rewrites local refs"),
             (&["clone", "https://github.com/user/repo"], "clones"),
             (&["mv", "old.txt", "new.txt"], "moves"),
             (&["rm", "file.txt"], "removes"),

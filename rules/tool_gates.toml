@@ -102,6 +102,7 @@ reason = "Info flags."
 [[programs.ask]]
 subcommand = "approve"
 reason = "Adds a permanent permission rule to your settings.json. Future matching tool calls auto-allow without prompting."
+auto = "prompt"
 
 # -----------------------------------------------------------------------------
 # Rules Management
@@ -131,6 +132,7 @@ reason = "Writes tool-gates hook entries into the client's settings.json (Claude
 subcommand = "agy allowlist"
 if_flags_any = ["--apply"]
 reason = "Merges the safe-command allowlist into agy's settings.json. Changes which commands agy auto-allows without prompting."
+auto = "prompt"
 
 # -----------------------------------------------------------------------------
 # Interactive TUI
@@ -144,6 +146,6 @@ reason = "Opens the interactive approval TUI. Selecting Approve writes a permane
 # Tool Cache
 # -----------------------------------------------------------------------------
 
-[[programs.ask]]
+[[programs.allow]]
 if_flags_any = ["--refresh-tools"]
-reason = "Re-scans the system for modern CLI tools (bat, rg, fd, etc.) and rewrites `~/.cache/tool-gates/available-tools.json`. Used to surface hints."
+reason = "Re-scans the system for modern CLI tools (bat, rg, fd, etc.) and rewrites its own hint cache under `~/.cache/tool-gates/`. Affects which hints appear, nothing else."

@@ -112,10 +112,12 @@ reason = "Creates a new npm registry auth token. Mints a credential that can pub
 [[programs.ask]]
 subcommand = "token revoke"
 reason = "Revokes an npm registry auth token by id or value. Immediately invalidates that credential for every consumer."
+auto = "prompt"
 
 [[programs.ask]]
 subcommand = "token delete"
 reason = "Deletes an npm registry auth token. Immediately invalidates that credential."
+auto = "prompt"
 
 [[programs.allow]]
 subcommand = "team ls"
@@ -301,10 +303,12 @@ reason = "Removes the global symlink created by `npm link`. Affects every projec
 [[programs.ask]]
 subcommand = "publish"
 reason = "Publishes the package to its registry. Public publish is irreversible: the version number cannot be reused."
+auto = "prompt"
 
 [[programs.ask]]
 subcommand = "unpublish"
 reason = "Removes a published version from the registry. Public unpublish is restricted by npm policy and can break downstream consumers."
+auto = "prompt"
 
 [[programs.ask]]
 subcommand = "deprecate"
@@ -501,6 +505,7 @@ reason = "Removes the global symlink created by `pnpm link`. Affects every proje
 [[programs.ask]]
 subcommand = "publish"
 reason = "Publishes the package to its registry. Public publish is irreversible: the version number cannot be reused."
+auto = "prompt"
 
 [[programs.ask]]
 subcommand = "init"
@@ -663,6 +668,7 @@ reason = "Removes the global symlink created by `yarn link`. Affects every proje
 [[programs.ask]]
 subcommand = "publish"
 reason = "Publishes the package to its registry. Public publish is irreversible: the version number cannot be reused."
+auto = "prompt"
 
 [[programs.ask]]
 subcommand = "init"
@@ -899,6 +905,7 @@ reason = "Builds source and wheel distributions into `dist/`. Writes artifacts; 
 [[programs.ask]]
 subcommand = "publish"
 reason = "Publishes the package to its registry. Public publish is irreversible: the version number cannot be reused."
+auto = "prompt"
 
 # uv pip risky subcommands
 [[programs.ask]]
@@ -1117,6 +1124,7 @@ reason = "Updates dependencies in `Cargo.lock` to newer compatible versions. Cha
 [[programs.ask]]
 subcommand = "publish"
 reason = "Publishing crate"
+auto = "prompt"
 
 [[programs.ask]]
 subcommand = "yank"
@@ -1512,6 +1520,7 @@ reason = "Scaffolds a project from a `create-<name>` template, downloading it if
 [[programs.ask]]
 subcommand = "publish"
 reason = "Publishes the package to its registry. Public publish is irreversible: the version number cannot be reused."
+auto = "prompt"
 
 # =============================================================================
 # CONDA / MAMBA / MICROMAMBA
@@ -1774,6 +1783,7 @@ reason = "Creating project"
 [[programs.ask]]
 subcommand = "publish"
 reason = "Publishes the package to its registry. Public publish is irreversible: the version number cannot be reused."
+auto = "prompt"
 
 [[programs.ask]]
 subcommand = "cache"
@@ -2054,13 +2064,13 @@ reason = "Pruning unused versions"
 subcommand = "sync"
 reason = "Syncing tool versions"
 
-[[programs.ask]]
+[[programs.allow]]
 subcommand = "activate"
-reason = "Activating mise in shell"
+reason = "Prints the shell activation script to stdout. Nothing is executed or written; the caller decides whether to eval it."
 
-[[programs.ask]]
+[[programs.allow]]
 subcommand = "deactivate"
-reason = "Deactivating mise"
+reason = "Prints the script that undoes shell activation. Takes no arguments and writes nothing."
 
 [[programs.ask]]
 subcommand = "implode"

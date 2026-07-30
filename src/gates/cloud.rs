@@ -88,14 +88,20 @@ fn check_aws(cmd: &CommandInfo) -> GateResult {
 fn check_gcloud(cmd: &CommandInfo) -> GateResult {
     let args = &cmd.args;
 
-    // Less than 3 args - try declarative (handles config list, auth list, etc.)
+    // Consult the declarative catalog first, at every length. Gating this on
+    // `args.len() < 3` meant a rule like `secrets delete` only ever matched the
+    // bare `gcloud secrets delete` probe: the moment a secret name was supplied
+    // the command fell through to the generic action lists below, losing the
+    // rule's reason and its auto disposition along with it.
+    if let Some(result) = check_gcloud_declarative(cmd) {
+        return result;
+    }
+
     if args.len() < 3 {
-        return check_gcloud_declarative(cmd).unwrap_or_else(|| {
-            GateResult::ask(format!(
-                "gcloud: {}",
-                args.first().unwrap_or(&"unknown".to_string())
-            ))
-        });
+        return GateResult::ask(format!(
+            "gcloud: {}",
+            args.first().unwrap_or(&"unknown".to_string())
+        ));
     }
 
     // 3+ args - check the action (3rd word)
@@ -433,12 +439,13 @@ mod tests {
     }
 
     #[test]
-    fn test_helm_repo_update_asks() {
+    fn test_helm_repo_update_allows() {
+        // Refreshes the local repo index only; nothing on any cluster changes.
         let result = check_cloud(&make_cmd("helm", &["repo", "update"]));
         assert_eq!(
             result.decision,
-            Decision::Ask,
-            "helm repo update should ask"
+            Decision::Allow,
+            "helm repo update is local-cache only"
         );
     }
 

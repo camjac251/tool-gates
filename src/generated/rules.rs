@@ -1,4 +1,4 @@
-// tool-gates-generation-fingerprint: 5e34339314364a12:a2f2cd48d2ec2797
+// tool-gates-generation-fingerprint: cb38b123bcce9029:eec0510d74896e7c
 //! Auto-generated from rules/*.toml files.
 //! DO NOT EDIT - changes will be overwritten by build.rs
 
@@ -50,6 +50,7 @@ pub static SAFE_COMMANDS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "dust",
         "echo",
         "env",
+        "exit",
         "expand",
         "export",
         "expr",
@@ -120,6 +121,7 @@ pub static SAFE_COMMANDS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "ping",
         "popd",
         "pr",
+        "print",
         "printenv",
         "printf",
         "procs",
@@ -482,7 +484,7 @@ pub static GH_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("repo unarchive", "Unarchiving repository"),
         ("repo sync", "Syncing repository"),
         ("repo set-default", "Setting default repo"),
-        ("release create", "Creating release"),
+        ("release create", "Publishes a GitHub release. Consumers and package managers may pick it up immediately, and the tag it points at is public from that moment."),
         ("release delete", "Deletes release `<release>` from GitHub. Removes release notes and uploaded assets; the underlying git tag stays unless `--cleanup-tag` is passed."),
         ("release edit", "Editing release"),
         ("release upload", "Uploads asset files to an existing release. Published assets become downloadable by anyone who can see the release."),
@@ -501,7 +503,6 @@ pub static GH_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("run cancel", "Canceling run"),
         ("run rerun", "Rerunning"),
         ("run delete", "Deleting run"),
-        ("run watch", "Watching run"),
         ("codespace create", "Creating codespace"),
         ("codespace delete", "Deletes a codespace. Unsaved local changes inside the codespace are lost."),
         ("codespace edit", "Editing codespace"),
@@ -514,8 +515,7 @@ pub static GH_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("gpg-key add", "Adding GPG key"),
         ("gpg-key delete", "Removes a GPG key from the GitHub account. Existing signed commits stay valid; future signatures with this key will not be marked verified."),
         ("config set", "Setting config"),
-        ("config clear-cache", "Clearing cache"),
-        ("secret set", "Setting secret"),
+        ("secret set", "Writes an Actions/Codespaces/Dependabot secret. The value cannot be read back afterwards, so a wrong value is only discoverable by a failing workflow."),
         ("secret delete", "Deletes an Actions/Codespaces/Dependabot secret. Future workflow runs that read this secret will fail until it is recreated."),
         ("variable set", "Sets an Actions variable for the repo, environment, or organization. Visible to future workflow runs."),
         ("variable delete", "Deletes an Actions variable. Future workflow runs that read this variable will see it as empty."),
@@ -541,6 +541,21 @@ pub static GH_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     ].into_iter().collect()
 });
 
+pub static GH_ASK_HOLD: LazyLock<HashSet<&str>> = LazyLock::new(|| {
+    [
+        "release create",
+        "release delete",
+        "ssh-key add",
+        "ssh-key delete",
+        "gpg-key add",
+        "gpg-key delete",
+        "secret set",
+        "secret delete",
+    ]
+    .into_iter()
+    .collect()
+});
+
 pub static GH_BLOCK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
         ("repo delete", "Deletes the repository on GitHub. Irreversible: history, issues, PRs, releases, and forks-from-this-repo are removed. Blocked unconditionally."),
@@ -564,8 +579,17 @@ pub fn check_gh_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
-    if let Some(reason) = GH_BLOCK.get(subcmd.as_str()) {
+    if let Some(reason) = GH_BLOCK
+        .get(subcmd_triple.as_str())
+        .or_else(|| GH_BLOCK.get(subcmd.as_str()))
+    {
         return Some(GateResult::block(format!("gh: {}", reason)));
     }
 
@@ -780,12 +804,30 @@ pub fn check_gh_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             "Shows a Project's fields and items. Read-only.",
         ));
     }
+    if cmd.args.len() >= 2 && cmd.args[0] == "run" && cmd.args[1] == "watch" {
+        return Some(GateResult::allow_with_reason(
+            "Streams the status of a workflow run until it finishes. Read-only; `--exit-status` only sets the exit code.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "config" && cmd.args[1] == "clear-cache" {
+        return Some(GateResult::allow_with_reason(
+            "Clears gh's local HTTP response cache. Nothing on GitHub changes and the cache refills on the next request.",
+        ));
+    }
 
     if let Some(reason) = GH_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| GH_ASK.get(subcmd.as_str()))
         .or_else(|| GH_ASK.get(subcmd_single))
     {
-        return Some(GateResult::ask(format!("gh: {}", reason)));
+        let result = GateResult::ask(format!("gh: {}", reason));
+        if GH_ASK_HOLD.contains(subcmd_triple.as_str())
+            || GH_ASK_HOLD.contains(subcmd.as_str())
+            || GH_ASK_HOLD.contains(subcmd_single)
+        {
+            return Some(result.hold_in_auto());
+        }
+        return Some(result);
     }
 
     // API rules for 'gh api'
@@ -870,7 +912,6 @@ pub static GIT_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("format-patch", "Writes one `.patch` file per commit in the specified range. Output goes to the working directory."),
         ("init", "Creates a new git repository in the current directory. Writes a `.git/` directory."),
         ("clone", "Clones a remote repository into a new directory. Network operation; size depends on remote history."),
-        ("fetch", "Downloads refs and objects from a remote. Does not modify the working tree or current branch."),
         ("mv", "Moves or renames a tracked file and stages the rename in one step."),
         ("rm", "Removes a tracked file from the working tree and stages the deletion. `--cached` keeps the file on disk."),
         ("bisect", "Starts a binary-search session over commit history. Mutates HEAD across iterations; end with `git bisect reset`."),
@@ -883,6 +924,9 @@ pub static GIT_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("worktree", "Worktree operation. See `git worktree --help` for subcommand-specific risk."),
     ].into_iter().collect()
 });
+
+pub static GIT_ASK_HOLD: LazyLock<HashSet<&str>> =
+    LazyLock::new(|| ["filter-branch", "filter-repo"].into_iter().collect());
 
 /// Check git commands declaratively
 pub fn check_git_declarative(cmd: &CommandInfo) -> Option<GateResult> {
@@ -909,6 +953,12 @@ pub fn check_git_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if subcmd_single == "push"
@@ -917,9 +967,7 @@ pub fn check_git_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .iter()
             .any(|a| ["--force", "-f"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask(
-            "Force push overwrites upstream history. Safer: `--force-with-lease` fails if the remote moved.",
-        ));
+        return Some(GateResult::ask("Force push overwrites upstream history. Safer: `--force-with-lease` fails if the remote moved.").hold_in_auto());
     }
     if subcmd_single == "reset" && cmd.args.iter().any(|a| ["--hard"].contains(&a.as_str())) {
         return Some(GateResult::ask(
@@ -944,6 +992,16 @@ pub fn check_git_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if subcmd_single == "checkout" && cmd.args.iter().any(|a| ["--"].contains(&a.as_str())) {
         return Some(GateResult::ask(
             "Discards uncommitted changes in the listed paths. Cannot be undone.",
+        ));
+    }
+    if subcmd_single == "fetch"
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--force", "-f", "--prune", "-p"].contains(&a.as_str()))
+    {
+        return Some(GateResult::ask(
+            "Fetch that rewrites local refs: `--force` allows non-fast-forward updates to remote-tracking branches, `--prune` deletes the ones whose upstream is gone.",
         ));
     }
     if subcmd_single == "tag"
@@ -1262,12 +1320,30 @@ pub fn check_git_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             "Prints the URL of a remote. Read-only.",
         ));
     }
+    if subcmd_single == "fetch"
+        && !cmd
+            .args
+            .iter()
+            .any(|a| ["--force", "-f", "--prune", "-p"].contains(&a.as_str()))
+    {
+        return Some(GateResult::allow_with_reason(
+            "Downloads refs and objects from a remote. Does not modify the working tree or current branch.",
+        ));
+    }
 
     if let Some(reason) = GIT_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| GIT_ASK.get(subcmd.as_str()))
         .or_else(|| GIT_ASK.get(subcmd_single))
     {
-        return Some(GateResult::ask(format!("git: {}", reason)));
+        let result = GateResult::ask(format!("git: {}", reason));
+        if GIT_ASK_HOLD.contains(subcmd_triple.as_str())
+            || GIT_ASK_HOLD.contains(subcmd.as_str())
+            || GIT_ASK_HOLD.contains(subcmd_single)
+        {
+            return Some(result.hold_in_auto());
+        }
+        return Some(result);
     }
 
     Some(GateResult::ask(format!("git: {}", subcmd_single)))
@@ -1297,8 +1373,17 @@ pub fn check_aws_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
-    if let Some(reason) = AWS_BLOCK.get(subcmd.as_str()) {
+    if let Some(reason) = AWS_BLOCK
+        .get(subcmd_triple.as_str())
+        .or_else(|| AWS_BLOCK.get(subcmd.as_str()))
+    {
         return Some(GateResult::block(format!("aws: {}", reason)));
     }
 
@@ -1536,6 +1621,16 @@ pub static GCLOUD_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     ].into_iter().collect()
 });
 
+pub static GCLOUD_ASK_HOLD: LazyLock<HashSet<&str>> = LazyLock::new(|| {
+    [
+        "container clusters delete",
+        "sql instances delete",
+        "secrets delete",
+    ]
+    .into_iter()
+    .collect()
+});
+
 /// Check gcloud commands declaratively
 pub fn check_gcloud_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if !["gcloud"].contains(&cmd.program.as_str()) {
@@ -1552,6 +1647,12 @@ pub fn check_gcloud_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if cmd.args.len() >= 2 && cmd.args[0] == "config" && cmd.args[1] == "list" {
@@ -1755,10 +1856,18 @@ pub fn check_gcloud_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = GCLOUD_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| GCLOUD_ASK.get(subcmd.as_str()))
         .or_else(|| GCLOUD_ASK.get(subcmd_single))
     {
-        return Some(GateResult::ask(format!("gcloud: {}", reason)));
+        let result = GateResult::ask(format!("gcloud: {}", reason));
+        if GCLOUD_ASK_HOLD.contains(subcmd_triple.as_str())
+            || GCLOUD_ASK_HOLD.contains(subcmd.as_str())
+            || GCLOUD_ASK_HOLD.contains(subcmd_single)
+        {
+            return Some(result.hold_in_auto());
+        }
+        return Some(result);
     }
 
     Some(GateResult::ask(format!("gcloud: {}", subcmd_single)))
@@ -1782,6 +1891,12 @@ pub fn check_az_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "--version" {
@@ -1827,6 +1942,12 @@ pub static TERRAFORM_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     ].into_iter().collect()
 });
 
+pub static TERRAFORM_ASK_HOLD: LazyLock<HashSet<&str>> = LazyLock::new(|| {
+    ["force-unlock", "destroy", "state push"]
+        .into_iter()
+        .collect()
+});
+
 /// Check terraform commands declaratively
 pub fn check_terraform_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if !["terraform", "tofu"].contains(&cmd.program.as_str()) {
@@ -1843,6 +1964,12 @@ pub fn check_terraform_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "plan" {
@@ -1927,10 +2054,18 @@ pub fn check_terraform_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = TERRAFORM_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| TERRAFORM_ASK.get(subcmd.as_str()))
         .or_else(|| TERRAFORM_ASK.get(subcmd_single))
     {
-        return Some(GateResult::ask(format!("terraform: {}", reason)));
+        let result = GateResult::ask(format!("terraform: {}", reason));
+        if TERRAFORM_ASK_HOLD.contains(subcmd_triple.as_str())
+            || TERRAFORM_ASK_HOLD.contains(subcmd.as_str())
+            || TERRAFORM_ASK_HOLD.contains(subcmd_single)
+        {
+            return Some(result.hold_in_auto());
+        }
+        return Some(result);
     }
 
     Some(GateResult::ask(format!("terraform: {}", subcmd_single)))
@@ -1992,8 +2127,17 @@ pub fn check_kubectl_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
-    if let Some(reason) = KUBECTL_BLOCK.get(subcmd.as_str()) {
+    if let Some(reason) = KUBECTL_BLOCK
+        .get(subcmd_triple.as_str())
+        .or_else(|| KUBECTL_BLOCK.get(subcmd.as_str()))
+    {
         return Some(GateResult::block(format!("kubectl: {}", reason)));
     }
 
@@ -2100,7 +2244,8 @@ pub fn check_kubectl_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = KUBECTL_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| KUBECTL_ASK.get(subcmd.as_str()))
         .or_else(|| KUBECTL_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("kubectl: {}", reason)));
@@ -2195,6 +2340,12 @@ pub fn check_docker_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "ps" {
@@ -2454,7 +2605,8 @@ pub fn check_docker_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = DOCKER_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| DOCKER_ASK.get(subcmd.as_str()))
         .or_else(|| DOCKER_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("docker: {}", reason)));
@@ -2508,6 +2660,12 @@ pub fn check_podman_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "ps" {
@@ -2692,7 +2850,8 @@ pub fn check_podman_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = PODMAN_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| PODMAN_ASK.get(subcmd.as_str()))
         .or_else(|| PODMAN_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("podman: {}", reason)));
@@ -2739,6 +2898,12 @@ pub fn check_docker_compose_declarative(cmd: &CommandInfo) -> Option<GateResult>
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "ps" {
@@ -2783,7 +2948,8 @@ pub fn check_docker_compose_declarative(cmd: &CommandInfo) -> Option<GateResult>
     }
 
     if let Some(reason) = DOCKER_COMPOSE_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| DOCKER_COMPOSE_ASK.get(subcmd.as_str()))
         .or_else(|| DOCKER_COMPOSE_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("docker-compose: {}", reason)));
@@ -2801,7 +2967,6 @@ pub static HELM_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
         ("repo add", "Helm repo add: registers a chart repository in the local Helm config. Subsequent installs can pull charts from it."),
         ("repo remove", "Helm repo remove: removes a chart repository from the local Helm config. Existing releases keep running."),
-        ("repo update", "Helm repo update: refreshes the local index for all repos. Read-only on clusters; updates local cache files."),
         ("install", "Helm install: deploys a chart as a new release into the current kube context/namespace. Creates the resources defined in the chart."),
         ("upgrade", "Helm upgrade: applies a new chart version or values to an existing release. Workloads may roll; use `--atomic` to auto-rollback on failure."),
         ("uninstall", "Helm uninstall: removes a release and all its Kubernetes resources from the cluster. Persistent volumes may be retained per chart settings."),
@@ -2828,6 +2993,12 @@ pub fn check_helm_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "list" {
@@ -2858,6 +3029,11 @@ pub fn check_helm_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if cmd.args.len() >= 2 && cmd.args[0] == "repo" && cmd.args[1] == "list" {
         return Some(GateResult::allow_with_reason(
             "Helm repo list: lists configured chart repositories. Read-only.",
+        ));
+    }
+    if cmd.args.len() >= 2 && cmd.args[0] == "repo" && cmd.args[1] == "update" {
+        return Some(GateResult::allow_with_reason(
+            "Helm repo update: refreshes the local index for all repos. Read-only on clusters; updates local cache files.",
         ));
     }
     if subcmd_single == "status" {
@@ -2902,7 +3078,8 @@ pub fn check_helm_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = HELM_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| HELM_ASK.get(subcmd.as_str()))
         .or_else(|| HELM_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("helm: {}", reason)));
@@ -2929,6 +3106,9 @@ pub static PULUMI_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     ].into_iter().collect()
 });
 
+pub static PULUMI_ASK_HOLD: LazyLock<HashSet<&str>> =
+    LazyLock::new(|| ["destroy", "cancel"].into_iter().collect());
+
 /// Check pulumi commands declaratively
 pub fn check_pulumi_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if !["pulumi"].contains(&cmd.program.as_str()) {
@@ -2945,6 +3125,12 @@ pub fn check_pulumi_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "preview" {
@@ -3004,10 +3190,18 @@ pub fn check_pulumi_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = PULUMI_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| PULUMI_ASK.get(subcmd.as_str()))
         .or_else(|| PULUMI_ASK.get(subcmd_single))
     {
-        return Some(GateResult::ask(format!("pulumi: {}", reason)));
+        let result = GateResult::ask(format!("pulumi: {}", reason));
+        if PULUMI_ASK_HOLD.contains(subcmd_triple.as_str())
+            || PULUMI_ASK_HOLD.contains(subcmd.as_str())
+            || PULUMI_ASK_HOLD.contains(subcmd_single)
+        {
+            return Some(result.hold_in_auto());
+        }
+        return Some(result);
     }
 
     Some(GateResult::ask(format!("pulumi: {}", subcmd_single)))
@@ -3056,6 +3250,12 @@ pub static NPM_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     ].into_iter().collect()
 });
 
+pub static NPM_ASK_HOLD: LazyLock<HashSet<&str>> = LazyLock::new(|| {
+    ["token revoke", "token delete", "publish", "unpublish"]
+        .into_iter()
+        .collect()
+});
+
 /// Check npm commands declaratively
 pub fn check_npm_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if !["npm"].contains(&cmd.program.as_str()) {
@@ -3072,6 +3272,12 @@ pub fn check_npm_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if subcmd_single == "config"
@@ -3287,10 +3493,18 @@ pub fn check_npm_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = NPM_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| NPM_ASK.get(subcmd.as_str()))
         .or_else(|| NPM_ASK.get(subcmd_single))
     {
-        return Some(GateResult::ask(format!("npm: {}", reason)));
+        let result = GateResult::ask(format!("npm: {}", reason));
+        if NPM_ASK_HOLD.contains(subcmd_triple.as_str())
+            || NPM_ASK_HOLD.contains(subcmd.as_str())
+            || NPM_ASK_HOLD.contains(subcmd_single)
+        {
+            return Some(result.hold_in_auto());
+        }
+        return Some(result);
     }
 
     Some(GateResult::ask(format!("npm: {}", subcmd_single)))
@@ -3323,6 +3537,9 @@ pub static PNPM_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     ].into_iter().collect()
 });
 
+pub static PNPM_ASK_HOLD: LazyLock<HashSet<&str>> =
+    LazyLock::new(|| ["publish"].into_iter().collect());
+
 /// Check pnpm commands declaratively
 pub fn check_pnpm_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if !["pnpm"].contains(&cmd.program.as_str()) {
@@ -3339,6 +3556,12 @@ pub fn check_pnpm_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if subcmd_single == "audit" && cmd.args.iter().any(|a| ["--fix"].contains(&a.as_str())) {
@@ -3440,10 +3663,18 @@ pub fn check_pnpm_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = PNPM_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| PNPM_ASK.get(subcmd.as_str()))
         .or_else(|| PNPM_ASK.get(subcmd_single))
     {
-        return Some(GateResult::ask(format!("pnpm: {}", reason)));
+        let result = GateResult::ask(format!("pnpm: {}", reason));
+        if PNPM_ASK_HOLD.contains(subcmd_triple.as_str())
+            || PNPM_ASK_HOLD.contains(subcmd.as_str())
+            || PNPM_ASK_HOLD.contains(subcmd_single)
+        {
+            return Some(result.hold_in_auto());
+        }
+        return Some(result);
     }
 
     Some(GateResult::ask(format!("pnpm: {}", subcmd_single)))
@@ -3473,6 +3704,9 @@ pub static YARN_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     ].into_iter().collect()
 });
 
+pub static YARN_ASK_HOLD: LazyLock<HashSet<&str>> =
+    LazyLock::new(|| ["publish"].into_iter().collect());
+
 /// Check yarn commands declaratively
 pub fn check_yarn_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if !["yarn"].contains(&cmd.program.as_str()) {
@@ -3489,6 +3723,12 @@ pub fn check_yarn_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if subcmd_single == "config"
@@ -3593,10 +3833,18 @@ pub fn check_yarn_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = YARN_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| YARN_ASK.get(subcmd.as_str()))
         .or_else(|| YARN_ASK.get(subcmd_single))
     {
-        return Some(GateResult::ask(format!("yarn: {}", reason)));
+        let result = GateResult::ask(format!("yarn: {}", reason));
+        if YARN_ASK_HOLD.contains(subcmd_triple.as_str())
+            || YARN_ASK_HOLD.contains(subcmd.as_str())
+            || YARN_ASK_HOLD.contains(subcmd_single)
+        {
+            return Some(result.hold_in_auto());
+        }
+        return Some(result);
     }
 
     Some(GateResult::ask(format!("yarn: {}", subcmd_single)))
@@ -3640,6 +3888,12 @@ pub fn check_pip_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if subcmd_single == "config"
@@ -3733,7 +3987,8 @@ pub fn check_pip_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = PIP_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| PIP_ASK.get(subcmd.as_str()))
         .or_else(|| PIP_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("pip: {}", reason)));
@@ -3763,6 +4018,9 @@ pub static UV_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     ].into_iter().collect()
 });
 
+pub static UV_ASK_HOLD: LazyLock<HashSet<&str>> =
+    LazyLock::new(|| ["publish"].into_iter().collect());
+
 /// Check uv commands declaratively
 pub fn check_uv_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if !["uv"].contains(&cmd.program.as_str()) {
@@ -3779,6 +4037,12 @@ pub fn check_uv_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "version" {
@@ -3834,10 +4098,18 @@ pub fn check_uv_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = UV_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| UV_ASK.get(subcmd.as_str()))
         .or_else(|| UV_ASK.get(subcmd_single))
     {
-        return Some(GateResult::ask(format!("uv: {}", reason)));
+        let result = GateResult::ask(format!("uv: {}", reason));
+        if UV_ASK_HOLD.contains(subcmd_triple.as_str())
+            || UV_ASK_HOLD.contains(subcmd.as_str())
+            || UV_ASK_HOLD.contains(subcmd_single)
+        {
+            return Some(result.hold_in_auto());
+        }
+        return Some(result);
     }
 
     Some(GateResult::ask(format!("uv: {}", subcmd_single)))
@@ -3863,6 +4135,9 @@ pub static CARGO_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     ].into_iter().collect()
 });
 
+pub static CARGO_ASK_HOLD: LazyLock<HashSet<&str>> =
+    LazyLock::new(|| ["publish"].into_iter().collect());
+
 /// Check cargo commands declaratively
 pub fn check_cargo_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if !["cargo"].contains(&cmd.program.as_str()) {
@@ -3879,6 +4154,12 @@ pub fn check_cargo_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if subcmd_single == "clippy" && cmd.args.iter().any(|a| ["--fix"].contains(&a.as_str())) {
@@ -4073,10 +4354,18 @@ pub fn check_cargo_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = CARGO_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| CARGO_ASK.get(subcmd.as_str()))
         .or_else(|| CARGO_ASK.get(subcmd_single))
     {
-        return Some(GateResult::ask(format!("cargo: {}", reason)));
+        let result = GateResult::ask(format!("cargo: {}", reason));
+        if CARGO_ASK_HOLD.contains(subcmd_triple.as_str())
+            || CARGO_ASK_HOLD.contains(subcmd.as_str())
+            || CARGO_ASK_HOLD.contains(subcmd_single)
+        {
+            return Some(result.hold_in_auto());
+        }
+        return Some(result);
     }
 
     Some(GateResult::ask(format!("cargo: {}", subcmd_single)))
@@ -4100,6 +4389,12 @@ pub fn check_rustc_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if true
@@ -4163,6 +4458,12 @@ pub fn check_rustup_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "show" {
@@ -4227,7 +4528,8 @@ pub fn check_rustup_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = RUSTUP_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| RUSTUP_ASK.get(subcmd.as_str()))
         .or_else(|| RUSTUP_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("rustup: {}", reason)));
@@ -4270,6 +4572,12 @@ pub fn check_go_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if subcmd_single == "env" && cmd.args.iter().any(|a| ["-w", "-u"].contains(&a.as_str())) {
@@ -4349,7 +4657,8 @@ pub fn check_go_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = GO_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| GO_ASK.get(subcmd.as_str()))
         .or_else(|| GO_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("go: {}", reason)));
@@ -4381,6 +4690,9 @@ pub static BUN_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     ].into_iter().collect()
 });
 
+pub static BUN_ASK_HOLD: LazyLock<HashSet<&str>> =
+    LazyLock::new(|| ["publish"].into_iter().collect());
+
 /// Check bun commands declaratively
 pub fn check_bun_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if !["bun"].contains(&cmd.program.as_str()) {
@@ -4397,6 +4709,12 @@ pub fn check_bun_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if cmd.args.len() >= 2 && cmd.args[0] == "pm" && cmd.args[1] == "ls" {
@@ -4472,10 +4790,18 @@ pub fn check_bun_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = BUN_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| BUN_ASK.get(subcmd.as_str()))
         .or_else(|| BUN_ASK.get(subcmd_single))
     {
-        return Some(GateResult::ask(format!("bun: {}", reason)));
+        let result = GateResult::ask(format!("bun: {}", reason));
+        if BUN_ASK_HOLD.contains(subcmd_triple.as_str())
+            || BUN_ASK_HOLD.contains(subcmd.as_str())
+            || BUN_ASK_HOLD.contains(subcmd_single)
+        {
+            return Some(result.hold_in_auto());
+        }
+        return Some(result);
     }
 
     Some(GateResult::ask(format!("bun: {}", subcmd_single)))
@@ -4519,6 +4845,12 @@ pub fn check_conda_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if subcmd_single == "config"
@@ -4612,7 +4944,8 @@ pub fn check_conda_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = CONDA_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| CONDA_ASK.get(subcmd.as_str()))
         .or_else(|| CONDA_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("conda: {}", reason)));
@@ -4643,6 +4976,9 @@ pub static POETRY_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     ].into_iter().collect()
 });
 
+pub static POETRY_ASK_HOLD: LazyLock<HashSet<&str>> =
+    LazyLock::new(|| ["publish"].into_iter().collect());
+
 /// Check poetry commands declaratively
 pub fn check_poetry_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if !["poetry"].contains(&cmd.program.as_str()) {
@@ -4659,6 +4995,12 @@ pub fn check_poetry_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "show" {
@@ -4743,10 +5085,18 @@ pub fn check_poetry_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = POETRY_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| POETRY_ASK.get(subcmd.as_str()))
         .or_else(|| POETRY_ASK.get(subcmd_single))
     {
-        return Some(GateResult::ask(format!("poetry: {}", reason)));
+        let result = GateResult::ask(format!("poetry: {}", reason));
+        if POETRY_ASK_HOLD.contains(subcmd_triple.as_str())
+            || POETRY_ASK_HOLD.contains(subcmd.as_str())
+            || POETRY_ASK_HOLD.contains(subcmd_single)
+        {
+            return Some(result.hold_in_auto());
+        }
+        return Some(result);
     }
 
     Some(GateResult::ask(format!("poetry: {}", subcmd_single)))
@@ -4787,6 +5137,12 @@ pub fn check_pipx_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "list" {
@@ -4811,7 +5167,8 @@ pub fn check_pipx_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = PIPX_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| PIPX_ASK.get(subcmd.as_str()))
         .or_else(|| PIPX_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("pipx: {}", reason)));
@@ -4841,8 +5198,6 @@ pub static MISE_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("uninstall", "Uninstalling tools"),
         ("prune", "Pruning unused versions"),
         ("sync", "Syncing tool versions"),
-        ("activate", "Activating mise in shell"),
-        ("deactivate", "Deactivating mise"),
         ("implode", "Removing mise installation"),
         ("self-update", "Updating mise itself"),
         ("plugins install", "Installing plugin"),
@@ -4870,6 +5225,12 @@ pub fn check_mise_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "ls" {
@@ -5002,6 +5363,16 @@ pub fn check_mise_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             "Runs a command with mise-managed tool versions on PATH. Devtool delegation is handled by the mise handler.",
         ));
     }
+    if subcmd_single == "activate" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the shell activation script to stdout. Nothing is executed or written; the caller decides whether to eval it.",
+        ));
+    }
+    if subcmd_single == "deactivate" {
+        return Some(GateResult::allow_with_reason(
+            "Prints the script that undoes shell activation. Takes no arguments and writes nothing.",
+        ));
+    }
     if subcmd_single == "registry" {
         return Some(GateResult::allow_with_reason(
             "Lists tools available in the mise registry. Read-only.",
@@ -5009,7 +5380,8 @@ pub fn check_mise_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = MISE_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| MISE_ASK.get(subcmd.as_str()))
         .or_else(|| MISE_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("mise: {}", reason)));
@@ -5151,6 +5523,12 @@ pub fn check_bd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if subcmd_single == "migrate"
@@ -5828,7 +6206,8 @@ pub fn check_bd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = BD_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| BD_ASK.get(subcmd.as_str()))
         .or_else(|| BD_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("bd: {}", reason)));
@@ -5849,6 +6228,9 @@ pub static TOOL_GATES_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     ].into_iter().collect()
 });
 
+pub static TOOL_GATES_ASK_HOLD: LazyLock<HashSet<&str>> =
+    LazyLock::new(|| ["approve"].into_iter().collect());
+
 /// Check tool-gates commands declaratively
 pub fn check_tool_gates_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if !["tool-gates", "bash-gates"].contains(&cmd.program.as_str()) {
@@ -5865,6 +6247,12 @@ pub fn check_tool_gates_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if cmd.args.len() >= 2
@@ -5872,19 +6260,7 @@ pub fn check_tool_gates_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         && cmd.args[1] == "allowlist"
         && cmd.args.iter().any(|a| ["--apply"].contains(&a.as_str()))
     {
-        return Some(GateResult::ask(
-            "Merges the safe-command allowlist into agy's settings.json. Changes which commands agy auto-allows without prompting.",
-        ));
-    }
-    if true
-        && cmd
-            .args
-            .iter()
-            .any(|a| ["--refresh-tools"].contains(&a.as_str()))
-    {
-        return Some(GateResult::ask(
-            "Re-scans the system for modern CLI tools (bat, rg, fd, etc.) and rewrites `~/.cache/tool-gates/available-tools.json`. Used to surface hints.",
-        ));
+        return Some(GateResult::ask("Merges the safe-command allowlist into agy's settings.json. Changes which commands agy auto-allows without prompting.").hold_in_auto());
     }
 
     // Check conditional allow rules
@@ -5947,12 +6323,30 @@ pub fn check_tool_gates_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     {
         return Some(GateResult::allow_with_reason("Info flags."));
     }
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--refresh-tools"].contains(&a.as_str()))
+    {
+        return Some(GateResult::allow_with_reason(
+            "Re-scans the system for modern CLI tools (bat, rg, fd, etc.) and rewrites its own hint cache under `~/.cache/tool-gates/`. Affects which hints appear, nothing else.",
+        ));
+    }
 
     if let Some(reason) = TOOL_GATES_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| TOOL_GATES_ASK.get(subcmd.as_str()))
         .or_else(|| TOOL_GATES_ASK.get(subcmd_single))
     {
-        return Some(GateResult::ask(format!("tool-gates: {}", reason)));
+        let result = GateResult::ask(format!("tool-gates: {}", reason));
+        if TOOL_GATES_ASK_HOLD.contains(subcmd_triple.as_str())
+            || TOOL_GATES_ASK_HOLD.contains(subcmd.as_str())
+            || TOOL_GATES_ASK_HOLD.contains(subcmd_single)
+        {
+            return Some(result.hold_in_auto());
+        }
+        return Some(result);
     }
 
     Some(GateResult::ask(format!("tool-gates: {}", subcmd_single)))
@@ -5976,6 +6370,12 @@ pub fn check_sd_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any sd invocation asks
     Some(GateResult::ask(
@@ -6001,6 +6401,12 @@ pub fn check_awk_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any awk invocation asks
     Some(GateResult::ask(
@@ -6026,6 +6432,12 @@ pub fn check_sad_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true && cmd.args.iter().any(|a| ["--commit"].contains(&a.as_str())) {
@@ -6055,6 +6467,12 @@ pub fn check_ast_grep_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true
@@ -6089,6 +6507,12 @@ pub fn check_sg_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any sg invocation asks
     Some(GateResult::ask(
@@ -6114,6 +6538,12 @@ pub fn check_yq_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true
@@ -6148,6 +6578,12 @@ pub fn check_jq_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     Some(GateResult::allow())
 }
@@ -6170,6 +6606,12 @@ pub fn check_semgrep_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true
@@ -6204,6 +6646,12 @@ pub fn check_comby_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true
@@ -6244,9 +6692,16 @@ pub fn check_grit_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     if let Some(reason) = GRIT_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| GRIT_ASK.get(subcmd.as_str()))
         .or_else(|| GRIT_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("grit: {}", reason)));
@@ -6273,6 +6728,12 @@ pub fn check_watchexec_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any watchexec invocation asks
     Some(GateResult::ask(
@@ -6298,6 +6759,12 @@ pub fn check_biome_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if subcmd_single == "check"
@@ -6340,6 +6807,12 @@ pub fn check_prettier_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true
@@ -6372,6 +6845,12 @@ pub fn check_eslint_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true && cmd.args.iter().any(|a| ["--fix"].contains(&a.as_str())) {
@@ -6402,6 +6881,12 @@ pub fn check_ruff_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if subcmd_single == "check" && cmd.args.iter().any(|a| ["--fix"].contains(&a.as_str())) {
@@ -6421,7 +6906,8 @@ pub fn check_ruff_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = RUFF_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| RUFF_ASK.get(subcmd.as_str()))
         .or_else(|| RUFF_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("ruff: {}", reason)));
@@ -6448,6 +6934,12 @@ pub fn check_black_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if true
@@ -6483,6 +6975,12 @@ pub fn check_isort_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if true
@@ -6518,6 +7016,12 @@ pub fn check_shellcheck_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     Some(GateResult::allow())
 }
@@ -6540,6 +7044,12 @@ pub fn check_hadolint_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     Some(GateResult::allow())
 }
@@ -6562,6 +7072,12 @@ pub fn check_golangci_lint_declarative(cmd: &CommandInfo) -> Option<GateResult> 
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true && cmd.args.iter().any(|a| ["--fix"].contains(&a.as_str())) {
@@ -6589,6 +7105,12 @@ pub fn check_gci_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true && cmd.args.iter().any(|a| ["write"].contains(&a.as_str())) {
@@ -6616,6 +7138,12 @@ pub fn check_air_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     Some(GateResult::allow())
 }
@@ -6638,6 +7166,12 @@ pub fn check_actionlint_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     Some(GateResult::allow())
 }
@@ -6660,6 +7194,12 @@ pub fn check_gitleaks_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     Some(GateResult::allow())
 }
@@ -6690,6 +7230,12 @@ pub fn check_lefthook_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "run" {
@@ -6709,7 +7255,8 @@ pub fn check_lefthook_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = LEFTHOOK_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| LEFTHOOK_ASK.get(subcmd.as_str()))
         .or_else(|| LEFTHOOK_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("lefthook: {}", reason)));
@@ -6736,6 +7283,12 @@ pub fn check_vite_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     Some(GateResult::allow())
 }
@@ -6758,6 +7311,12 @@ pub fn check_vitest_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     Some(GateResult::allow())
 }
@@ -6780,6 +7339,12 @@ pub fn check_jest_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     Some(GateResult::allow())
 }
@@ -6802,6 +7367,12 @@ pub fn check_mocha_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     Some(GateResult::allow())
 }
@@ -6824,6 +7395,12 @@ pub fn check_tsc_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     Some(GateResult::allow())
 }
@@ -6846,6 +7423,12 @@ pub fn check_tsup_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     Some(GateResult::allow())
 }
@@ -6868,6 +7451,12 @@ pub fn check_esbuild_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     Some(GateResult::allow())
 }
@@ -6890,6 +7479,12 @@ pub fn check_turbo_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     Some(GateResult::allow())
 }
@@ -6912,6 +7507,12 @@ pub fn check_nx_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     Some(GateResult::allow())
 }
@@ -6934,6 +7535,12 @@ pub fn check_knip_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     Some(GateResult::allow())
 }
@@ -6956,6 +7563,12 @@ pub fn check_oxlint_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     Some(GateResult::allow())
 }
@@ -6978,6 +7591,12 @@ pub fn check_gofmt_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true && cmd.args.iter().any(|a| ["-w"].contains(&a.as_str())) {
@@ -7005,6 +7624,12 @@ pub fn check_gofumpt_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true && cmd.args.iter().any(|a| ["-w"].contains(&a.as_str())) {
@@ -7032,6 +7657,12 @@ pub fn check_goimports_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true && cmd.args.iter().any(|a| ["-w"].contains(&a.as_str())) {
@@ -7059,6 +7690,12 @@ pub fn check_shfmt_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true && cmd.args.iter().any(|a| ["-w"].contains(&a.as_str())) {
@@ -7086,6 +7723,12 @@ pub fn check_rustfmt_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if true && cmd.args.iter().any(|a| ["--check"].contains(&a.as_str())) {
@@ -7116,6 +7759,12 @@ pub fn check_stylua_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if true && cmd.args.iter().any(|a| ["--check"].contains(&a.as_str())) {
@@ -7146,6 +7795,12 @@ pub fn check_clang_format_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true && cmd.args.iter().any(|a| ["-i"].contains(&a.as_str())) {
@@ -7173,6 +7828,12 @@ pub fn check_autopep8_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true
@@ -7205,6 +7866,12 @@ pub fn check_rubocop_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true
@@ -7237,6 +7904,12 @@ pub fn check_standardrb_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true
@@ -7269,6 +7942,12 @@ pub fn check_patch_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if true && cmd.args.iter().any(|a| ["--dry-run"].contains(&a.as_str())) {
@@ -7301,6 +7980,12 @@ pub fn check_dos2unix_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any dos2unix invocation asks
     Some(GateResult::ask("dos2unix: Converting line endings"))
@@ -7324,6 +8009,12 @@ pub fn check_unix2dos_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any unix2dos invocation asks
     Some(GateResult::ask("unix2dos: Converting line endings"))
@@ -7347,6 +8038,12 @@ pub fn check_stylelint_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true && cmd.args.iter().any(|a| ["--fix"].contains(&a.as_str())) {
@@ -7377,9 +8074,16 @@ pub fn check_mix_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     if let Some(reason) = MIX_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| MIX_ASK.get(subcmd.as_str()))
         .or_else(|| MIX_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("mix: {}", reason)));
@@ -7406,6 +8110,12 @@ pub fn check_perltidy_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true && cmd.args.iter().any(|a| ["-b"].contains(&a.as_str())) {
@@ -7433,6 +8143,12 @@ pub fn check_dartfmt_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any dartfmt invocation asks
     Some(GateResult::ask("dartfmt: Formatting files"))
@@ -7459,6 +8175,12 @@ pub fn check_dart_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "analyze" {
@@ -7478,7 +8200,8 @@ pub fn check_dart_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = DART_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| DART_ASK.get(subcmd.as_str()))
         .or_else(|| DART_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("dart: {}", reason)));
@@ -7505,6 +8228,12 @@ pub fn check_elm_format_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any elm-format invocation asks
     Some(GateResult::ask("elm-format: Formatting files"))
@@ -7528,6 +8257,12 @@ pub fn check_scalafmt_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if true && cmd.args.iter().any(|a| ["--check"].contains(&a.as_str())) {
@@ -7558,6 +8293,12 @@ pub fn check_ktlint_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true
@@ -7590,6 +8331,12 @@ pub fn check_swiftformat_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if true && cmd.args.iter().any(|a| ["--lint"].contains(&a.as_str())) {
@@ -7623,6 +8370,12 @@ pub fn check_buf_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "lint" {
@@ -7647,7 +8400,8 @@ pub fn check_buf_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = BUF_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| BUF_ASK.get(subcmd.as_str()))
         .or_else(|| BUF_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("buf: {}", reason)));
@@ -7674,6 +8428,12 @@ pub fn check_pytest_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     Some(GateResult::allow())
 }
@@ -7696,6 +8456,12 @@ pub fn check_mypy_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     Some(GateResult::allow())
 }
@@ -7718,6 +8484,12 @@ pub fn check_pyright_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     Some(GateResult::allow())
 }
@@ -7740,6 +8512,12 @@ pub fn check_pylint_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     Some(GateResult::allow())
 }
@@ -7762,6 +8540,12 @@ pub fn check_flake8_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     Some(GateResult::allow())
 }
@@ -7784,6 +8568,12 @@ pub fn check_bandit_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     Some(GateResult::allow())
 }
@@ -7818,6 +8608,12 @@ pub fn check_coverage_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "report" {
@@ -7837,7 +8633,8 @@ pub fn check_coverage_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = COVERAGE_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| COVERAGE_ASK.get(subcmd.as_str()))
         .or_else(|| COVERAGE_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("coverage: {}", reason)));
@@ -7864,6 +8661,12 @@ pub fn check_tox_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "--version" {
@@ -7911,6 +8714,12 @@ pub fn check_nox_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "--version" {
@@ -7958,6 +8767,12 @@ pub fn check_autoflake_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true
@@ -8004,6 +8819,12 @@ pub fn check_tsx_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "--version" {
@@ -8041,6 +8862,12 @@ pub fn check_ts_node_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "--version" {
@@ -8078,6 +8905,12 @@ pub fn check_webpack_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     Some(GateResult::allow())
 }
@@ -8100,6 +8933,12 @@ pub fn check_rollup_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     Some(GateResult::allow())
 }
@@ -8122,6 +8961,12 @@ pub fn check_swc_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     Some(GateResult::allow())
 }
@@ -8130,7 +8975,6 @@ pub fn check_swc_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 pub static PARCEL_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
-        ("serve", "parcel serve: starts the Parcel dev server on a local port. Binds to localhost until interrupted."),
         ("watch", "parcel watch: rebuilds the bundle on file changes. Long-running; writes output to the configured dist dir."),
     ].into_iter().collect()
 });
@@ -8151,6 +8995,12 @@ pub fn check_parcel_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "build" {
@@ -8168,9 +9018,15 @@ pub fn check_parcel_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             "Prints Parcel usage help. Read-only.",
         ));
     }
+    if subcmd_single == "serve" {
+        return Some(GateResult::allow_with_reason(
+            "parcel serve: starts the Parcel dev server on a local port. Binds to localhost until interrupted.",
+        ));
+    }
 
     if let Some(reason) = PARCEL_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| PARCEL_ASK.get(subcmd.as_str()))
         .or_else(|| PARCEL_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("parcel: {}", reason)));
@@ -8204,6 +9060,12 @@ pub fn check_playwright_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "test" {
@@ -8233,7 +9095,8 @@ pub fn check_playwright_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = PLAYWRIGHT_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| PLAYWRIGHT_ASK.get(subcmd.as_str()))
         .or_else(|| PLAYWRIGHT_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("playwright: {}", reason)));
@@ -8267,6 +9130,12 @@ pub fn check_cypress_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "run" {
@@ -8301,7 +9170,8 @@ pub fn check_cypress_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = CYPRESS_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| CYPRESS_ASK.get(subcmd.as_str()))
         .or_else(|| CYPRESS_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("cypress: {}", reason)));
@@ -8338,6 +9208,12 @@ pub fn check_wrangler_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "whoami" {
@@ -8362,7 +9238,8 @@ pub fn check_wrangler_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = WRANGLER_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| WRANGLER_ASK.get(subcmd.as_str()))
         .or_else(|| WRANGLER_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("wrangler: {}", reason)));
@@ -8389,6 +9266,12 @@ pub fn check_ty_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true
@@ -8423,6 +9306,12 @@ pub fn check_markdownlint_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true
@@ -8432,6 +9321,176 @@ pub fn check_markdownlint_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             .any(|a| ["--fix", "-f"].contains(&a.as_str()))
     {
         return Some(GateResult::ask("Auto-fixing markdown"));
+    }
+
+    Some(GateResult::allow())
+}
+
+// === RUMDL (from devtools.toml) ===
+
+/// Check rumdl commands declaratively
+pub fn check_rumdl_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["rumdl"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
+
+    // Check ask rules with flag/prefix conditions
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["--fix", "-f"].contains(&a.as_str()))
+    {
+        return Some(GateResult::ask(
+            "Rewrites the Markdown files in place. Run without `--fix` first to see what would change.",
+        ));
+    }
+
+    Some(GateResult::allow())
+}
+
+// === MARKDOWNLINT-CLI2 (from devtools.toml) ===
+
+/// Check markdownlint-cli2 commands declaratively
+pub fn check_markdownlint_cli2_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["markdownlint-cli2"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
+
+    // Check ask rules with flag/prefix conditions
+    if true && cmd.args.iter().any(|a| ["--fix"].contains(&a.as_str())) {
+        return Some(GateResult::ask(
+            "Rewrites the Markdown files in place. Run without `--fix` first to see what would change.",
+        ));
+    }
+
+    Some(GateResult::allow())
+}
+
+// === TAPLO (from devtools.toml) ===
+
+pub static TAPLO_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
+    [
+        (
+            "format",
+            "Reformats TOML files in place. Pass `--check` to report differences without writing.",
+        ),
+        (
+            "fmt",
+            "Reformats TOML files in place. Pass `--check` to report differences without writing.",
+        ),
+    ]
+    .into_iter()
+    .collect()
+});
+
+/// Check taplo commands declaratively
+pub fn check_taplo_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["taplo"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
+
+    if let Some(reason) = TAPLO_ASK
+        .get(subcmd_triple.as_str())
+        .or_else(|| TAPLO_ASK.get(subcmd.as_str()))
+        .or_else(|| TAPLO_ASK.get(subcmd_single))
+    {
+        return Some(GateResult::ask(format!("taplo: {}", reason)));
+    }
+
+    Some(GateResult::allow())
+}
+
+// === MDBOOK (from devtools.toml) ===
+
+pub static MDBOOK_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
+    [
+        ("build", "Writes the rendered book into the output directory, replacing its current contents."),
+        ("serve", "Rebuilds the book into the output directory and serves it, rewriting on every change."),
+        ("clean", "Deletes the book output directory. Verify the configured build dir before removing it."),
+    ].into_iter().collect()
+});
+
+/// Check mdbook commands declaratively
+pub fn check_mdbook_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["mdbook"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
+
+    if let Some(reason) = MDBOOK_ASK
+        .get(subcmd_triple.as_str())
+        .or_else(|| MDBOOK_ASK.get(subcmd.as_str()))
+        .or_else(|| MDBOOK_ASK.get(subcmd_single))
+    {
+        return Some(GateResult::ask(format!("mdbook: {}", reason)));
     }
 
     Some(GateResult::allow())
@@ -8455,6 +9514,12 @@ pub fn check_ffprobe_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     Some(GateResult::allow())
 }
@@ -8477,6 +9542,12 @@ pub fn check_d2_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     Some(GateResult::allow())
 }
@@ -8499,6 +9570,12 @@ pub fn check_ffmpeg_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if true
@@ -8542,6 +9619,12 @@ pub fn check_python3_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true && cmd.args.iter().any(|a| ["-c"].contains(&a.as_str())) {
@@ -8597,6 +9680,12 @@ pub fn check_node_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true
@@ -8662,6 +9751,12 @@ pub fn check_ruby_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true && cmd.args.iter().any(|a| ["-e"].contains(&a.as_str())) {
@@ -8717,6 +9812,9 @@ pub static DENO_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     ].into_iter().collect()
 });
 
+pub static DENO_ASK_HOLD: LazyLock<HashSet<&str>> =
+    LazyLock::new(|| ["publish"].into_iter().collect());
+
 /// Check deno commands declaratively
 pub fn check_deno_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if !["deno"].contains(&cmd.program.as_str()) {
@@ -8733,6 +9831,12 @@ pub fn check_deno_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "--version" {
@@ -8799,10 +9903,18 @@ pub fn check_deno_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = DENO_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| DENO_ASK.get(subcmd.as_str()))
         .or_else(|| DENO_ASK.get(subcmd_single))
     {
-        return Some(GateResult::ask(format!("deno: {}", reason)));
+        let result = GateResult::ask(format!("deno: {}", reason));
+        if DENO_ASK_HOLD.contains(subcmd_triple.as_str())
+            || DENO_ASK_HOLD.contains(subcmd.as_str())
+            || DENO_ASK_HOLD.contains(subcmd_single)
+        {
+            return Some(result.hold_in_auto());
+        }
+        return Some(result);
     }
 
     Some(GateResult::ask(format!("deno: {}", subcmd_single)))
@@ -8826,6 +9938,12 @@ pub fn check_php_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true && cmd.args.iter().any(|a| ["-r"].contains(&a.as_str())) {
@@ -8901,6 +10019,12 @@ pub fn check_lua_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true && cmd.args.iter().any(|a| ["-e"].contains(&a.as_str())) {
@@ -8938,6 +10062,12 @@ pub fn check_java_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if true
@@ -8973,6 +10103,12 @@ pub fn check_javac_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if true
@@ -9023,6 +10159,12 @@ pub fn check_dotnet_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if true
@@ -9090,7 +10232,8 @@ pub fn check_dotnet_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = DOTNET_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| DOTNET_ASK.get(subcmd.as_str()))
         .or_else(|| DOTNET_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("dotnet: {}", reason)));
@@ -9124,6 +10267,12 @@ pub fn check_swift_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if true
@@ -9146,7 +10295,8 @@ pub fn check_swift_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = SWIFT_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| SWIFT_ASK.get(subcmd.as_str()))
         .or_else(|| SWIFT_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("swift: {}", reason)));
@@ -9173,6 +10323,12 @@ pub fn check_elixir_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true && cmd.args.iter().any(|a| ["-e"].contains(&a.as_str())) {
@@ -9223,6 +10379,12 @@ pub fn check_iex_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if true
@@ -9285,8 +10447,17 @@ pub fn check_rm_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
-    if let Some(reason) = RM_BLOCK.get(subcmd.as_str()) {
+    if let Some(reason) = RM_BLOCK
+        .get(subcmd_triple.as_str())
+        .or_else(|| RM_BLOCK.get(subcmd.as_str()))
+    {
         return Some(GateResult::block(format!("rm: {}", reason)));
     }
 
@@ -9313,6 +10484,12 @@ pub fn check_mv_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any mv invocation asks
     Some(GateResult::ask(
@@ -9338,6 +10515,12 @@ pub fn check_cp_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any cp invocation asks
     Some(GateResult::ask(
@@ -9363,6 +10546,12 @@ pub fn check_mkdir_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any mkdir invocation asks
     Some(GateResult::ask(
@@ -9388,6 +10577,12 @@ pub fn check_rmdir_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any rmdir invocation asks
     Some(GateResult::ask(
@@ -9413,6 +10608,12 @@ pub fn check_touch_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any touch invocation asks
     Some(GateResult::ask(
@@ -9438,6 +10639,12 @@ pub fn check_chmod_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any chmod invocation asks
     Some(GateResult::ask(
@@ -9463,6 +10670,12 @@ pub fn check_chown_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any chown invocation asks
     Some(GateResult::ask(
@@ -9488,6 +10701,12 @@ pub fn check_chgrp_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any chgrp invocation asks
     Some(GateResult::ask(
@@ -9513,6 +10732,12 @@ pub fn check_ln_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any ln invocation asks
     Some(GateResult::ask(
@@ -9538,6 +10763,12 @@ pub fn check_perl_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any perl invocation asks
     Some(GateResult::ask(
@@ -9563,6 +10794,12 @@ pub fn check_tar_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "-t" {
@@ -9597,6 +10834,12 @@ pub fn check_unzip_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if true && cmd.args.iter().any(|a| ["-l"].contains(&a.as_str())) {
@@ -9629,6 +10872,12 @@ pub fn check_zip_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any zip invocation asks
     Some(GateResult::ask(
@@ -9654,6 +10903,12 @@ pub fn check_curl_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "--version" {
@@ -9703,6 +10958,12 @@ pub fn check_wget_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true
@@ -9792,6 +11053,12 @@ pub fn check_ssh_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any ssh invocation asks
     Some(GateResult::ask(
@@ -9817,6 +11084,12 @@ pub fn check_scp_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any scp invocation asks
     Some(GateResult::ask(
@@ -9842,6 +11115,12 @@ pub fn check_sftp_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any sftp invocation asks
     Some(GateResult::ask(
@@ -9876,6 +11155,12 @@ pub fn check_rsync_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any rsync invocation asks
     Some(GateResult::ask(
@@ -9901,6 +11186,12 @@ pub fn check_nc_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional block rules
 
@@ -9944,6 +11235,12 @@ pub fn check_http_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "--version" {
@@ -9963,7 +11260,8 @@ pub fn check_http_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = HTTP_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| HTTP_ASK.get(subcmd.as_str()))
         .or_else(|| HTTP_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("http: {}", reason)));
@@ -9990,6 +11288,12 @@ pub fn check_nmap_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "--version" {
@@ -10037,6 +11341,12 @@ pub fn check_socat_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "--version" {
@@ -10084,6 +11394,12 @@ pub fn check_telnet_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any telnet invocation asks
     Some(GateResult::ask(
@@ -10529,6 +11845,12 @@ pub fn check_mount_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if true
@@ -10650,6 +11972,12 @@ pub fn check_psql_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if true
@@ -10684,6 +12012,12 @@ pub fn check_createdb_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any createdb invocation asks
     Some(GateResult::ask(
@@ -10709,6 +12043,12 @@ pub fn check_dropdb_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any dropdb invocation asks
     Some(GateResult::ask(
@@ -10734,6 +12074,12 @@ pub fn check_pg_dump_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     Some(GateResult::allow())
 }
@@ -10756,6 +12102,12 @@ pub fn check_pg_restore_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any pg_restore invocation asks
     Some(GateResult::ask(
@@ -10781,6 +12133,12 @@ pub fn check_migrate_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any migrate invocation asks
     Some(GateResult::ask(
@@ -10806,6 +12164,12 @@ pub fn check_goose_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any goose invocation asks
     Some(GateResult::ask(
@@ -10831,6 +12195,12 @@ pub fn check_dbmate_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any dbmate invocation asks
     Some(GateResult::ask(
@@ -10856,6 +12226,12 @@ pub fn check_flyway_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any flyway invocation asks
     Some(GateResult::ask(
@@ -10890,6 +12266,12 @@ pub fn check_alembic_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "history" {
@@ -10919,7 +12301,8 @@ pub fn check_alembic_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = ALEMBIC_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| ALEMBIC_ASK.get(subcmd.as_str()))
         .or_else(|| ALEMBIC_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("alembic: {}", reason)));
@@ -10946,6 +12329,12 @@ pub fn check_mysql_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     Some(GateResult::ask(format!("mysql: {}", subcmd_single)))
 }
@@ -10968,6 +12357,12 @@ pub fn check_sqlite3_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if true && cmd.args.iter().any(|a| ["-readonly"].contains(&a.as_str())) {
@@ -11000,6 +12395,12 @@ pub fn check_mongosh_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true && cmd.args.iter().any(|a| ["--eval"].contains(&a.as_str())) {
@@ -11032,6 +12433,12 @@ pub fn check_redis_cli_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     Some(GateResult::ask(format!("redis-cli: {}", subcmd_single)))
 }
@@ -11054,6 +12461,12 @@ pub fn check_kill_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if true && cmd.args.iter().any(|a| ["-0"].contains(&a.as_str())) {
@@ -11086,6 +12499,12 @@ pub fn check_pkill_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any pkill invocation asks
     Some(GateResult::ask(
@@ -11111,6 +12530,12 @@ pub fn check_killall_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any killall invocation asks
     Some(GateResult::ask(
@@ -11136,6 +12561,12 @@ pub fn check_xkill_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any xkill invocation asks
     Some(GateResult::ask(
@@ -11177,6 +12608,12 @@ pub fn check_make_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "test" {
@@ -11275,6 +12712,12 @@ pub fn check_cmake_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "--version" {
@@ -11296,15 +12739,6 @@ pub fn check_cmake_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 
 // === NINJA (from system.toml) ===
 
-pub static NINJA_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
-    [(
-        "clean",
-        "Removes Ninja build artifacts in the current build directory.",
-    )]
-    .into_iter()
-    .collect()
-});
-
 /// Check ninja commands declaratively
 pub fn check_ninja_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if !["ninja"].contains(&cmd.program.as_str()) {
@@ -11321,6 +12755,12 @@ pub fn check_ninja_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "-t" {
@@ -11328,12 +12768,10 @@ pub fn check_ninja_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             "Runs a Ninja subtool (`-t query`, `-t graph`, etc.). Inspection only; does not build targets.",
         ));
     }
-
-    if let Some(reason) = NINJA_ASK
-        .get(subcmd.as_str())
-        .or_else(|| NINJA_ASK.get(subcmd_single))
-    {
-        return Some(GateResult::ask(format!("ninja: {}", reason)));
+    if subcmd_single == "clean" {
+        return Some(GateResult::allow_with_reason(
+            "Removes Ninja build artifacts in the current build directory. Everything it deletes is regenerated by rebuilding.",
+        ));
     }
 
     Some(GateResult::ask(format!("ninja: {}", subcmd_single)))
@@ -11357,6 +12795,12 @@ pub fn check_just_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "--list" {
@@ -11401,6 +12845,12 @@ pub fn check_task_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "--list" {
@@ -11426,6 +12876,9 @@ pub static GRADLE_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     ].into_iter().collect()
 });
 
+pub static GRADLE_ASK_HOLD: LazyLock<HashSet<&str>> =
+    LazyLock::new(|| ["publish", "uploadArchives"].into_iter().collect());
+
 /// Check gradle commands declaratively
 pub fn check_gradle_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if !["gradle", "gradlew", "./gradlew"].contains(&cmd.program.as_str()) {
@@ -11442,6 +12895,12 @@ pub fn check_gradle_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "tasks" {
@@ -11486,10 +12945,18 @@ pub fn check_gradle_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = GRADLE_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| GRADLE_ASK.get(subcmd.as_str()))
         .or_else(|| GRADLE_ASK.get(subcmd_single))
     {
-        return Some(GateResult::ask(format!("gradle: {}", reason)));
+        let result = GateResult::ask(format!("gradle: {}", reason));
+        if GRADLE_ASK_HOLD.contains(subcmd_triple.as_str())
+            || GRADLE_ASK_HOLD.contains(subcmd.as_str())
+            || GRADLE_ASK_HOLD.contains(subcmd_single)
+        {
+            return Some(result.hold_in_auto());
+        }
+        return Some(result);
     }
 
     Some(GateResult::ask(format!("gradle: {}", subcmd_single)))
@@ -11503,6 +12970,9 @@ pub static MVN_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("deploy", "Deploys Maven artifacts to a remote repository. Network operation; affects downstream consumers."),
     ].into_iter().collect()
 });
+
+pub static MVN_ASK_HOLD: LazyLock<HashSet<&str>> =
+    LazyLock::new(|| ["deploy"].into_iter().collect());
 
 /// Check mvn commands declaratively
 pub fn check_mvn_declarative(cmd: &CommandInfo) -> Option<GateResult> {
@@ -11520,6 +12990,12 @@ pub fn check_mvn_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "help" {
@@ -11569,10 +13045,18 @@ pub fn check_mvn_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = MVN_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| MVN_ASK.get(subcmd.as_str()))
         .or_else(|| MVN_ASK.get(subcmd_single))
     {
-        return Some(GateResult::ask(format!("mvn: {}", reason)));
+        let result = GateResult::ask(format!("mvn: {}", reason));
+        if MVN_ASK_HOLD.contains(subcmd_triple.as_str())
+            || MVN_ASK_HOLD.contains(subcmd.as_str())
+            || MVN_ASK_HOLD.contains(subcmd_single)
+        {
+            return Some(result.hold_in_auto());
+        }
+        return Some(result);
     }
 
     Some(GateResult::ask(format!("mvn: {}", subcmd_single)))
@@ -11603,6 +13087,12 @@ pub fn check_bazel_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "info" {
@@ -11652,7 +13142,8 @@ pub fn check_bazel_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = BAZEL_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| BAZEL_ASK.get(subcmd.as_str()))
         .or_else(|| BAZEL_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("bazel: {}", reason)));
@@ -11666,7 +13157,6 @@ pub fn check_bazel_declarative(cmd: &CommandInfo) -> Option<GateResult> {
 pub static MESON_ASK: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     [
         ("setup", "Configures a Meson build directory. Reads `meson.build` and writes build system files."),
-        ("compile", "Compiles a Meson project. Invokes the underlying build backend (ninja by default)."),
         ("install", "Installs Meson build outputs to the configured prefix. May require root depending on prefix."),
     ].into_iter().collect()
 });
@@ -11687,6 +13177,12 @@ pub fn check_meson_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "introspect" {
@@ -11709,9 +13205,15 @@ pub fn check_meson_declarative(cmd: &CommandInfo) -> Option<GateResult> {
             "Prints Meson help text. Read-only; configures or builds nothing.",
         ));
     }
+    if subcmd_single == "compile" {
+        return Some(GateResult::allow_with_reason(
+            "Compiles a Meson project. Invokes the underlying build backend (ninja by default).",
+        ));
+    }
 
     if let Some(reason) = MESON_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| MESON_ASK.get(subcmd.as_str()))
         .or_else(|| MESON_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("meson: {}", reason)));
@@ -11754,6 +13256,12 @@ pub fn check_ansible_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "--version" {
@@ -11817,6 +13325,12 @@ pub fn check_vagrant_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "status" {
@@ -11851,7 +13365,8 @@ pub fn check_vagrant_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = VAGRANT_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| VAGRANT_ASK.get(subcmd.as_str()))
         .or_else(|| VAGRANT_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("vagrant: {}", reason)));
@@ -11878,6 +13393,12 @@ pub fn check_hyperfine_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "--version" {
@@ -11915,6 +13436,12 @@ pub fn check_sudo_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if true
@@ -11989,6 +13516,12 @@ pub fn check_systemctl_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "status" {
@@ -12078,7 +13611,8 @@ pub fn check_systemctl_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = SYSTEMCTL_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| SYSTEMCTL_ASK.get(subcmd.as_str()))
         .or_else(|| SYSTEMCTL_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("systemctl: {}", reason)));
@@ -12105,6 +13639,12 @@ pub fn check_service_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if true
@@ -12139,6 +13679,12 @@ pub fn check_crontab_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if true && cmd.args.iter().any(|a| ["-l"].contains(&a.as_str())) {
@@ -12191,6 +13737,12 @@ pub fn check_apt_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "list" {
@@ -12295,7 +13847,8 @@ pub fn check_apt_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = APT_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| APT_ASK.get(subcmd.as_str()))
         .or_else(|| APT_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("apt: {}", reason)));
@@ -12322,6 +13875,12 @@ pub fn check_apt_cache_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     Some(GateResult::allow())
 }
@@ -12363,6 +13922,12 @@ pub fn check_dnf_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "list" {
@@ -12452,7 +14017,8 @@ pub fn check_dnf_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = DNF_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| DNF_ASK.get(subcmd.as_str()))
         .or_else(|| DNF_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("dnf: {}", reason)));
@@ -12479,6 +14045,12 @@ pub fn check_pacman_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "-Q" {
@@ -12603,6 +14175,12 @@ pub fn check_brew_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "list" {
@@ -12712,7 +14290,8 @@ pub fn check_brew_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = BREW_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| BREW_ASK.get(subcmd.as_str()))
         .or_else(|| BREW_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("brew: {}", reason)));
@@ -12760,6 +14339,12 @@ pub fn check_zypper_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "search" {
@@ -12864,7 +14449,8 @@ pub fn check_zypper_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = ZYPPER_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| ZYPPER_ASK.get(subcmd.as_str()))
         .or_else(|| ZYPPER_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("zypper: {}", reason)));
@@ -12920,6 +14506,12 @@ pub fn check_apk_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "info" {
@@ -12979,7 +14571,8 @@ pub fn check_apk_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = APK_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| APK_ASK.get(subcmd.as_str()))
         .or_else(|| APK_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("apk: {}", reason)));
@@ -13019,6 +14612,12 @@ pub fn check_nix_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "search" {
@@ -13083,7 +14682,8 @@ pub fn check_nix_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = NIX_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| NIX_ASK.get(subcmd.as_str()))
         .or_else(|| NIX_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("nix: {}", reason)));
@@ -13138,6 +14738,12 @@ pub fn check_nix_env_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "-q" {
@@ -13152,7 +14758,8 @@ pub fn check_nix_env_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = NIX_ENV_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| NIX_ENV_ASK.get(subcmd.as_str()))
         .or_else(|| NIX_ENV_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("nix-env: {}", reason)));
@@ -13179,6 +14786,12 @@ pub fn check_nix_shell_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Bare ask rule - any nix-shell invocation asks
     Some(GateResult::ask(
@@ -13238,6 +14851,12 @@ pub fn check_flatpak_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "list" {
@@ -13282,7 +14901,8 @@ pub fn check_flatpak_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = FLATPAK_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| FLATPAK_ASK.get(subcmd.as_str()))
         .or_else(|| FLATPAK_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("flatpak: {}", reason)));
@@ -13309,6 +14929,12 @@ pub fn check_dpkg_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true
@@ -13452,6 +15078,12 @@ pub fn check_apt_mark_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "showmanual" {
@@ -13491,7 +15123,8 @@ pub fn check_apt_mark_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = APT_MARK_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| APT_MARK_ASK.get(subcmd.as_str()))
         .or_else(|| APT_MARK_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("apt-mark: {}", reason)));
@@ -13532,6 +15165,12 @@ pub fn check_pactl_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if subcmd_single == "list" {
@@ -13596,7 +15235,8 @@ pub fn check_pactl_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = PACTL_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| PACTL_ASK.get(subcmd.as_str()))
         .or_else(|| PACTL_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("pactl: {}", reason)));
@@ -13640,6 +15280,12 @@ pub fn check_openssl_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if subcmd_single == "x509" && cmd.args.iter().any(|a| ["-req"].contains(&a.as_str())) {
@@ -13731,7 +15377,8 @@ pub fn check_openssl_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = OPENSSL_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| OPENSSL_ASK.get(subcmd.as_str()))
         .or_else(|| OPENSSL_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("openssl: {}", reason)));
@@ -13758,6 +15405,12 @@ pub fn check_gpg_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true
@@ -13919,6 +15572,12 @@ pub fn check_ssh_keygen_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if true && cmd.args.iter().any(|a| ["-R"].contains(&a.as_str())) {
@@ -13973,6 +15632,12 @@ pub fn check_age_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check conditional allow rules
     if true && cmd.args.iter().any(|a| ["--version"].contains(&a.as_str())) {
@@ -14017,6 +15682,12 @@ pub fn check_short_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     };
     #[allow(unused_variables)]
     let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
 
     // Check ask rules with flag/prefix conditions
     if subcmd_single == "search"
@@ -14217,7 +15888,8 @@ pub fn check_short_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     }
 
     if let Some(reason) = SHORT_ASK
-        .get(subcmd.as_str())
+        .get(subcmd_triple.as_str())
+        .or_else(|| SHORT_ASK.get(subcmd.as_str()))
         .or_else(|| SHORT_ASK.get(subcmd_single))
     {
         return Some(GateResult::ask(format!("short: {}", reason)));
@@ -14562,6 +16234,18 @@ pub fn check_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(result);
     }
     if let Some(result) = check_markdownlint_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_rumdl_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_markdownlint_cli2_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_taplo_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_mdbook_declarative(cmd) {
         return Some(result);
     }
     if let Some(result) = check_ffprobe_declarative(cmd) {
@@ -15093,7 +16777,7 @@ pub fn check_tool_gates_gate(cmd: &CommandInfo) -> GateResult {
 /// Programs handled by the tool_gates gate
 pub static TOOL_GATES_PROGRAMS: &[&str] = &["tool-gates", "bash-gates"];
 
-/// Generated gate for devtools - handles: sd, awk, gawk, mawk, sad, ast-grep, sg, yq, jq, semgrep, comby, grit, watchexec, biome, prettier, eslint, ruff, black, isort, shellcheck, hadolint, golangci-lint, gci, air, actionlint, gitleaks, lefthook, vite, vitest, jest, mocha, tsc, tsup, esbuild, turbo, nx, knip, oxlint, gofmt, gofumpt, goimports, shfmt, rustfmt, stylua, clang-format, autopep8, rubocop, standardrb, patch, dos2unix, unix2dos, stylelint, mix, perltidy, dartfmt, dart, elm-format, scalafmt, ktlint, swiftformat, buf, pytest, py.test, mypy, pyright, basedpyright, pylint, flake8, bandit, coverage, tox, nox, autoflake, tsx, ts-node, webpack, webpack-cli, rollup, swc, parcel, playwright, cypress, wrangler, ty, markdownlint, ffprobe, d2, ffmpeg
+/// Generated gate for devtools - handles: sd, awk, gawk, mawk, sad, ast-grep, sg, yq, jq, semgrep, comby, grit, watchexec, biome, prettier, eslint, ruff, black, isort, shellcheck, hadolint, golangci-lint, gci, air, actionlint, gitleaks, lefthook, vite, vitest, jest, mocha, tsc, tsup, esbuild, turbo, nx, knip, oxlint, gofmt, gofumpt, goimports, shfmt, rustfmt, stylua, clang-format, autopep8, rubocop, standardrb, patch, dos2unix, unix2dos, stylelint, mix, perltidy, dartfmt, dart, elm-format, scalafmt, ktlint, swiftformat, buf, pytest, py.test, mypy, pyright, basedpyright, pylint, flake8, bandit, coverage, tox, nox, autoflake, tsx, ts-node, webpack, webpack-cli, rollup, swc, parcel, playwright, cypress, wrangler, ty, markdownlint, rumdl, markdownlint-cli2, taplo, mdbook, ffprobe, d2, ffmpeg
 /// Custom handlers needed for: ["awk", "sd"]
 pub fn check_devtools_gate(cmd: &CommandInfo) -> GateResult {
     match cmd.program.as_str() {
@@ -15181,6 +16865,12 @@ pub fn check_devtools_gate(cmd: &CommandInfo) -> GateResult {
         "wrangler" => check_wrangler_declarative(cmd).unwrap_or_else(GateResult::skip),
         "ty" => check_ty_declarative(cmd).unwrap_or_else(GateResult::skip),
         "markdownlint" => check_markdownlint_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "rumdl" => check_rumdl_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "markdownlint-cli2" => {
+            check_markdownlint_cli2_declarative(cmd).unwrap_or_else(GateResult::skip)
+        }
+        "taplo" => check_taplo_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "mdbook" => check_mdbook_declarative(cmd).unwrap_or_else(GateResult::skip),
         "ffprobe" => check_ffprobe_declarative(cmd).unwrap_or_else(GateResult::skip),
         "d2" => check_d2_declarative(cmd).unwrap_or_else(GateResult::skip),
         "ffmpeg" => check_ffmpeg_declarative(cmd).unwrap_or_else(GateResult::skip),
@@ -15275,6 +16965,10 @@ pub static DEVTOOLS_PROGRAMS: &[&str] = &[
     "wrangler",
     "ty",
     "markdownlint",
+    "rumdl",
+    "markdownlint-cli2",
+    "taplo",
+    "mdbook",
     "ffprobe",
     "d2",
     "ffmpeg",
@@ -15642,12 +17336,15 @@ pub static FILE_EDITING_PROGRAMS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "isort",
         "ktlint",
         "markdownlint",
+        "markdownlint-cli2",
+        "mdbook",
         "mix",
         "mkdir",
         "perltidy",
         "prettier",
         "rubocop",
         "ruff",
+        "rumdl",
         "rustfmt",
         "sad",
         "scalafmt",
@@ -15659,6 +17356,7 @@ pub static FILE_EDITING_PROGRAMS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "stylelint",
         "stylua",
         "swiftformat",
+        "taplo",
         "terraform",
         "tofu",
         "ty",
@@ -15756,6 +17454,12 @@ pub fn is_file_editing_command(cmd: &CommandInfo) -> bool {
             .args
             .iter()
             .any(|a| ["--fix", "-f"].contains(&a.as_str())),
+        "markdownlint-cli2" => cmd.args.iter().any(|a| ["--fix"].contains(&a.as_str())),
+        "mdbook" => {
+            cmd.args.first().is_some_and(|a| a == "build")
+                || cmd.args.first().is_some_and(|a| a == "serve")
+                || cmd.args.first().is_some_and(|a| a == "clean")
+        }
         "mix" => cmd.args.first().is_some_and(|a| a == "format"),
         "mkdir" => {
             // Bare rule: always file-editing
@@ -15775,6 +17479,10 @@ pub fn is_file_editing_command(cmd: &CommandInfo) -> bool {
                 && cmd.args.iter().any(|a| ["--fix"].contains(&a.as_str())))
                 || cmd.args.first().is_some_and(|a| a == "format")
         }
+        "rumdl" => cmd
+            .args
+            .iter()
+            .any(|a| ["--fix", "-f"].contains(&a.as_str())),
         "rustfmt" => {
             // Bare rule: always file-editing
             true
@@ -15809,6 +17517,10 @@ pub fn is_file_editing_command(cmd: &CommandInfo) -> bool {
         "swiftformat" => {
             // Bare rule: always file-editing
             true
+        }
+        "taplo" => {
+            cmd.args.first().is_some_and(|a| a == "format")
+                || cmd.args.first().is_some_and(|a| a == "fmt")
         }
         "terraform" => cmd.args.first().is_some_and(|a| a == "fmt"),
         "tofu" => cmd.args.first().is_some_and(|a| a == "fmt"),
@@ -15958,79 +17670,79 @@ static FLOOR_LEADING_SEMICOLON_RE: LazyLock<Regex> = LazyLock::new(|| {
 /// has quoted strings blanked. Returns the first matching row's tier + reason.
 pub fn check_security_floor(comment_stripped: &str, unquoted: &str) -> Option<FloorHit> {
     if unquoted.contains("bash") && FLOOR_PIPE_BASH_RE.is_match(unquoted) {
-        return Some(FloorHit { tier: FloorTier::HardAsk, reason: "Piping to bash runs whatever upstream returns, with no chance to inspect. Save the output to a file first, review it, then run.".to_string() });
+        return Some(FloorHit { tier: FloorTier::HardAsk, reason: "Piping to bash runs whatever upstream returns, with no chance to inspect. Save the output to a file first, review it, then run.".to_string(), hold_in_auto: false });
     }
     if unquoted.contains("|") && FLOOR_PIPE_SH_RE.is_match(unquoted) {
-        return Some(FloorHit { tier: FloorTier::HardAsk, reason: "Piping to sh runs whatever upstream returns, with no chance to inspect. Save the output to a file first, review it, then run.".to_string() });
+        return Some(FloorHit { tier: FloorTier::HardAsk, reason: "Piping to sh runs whatever upstream returns, with no chance to inspect. Save the output to a file first, review it, then run.".to_string(), hold_in_auto: false });
     }
     if unquoted.contains("zsh") && FLOOR_PIPE_ZSH_RE.is_match(unquoted) {
-        return Some(FloorHit { tier: FloorTier::HardAsk, reason: "Piping to zsh runs whatever upstream returns, with no chance to inspect. Save the output to a file first, review it, then run.".to_string() });
+        return Some(FloorHit { tier: FloorTier::HardAsk, reason: "Piping to zsh runs whatever upstream returns, with no chance to inspect. Save the output to a file first, review it, then run.".to_string(), hold_in_auto: false });
     }
     if unquoted.contains("sudo") && FLOOR_PIPE_SUDO_RE.is_match(unquoted) {
-        return Some(FloorHit { tier: FloorTier::HardAsk, reason: "Piping to sudo elevates upstream output. Same risk as `curl | bash` with full privileges; save and review the upstream content first.".to_string() });
+        return Some(FloorHit { tier: FloorTier::HardAsk, reason: "Piping to sudo elevates upstream output. Same risk as `curl | bash` with full privileges; save and review the upstream content first.".to_string(), hold_in_auto: false });
     }
     if unquoted.contains("doas") && FLOOR_PIPE_DOAS_RE.is_match(unquoted) {
-        return Some(FloorHit { tier: FloorTier::HardAsk, reason: "Piping to doas elevates upstream output. Same risk as `curl | bash` with full privileges; save and review the upstream content first.".to_string() });
+        return Some(FloorHit { tier: FloorTier::HardAsk, reason: "Piping to doas elevates upstream output. Same risk as `curl | bash` with full privileges; save and review the upstream content first.".to_string(), hold_in_auto: false });
     }
     if unquoted.contains("python") && FLOOR_PIPE_PYTHON_RE.is_match(unquoted) {
-        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "Piping to python runs upstream as a script. Save to a file first, review it, then run.".to_string() });
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "Piping to python runs upstream as a script. Save to a file first, review it, then run.".to_string(), hold_in_auto: false });
     }
     if unquoted.contains("perl") && FLOOR_PIPE_PERL_RE.is_match(unquoted) {
-        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "Piping to perl runs upstream as a script. Save to a file first, review it, then run.".to_string() });
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "Piping to perl runs upstream as a script. Save to a file first, review it, then run.".to_string(), hold_in_auto: false });
     }
     if unquoted.contains("ruby") && FLOOR_PIPE_RUBY_RE.is_match(unquoted) {
-        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "Piping to ruby runs upstream as a script. Save to a file first, review it, then run.".to_string() });
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "Piping to ruby runs upstream as a script. Save to a file first, review it, then run.".to_string(), hold_in_auto: false });
     }
     if unquoted.contains("node") && FLOOR_PIPE_NODE_RE.is_match(unquoted) {
-        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "Piping to node runs upstream as a script. Save to a file first, review it, then run.".to_string() });
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "Piping to node runs upstream as a script. Save to a file first, review it, then run.".to_string(), hold_in_auto: false });
     }
     if unquoted.contains("eval") && FLOOR_EVAL_RE.is_match(unquoted) {
-        return Some(FloorHit { tier: FloorTier::HardAsk, reason: "`eval` runs arbitrary code constructed from variables. Prefer parameter expansion (`${var}`), array indexing, or `case` statements; if eval is truly needed, validate the input first.".to_string() });
+        return Some(FloorHit { tier: FloorTier::HardAsk, reason: "`eval` runs arbitrary code constructed from variables. Prefer parameter expansion (`${var}`), array indexing, or `case` statements; if eval is truly needed, validate the input first.".to_string(), hold_in_auto: false });
     }
     if unquoted.contains("source") && FLOOR_SOURCE_RE.is_match(unquoted) {
-        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`source` runs the file in the current shell and inherits its `export`s, aliases, and `cd`s. Verify the file's contents before approving.".to_string() });
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`source` runs the file in the current shell and inherits its `export`s, aliases, and `cd`s. Verify the file's contents before approving.".to_string(), hold_in_auto: false });
     }
     if FLOOR_DOT_SOURCE_RE.is_match(unquoted) {
-        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`.` is equivalent to `source`: runs the file in the current shell and inherits its `export`s and aliases. Verify the file's contents before approving.".to_string() });
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`.` is equivalent to `source`: runs the file in the current shell and inherits its `export`s and aliases. Verify the file's contents before approving.".to_string(), hold_in_auto: false });
     }
     if unquoted.contains("xargs") && FLOOR_XARGS_RM_RE.is_match(unquoted) {
-        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "xargs piping to `rm` runs it once per input line. Verify the upstream filter; mistakes cascade.".to_string() });
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "xargs piping to `rm` runs it once per input line. Verify the upstream filter; mistakes cascade.".to_string(), hold_in_auto: true });
     }
     if unquoted.contains("xargs") && FLOOR_XARGS_MV_RE.is_match(unquoted) {
-        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "xargs piping to `mv` runs it once per input line. Verify the upstream filter; mistakes cascade.".to_string() });
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "xargs piping to `mv` runs it once per input line. Verify the upstream filter; mistakes cascade.".to_string(), hold_in_auto: true });
     }
     if unquoted.contains("xargs") && FLOOR_XARGS_CP_RE.is_match(unquoted) {
-        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "xargs piping to `cp` runs it once per input line. Verify the upstream filter; mistakes cascade.".to_string() });
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "xargs piping to `cp` runs it once per input line. Verify the upstream filter; mistakes cascade.".to_string(), hold_in_auto: true });
     }
     if unquoted.contains("xargs") && FLOOR_XARGS_CHMOD_RE.is_match(unquoted) {
-        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "xargs piping to `chmod` runs it once per input line. Verify the upstream filter; mistakes cascade.".to_string() });
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "xargs piping to `chmod` runs it once per input line. Verify the upstream filter; mistakes cascade.".to_string(), hold_in_auto: true });
     }
     if unquoted.contains("xargs") && FLOOR_XARGS_CHOWN_RE.is_match(unquoted) {
-        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "xargs piping to `chown` runs it once per input line. Verify the upstream filter; mistakes cascade.".to_string() });
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "xargs piping to `chown` runs it once per input line. Verify the upstream filter; mistakes cascade.".to_string(), hold_in_auto: true });
     }
     if unquoted.contains("xargs") && FLOOR_XARGS_DD_RE.is_match(unquoted) {
-        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "xargs piping to `dd` runs it once per input line. Verify the upstream filter; mistakes cascade.".to_string() });
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "xargs piping to `dd` runs it once per input line. Verify the upstream filter; mistakes cascade.".to_string(), hold_in_auto: true });
     }
     if unquoted.contains("xargs") && FLOOR_XARGS_SHRED_RE.is_match(unquoted) {
-        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "xargs piping to `shred` runs it once per input line. Verify the upstream filter; mistakes cascade.".to_string() });
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "xargs piping to `shred` runs it once per input line. Verify the upstream filter; mistakes cascade.".to_string(), hold_in_auto: true });
     }
     if unquoted.contains("xargs") && FLOOR_XARGS_KUBECTL_DELETE_RE.is_match(unquoted) {
-        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "xargs piping to `kubectl delete` runs delete once per input line. Verify the upstream filter; mistakes cascade across many resources.".to_string() });
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "xargs piping to `kubectl delete` runs delete once per input line. Verify the upstream filter; mistakes cascade across many resources.".to_string(), hold_in_auto: true });
     }
     if (unquoted.contains("find ") || unquoted.contains("find\t"))
         && FLOOR_FIND_DELETE_RE.is_match(unquoted)
     {
-        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`find -delete` removes every match. Run without `-delete` first to preview which paths would be removed.".to_string() });
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`find -delete` removes every match. Run without `-delete` first to preview which paths would be removed.".to_string(), hold_in_auto: true });
     }
     if (unquoted.contains("find ") || unquoted.contains("find\t"))
         && FLOOR_FIND_EXEC_RE.is_match(unquoted)
     {
-        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`find -exec` runs a command per match. Verify both the find filter and the command body; mistakes cascade across every match.".to_string() });
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`find -exec` runs a command per match. Verify both the find filter and the command body; mistakes cascade across every match.".to_string(), hold_in_auto: true });
     }
     if (unquoted.contains("find ") || unquoted.contains("find\t"))
         && FLOOR_FIND_FWRITE_RE.is_match(unquoted)
     {
-        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`find -fprintf`/`-fprint`/`-fls` writes matched output to a file, overwriting it. Verify the target path.".to_string() });
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`find -fprintf`/`-fprint`/`-fls` writes matched output to a file, overwriting it. Verify the target path.".to_string(), hold_in_auto: false });
     }
     if let Some(hit) = crate::security_floor::fd_exec(comment_stripped, unquoted) {
         return Some(hit);
@@ -16038,19 +17750,19 @@ pub fn check_security_floor(comment_stripped: &str, unquoted: &str) -> Option<Fl
     if (unquoted.contains("--pre") || unquoted.contains("--hostname-bin"))
         && FLOOR_RG_EXEC_RE.is_match(unquoted)
     {
-        return Some(FloorHit { tier: FloorTier::HardAsk, reason: "ripgrep `--pre`/`--pre-glob`/`--hostname-bin` run an external program (a per-file preprocessor or a hostname helper), i.e. arbitrary code execution. Run that program directly and inspect it first.".to_string() });
+        return Some(FloorHit { tier: FloorTier::HardAsk, reason: "ripgrep `--pre`/`--pre-glob`/`--hostname-bin` run an external program (a per-file preprocessor or a hostname helper), i.e. arbitrary code execution. Run that program directly and inspect it first.".to_string(), hold_in_auto: false });
     }
     if unquoted.contains("sort") && FLOOR_SORT_OUTPUT_RE.is_match(unquoted) {
-        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`sort -o`/`--output` overwrites the target file without warning, and the target can be the input file itself. Verify the path.".to_string() });
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`sort -o`/`--output` overwrites the target file without warning, and the target can be the input file itself. Verify the path.".to_string(), hold_in_auto: false });
     }
     if unquoted.contains("pg_dump") && FLOOR_PG_DUMP_FILE_RE.is_match(unquoted) {
-        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`pg_dump -f`/`--file` writes the dump to a file and overwrites it. Omit `-f` to send the dump to stdout, or verify the path.".to_string() });
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`pg_dump -f`/`--file` writes the dump to a file and overwrites it. Omit `-f` to send the dump to stdout, or verify the path.".to_string(), hold_in_auto: false });
     }
     if unquoted.contains("gitleaks") && FLOOR_GITLEAKS_REPORT_RE.is_match(unquoted) {
-        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`gitleaks -r`/`--report-path` writes a report file to the given path, overwriting it. Verify the destination.".to_string() });
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`gitleaks -r`/`--report-path` writes a report file to the given path, overwriting it. Verify the destination.".to_string(), hold_in_auto: false });
     }
     if unquoted.contains("unrar") && FLOOR_UNRAR_EXTRACT_RE.is_match(unquoted) {
-        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`unrar x`/`e` extracts archive contents to disk and can overwrite files. Use `unrar l` to list without extracting, or verify the destination.".to_string() });
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "`unrar x`/`e` extracts archive contents to disk and can overwrite files. Use `unrar l` to list without extracting, or verify the destination.".to_string(), hold_in_auto: false });
     }
     if (unquoted.contains("ip")
         || unquoted.contains("route")
@@ -16058,7 +17770,7 @@ pub fn check_security_floor(comment_stripped: &str, unquoted: &str) -> Option<Fl
         || unquoted.contains("arp"))
         && FLOOR_NET_MUTATE_RE.is_match(unquoted)
     {
-        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "Network configuration change (`ip/route ... add|del|set`, `ifconfig ... up|down`, `arp -d|-s`). Verify the interface and values; routing and interface changes can disrupt connectivity.".to_string() });
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "Network configuration change (`ip/route ... add|del|set`, `ifconfig ... up|down`, `arp -d|-s`). Verify the interface and values; routing and interface changes can disrupt connectivity.".to_string(), hold_in_auto: false });
     }
     if comment_stripped.contains("$(") {
         for cap in FLOOR_DOLLAR_SUBST_RE.captures_iter(comment_stripped) {
@@ -16076,6 +17788,7 @@ pub fn check_security_floor(comment_stripped: &str, unquoted: &str) -> Option<Fl
                 return Some(FloorHit {
                     tier: FloorTier::HardAsk,
                     reason,
+                    hold_in_auto: false,
                 });
             }
         }
@@ -16095,12 +17808,13 @@ pub fn check_security_floor(comment_stripped: &str, unquoted: &str) -> Option<Fl
                 return Some(FloorHit {
                     tier: FloorTier::HardAsk,
                     reason,
+                    hold_in_auto: false,
                 });
             }
         }
     }
     if comment_stripped.contains(";") && FLOOR_LEADING_SEMICOLON_RE.is_match(comment_stripped) {
-        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "Command starts with `;`. Usually a paste artifact or shell-injection attempt; review the full command before approving.".to_string() });
+        return Some(FloorHit { tier: FloorTier::SoftAsk, reason: "Command starts with `;`. Usually a paste artifact or shell-injection attempt; review the full command before approving.".to_string(), hold_in_auto: false });
     }
     if let Some(hit) = crate::security_floor::redirect_targets(comment_stripped, unquoted) {
         return Some(hit);

@@ -380,11 +380,13 @@ reason = "Setting default repo"
 # Release mutations
 [[programs.ask]]
 subcommand = "release create"
-reason = "Creating release"
+reason = "Publishes a GitHub release. Consumers and package managers may pick it up immediately, and the tag it points at is public from that moment."
+auto = "prompt"
 
 [[programs.ask]]
 subcommand = "release delete"
 reason = "Deletes release `<release>` from GitHub. Removes release notes and uploaded assets; the underlying git tag stays unless `--cleanup-tag` is passed."
+auto = "prompt"
 
 [[programs.ask]]
 subcommand = "release edit"
@@ -458,9 +460,9 @@ reason = "Rerunning"
 subcommand = "run delete"
 reason = "Deleting run"
 
-[[programs.ask]]
+[[programs.allow]]
 subcommand = "run watch"
-reason = "Watching run"
+reason = "Streams the status of a workflow run until it finishes. Read-only; `--exit-status` only sets the exit code."
 
 # Codespace mutations
 [[programs.ask]]
@@ -495,36 +497,42 @@ reason = "Deletes a codespace. Unsaved local changes inside the codespace are lo
 [[programs.ask]]
 subcommand = "ssh-key add"
 reason = "Adding SSH key"
+auto = "prompt"
 
 [[programs.ask]]
 subcommand = "ssh-key delete"
 reason = "Removes an SSH key from the GitHub account. SSH access from any machine using that key will stop working."
+auto = "prompt"
 
 [[programs.ask]]
 subcommand = "gpg-key add"
 reason = "Adding GPG key"
+auto = "prompt"
 
 [[programs.ask]]
 subcommand = "gpg-key delete"
 reason = "Removes a GPG key from the GitHub account. Existing signed commits stay valid; future signatures with this key will not be marked verified."
+auto = "prompt"
 
 # Config mutations
 [[programs.ask]]
 subcommand = "config set"
 reason = "Setting config"
 
-[[programs.ask]]
+[[programs.allow]]
 subcommand = "config clear-cache"
-reason = "Clearing cache"
+reason = "Clears gh's local HTTP response cache. Nothing on GitHub changes and the cache refills on the next request."
 
 # Secret/variable mutations
 [[programs.ask]]
 subcommand = "secret set"
-reason = "Setting secret"
+reason = "Writes an Actions/Codespaces/Dependabot secret. The value cannot be read back afterwards, so a wrong value is only discoverable by a failing workflow."
+auto = "prompt"
 
 [[programs.ask]]
 subcommand = "secret delete"
 reason = "Deletes an Actions/Codespaces/Dependabot secret. Future workflow runs that read this secret will fail until it is recreated."
+auto = "prompt"
 
 [[programs.ask]]
 subcommand = "variable set"

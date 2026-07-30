@@ -69,10 +69,17 @@ fn check_shell_c(cmd: &CommandInfo) -> Option<GateResult> {
                 )));
             }
             Decision::Ask => {
-                return Some(GateResult::ask(format!(
+                let hold = result.hold_in_auto;
+                let wrapped = GateResult::ask(format!(
                     "Shell script: {}",
                     result.reason.unwrap_or_else(|| inner_cmd.program.clone())
-                )));
+                ));
+                // `bash -c 'npm publish'` is still npm publish.
+                return Some(if hold {
+                    wrapped.hold_in_auto()
+                } else {
+                    wrapped
+                });
             }
             Decision::Skip => {
                 // Unknown command in script

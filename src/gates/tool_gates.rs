@@ -141,9 +141,10 @@ mod tests {
     }
 
     #[test]
-    fn test_refresh_tools_asks() {
+    fn test_refresh_tools_allows() {
+        // Rewrites tool-gates' own hint cache and nothing else.
         let result = check_tool_gates(&cmd("tool-gates", &["--refresh-tools"]));
-        assert_eq!(result.decision, Decision::Ask);
+        assert_eq!(result.decision, Decision::Allow);
         assert!(result.reason.as_ref().unwrap().contains("Re-scans"));
     }
 

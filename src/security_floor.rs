@@ -23,6 +23,11 @@ use std::sync::LazyLock;
 pub struct FloorHit {
     pub tier: FloorTier,
     pub reason: String,
+    /// For `soft_ask` rows: keep an explicit ask under Claude Code auto mode
+    /// rather than deferring to the classifier. Set from `auto = "prompt"` in
+    /// `rules/security.toml` for patterns that cascade destructively across
+    /// many targets, where one wrong filter is not recoverable.
+    pub hold_in_auto: bool,
 }
 
 // The regex statics below back the two Rust handler rows. Every other floor
@@ -154,11 +159,17 @@ pub(crate) fn check_raw_string_patterns(
         Some(FloorHit {
             tier: FloorTier::HardAsk,
             reason,
+            ..
         }) => (Some(HookOutput::ask(&reason)), None),
         Some(FloorHit {
             tier: FloorTier::SoftAsk,
             reason,
-        }) => (None, Some(HookOutput::ask(&reason))),
+            hold_in_auto,
+        }) => {
+            let mut output = HookOutput::ask(&reason);
+            output.hold_in_auto = hold_in_auto;
+            (None, Some(output))
+        }
         None => (None, None),
     }
 }
@@ -205,6 +216,9 @@ pub fn fd_exec(_comment_stripped: &str, unquoted: &str) -> Option<FloorHit> {
                         reason: format!(
                             "fd executing `{cmd}` per match via -x/--exec. Verify the fd filter first (run without -x); mistakes cascade across every match."
                         ),
+                        // Runs a destructive command once per match; a wrong
+                        // filter is not recoverable.
+                        hold_in_auto: true,
                     });
                 }
             }
@@ -276,6 +290,9 @@ fn redirect_hit() -> FloorHit {
     FloorHit {
         tier: FloorTier::SoftAsk,
         reason: "Output redirection (`>`, `>>`, `tee`) writes to a file. Verify the target path; `>` overwrites without warning.".to_string(),
+        // Writing one named file is the single most common shell shape there
+        // is, and the classifier can see the target path. Let it judge.
+        hold_in_auto: false,
     }
 }
 
@@ -1408,12 +1425,204 @@ mod tests {
         }
 
         #[test]
-        fn test_defer_does_not_apply_in_auto_mode() {
-            // Under auto mode the classifier handles the prompt-less path;
-            // deferring would just rename the ask. Keep gate_result Ask so
-            // the existing classifier-feeding behavior stays intact.
+        fn test_gate_ask_defers_in_auto_mode() {
+            // Defer is the only decision that reaches the auto-mode classifier.
+            // An explicit ask is returned to the user without the resolver ever
+            // running, so emitting one here would exclude the gate catalog from
+            // the mechanism auto mode exists to provide.
             let result = check_command_with_settings("npm install foo", "/tmp", "auto");
+            assert_eq!(result.decision, PermissionDecision::Defer);
+        }
+
+        #[test]
+        fn test_soft_ask_tiering_under_auto_mode() {
+            // Conservative-by-default soft asks are better judged by the
+            // classifier, which sees the whole command.
+            for command in [
+                "cat x.txt > out.log",
+                "curl https://example.com | python",
+                "source ./env.sh",
+            ] {
+                let result = check_command_with_settings(command, "/tmp", "auto");
+                assert_eq!(
+                    result.decision,
+                    PermissionDecision::Defer,
+                    "{command} should reach the auto-mode classifier"
+                );
+            }
+
+            // Rows marked `auto = "prompt"` run a destructive command once per
+            // match, where one wrong filter is not recoverable.
+            for command in ["find . -delete", "find . -exec rm {} ;", "xargs rm < list"] {
+                let result = check_command_with_settings(command, "/tmp", "auto");
+                assert_eq!(
+                    result.decision,
+                    PermissionDecision::Ask,
+                    "{command} must hold an explicit ask under auto mode"
+                );
+            }
+
+            // A soft ask on a command Claude's acceptEdits fast path could
+            // approve keeps its explicit ask: that is what holds it back.
+            let result = check_command_with_settings("cp a b > log.txt", "/tmp", "auto");
             assert_eq!(result.decision, PermissionDecision::Ask);
+        }
+
+        #[test]
+        fn test_auto_prompt_rules_hold_their_ask_under_auto_mode() {
+            // Irreversible, externally-visible actions opt out of classifier
+            // adjudication via `auto = "prompt"` in the rule catalog.
+            for command in ["npm publish", "cargo publish", "gh ssh-key delete mykey"] {
+                let result = check_command_with_settings(command, "/tmp", "auto");
+                assert_eq!(
+                    result.decision,
+                    PermissionDecision::Ask,
+                    "{command} must hold an explicit ask under auto mode"
+                );
+            }
+
+            // A routine ask in the same catalogs still defers.
+            for command in ["npm install foo", "gh pr list"] {
+                let result = check_command_with_settings(command, "/tmp", "auto");
+                assert_ne!(
+                    result.decision,
+                    PermissionDecision::Ask,
+                    "{command} should not hold an ask under auto mode"
+                );
+            }
+        }
+
+        #[test]
+        fn test_auto_prompt_propagates_through_task_expansion() {
+            use std::fs;
+            use tempfile::TempDir;
+
+            // A script wrapping an irreversible command inherits its hold, so
+            // `pnpm run release` cannot launder `npm publish` past the prompt.
+            let temp = TempDir::new().unwrap();
+            let pkg = r#"{"name": "demo", "scripts": {"release": "npm publish"}}"#;
+            fs::write(temp.path().join("package.json"), pkg).unwrap();
+
+            let cwd = temp.path().to_str().unwrap();
+            let result = check_command_with_settings("pnpm run release", cwd, "auto");
+            assert_eq!(result.decision, PermissionDecision::Ask);
+        }
+
+        #[test]
+        fn test_nested_script_wrapper_never_collapses_to_allow() {
+            use std::fs;
+            use tempfile::TempDir;
+
+            // A script that runs another script must inherit its approval
+            // requirement. The inner check returns Defer under auto, and an
+            // outer loop that only recognized Ask would treat that as "nothing
+            // to report" and allow the whole thing.
+            let temp = TempDir::new().unwrap();
+            let pkg = r#"{"name":"d","scripts":{
+                "inst":"npm install left-pad",
+                "nested":"pnpm run inst",
+                "chain":"pnpm run inst && echo done"
+            }}"#;
+            fs::write(temp.path().join("package.json"), pkg).unwrap();
+            fs::write(
+                temp.path().join("mise.toml"),
+                "[tasks]\nvia = \"pnpm run inst\"\n",
+            )
+            .unwrap();
+
+            let cwd = temp.path().to_str().unwrap();
+            for command in [
+                "pnpm run inst",
+                "pnpm run nested",
+                "pnpm run chain",
+                "mise run via",
+            ] {
+                let result = check_command_with_settings(command, cwd, "auto");
+                assert_ne!(
+                    result.decision,
+                    PermissionDecision::Allow,
+                    "{command} must not be silently allowed under auto mode"
+                );
+            }
+        }
+
+        #[test]
+        fn test_hold_in_auto_survives_wrappers_and_redirects() {
+            // Every one of these is still `npm publish`, and an irreversible
+            // action must not shed its hold by gaining a wrapper or a redirect.
+            for command in [
+                "npm publish",
+                "npm publish > log.txt",
+                "sudo npm publish",
+                "bash -c 'npm publish'",
+                "sh -c 'npm publish'",
+            ] {
+                let result = check_command_with_settings(command, "/tmp", "auto");
+                assert_eq!(
+                    result.decision,
+                    PermissionDecision::Ask,
+                    "{command} must hold its explicit ask under auto mode"
+                );
+            }
+        }
+
+        #[test]
+        fn test_accept_edits_base_guard_matches_claude_base_resolution() {
+            // Claude resolves the base command through quoting, a leading
+            // backslash, and transparent prefixes before consulting its
+            // no-path-validation allowlist. The guard has to see the same name
+            // or the fast path approves what tool-gates thought it deferred.
+            for command in [
+                "rm /etc/hosts",
+                "\\rm -rf src",
+                "stdbuf -o0 rm -rf src",
+                "noglob rm /etc/hosts",
+            ] {
+                let result = check_command_with_settings(command, "/tmp", "auto");
+                assert_eq!(
+                    result.decision,
+                    PermissionDecision::Ask,
+                    "{command} must hold an explicit ask, not defer into Claude's fast path"
+                );
+            }
+
+            // A chain containing a non-base command cannot reach the fast path,
+            // so it should still reach the classifier.
+            let mixed = check_command_with_settings("mkdir -p dist && cargo build", "/tmp", "auto");
+            assert_eq!(mixed.decision, PermissionDecision::Defer);
+        }
+
+        #[test]
+        fn test_auto_mode_defer_wire_form_per_client() {
+            use crate::models::Client;
+
+            let result = check_command_with_settings("npm install foo", "/tmp", "auto");
+
+            // Claude: omit permissionDecision entirely so the resolver
+            // continues into the auto-mode classifier.
+            let claude = serde_json::to_string(&result.serialize(Client::Claude)).unwrap();
+            assert!(
+                !claude.contains("\"permissionDecision\""),
+                "auto-mode defer must omit permissionDecision for Claude: {claude}"
+            );
+            assert!(
+                claude.contains("\"hookEventName\":\"PreToolUse\""),
+                "defer still carries the PreToolUse envelope: {claude}"
+            );
+
+            // Codex has no auto mode and rejects allow/ask, so it stays silent.
+            let codex = serde_json::to_string(&result.serialize(Client::Codex)).unwrap();
+            assert_eq!(codex, "null", "Codex must receive empty output: {codex}");
+
+            // Gemini and Antigravity have no resolver to defer to, so defer
+            // must keep collapsing to an explicit ask for them.
+            for client in [Client::Gemini, Client::Antigravity] {
+                let json = serde_json::to_string(&result.serialize(client)).unwrap();
+                assert!(
+                    json.contains("\"decision\":\"ask\""),
+                    "{client:?} must still see an explicit ask: {json}"
+                );
+            }
         }
 
         #[serial_test::serial]

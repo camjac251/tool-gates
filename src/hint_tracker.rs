@@ -232,7 +232,16 @@ pub fn is_security_warning_new(session_id: &str, key: &str) -> bool {
     if session_id.is_empty() {
         return true;
     }
-    record_security_warning(session_id, key).unwrap_or(true)
+    match record_security_warning(session_id, key) {
+        Ok(is_new) => is_new,
+        Err(error) => {
+            // Failing open keeps the warning visible, but silently swallowing
+            // the cause makes a dedup miss indistinguishable from a genuinely
+            // new warning. Name it so the next occurrence is diagnosable.
+            eprintln!("Warning: security-warning dedup unavailable ({error}); warning re-shown");
+            true
+        }
+    }
 }
 
 #[cfg(test)]

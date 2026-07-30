@@ -46,7 +46,7 @@ use tool_gates::settings_writer::{
 };
 use tool_gates::tool_blocks::check_tool_block;
 use tool_gates::tool_cache;
-use tool_gates::tracking::{CommandPart, track_ask_command};
+use tool_gates::tracking::{ApprovalOrigin, CommandPart, TrackedCommand, track_ask_command};
 use tool_gates::tui::run_review;
 
 fn main() {
@@ -499,6 +499,14 @@ fn handle_permission_denied_hook(input: serde_json::Value) {
         return;
     }
 
+    // Two other outcomes reach this hook wearing the classifier's label: the
+    // classifier being unreachable, and the session's denial limit falling
+    // back to prompting. Neither is a judgment about the command, and
+    // retrying both wastes a turn or talks over a stop signal.
+    if pd_input.is_non_judgment_denial() {
+        return;
+    }
+
     // Respect the bash_gates opt-out so users who disabled the gate engine
     // don't get retry hints driven by the engine they turned off.
     if !config::load().features.bash_gates {
@@ -720,17 +728,26 @@ fn handle_bash_pre_tool_use(hook_input: &HookInput, client: Client) {
     // If the result is "ask", track it for PostToolUse correlation. Gemini
     // doesn't provide tool_use_id, but Claude and Codex do.
     //
-    // Under auto mode, tool-gates "ask" does NOT surface a user prompt -- the
-    // Claude Code classifier decides silently. Pending-queue entries there
-    // represent classifier decisions, not human approvals, so skip tracking.
     // Tracking fires for both Ask and Defer: in either case the user
     // (or CC's resolver) is going to consider whether to approve, and a
     // success means we should record the pattern for the pending queue.
+    //
+    // A hook "ask" always reaches a human, in every mode: Claude Code hands
+    // it straight back without consulting the auto-mode classifier. Only a
+    // "defer" under auto can be resolved by the classifier with nobody
+    // looking, so that combination is recorded as classifier-originated and
+    // the review queue can weigh it accordingly.
+    let origin = if output.decision == PermissionDecision::Defer
+        && is_auto_mode(&hook_input.permission_mode)
+    {
+        ApprovalOrigin::Classifier
+    } else {
+        ApprovalOrigin::Prompt
+    };
     if matches!(client, Client::Claude | Client::Codex)
         && (output.decision == PermissionDecision::Ask
             || output.decision == PermissionDecision::Defer)
         && !hook_input.tool_use_id.is_empty()
-        && !is_auto_mode(&hook_input.permission_mode)
     {
         let commands = tool_gates::parser::extract_commands(&command);
 
@@ -788,15 +805,16 @@ fn handle_bash_pre_tool_use(hook_input: &HookInput, client: Client) {
         if suggested_patterns.is_empty() {
             // Nothing actionable to suggest, don't pollute pending queue
         } else {
-            track_ask_command(
-                &hook_input.tool_use_id,
-                &command,
+            let tracked = TrackedCommand::new(
+                command.clone(),
                 suggested_patterns,
                 breakdown,
-                &hook_input.project_id(),
-                &hook_input.cwd,
-                &hook_input.session_id,
-            );
+                hook_input.project_id(),
+                hook_input.cwd.clone(),
+                hook_input.session_id.clone(),
+            )
+            .with_origin(origin);
+            track_ask_command(&hook_input.tool_use_id, tracked);
         }
     }
 

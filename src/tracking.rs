@@ -59,6 +59,22 @@ impl CommandPart {
     }
 }
 
+/// Who resolved the approval that let a tracked command run.
+///
+/// Under auto mode a `defer` hands the decision to Claude Code's auto-mode
+/// classifier, which can approve silently. Those entries are not evidence
+/// that a human agreed to the pattern, so the review queue must be able to
+/// tell them apart from prompts a person actually clicked through.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ApprovalOrigin {
+    /// A human saw a permission prompt and approved it.
+    #[default]
+    Prompt,
+    /// Deferred under auto mode; the classifier may have approved it unseen.
+    Classifier,
+}
+
 /// A tracked command awaiting PostToolUse confirmation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrackedCommand {
@@ -73,6 +89,10 @@ pub struct TrackedCommand {
     pub session_id: String,
     pub timestamp: DateTime<Utc>,
     pub expires: DateTime<Utc>,
+    /// Entries written before this field existed were all human-prompted,
+    /// so the default is correct for them.
+    #[serde(default)]
+    pub origin: ApprovalOrigin,
 }
 
 impl TrackedCommand {
@@ -94,7 +114,14 @@ impl TrackedCommand {
             session_id,
             timestamp: now,
             expires: now + Duration::seconds(DEFAULT_TTL_SECS),
+            origin: ApprovalOrigin::default(),
         }
+    }
+
+    /// Record who resolved the approval for this command.
+    pub fn with_origin(mut self, origin: ApprovalOrigin) -> Self {
+        self.origin = origin;
+        self
     }
 
     pub fn is_expired(&self) -> bool {
@@ -244,24 +271,7 @@ impl TrackingStore {
 /// Track a command that returned "ask"/"defer" for later PostToolUse correlation.
 /// Concurrent sessions share the file safely: each entry stands alone until
 /// PostToolUse takes it or the 24h TTL clears it.
-pub fn track_ask_command(
-    tool_use_id: &str,
-    command: &str,
-    suggested_patterns: Vec<String>,
-    breakdown: Vec<CommandPart>,
-    project_id: &str,
-    cwd: &str,
-    session_id: &str,
-) {
-    let tracked = TrackedCommand::new(
-        command.to_string(),
-        suggested_patterns,
-        breakdown,
-        project_id.to_string(),
-        cwd.to_string(),
-        session_id.to_string(),
-    );
-
+pub fn track_ask_command(tool_use_id: &str, tracked: TrackedCommand) {
     let tool_use_id = tool_use_id.to_string();
     if let Err(e) = TrackingStore::with_exclusive_lock(|store| {
         store.track(&tool_use_id, tracked);

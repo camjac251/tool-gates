@@ -675,6 +675,11 @@ fn generate_antigravity_allow_commands(rule_files: &[(String, RuleFile)]) -> Str
         "return",
         "break",
         "continue",
+        "exit",
+        // zsh/ksh echo equivalent. A same-named binary exists on some systems,
+        // so keep it out of the native allowlists even though the gate engine
+        // treats it as safe.
+        "print",
     ];
 
     // Exclusions: programs that are conditionally gated anywhere (any ask/block
@@ -818,6 +823,24 @@ fn generate_conditional_rules(rules: &[&ConditionalRule]) -> String {
     output
 }
 
+/// True when this ask must stay an explicit prompt under Claude Code auto mode.
+///
+/// Claude Code hands a hook `ask` straight back to the user without consulting
+/// the auto-mode classifier, so `auto = "prompt"` is how a rule opts out of
+/// classifier adjudication.
+fn holds_in_auto(ask: &AskRule) -> bool {
+    ask.auto == AutoDisposition::Prompt
+}
+
+/// Method-call suffix appended to a generated `GateResult::ask(..)`.
+fn auto_hold_suffix(ask: &AskRule) -> &'static str {
+    if holds_in_auto(ask) {
+        ".hold_in_auto()"
+    } else {
+        ""
+    }
+}
+
 fn generate_program_rules(file_name: &str, program: &ProgramRules) -> String {
     let mut output = String::new();
     let name = &program.name;
@@ -847,7 +870,7 @@ fn generate_program_rules(file_name: &str, program: &ProgramRules) -> String {
         .collect();
 
     // Collect simple asks (with subcommand)
-    let simple_asks: Vec<(String, String)> = program
+    let simple_asks: Vec<(String, String, bool)> = program
         .ask
         .iter()
         .filter(|r| {
@@ -856,8 +879,14 @@ fn generate_program_rules(file_name: &str, program: &ProgramRules) -> String {
                 && r.if_flags.is_empty()
                 && r.if_flags_any.is_empty()
         })
-        .map(|r| (r.subcommand_parts().join(" "), r.reason.clone()))
-        .filter(|(s, _)| !s.is_empty())
+        .map(|r| {
+            (
+                r.subcommand_parts().join(" "),
+                r.reason.clone(),
+                holds_in_auto(r),
+            )
+        })
+        .filter(|(s, _, _)| !s.is_empty())
         .collect();
 
     // Find bare ask rule (matches any invocation of the program)
@@ -911,7 +940,7 @@ fn generate_program_rules(file_name: &str, program: &ProgramRules) -> String {
             name_upper
         ));
         output.push_str("    [\n");
-        for (subcmd, reason) in &simple_asks {
+        for (subcmd, reason, _) in &simple_asks {
             output.push_str(&format!(
                 "        (\"{}\", \"{}\"),\n",
                 escape_rust_string(subcmd),
@@ -920,6 +949,21 @@ fn generate_program_rules(file_name: &str, program: &ProgramRules) -> String {
         }
         output.push_str("    ].into_iter().collect()\n");
         output.push_str("});\n\n");
+
+        // Subcommands whose ask must survive auto mode instead of deferring
+        // to the classifier.
+        if simple_asks.iter().any(|(_, _, hold)| *hold) {
+            output.push_str(&format!(
+                "pub static {}_ASK_HOLD: LazyLock<HashSet<&str>> = LazyLock::new(|| {{\n",
+                name_upper
+            ));
+            output.push_str("    [\n");
+            for (subcmd, _, _) in simple_asks.iter().filter(|(_, _, hold)| *hold) {
+                output.push_str(&format!("        \"{}\",\n", escape_rust_string(subcmd)));
+            }
+            output.push_str("    ].into_iter().collect()\n");
+            output.push_str("});\n\n");
+        }
     }
 
     if !simple_blocks.is_empty() {
@@ -1003,14 +1047,23 @@ fn generate_program_rules(file_name: &str, program: &ProgramRules) -> String {
     output.push_str("    };\n");
     output.push_str("    #[allow(unused_variables)]\n");
     output.push_str(
-        "    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or(\"\");\n\n",
+        "    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or(\"\");\n",
     );
+    // Three-word key. Rules like `gcloud container clusters delete` are keyed on
+    // their full path, so without this the map lookups can only ever see the
+    // first two words and every such rule is dead.
+    output.push_str("    #[allow(unused_variables)]\n");
+    output.push_str("    let subcmd_triple = if cmd.args.len() >= 3 {\n");
+    output.push_str("        format!(\"{} {} {}\", cmd.args[0], cmd.args[1], cmd.args[2])\n");
+    output.push_str("    } else {\n");
+    output.push_str("        String::new()\n");
+    output.push_str("    };\n\n");
 
     // Check blocks first (highest priority)
     if !simple_blocks.is_empty() {
         output.push_str(&format!(
-            "    if let Some(reason) = {}_BLOCK.get(subcmd.as_str()) {{\n",
-            name_upper
+            "    if let Some(reason) = {}_BLOCK.get(subcmd_triple.as_str()).or_else(|| {}_BLOCK.get(subcmd.as_str())) {{\n",
+            name_upper, name_upper
         ));
         output.push_str(&format!(
             "        return Some(GateResult::block(format!(\"{}: {{}}\", reason)));\n",
@@ -1117,8 +1170,9 @@ fn generate_program_rules(file_name: &str, program: &ProgramRules) -> String {
                     flags.join(", ")
                 ));
                 output.push_str(&format!(
-                    "        return Some(GateResult::ask(\"{}\"));\n",
-                    escape_rust_string(&ask.reason)
+                    "        return Some(GateResult::ask(\"{}\"){});\n",
+                    escape_rust_string(&ask.reason),
+                    auto_hold_suffix(ask)
                 ));
                 output.push_str("    }\n");
             }
@@ -1147,9 +1201,10 @@ fn generate_program_rules(file_name: &str, program: &ProgramRules) -> String {
                     ));
                 }
                 output.push_str(&format!(
-                    "        return Some(GateResult::ask(\"{}: {}\"));\n",
+                    "        return Some(GateResult::ask(\"{}: {}\"){});\n",
                     name,
-                    escape_rust_string(&ask.reason)
+                    escape_rust_string(&ask.reason),
+                    auto_hold_suffix(ask)
                 ));
                 output.push_str("    }\n");
             }
@@ -1161,9 +1216,10 @@ fn generate_program_rules(file_name: &str, program: &ProgramRules) -> String {
                     escape_rust_string(prefix)
                 ));
                 output.push_str(&format!(
-                    "        return Some(GateResult::ask(\"{}: {}\"));\n",
+                    "        return Some(GateResult::ask(\"{}: {}\"){});\n",
                     name,
-                    escape_rust_string(&ask.reason)
+                    escape_rust_string(&ask.reason),
+                    auto_hold_suffix(ask)
                 ));
                 output.push_str("    }\n");
             }
@@ -1174,8 +1230,8 @@ fn generate_program_rules(file_name: &str, program: &ProgramRules) -> String {
     // Check simple allows
     if !simple_allows.is_empty() {
         output.push_str(&format!(
-            "    if {}_ALLOW.contains(subcmd.as_str()) || {}_ALLOW.contains(subcmd_single) {{\n",
-            name_upper, name_upper
+            "    if {}_ALLOW.contains(subcmd_triple.as_str()) || {}_ALLOW.contains(subcmd.as_str()) || {}_ALLOW.contains(subcmd_single) {{\n",
+            name_upper, name_upper, name_upper
         ));
         output.push_str("        return Some(GateResult::allow());\n");
         output.push_str("    }\n\n");
@@ -1296,13 +1352,27 @@ fn generate_program_rules(file_name: &str, program: &ProgramRules) -> String {
     // Check simple asks
     if !simple_asks.is_empty() {
         output.push_str(&format!(
-            "    if let Some(reason) = {}_ASK.get(subcmd.as_str()).or_else(|| {}_ASK.get(subcmd_single)) {{\n",
-            name_upper, name_upper
+            "    if let Some(reason) = {}_ASK.get(subcmd_triple.as_str()).or_else(|| {}_ASK.get(subcmd.as_str())).or_else(|| {}_ASK.get(subcmd_single)) {{\n",
+            name_upper, name_upper, name_upper
         ));
-        output.push_str(&format!(
-            "        return Some(GateResult::ask(format!(\"{}: {{}}\", reason)));\n",
-            name
-        ));
+        if simple_asks.iter().any(|(_, _, hold)| *hold) {
+            output.push_str(&format!(
+                "        let result = GateResult::ask(format!(\"{}: {{}}\", reason));\n",
+                name
+            ));
+            output.push_str(&format!(
+                "        if {}_ASK_HOLD.contains(subcmd_triple.as_str()) || {}_ASK_HOLD.contains(subcmd.as_str()) || {}_ASK_HOLD.contains(subcmd_single) {{\n",
+                name_upper, name_upper, name_upper
+            ));
+            output.push_str("            return Some(result.hold_in_auto());\n");
+            output.push_str("        }\n");
+            output.push_str("        return Some(result);\n");
+        } else {
+            output.push_str(&format!(
+                "        return Some(GateResult::ask(format!(\"{}: {{}}\", reason)));\n",
+                name
+            ));
+        }
         output.push_str("    }\n\n");
     }
 
@@ -1319,9 +1389,10 @@ fn generate_program_rules(file_name: &str, program: &ProgramRules) -> String {
             name
         ));
         output.push_str(&format!(
-            "    Some(GateResult::ask(\"{}: {}\"))\n",
+            "    Some(GateResult::ask(\"{}: {}\"){})\n",
             name,
-            escape_rust_string(&ask.reason)
+            escape_rust_string(&ask.reason),
+            auto_hold_suffix(ask)
         ));
     } else {
         // Handle unknown action (bare_block already returned early above)
@@ -1942,6 +2013,9 @@ fn generate_floor_row(p: &SecurityPattern) -> String {
         FloorScan::CommentStripped => "comment_stripped",
     };
     let name = floor_static_name(&p.id);
+    // `auto` only means something for soft asks; hard asks promote to deny
+    // under auto mode before this flag is ever consulted.
+    let hold = p.tier == FloorTier::SoftAsk && p.auto == AutoDisposition::Prompt;
     let substring_guard = if p.requires_substring.is_empty() {
         None
     } else {
@@ -1989,7 +2063,7 @@ fn generate_floor_row(p: &SecurityPattern) -> String {
             escape_rust_string(&suffix)
         ));
         out.push_str(&format!(
-            "            return Some(FloorHit {{ tier: {tier}, reason }});\n"
+            "            return Some(FloorHit {{ tier: {tier}, reason, hold_in_auto: {hold} }});\n"
         ));
         out.push_str("        }\n");
         out.push_str("    }\n");
@@ -2002,7 +2076,7 @@ fn generate_floor_row(p: &SecurityPattern) -> String {
     // Plain regex row, with an optional cheap substring pre-guard.
     let guard = substring_guard.map_or_else(String::new, |guard| format!("{guard} && "));
     out.push_str(&format!(
-        "    if {guard}{name}.is_match({scan}) {{\n        return Some(FloorHit {{ tier: {tier}, reason: \"{reason}\".to_string() }});\n    }}\n",
+        "    if {guard}{name}.is_match({scan}) {{\n        return Some(FloorHit {{ tier: {tier}, reason: \"{reason}\".to_string(), hold_in_auto: {hold} }});\n    }}\n",
         reason = escape_rust_string(&p.reason),
     ));
     out

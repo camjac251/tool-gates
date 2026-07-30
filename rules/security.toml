@@ -111,6 +111,7 @@ reason = "`.` is equivalent to `source`: runs the file in the current shell and 
 id = "xargs-rm"
 regex = 'xargs\s+.*\brm\b|xargs\s+\brm\b'
 tier = "soft_ask"
+auto = "prompt"
 requires_substring = ["xargs"]
 reason = "xargs piping to `rm` runs it once per input line. Verify the upstream filter; mistakes cascade."
 
@@ -118,6 +119,7 @@ reason = "xargs piping to `rm` runs it once per input line. Verify the upstream 
 id = "xargs-mv"
 regex = 'xargs\s+.*\bmv\b|xargs\s+\bmv\b'
 tier = "soft_ask"
+auto = "prompt"
 requires_substring = ["xargs"]
 reason = "xargs piping to `mv` runs it once per input line. Verify the upstream filter; mistakes cascade."
 
@@ -125,6 +127,7 @@ reason = "xargs piping to `mv` runs it once per input line. Verify the upstream 
 id = "xargs-cp"
 regex = 'xargs\s+.*\bcp\b|xargs\s+\bcp\b'
 tier = "soft_ask"
+auto = "prompt"
 requires_substring = ["xargs"]
 reason = "xargs piping to `cp` runs it once per input line. Verify the upstream filter; mistakes cascade."
 
@@ -132,6 +135,7 @@ reason = "xargs piping to `cp` runs it once per input line. Verify the upstream 
 id = "xargs-chmod"
 regex = 'xargs\s+.*\bchmod\b|xargs\s+\bchmod\b'
 tier = "soft_ask"
+auto = "prompt"
 requires_substring = ["xargs"]
 reason = "xargs piping to `chmod` runs it once per input line. Verify the upstream filter; mistakes cascade."
 
@@ -139,6 +143,7 @@ reason = "xargs piping to `chmod` runs it once per input line. Verify the upstre
 id = "xargs-chown"
 regex = 'xargs\s+.*\bchown\b|xargs\s+\bchown\b'
 tier = "soft_ask"
+auto = "prompt"
 requires_substring = ["xargs"]
 reason = "xargs piping to `chown` runs it once per input line. Verify the upstream filter; mistakes cascade."
 
@@ -146,6 +151,7 @@ reason = "xargs piping to `chown` runs it once per input line. Verify the upstre
 id = "xargs-dd"
 regex = 'xargs\s+.*\bdd\b|xargs\s+\bdd\b'
 tier = "soft_ask"
+auto = "prompt"
 requires_substring = ["xargs"]
 reason = "xargs piping to `dd` runs it once per input line. Verify the upstream filter; mistakes cascade."
 
@@ -153,6 +159,7 @@ reason = "xargs piping to `dd` runs it once per input line. Verify the upstream 
 id = "xargs-shred"
 regex = 'xargs\s+.*\bshred\b|xargs\s+\bshred\b'
 tier = "soft_ask"
+auto = "prompt"
 requires_substring = ["xargs"]
 reason = "xargs piping to `shred` runs it once per input line. Verify the upstream filter; mistakes cascade."
 
@@ -160,6 +167,7 @@ reason = "xargs piping to `shred` runs it once per input line. Verify the upstre
 id = "xargs-kubectl-delete"
 regex = 'xargs\s+.*kubectl\s+delete|xargs\s+kubectl\s+delete'
 tier = "soft_ask"
+auto = "prompt"
 requires_substring = ["xargs"]
 reason = "xargs piping to `kubectl delete` runs delete once per input line. Verify the upstream filter; mistakes cascade across many resources."
 
@@ -169,6 +177,7 @@ reason = "xargs piping to `kubectl delete` runs delete once per input line. Veri
 id = "find-delete"
 regex = '-delete'
 tier = "soft_ask"
+auto = "prompt"
 requires_substring = ["find ", "find\t"]
 reason = "`find -delete` removes every match. Run without `-delete` first to preview which paths would be removed."
 
@@ -176,6 +185,7 @@ reason = "`find -delete` removes every match. Run without `-delete` first to pre
 id = "find-exec"
 regex = '\s-(?:execdir|okdir|exec|ok)\b'
 tier = "soft_ask"
+auto = "prompt"
 requires_substring = ["find ", "find\t"]
 reason = "`find -exec` runs a command per match. Verify both the find filter and the command body; mistakes cascade across every match."
 
@@ -194,6 +204,7 @@ reason = "`find -fprintf`/`-fprint`/`-fls` writes matched output to a file, over
 id = "fd-exec"
 handler = "fd_exec"
 tier = "soft_ask"
+auto = "prompt"
 reason = "fd executing `rm`/`mv`/`chmod`/`chown`/`dd`/`shred` per match via -x/--exec. Verify the fd filter first (run without -x); mistakes cascade across every match."
 
 # --- ripgrep external-program flags (hard ask) -------------------------------

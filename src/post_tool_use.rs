@@ -27,7 +27,8 @@ pub fn handle_post_tool_use(input: &PostToolUseInput) -> Option<PostToolUseOutpu
         return None;
     }
 
-    // Create a pending approval entry
+    // Create a pending approval entry, carrying through who resolved the
+    // approval so review can tell a human click from a classifier decision.
     let approval = PendingApproval::new(
         tracked.command,
         tracked.suggested_patterns,
@@ -35,7 +36,8 @@ pub fn handle_post_tool_use(input: &PostToolUseInput) -> Option<PostToolUseOutpu
         tracked.project_id,
         tracked.cwd,
         tracked.session_id,
-    );
+    )
+    .with_origin(tracked.origin);
 
     // Append to global pending queue.
     // If this fails, the entry is already removed from tracking. This is acceptable

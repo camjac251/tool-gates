@@ -5,7 +5,7 @@
     </ol>
   </nav>
   <h1 id="auto-h1">Auto Mode</h1>
-  <p class="page-lede">When Claude Code runs in <code>auto</code> permission mode, a server-side classifier decides <code>ask</code> calls instead of prompting. tool-gates layers in as a deterministic pre-filter and safety floor: hard denies stay hard, allows skip the classifier, and only genuinely ambiguous calls reach the classifier.</p>
+  <p class="page-lede">When Claude Code runs in <code>auto</code> permission mode, a classifier decides borderline calls instead of prompting. Reaching it takes care: Claude Code hands a hook <code>ask</code> straight back to the user without consulting the classifier, so <code>defer</code> is the only decision that routes there. tool-gates defers its gate asks under auto and keeps an explicit ask only where a human decision is the point.</p>
   <div class="sec-head" style="margin-top: var(--s-6)">
     <p class="lbl">Decision matrix</p>
     <h2>What the classifier sees.</h2>
@@ -23,7 +23,7 @@
     <article class="triad-card ask">
       <h3>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" width="14" height="14"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>
-        Ask
+        Defer
       </h3>
       <p>Classifier runs and decides allow or deny silently.</p>
       <span class="ex">cargo install foo</span>
@@ -49,11 +49,15 @@
     </article>
     <article class="hook-card">
       <h3>acceptEdits fast path is not trusted</h3>
-      <p>Claude's hardcoded <code>acceptEdits</code> Bash allow list includes <code>rm</code>, <code>rmdir</code>, <code>mv</code>, <code>cp</code>, <code>touch</code>. Under auto mode tool-gates owns the decision instead. Path-aware allows like <code>mkdir -p src/components</code> and <code>sed -i … file</code> still succeed; unapproved hardcoded bases deny before Claude's fast path can approve them.</p>
+      <p>Claude's hardcoded <code>acceptEdits</code> Bash allow list includes <code>rm</code>, <code>rmdir</code>, <code>mv</code>, <code>cp</code>, <code>touch</code>, and it matches the bare program name with no path check. Auto mode probes that list before calling the classifier, so tool-gates keeps an explicit <code>ask</code> when every sub-command sits on it. Path-aware allows like <code>mkdir -p src/components</code> and <code>sed -i … file</code> still succeed, and a mixed chain like <code>mkdir -p dist &amp;&amp; cargo build</code> defers, because Claude's fast path cannot fire on it either.</p>
     </article>
     <article class="hook-card">
-      <h3>Pending queue stays human-only</h3>
-      <p>The classifier decides silently; nothing it approves goes into <code>pending.jsonl</code>. The approval-learning review queue contains only patterns you explicitly clicked through.</p>
+      <h3>Irreversible actions still ask</h3>
+      <p>Ask rules marked <code>auto = "prompt"</code> hold their prompt under auto mode instead of deferring. These are the actions whose blast radius is external and irreversible, where the classifier knows nothing the rule does not: publishing a package, deleting an SSH or GPG key. The hold survives wrapper expansion, so <code>pnpm run release</code> cannot launder <code>npm publish</code> past it.</p>
+    </article>
+    <article class="hook-card">
+      <h3>The review queue records who approved</h3>
+      <p>Successful asks and defers both enter <code>pending.jsonl</code>. Each entry records whether a human approved the prompt or the classifier resolved a defer unseen, so <code>tool-gates review</code> never presents a silent classifier approval as prior consent.</p>
     </article>
     <article class="hook-card">
       <h3>Classifier denials get retry hints</h3>

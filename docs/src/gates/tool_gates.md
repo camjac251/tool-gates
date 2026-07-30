@@ -13,14 +13,14 @@
   </div>
 
   <section class="summary" aria-label="Rule counts at a glance">
-    <div class="seg-bar" role="img" aria-label="10 allow, 7 ask, 0 block">
-      <div class="seg allow" style="flex: 10"></div>
-      <div class="seg ask"   style="flex: 7"></div>
+    <div class="seg-bar" role="img" aria-label="11 allow, 6 ask, 0 block">
+      <div class="seg allow" style="flex: 11"></div>
+      <div class="seg ask"   style="flex: 6"></div>
       <div class="seg block" style="flex: 0"></div>
     </div>
     <div class="counts">
-      <span class="ca"><i></i><b>10</b> allow</span>
-      <span class="cas"><i></i><b>7</b> ask</span>
+      <span class="ca"><i></i><b>11</b> allow</span>
+      <span class="cas"><i></i><b>6</b> ask</span>
       <span class="cb"><i></i><b>0</b> block</span>
     </div>
   </section>
@@ -30,8 +30,8 @@
 
 <div class="chips" role="group" aria-label="Filter rules by decision" aria-describedby="rule-filter-status">
   <button class="chip all"   data-filter="all"   aria-pressed="true"><i></i>All <span class="n">17</span></button>
-  <button class="chip allow" data-filter="allow" aria-pressed="false"><i></i>Allow <span class="n">10</span></button>
-  <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">7</span></button>
+  <button class="chip allow" data-filter="allow" aria-pressed="false"><i></i>Allow <span class="n">11</span></button>
+  <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">6</span></button>
   <button class="chip block" data-filter="block" aria-pressed="false"><i></i>Block <span class="n">0</span></button>
 </div>
 <p class="rule-filter-status" id="rule-filter-status" role="status" aria-live="polite" aria-atomic="true">Showing all 17 rules.</p>
@@ -43,7 +43,7 @@
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
       rules/tool_gates.toml#allow
     </a>
-    <span class="count">10 patterns</span>
+    <span class="count">11 patterns</span>
   </header>
 
 <div class="rule-row" data-decision="allow" id="tool_gates-tool-gates-pending-list">
@@ -96,6 +96,11 @@
   <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
   <div class="rule-reason">Info flags.</div>
 </div>
+<div class="rule-row" data-decision="allow" id="tool_gates-tool-gates-refresh-tools">
+  <div class="rule-cmd"><span class="prog">tool-gates</span> <span class="flag">--refresh-tools</span></div>
+  <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
+  <div class="rule-reason">Re-scans the system for modern CLI tools (bat, rg, fd, etc.) and rewrites its own hint cache under <code>~/.cache/tool-gates/</code>. Affects which hints appear, nothing else.</div>
+</div>
 </div>
 
 <div class="rule-card">
@@ -105,7 +110,7 @@
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
       rules/tool_gates.toml#ask
     </a>
-    <span class="count">7 patterns</span>
+    <span class="count">6 patterns</span>
   </header>
 
 <div class="rule-row" data-decision="ask" id="tool_gates-tool-gates-approve">
@@ -137,10 +142,5 @@
   <div class="rule-cmd"><span class="prog">tool-gates</span> review</div>
   <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
   <div class="rule-reason">Opens the interactive approval TUI. Selecting Approve writes a permanent permission rule to a settings file.</div>
-</div>
-<div class="rule-row" data-decision="ask" id="tool_gates-tool-gates-refresh-tools">
-  <div class="rule-cmd"><span class="prog">tool-gates</span> <span class="flag">--refresh-tools</span></div>
-  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
-  <div class="rule-reason">Re-scans the system for modern CLI tools (bat, rg, fd, etc.) and rewrites <code>~/.cache/tool-gates/available-tools.json</code>. Used to surface hints.</div>
 </div>
 </div>

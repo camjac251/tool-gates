@@ -14,14 +14,14 @@
   </div>
 
   <section class="summary" aria-label="Rule counts at a glance">
-    <div class="seg-bar" role="img" aria-label="203 allow, 212 ask, 4 block">
-      <div class="seg allow" style="flex: 203"></div>
-      <div class="seg ask"   style="flex: 212"></div>
+    <div class="seg-bar" role="img" aria-label="204 allow, 211 ask, 4 block">
+      <div class="seg allow" style="flex: 204"></div>
+      <div class="seg ask"   style="flex: 211"></div>
       <div class="seg block" style="flex: 4"></div>
     </div>
     <div class="counts">
-      <span class="ca"><i></i><b>203</b> allow</span>
-      <span class="cas"><i></i><b>212</b> ask</span>
+      <span class="ca"><i></i><b>204</b> allow</span>
+      <span class="cas"><i></i><b>211</b> ask</span>
       <span class="cb"><i></i><b>4</b> block</span>
     </div>
   </section>
@@ -31,8 +31,8 @@
 
 <div class="chips" role="group" aria-label="Filter rules by decision" aria-describedby="rule-filter-status">
   <button class="chip all"   data-filter="all"   aria-pressed="true"><i></i>All <span class="n">419</span></button>
-  <button class="chip allow" data-filter="allow" aria-pressed="false"><i></i>Allow <span class="n">203</span></button>
-  <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">212</span></button>
+  <button class="chip allow" data-filter="allow" aria-pressed="false"><i></i>Allow <span class="n">204</span></button>
+  <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">211</span></button>
   <button class="chip block" data-filter="block" aria-pressed="false"><i></i>Block <span class="n">4</span></button>
 </div>
 <p class="rule-filter-status" id="rule-filter-status" role="status" aria-live="polite" aria-atomic="true">Showing all 419 rules.</p>
@@ -76,7 +76,7 @@
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
       rules/cloud.toml#allow
     </a>
-    <span class="count">203 patterns</span>
+    <span class="count">204 patterns</span>
   </header>
 
 <div class="rule-row" data-decision="allow" id="cloud-aws-version">
@@ -639,6 +639,11 @@
   <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
   <div class="rule-reason">Helm repo list: lists configured chart repositories. Read-only.</div>
 </div>
+<div class="rule-row" data-decision="allow" id="cloud-helm-repo-update">
+  <div class="rule-cmd"><span class="prog">helm</span> repo update</div>
+  <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
+  <div class="rule-reason">Helm repo update: refreshes the local index for all repos. Read-only on clusters; updates local cache files.</div>
+</div>
 <div class="rule-row" data-decision="allow" id="cloud-helm-status">
   <div class="rule-cmd"><span class="prog">helm</span> status</div>
   <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
@@ -1103,7 +1108,7 @@
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
       rules/cloud.toml#ask
     </a>
-    <span class="count">212 patterns</span>
+    <span class="count">211 patterns</span>
   </header>
 
 <div class="rule-row" data-decision="ask" id="cloud-aws-create">
@@ -1745,11 +1750,6 @@
   <div class="rule-cmd"><span class="prog">helm</span> repo remove</div>
   <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
   <div class="rule-reason">Helm repo remove: removes a chart repository from the local Helm config. Existing releases keep running.</div>
-</div>
-<div class="rule-row" data-decision="ask" id="cloud-helm-repo-update">
-  <div class="rule-cmd"><span class="prog">helm</span> repo update</div>
-  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
-  <div class="rule-reason">Helm repo update: refreshes the local index for all repos. Read-only on clusters; updates local cache files.</div>
 </div>
 <div class="rule-row" data-decision="ask" id="cloud-helm-install">
   <div class="rule-cmd"><span class="prog">helm</span> install</div>

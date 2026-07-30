@@ -514,7 +514,13 @@ mod tests {
         }
 
         #[test]
-        fn test_unapproved_claude_accept_edits_bases_deny_under_auto_mode() {
+        fn test_unapproved_claude_accept_edits_bases_ask_under_auto_mode() {
+            // A hook "ask" is returned to the user without entering Claude's
+            // permission resolver, so it never reaches the auto-mode
+            // acceptEdits fast path (which matches these bases on the bare
+            // program name with no path validation). Ask is therefore a
+            // sufficient gate; denying would only remove a decision the user
+            // is entitled to make.
             for command in [
                 "touch newfile.txt",
                 "rm file.txt",
@@ -525,10 +531,25 @@ mod tests {
                 let result = check_command_with_settings(command, "/tmp", "auto");
                 assert_eq!(
                     get_claude_wire_decision(&result).as_deref(),
-                    Some("deny"),
-                    "{command} must not reach Claude's auto-mode acceptEdits fast path"
+                    Some("ask"),
+                    "{command} must hold an explicit ask, not defer to Claude's acceptEdits fast path"
                 );
             }
+        }
+
+        #[test]
+        fn test_mixed_chain_with_non_base_command_defers_under_auto_mode() {
+            // Claude's acceptEdits fast path bails to the normal permission
+            // flow as soon as one sub-command is off its base list, so a mixed
+            // chain can never reach it. Holding an ask here would exclude the
+            // classifier for no safety gain.
+            let result =
+                check_command_with_settings("mkdir -p dist && cargo build", "/tmp", "auto");
+            assert_eq!(
+                result.decision,
+                PermissionDecision::Defer,
+                "a chain containing a non-base command should reach the auto-mode classifier"
+            );
         }
 
         #[test]
@@ -1282,9 +1303,10 @@ run = "mytool42 verify"
             );
         }
 
-        /// Auto mode keeps wrapper Ask explicit so the classifier path runs.
+        /// Auto mode defers wrapper asks so the classifier actually runs.
+        /// An explicit ask would be handed straight back to the user instead.
         #[test]
-        fn test_pnpm_script_stays_ask_under_auto_mode() {
+        fn test_pnpm_script_defers_under_auto_mode() {
             use std::fs;
             use tempfile::TempDir;
 
@@ -1294,7 +1316,7 @@ run = "mytool42 verify"
 
             let cwd = temp.path().to_str().unwrap();
             let result = check_command_with_settings("pnpm run check", cwd, "auto");
-            assert_eq!(result.decision, PermissionDecision::Ask);
+            assert_eq!(result.decision, PermissionDecision::Defer);
         }
 
         /// Regression: package.json scripts must get the auto-mode hard-ask
