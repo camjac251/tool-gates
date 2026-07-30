@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.33.3](https://github.com/camjac251/tool-gates/compare/v1.33.2...v1.33.3) - 2026-07-30
+
+### Fixed
+
+- *(hints)* remove client-only file actions
+- *(hooks)* keep shared feedback client-neutral
+
 ## [1.33.2](https://github.com/camjac251/tool-gates/compare/v1.33.1...v1.33.2) - 2026-07-30
 
 ### Fixed
