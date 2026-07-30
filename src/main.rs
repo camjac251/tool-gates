@@ -1396,6 +1396,114 @@ fn has_tool_gates_hook(hooks_array: &serde_json::Value) -> bool {
         .is_some_and(|arr| arr.iter().any(is_tool_gates_entry))
 }
 
+/// Collect every tool-gates hook command string anywhere in a JSON tree.
+///
+/// Walks the whole value rather than a known shape so it works for all four
+/// client layouts: Claude and Codex nest under `hooks.<Event>`, Antigravity
+/// keys by hook name first, and Gemini uses its own event names.
+fn collect_tool_gates_hook_commands(value: &serde_json::Value, out: &mut Vec<String>) {
+    match value {
+        serde_json::Value::Object(map) => {
+            for (key, child) in map {
+                if key == "command" {
+                    if let Some(cmd) = child.as_str() {
+                        if cmd.contains("tool-gates") || cmd.contains("bash-gates") {
+                            out.push(cmd.to_string());
+                        }
+                    }
+                }
+                collect_tool_gates_hook_commands(child, out);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                collect_tool_gates_hook_commands(item, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Resolve the binary a hook command would actually execute.
+///
+/// Takes the first shell word, drops surrounding quotes the installer may have
+/// written, then resolves a bare name through PATH the way the shell would.
+/// Returns the canonical path so a symlinked install (Homebrew) compares equal
+/// to its target.
+fn resolve_hook_binary(command: &str) -> Option<std::path::PathBuf> {
+    let token = command.split_whitespace().next()?;
+    let token = token.trim_matches(|c| c == '\'' || c == '"');
+    if token.is_empty() {
+        return None;
+    }
+
+    let candidate = if token.contains('/') {
+        std::path::PathBuf::from(token)
+    } else {
+        std::env::var_os("PATH").and_then(|path| {
+            std::env::split_paths(&path)
+                .map(|dir| dir.join(token))
+                .find(|p| p.is_file())
+        })?
+    };
+
+    std::fs::canonicalize(candidate).ok()
+}
+
+/// What the installed hooks across all clients actually resolve to.
+struct HookBinaryReport {
+    /// One entry per distinct binary, with the clients that reach it.
+    resolved: Vec<(std::path::PathBuf, Vec<String>)>,
+    /// Hook commands whose binary could not be found at all.
+    unresolvable: Vec<String>,
+}
+
+/// Resolve the binary behind every installed hook, grouped by target.
+///
+/// Clients disagreeing is the failure worth reporting: a hook pinned to an old
+/// absolute path, or a bare name shadowed earlier on PATH, keeps answering
+/// permission checks with stale logic while every other check still reports it
+/// installed. Comparing the hooks to each other rather than to this process
+/// avoids flagging a developer running a build out of the source tree, whose
+/// path legitimately differs from the installed one.
+fn report_hook_binaries(configs: &[(&str, std::path::PathBuf)]) -> HookBinaryReport {
+    let mut resolved: Vec<(std::path::PathBuf, Vec<String>)> = Vec::new();
+    let mut unresolvable: Vec<String> = Vec::new();
+
+    for (client, path) in configs {
+        let Ok(content) = std::fs::read_to_string(path) else {
+            continue;
+        };
+        let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) else {
+            continue;
+        };
+
+        let mut commands = Vec::new();
+        collect_tool_gates_hook_commands(&json, &mut commands);
+        commands.sort();
+        commands.dedup();
+
+        for command in commands {
+            match resolve_hook_binary(&command) {
+                Some(target) => match resolved.iter_mut().find(|(p, _)| *p == target) {
+                    Some((_, clients)) => {
+                        if !clients.iter().any(|c| c == client) {
+                            clients.push((*client).to_string());
+                        }
+                    }
+                    None => resolved.push((target, vec![(*client).to_string()])),
+                },
+                None => unresolvable.push(format!("{client}: {command}")),
+            }
+        }
+    }
+
+    HookBinaryReport {
+        resolved,
+        unresolvable,
+    }
+}
+
 /// Sync tool-gates hook entries for a hook event.
 /// Replaces existing tool-gates entries with expected ones if any managed
 /// field differs. Matcher-only comparisons miss managed command changes such
@@ -3630,6 +3738,55 @@ fn handle_doctor_subcommand(args: &[String]) {
         issues.push(msg);
     }
 
+    // Installed is not the same as current. A hook pinned to an old path, or a
+    // bare name shadowed earlier on PATH, answers permission checks with stale
+    // logic while every check above still reports it installed.
+    if any_installed {
+        let home = dirs::home_dir().unwrap_or_default();
+        let hook_configs = [
+            ("claude", home.join(".claude/settings.json")),
+            ("codex", home.join(".codex/hooks.json")),
+            ("antigravity", home.join(".gemini/config/hooks.json")),
+            ("gemini", home.join(".gemini/settings.json")),
+        ];
+        let report = report_hook_binaries(&hook_configs);
+
+        for detail in &report.unresolvable {
+            let msg = format!("Hook command resolves to no binary ({detail})");
+            eprintln!("  ✗ {msg}");
+            issues.push(msg);
+        }
+
+        match report.resolved.len() {
+            0 => {}
+            1 => {
+                let (path, clients) = &report.resolved[0];
+                eprintln!(
+                    "  ✓ Hook binary: one build for all clients ({})",
+                    clients.join(", ")
+                );
+                eprintln!("    {}", path.display());
+                ok_count += 1;
+            }
+            _ => {
+                let msg = format!(
+                    "Clients run {} different tool-gates builds; the older ones answer with stale logic",
+                    report.resolved.len()
+                );
+                eprintln!("  ⚠ {msg}");
+                for (path, clients) in &report.resolved {
+                    eprintln!("    {} <- {}", path.display(), clients.join(", "));
+                }
+                eprintln!("    Reinstall from the build you want, invoked by absolute path so it");
+                eprintln!("    records its own location rather than resolving through PATH:");
+                eprintln!(
+                    "    <path>/tool-gates hooks add -s user   (also --codex, --antigravity, --gemini)"
+                );
+                issues.push(msg);
+            }
+        }
+    }
+
     // 4. Cache files
     eprintln!();
     let cache_dir = tool_gates::cache::cache_dir();
@@ -3952,6 +4109,122 @@ mod tests {
         let input: HookInput = serde_json::from_str(json).unwrap();
         assert_eq!(input.tool_name, "Bash");
         assert_eq!(input.get_command(), "git status");
+    }
+
+    #[test]
+    fn test_resolve_hook_binary_handles_installer_command_forms() {
+        let temp = tempfile::tempdir().unwrap();
+        let binary = temp.path().join("tool-gates");
+        std::fs::write(&binary, b"#!/bin/sh\n").unwrap();
+        let canonical = std::fs::canonicalize(&binary).unwrap();
+        let raw = binary.display().to_string();
+
+        // Bare absolute path, the Claude installer's form.
+        assert_eq!(resolve_hook_binary(&raw).as_deref(), Some(&*canonical));
+        // With a client-routing flag, the Codex and Antigravity form.
+        assert_eq!(
+            resolve_hook_binary(&format!("{raw} --client codex")).as_deref(),
+            Some(&*canonical)
+        );
+        // Single-quoted, as written into the Antigravity hooks file.
+        assert_eq!(
+            resolve_hook_binary(&format!("'{raw}' --client antigravity")).as_deref(),
+            Some(&*canonical)
+        );
+        // A path that does not exist resolves to nothing rather than panicking.
+        assert!(resolve_hook_binary("/nonexistent/tool-gates").is_none());
+    }
+
+    #[test]
+    fn test_report_hook_binaries_flags_clients_on_different_builds() {
+        let temp = tempfile::tempdir().unwrap();
+        let current = temp.path().join("current");
+        let stale = temp.path().join("stale");
+        std::fs::create_dir_all(&current).unwrap();
+        std::fs::create_dir_all(&stale).unwrap();
+        let current_bin = current.join("tool-gates");
+        let stale_bin = stale.join("tool-gates");
+        std::fs::write(&current_bin, b"#!/bin/sh\n").unwrap();
+        std::fs::write(&stale_bin, b"#!/bin/sh\n").unwrap();
+
+        let write_config = |name: &str, command: &str| {
+            let path = temp.path().join(name);
+            let json = serde_json::json!({
+                "hooks": {
+                    "PreToolUse": [{
+                        "matcher": "Bash",
+                        "hooks": [{ "type": "command", "command": command }]
+                    }]
+                }
+            });
+            std::fs::write(&path, serde_json::to_vec(&json).unwrap()).unwrap();
+            path
+        };
+
+        // The shape that shipped stale logic for a day: one client pinned to an
+        // old absolute path while the others point at the current build.
+        let configs = [
+            (
+                "claude",
+                write_config("claude.json", &stale_bin.display().to_string()),
+            ),
+            (
+                "codex",
+                write_config(
+                    "codex.json",
+                    &format!("{} --client codex", current_bin.display()),
+                ),
+            ),
+        ];
+        let report = report_hook_binaries(&configs);
+        assert_eq!(
+            report.resolved.len(),
+            2,
+            "two distinct builds must be reported separately: {:?}",
+            report.resolved
+        );
+        assert!(report.unresolvable.is_empty());
+
+        // Agreement is the passing case, regardless of extra flags.
+        let agreed = [
+            (
+                "claude",
+                write_config("c2.json", &current_bin.display().to_string()),
+            ),
+            (
+                "antigravity",
+                write_config(
+                    "a2.json",
+                    &format!("'{}' --client antigravity", current_bin.display()),
+                ),
+            ),
+        ];
+        let report = report_hook_binaries(&agreed);
+        assert_eq!(report.resolved.len(), 1);
+        assert_eq!(report.resolved[0].1, vec!["claude", "antigravity"]);
+    }
+
+    #[test]
+    fn test_report_hook_binaries_reports_missing_binary() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("claude.json");
+        let json = serde_json::json!({
+            "hooks": {
+                "PreToolUse": [{
+                    "matcher": "Bash",
+                    "hooks": [{
+                        "type": "command",
+                        "command": "/nonexistent/path/tool-gates"
+                    }]
+                }]
+            }
+        });
+        std::fs::write(&path, serde_json::to_vec(&json).unwrap()).unwrap();
+
+        let report = report_hook_binaries(&[("claude", path)]);
+        assert!(report.resolved.is_empty());
+        assert_eq!(report.unresolvable.len(), 1);
+        assert!(report.unresolvable[0].contains("claude"));
     }
 
     #[test]
