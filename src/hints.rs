@@ -933,7 +933,7 @@ fn hint_less(_cmd: &CommandInfo) -> ModernHint {
     ModernHint {
         legacy_command: "less",
         modern_command: "bat",
-        hint: "Use `bat <file>` instead of `less`. Line-numbered output makes follow-up `Edit` and `Read` calls target specific lines precisely."
+        hint: "Use `bat <file>` instead of `less`. Line-numbered output supports precise follow-up edits and range reads."
             .to_string(),
     }
 }
@@ -1609,6 +1609,15 @@ mod tests {
         let hint = hint.unwrap();
         assert!(hint.hint.contains("-r -30:"));
         assert!(!hint.hint.contains("Use Read"));
+    }
+
+    #[test]
+    fn test_less_hint_is_client_neutral() {
+        let hint = hint_less(&cmd("less", &["file.txt"]));
+        assert_eq!(hint.modern_command, "bat");
+        assert!(hint.hint.contains("Line-numbered"));
+        assert!(!hint.hint.contains("`Edit`"));
+        assert!(!hint.hint.contains("`Read`"));
     }
 
     #[test]
