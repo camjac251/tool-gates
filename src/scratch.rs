@@ -38,10 +38,10 @@ fn is_unsafe_scratch_base(base: &str) -> bool {
     }
     // The user's home directory itself: a base of `/home/<user>` would
     // auto-allow ~/.ssh, ~/.aws, ~/.config, etc.
-    if let Some(home) = dirs::home_dir() {
-        if Path::new(base) == home.as_path() {
-            return true;
-        }
+    if let Some(home) = dirs::home_dir()
+        && Path::new(base) == home.as_path()
+    {
+        return true;
     }
     // Too shallow to be a real scratch dir: depth < 2 covers every bare
     // top-level dir (`/home`, `/etc`, `/usr`, `/var`, `/tmp`, ...).
@@ -131,10 +131,10 @@ pub fn is_under_scratch(path: &str) -> bool {
         return false;
     }
     let resolved = resolve_path(&expanded);
-    if let Some(base) = &base {
-        if is_under_any_dir(&resolved, std::slice::from_ref(base)) {
-            return true;
-        }
+    if let Some(base) = &base
+        && is_under_any_dir(&resolved, std::slice::from_ref(base))
+    {
+        return true;
     }
     is_claude_session_scratchpad(&resolved)
 }

@@ -107,10 +107,10 @@ fn check_rm(cmd: &CommandInfo) -> GateResult {
     let args = &cmd.args;
 
     // Try declarative first for blocks
-    if let Some(result) = check_rm_declarative(cmd) {
-        if matches!(result.decision, Decision::Block) {
-            return result;
-        }
+    if let Some(result) = check_rm_declarative(cmd)
+        && matches!(result.decision, Decision::Block)
+    {
+        return result;
     }
 
     // Literal catastrophic forms - blocked even when HOME is unset.

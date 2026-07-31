@@ -2,7 +2,7 @@
 name = "tool-gates"
 version = "1.33.4"
 edition = "2024"
-rust-version = "1.86"
+rust-version = "1.97.1"
 description = "Intelligent tool permission gates for AI coding assistants"
 license = "MIT"
 

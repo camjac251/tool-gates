@@ -465,10 +465,10 @@ fn hint_grep(cmd: &CommandInfo) -> Option<ModernHint> {
             // Flags with a following value
             "-e" | "--regexp" | "-f" | "--file" | "-A" | "--after-context" | "-B"
             | "--before-context" | "-C" | "--context" => {
-                if let Some(value) = iter.next() {
-                    if matches!(arg.as_str(), "-e" | "--regexp" | "-f" | "--file") {
-                        non_flag_args.push(value.as_str());
-                    }
+                if let Some(value) = iter.next()
+                    && matches!(arg.as_str(), "-e" | "--regexp" | "-f" | "--file")
+                {
+                    non_flag_args.push(value.as_str());
                 }
             }
             _ if !arg.starts_with('-') => non_flag_args.push(arg.as_str()),

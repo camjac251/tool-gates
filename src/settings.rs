@@ -255,12 +255,11 @@ impl Settings {
     /// Like `matches_any` but returns the matched pattern instead of a bool.
     fn find_matching<'a>(&self, patterns: &'a [String], command: &str) -> Option<&'a str> {
         for pattern in patterns {
-            if let Some(bash_pattern) = pattern.strip_prefix("Bash(") {
-                if let Some(inner) = bash_pattern.strip_suffix(')') {
-                    if Self::matches_bash_pattern(inner, command) {
-                        return Some(pattern);
-                    }
-                }
+            if let Some(bash_pattern) = pattern.strip_prefix("Bash(")
+                && let Some(inner) = bash_pattern.strip_suffix(')')
+                && Self::matches_bash_pattern(inner, command)
+            {
+                return Some(pattern);
             }
         }
         None
@@ -308,14 +307,12 @@ impl Settings {
         const FILE_PREFIXES: &[&str] = &["Write(", "Edit(", "MultiEdit("];
         for pattern in patterns {
             for prefix in FILE_PREFIXES {
-                if let Some(rest) = pattern.strip_prefix(prefix) {
-                    if let Some(inner) = rest.strip_suffix(')') {
-                        if path_matches_glob(inner, abs_path)
-                            || rel_path.is_some_and(|r| path_matches_glob(inner, r))
-                        {
-                            return true;
-                        }
-                    }
+                if let Some(rest) = pattern.strip_prefix(prefix)
+                    && let Some(inner) = rest.strip_suffix(')')
+                    && (path_matches_glob(inner, abs_path)
+                        || rel_path.is_some_and(|r| path_matches_glob(inner, r)))
+                {
+                    return true;
                 }
             }
         }
@@ -325,12 +322,11 @@ impl Settings {
     /// Match command against Bash(...) patterns
     fn matches_any(&self, patterns: &[String], command: &str) -> bool {
         for pattern in patterns {
-            if let Some(bash_pattern) = pattern.strip_prefix("Bash(") {
-                if let Some(inner) = bash_pattern.strip_suffix(')') {
-                    if Self::matches_bash_pattern(inner, command) {
-                        return true;
-                    }
-                }
+            if let Some(bash_pattern) = pattern.strip_prefix("Bash(")
+                && let Some(inner) = bash_pattern.strip_suffix(')')
+                && Self::matches_bash_pattern(inner, command)
+            {
+                return true;
             }
         }
         false
@@ -456,12 +452,11 @@ impl Settings {
     fn best_match_specificity(patterns: &[String], command: &str) -> Option<usize> {
         let mut best: Option<usize> = None;
         for pattern in patterns {
-            if let Some(bash_pattern) = pattern.strip_prefix("Bash(") {
-                if let Some(inner) = bash_pattern.strip_suffix(')') {
-                    if let Some(score) = Self::pattern_specificity(inner, command) {
-                        best = Some(best.map_or(score, |b| b.max(score)));
-                    }
-                }
+            if let Some(bash_pattern) = pattern.strip_prefix("Bash(")
+                && let Some(inner) = bash_pattern.strip_suffix(')')
+                && let Some(score) = Self::pattern_specificity(inner, command)
+            {
+                best = Some(best.map_or(score, |b| b.max(score)));
             }
         }
         best

@@ -23,10 +23,10 @@ pub fn suggest_patterns(cmd: &CommandInfo) -> Vec<String> {
                     if let Some(script) = cmd.args.get(1) {
                         patterns.push(format!("{} {} {}", cmd.program, subcmd, script));
                         // For nested scripts like "test:unit", also suggest "test*" prefix
-                        if let Some(prefix) = script.split(':').next() {
-                            if prefix != script {
-                                patterns.push(format!("{} {} {}*", cmd.program, subcmd, prefix)); // glob: match test:unit, test:e2e etc.
-                            }
+                        if let Some(prefix) = script.split(':').next()
+                            && prefix != script
+                        {
+                            patterns.push(format!("{} {} {}*", cmd.program, subcmd, prefix)); // glob: match test:unit, test:e2e etc.
                         }
                     }
                     patterns.push(format!("{} {}:*", cmd.program, subcmd));
@@ -127,10 +127,10 @@ pub fn suggest_patterns(cmd: &CommandInfo) -> Vec<String> {
                 }
                 // git checkout/switch with branch
                 else if subcmd == "checkout" || subcmd == "switch" {
-                    if let Some(branch) = cmd.args.get(1) {
-                        if !branch.starts_with('-') {
-                            patterns.push(format!("git {} {}", subcmd, branch));
-                        }
+                    if let Some(branch) = cmd.args.get(1)
+                        && !branch.starts_with('-')
+                    {
+                        patterns.push(format!("git {} {}", subcmd, branch));
                     }
                     patterns.push(format!("git {}:*", subcmd));
                 } else {
@@ -192,10 +192,10 @@ pub fn suggest_patterns(cmd: &CommandInfo) -> Vec<String> {
 
         // Default case - program + first subcommand if exists
         _ => {
-            if let Some(first_arg) = cmd.args.first() {
-                if !first_arg.starts_with('-') {
-                    patterns.push(format!("{} {}:*", cmd.program, first_arg));
-                }
+            if let Some(first_arg) = cmd.args.first()
+                && !first_arg.starts_with('-')
+            {
+                patterns.push(format!("{} {}:*", cmd.program, first_arg));
             }
             patterns.push(format!("{}:*", cmd.program));
         }

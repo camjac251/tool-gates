@@ -209,22 +209,21 @@ pub fn append_pending(approval: PendingApproval) -> std::io::Result<()> {
 
         // Tier 2: compaction-key match in same project. Collapses near-duplicates
         // that differ only in trailing literal args (package names, PR numbers).
-        if let Some(new_key) = compaction_key(&approval.patterns) {
-            if let Some(existing) = entries.iter_mut().find(|e| {
+        if let Some(new_key) = compaction_key(&approval.patterns)
+            && let Some(existing) = entries.iter_mut().find(|e| {
                 e.project_id == approval.project_id
                     && compaction_key(&e.patterns).as_deref() == Some(new_key.as_str())
-            }) {
-                existing.increment(approval.origin);
-                // Keep only patterns shared by both. The broadest matching
-                // pattern survives; the specific-literal patterns drop out.
-                let new_set: std::collections::HashSet<&String> =
-                    approval.patterns.iter().collect();
-                existing.patterns.retain(|p| new_set.contains(p));
-                // Don't replace breakdown -- the existing entry's breakdown
-                // already corresponds to its command, and the new command
-                // would be misleading there.
-                return;
-            }
+            })
+        {
+            existing.increment(approval.origin);
+            // Keep only patterns shared by both. The broadest matching
+            // pattern survives; the specific-literal patterns drop out.
+            let new_set: std::collections::HashSet<&String> = approval.patterns.iter().collect();
+            existing.patterns.retain(|p| new_set.contains(p));
+            // Don't replace breakdown -- the existing entry's breakdown
+            // already corresponds to its command, and the new command
+            // would be misleading there.
+            return;
         }
 
         entries.push(approval);

@@ -26,7 +26,7 @@
           <p class="step-prose">Replace <code>macos-arm64</code> with <code>macos-x86_64</code>, <code>linux-arm64</code>, or <code>linux-x86_64</code> for your platform. Windows binaries are available for Bash-like environments such as Git Bash or MSYS2. PowerShell/cmd.exe command classification is not first-class yet; WSL users should use the Linux binary.</p>
         </div>
         <div class="tab-panel" id="install-panel-cargo" data-panel="cargo" role="tabpanel" aria-labelledby="install-tab-cargo" tabindex="0" hidden>
-          <p class="step-prose">Requires Rust 1.86 or newer. Builds from source into Cargo's bin directory.</p>
+          <p class="step-prose">Requires Rust 1.97.1 or newer. Builds from source into Cargo's bin directory.</p>
 <pre class="code-block"><span class="prompt">$</span> cargo install --git https://github.com/camjac251/tool-gates</pre>
         </div>
       </div>

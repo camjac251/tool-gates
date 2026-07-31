@@ -237,10 +237,8 @@ fn collect_quoted_heredoc_body_ranges(
                 _ => {}
             }
         }
-        if quoted {
-            if let Some(body) = body {
-                ranges.push((body.start_byte(), body.end_byte()));
-            }
+        if quoted && let Some(body) = body {
+            ranges.push((body.start_byte(), body.end_byte()));
         }
     }
 

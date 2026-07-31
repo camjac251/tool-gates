@@ -341,10 +341,10 @@ fn expand_tilde(path: &str) -> String {
         if let Some(home) = dirs::home_dir() {
             return home.join(rest).display().to_string();
         }
-    } else if path == "~" {
-        if let Some(home) = dirs::home_dir() {
-            return home.display().to_string();
-        }
+    } else if path == "~"
+        && let Some(home) = dirs::home_dir()
+    {
+        return home.display().to_string();
     }
     path.to_string()
 }

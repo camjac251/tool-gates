@@ -171,14 +171,14 @@ fn check_psql(cmd: &CommandInfo) -> GateResult {
     }
 
     // Command execution - parse SQL
-    if let Some(idx) = args.iter().position(|a| a == "-c" || a == "--command") {
-        if idx + 1 < args.len() {
-            let query = args[idx + 1].to_uppercase();
-            if query.starts_with("SELECT") || query.starts_with("\\D") || query.starts_with("\\L") {
-                return GateResult::allow();
-            }
-            return GateResult::ask("psql: Executing SQL");
+    if let Some(idx) = args.iter().position(|a| a == "-c" || a == "--command")
+        && idx + 1 < args.len()
+    {
+        let query = args[idx + 1].to_uppercase();
+        if query.starts_with("SELECT") || query.starts_with("\\D") || query.starts_with("\\L") {
+            return GateResult::allow();
         }
+        return GateResult::ask("psql: Executing SQL");
     }
 
     // Use declarative for other cases
@@ -189,15 +189,14 @@ fn check_mysql(cmd: &CommandInfo) -> GateResult {
     let args = &cmd.args;
 
     // Execute option
-    if let Some(idx) = args.iter().position(|a| a == "-e" || a == "--execute") {
-        if idx + 1 < args.len() {
-            let query = args[idx + 1].to_uppercase();
-            if query.starts_with("SELECT") || query.starts_with("SHOW") || query.starts_with("DESC")
-            {
-                return GateResult::allow();
-            }
-            return GateResult::ask("mysql: Executing SQL");
+    if let Some(idx) = args.iter().position(|a| a == "-e" || a == "--execute")
+        && idx + 1 < args.len()
+    {
+        let query = args[idx + 1].to_uppercase();
+        if query.starts_with("SELECT") || query.starts_with("SHOW") || query.starts_with("DESC") {
+            return GateResult::allow();
         }
+        return GateResult::ask("mysql: Executing SQL");
     }
 
     check_mysql_declarative(cmd).unwrap_or_else(|| GateResult::ask("mysql: Database connection"))
@@ -260,10 +259,10 @@ fn check_make(cmd: &CommandInfo) -> GateResult {
     }
 
     // Check declarative for known safe targets
-    if let Some(result) = check_make_declarative(cmd) {
-        if matches!(result.decision, Decision::Allow | Decision::Ask) {
-            return result;
-        }
+    if let Some(result) = check_make_declarative(cmd)
+        && matches!(result.decision, Decision::Allow | Decision::Ask)
+    {
+        return result;
     }
 
     // Common safe targets

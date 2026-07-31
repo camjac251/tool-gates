@@ -302,10 +302,10 @@ impl App {
             return entry.patterns.clone();
         }
         let actionable = self.actionable_segments();
-        if let Some(&seg_idx) = actionable.get(self.selected_segment) {
-            if let Some(part) = entry.breakdown.get(seg_idx) {
-                return segment_patterns(part);
-            }
+        if let Some(&seg_idx) = actionable.get(self.selected_segment)
+            && let Some(part) = entry.breakdown.get(seg_idx)
+        {
+            return segment_patterns(part);
         }
         entry.patterns.clone()
     }
@@ -336,10 +336,10 @@ impl App {
         };
         if entry.breakdown.len() > 1 {
             let actionable = self.actionable_segments();
-            if let Some(&idx) = actionable.get(self.selected_segment) {
-                if let Some(part) = entry.breakdown.get(idx) {
-                    return part.program.clone();
-                }
+            if let Some(&idx) = actionable.get(self.selected_segment)
+                && let Some(part) = entry.breakdown.get(idx)
+            {
+                return part.program.clone();
             }
         }
         entry

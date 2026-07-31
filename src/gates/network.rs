@@ -102,10 +102,10 @@ fn check_curl(cmd: &CommandInfo) -> GateResult {
     }
 
     // GitHub raw/API content - nudge toward `gh api` before falling through
-    if let Some(url) = find_http_url(args) {
-        if is_github_content_url(url) {
-            return GateResult::ask(GH_API_REASON);
-        }
+    if let Some(url) = find_http_url(args)
+        && is_github_content_url(url)
+    {
+        return GateResult::ask(GH_API_REASON);
     }
 
     // Simple GET - allow
@@ -178,10 +178,10 @@ fn check_rsync(cmd: &CommandInfo) -> GateResult {
     }
 
     // Use declarative for version/help
-    if let Some(result) = check_rsync_declarative(cmd) {
-        if matches!(result.decision, crate::models::Decision::Allow) {
-            return result;
-        }
+    if let Some(result) = check_rsync_declarative(cmd)
+        && matches!(result.decision, crate::models::Decision::Allow)
+    {
+        return result;
     }
 
     GateResult::ask("rsync: File sync")
@@ -201,10 +201,10 @@ fn check_netcat(cmd: &CommandInfo) -> GateResult {
     }
 
     // Use declarative for blocks
-    if let Some(result) = check_nc_declarative(cmd) {
-        if matches!(result.decision, crate::models::Decision::Block) {
-            return result;
-        }
+    if let Some(result) = check_nc_declarative(cmd)
+        && matches!(result.decision, crate::models::Decision::Block)
+    {
+        return result;
     }
 
     // Listen mode - ask
@@ -243,10 +243,10 @@ fn check_httpie(cmd: &CommandInfo) -> GateResult {
     }
 
     // GitHub raw/API content - nudge toward `gh api` before falling through
-    if let Some(url) = find_http_url(args) {
-        if is_github_content_url(url) {
-            return GateResult::ask(GH_API_REASON);
-        }
+    if let Some(url) = find_http_url(args)
+        && is_github_content_url(url)
+    {
+        return GateResult::ask(GH_API_REASON);
     }
 
     // Simple GET - allow

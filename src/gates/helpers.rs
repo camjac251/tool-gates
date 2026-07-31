@@ -114,10 +114,10 @@ pub fn expand_path_vars_lossy(arg: &str) -> String {
 }
 
 fn resolve_user() -> Option<String> {
-    if let Ok(u) = std::env::var("USER") {
-        if !u.is_empty() {
-            return Some(u);
-        }
+    if let Ok(u) = std::env::var("USER")
+        && !u.is_empty()
+    {
+        return Some(u);
     }
     // Fallback: final path component of home dir.
     dirs::home_dir().and_then(|h| h.file_name().map(|n| n.to_string_lossy().into_owned()))
@@ -196,12 +196,13 @@ pub fn get_flag_value<'a>(args: &'a [String], flags: &[&str]) -> Option<&'a str>
             }
 
             // Short flag combined: -XPOST (only for single-char flags)
-            if flag.len() == 2 && flag.starts_with('-') && !flag.starts_with("--") {
-                if let Some(value) = arg.strip_prefix(flag) {
-                    if !value.is_empty() {
-                        return Some(value);
-                    }
-                }
+            if flag.len() == 2
+                && flag.starts_with('-')
+                && !flag.starts_with("--")
+                && let Some(value) = arg.strip_prefix(flag)
+                && !value.is_empty()
+            {
+                return Some(value);
             }
         }
         i += 1;

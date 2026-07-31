@@ -414,16 +414,15 @@ fn is_worktree_context(resolved_path: &Path, cwd: &str) -> bool {
             Some(n) => n,
             None => continue,
         };
-        if dir_name == "worktrees" {
-            if let Some(parent) = ancestor.parent() {
-                if parent.file_name().and_then(|n| n.to_str()) == Some(".claude") {
-                    // Resolve the authorization root too. Comparing a
-                    // canonical candidate to a lexical cwd would reject safe
-                    // in-tree symlinks or preserve a symlinked escape.
-                    let resolved_cwd = crate::paths::resolve_path(cwd);
-                    return resolved_path.starts_with(Path::new(&resolved_cwd));
-                }
-            }
+        if dir_name == "worktrees"
+            && let Some(parent) = ancestor.parent()
+            && parent.file_name().and_then(|n| n.to_str()) == Some(".claude")
+        {
+            // Resolve the authorization root too. Comparing a
+            // canonical candidate to a lexical cwd would reject safe
+            // in-tree symlinks or preserve a symlinked escape.
+            let resolved_cwd = crate::paths::resolve_path(cwd);
+            return resolved_path.starts_with(Path::new(&resolved_cwd));
         }
     }
     false

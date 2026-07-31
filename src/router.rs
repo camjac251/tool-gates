@@ -98,10 +98,10 @@ fn check_command_for_session_with_commands(
     for cmd in commands {
         let result = check_single_command(cmd);
 
-        if result.decision != Decision::Block {
-            if let Some(hint) = get_modern_hint(cmd) {
-                hints.push(hint);
-            }
+        if result.decision != Decision::Block
+            && let Some(hint) = get_modern_hint(cmd)
+        {
+            hints.push(hint);
         }
 
         match result.decision {

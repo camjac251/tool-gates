@@ -69,7 +69,7 @@ mise run build-wasm
 mise exec -- mdbook build docs
 ```
 
-Run `mise run build-wasm` when a change affects the browser simulator or the WASM-compatible engine path. The project MSRV is Rust 1.86; do not introduce newer language or standard-library requirements.
+Run `mise run build-wasm` when a change affects the browser simulator or the WASM-compatible engine path. The project MSRV is Rust 1.97.1; do not introduce newer language or standard-library requirements.
 
 ## Source-of-Truth Invariants
 

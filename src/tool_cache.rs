@@ -241,10 +241,11 @@ pub fn detect_tools() -> ToolCache {
 /// Get the tool cache, loading from disk or detecting if needed
 pub fn get_cache() -> ToolCache {
     // Try to load existing cache
-    if let Some(cache) = load_cache() {
-        if cache.is_valid() && cache.has_all_known_tools() {
-            return cache;
-        }
+    if let Some(cache) = load_cache()
+        && cache.is_valid()
+        && cache.has_all_known_tools()
+    {
+        return cache;
     }
 
     // Cache missing or expired - detect tools and save

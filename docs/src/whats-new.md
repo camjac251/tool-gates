@@ -1100,5 +1100,5 @@
   </details>
   <p class="note">
     <svg class="alert" aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
-    <span><b>Release automation via release-plz.</b> Push to main triggers a version-bump PR; merging it cuts the GitHub release with cross-compiled binaries (linux x86_64/arm64, macos x86_64/arm64, windows x86_64/arm64) and updates the Homebrew tap. MSRV is Rust 1.86. Note: Releases prior to v1.5.4 have been purged on GitHub and do not have downloadable pre-built assets; Homebrew tap installation requires v1.5.6 or newer.</span>
+    <span><b>Release automation via release-plz.</b> Push to main triggers a version-bump PR; merging it cuts the GitHub release with cross-compiled binaries (linux x86_64/arm64, macos x86_64/arm64, windows x86_64/arm64) and updates the Homebrew tap. MSRV is Rust 1.97.1. Note: Releases prior to v1.5.4 have been purged on GitHub and do not have downloadable pre-built assets; Homebrew tap installation requires v1.5.6 or newer.</span>
   </p>

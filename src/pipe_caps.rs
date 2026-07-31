@@ -78,10 +78,10 @@ pub(crate) fn check_hard_deny_patterns_with_features(
     command_string: &str,
     features: &crate::config::Features,
 ) -> Option<HookOutput> {
-    if features.head_tail_pipe_block {
-        if let Some(output) = check_head_tail_pipe(command_string) {
-            return Some(output);
-        }
+    if features.head_tail_pipe_block
+        && let Some(output) = check_head_tail_pipe(command_string)
+    {
+        return Some(output);
     }
 
     None
@@ -115,10 +115,11 @@ fn normalize_token(tok: &str) -> &str {
 /// True for a token that is a leading `VAR=value` env assignment or a
 /// redirection operator, neither of which is the command program.
 fn is_assignment_or_redirect(tok: &str) -> bool {
-    if let Some((key, _)) = tok.split_once('=') {
-        if !key.is_empty() && key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
-            return true;
-        }
+    if let Some((key, _)) = tok.split_once('=')
+        && !key.is_empty()
+        && key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+    {
+        return true;
     }
     tok.starts_with('>') || tok.starts_with('<') || tok.starts_with("2>") || tok.starts_with("&>")
 }
@@ -310,10 +311,11 @@ fn numeric_line_count(args: &[String]) -> Option<u64> {
         }
         if let Some(value) = arg.strip_prefix("--lines=") {
             count = Some(unsigned_decimal(value)?);
-        } else if let Some(value) = arg.strip_prefix('-') {
-            if !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()) {
-                count = unsigned_decimal(value);
-            }
+        } else if let Some(value) = arg.strip_prefix('-')
+            && !value.is_empty()
+            && value.bytes().all(|byte| byte.is_ascii_digit())
+        {
+            count = unsigned_decimal(value);
         }
         index += 1;
     }

@@ -315,10 +315,10 @@ fn normalize_antigravity_pre_tool_use(v: serde_json::Value) -> AntigravityPayloa
     };
     // `args` may be absent, but a present non-object `args` would silently drop
     // the command/path and fail open. Reject it as malformed instead.
-    if let Some(args) = tool_call.get("args") {
-        if !args.is_object() {
-            return AntigravityPayload::Malformed;
-        }
+    if let Some(args) = tool_call.get("args")
+        && !args.is_object()
+    {
+        return AntigravityPayload::Malformed;
     }
 
     // Start from the raw args so nothing is lost, then layer the canonical keys
@@ -788,12 +788,12 @@ fn handle_bash_pre_tool_use(hook_input: &HookInput, client: Client) {
         // so only the first program's pattern (e.g. ast-grep:*) actually works
         // to allow the entire pipeline. Per-subcommand patterns (e.g.
         // python3:*) are informational and cover standalone usage.
-        if commands.len() > 1 {
-            if let Some(first) = commands.first() {
-                let mut full_cmd_patterns = suggest_patterns(first);
-                full_cmd_patterns.extend(suggested_patterns);
-                suggested_patterns = full_cmd_patterns;
-            }
+        if commands.len() > 1
+            && let Some(first) = commands.first()
+        {
+            let mut full_cmd_patterns = suggest_patterns(first);
+            full_cmd_patterns.extend(suggested_patterns);
+            suggested_patterns = full_cmd_patterns;
         }
 
         // Deduplicate patterns while preserving order
@@ -895,13 +895,13 @@ fn serialize_permission_request_for_client(
                             "tool-gates: Codex doesn't honor `updatedInput` on PermissionRequest; dropping rewrite"
                         );
                     }
-                    if let Some(perms) = updated_permissions {
-                        if !perms.is_empty() {
-                            eprintln!(
-                                "tool-gates: Codex doesn't honor `updatedPermissions` on PermissionRequest; dropping {} entry/entries (worktree edits will keep prompting)",
-                                perms.len()
-                            );
-                        }
+                    if let Some(perms) = updated_permissions
+                        && !perms.is_empty()
+                    {
+                        eprintln!(
+                            "tool-gates: Codex doesn't honor `updatedPermissions` on PermissionRequest; dropping {} entry/entries (worktree edits will keep prompting)",
+                            perms.len()
+                        );
                     }
                 }
                 PermissionRequestDecision::Deny { message, interrupt } => {
@@ -992,11 +992,11 @@ fn handle_post_tool_use_hook(input: serde_json::Value, client: Client) {
             (Some(track), true) => Some(track),
             (Some(track), false) => {
                 let mut combined = String::new();
-                if let Some(ref hso) = track.hook_specific_output {
-                    if let Some(ref existing) = hso.additional_context {
-                        combined.push_str(existing);
-                        combined.push_str("\n\n");
-                    }
+                if let Some(ref hso) = track.hook_specific_output
+                    && let Some(ref existing) = hso.additional_context
+                {
+                    combined.push_str(existing);
+                    combined.push_str("\n\n");
                 }
                 combined.push_str(&codex_hints);
                 Some(tool_gates::models::PostToolUseOutput::with_context(
@@ -1038,25 +1038,24 @@ fn handle_post_tool_use_hook(input: serde_json::Value, client: Client) {
             .content_pairs();
 
         let mut outputs: Vec<tool_gates::models::PostToolUseOutput> = Vec::new();
-        if config.features.security_reminders {
-            if let Some(output) =
+        if config.features.security_reminders
+            && let Some(output) =
                 tool_gates::security_reminders::check_security_reminders_post_for_content(
                     &content_pairs,
                     &config.security_reminders,
                     &post_input.session_id,
                     client,
                 )
-            {
-                outputs.push(output);
-            }
+        {
+            outputs.push(output);
         }
-        if config.features.design_lint {
-            if let Some(output) = tool_gates::design_lint::check_design_lint_post_for_content(
+        if config.features.design_lint
+            && let Some(output) = tool_gates::design_lint::check_design_lint_post_for_content(
                 &content_pairs,
                 &config.design_lint,
-            ) {
-                outputs.push(output);
-            }
+            )
+        {
+            outputs.push(output);
         }
 
         // One source: emit as-is (byte-identical to the prior security-only
@@ -1405,12 +1404,11 @@ fn collect_tool_gates_hook_commands(value: &serde_json::Value, out: &mut Vec<Str
     match value {
         serde_json::Value::Object(map) => {
             for (key, child) in map {
-                if key == "command" {
-                    if let Some(cmd) = child.as_str() {
-                        if cmd.contains("tool-gates") || cmd.contains("bash-gates") {
-                            out.push(cmd.to_string());
-                        }
-                    }
+                if key == "command"
+                    && let Some(cmd) = child.as_str()
+                    && (cmd.contains("tool-gates") || cmd.contains("bash-gates"))
+                {
+                    out.push(cmd.to_string());
                 }
                 collect_tool_gates_hook_commands(child, out);
             }
@@ -3514,16 +3512,16 @@ fn handle_doctor_subcommand(args: &[String]) {
                     for entry in arr {
                         if let Some(inner_hooks) = entry.get("hooks").and_then(|h| h.as_array()) {
                             for hook in inner_hooks {
-                                if let Some(cmd) = hook.get("command").and_then(|c| c.as_str()) {
-                                    if cmd.contains(".py") || cmd.contains("uvx") {
-                                        let msg = format!(
-                                            "Legacy Python hook in claude {}: {}",
-                                            scope,
-                                            cmd.chars().take(80).collect::<String>()
-                                        );
-                                        eprintln!("  ⚠ {}", msg);
-                                        issues.push(msg);
-                                    }
+                                if let Some(cmd) = hook.get("command").and_then(|c| c.as_str())
+                                    && (cmd.contains(".py") || cmd.contains("uvx"))
+                                {
+                                    let msg = format!(
+                                        "Legacy Python hook in claude {}: {}",
+                                        scope,
+                                        cmd.chars().take(80).collect::<String>()
+                                    );
+                                    eprintln!("  ⚠ {}", msg);
+                                    issues.push(msg);
                                 }
                             }
                         }
@@ -3579,16 +3577,16 @@ fn handle_doctor_subcommand(args: &[String]) {
                     for entry in arr {
                         if let Some(inner_hooks) = entry.get("hooks").and_then(|h| h.as_array()) {
                             for hook in inner_hooks {
-                                if let Some(cmd) = hook.get("command").and_then(|c| c.as_str()) {
-                                    if cmd.contains(".py") || cmd.contains("uvx") {
-                                        let msg = format!(
-                                            "Legacy Python hook in gemini {}: {}",
-                                            scope,
-                                            cmd.chars().take(80).collect::<String>()
-                                        );
-                                        eprintln!("  ⚠ {}", msg);
-                                        issues.push(msg);
-                                    }
+                                if let Some(cmd) = hook.get("command").and_then(|c| c.as_str())
+                                    && (cmd.contains(".py") || cmd.contains("uvx"))
+                                {
+                                    let msg = format!(
+                                        "Legacy Python hook in gemini {}: {}",
+                                        scope,
+                                        cmd.chars().take(80).collect::<String>()
+                                    );
+                                    eprintln!("  ⚠ {}", msg);
+                                    issues.push(msg);
                                 }
                             }
                         }
@@ -3675,16 +3673,16 @@ fn handle_doctor_subcommand(args: &[String]) {
                     for entry in arr {
                         if let Some(inner_hooks) = entry.get("hooks").and_then(|h| h.as_array()) {
                             for hook in inner_hooks {
-                                if let Some(cmd) = hook.get("command").and_then(|c| c.as_str()) {
-                                    if cmd.contains(".py") || cmd.contains("uvx") {
-                                        let msg = format!(
-                                            "Legacy Python hook in codex {}: {}",
-                                            scope,
-                                            cmd.chars().take(80).collect::<String>()
-                                        );
-                                        eprintln!("  ⚠ {}", msg);
-                                        issues.push(msg);
-                                    }
+                                if let Some(cmd) = hook.get("command").and_then(|c| c.as_str())
+                                    && (cmd.contains(".py") || cmd.contains("uvx"))
+                                {
+                                    let msg = format!(
+                                        "Legacy Python hook in codex {}: {}",
+                                        scope,
+                                        cmd.chars().take(80).collect::<String>()
+                                    );
+                                    eprintln!("  ⚠ {}", msg);
+                                    issues.push(msg);
                                 }
                             }
                         }

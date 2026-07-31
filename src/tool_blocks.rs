@@ -135,10 +135,10 @@ pub fn check_tool_block(
         }
 
         // Skip rule if the required alternative tool isn't installed
-        if let Some(ref required) = rule.requires_tool {
-            if !get_cache().is_available(required) {
-                continue;
-            }
+        if let Some(ref required) = rule.requires_tool
+            && !get_cache().is_available(required)
+        {
+            continue;
         }
 
         // Unconditional block

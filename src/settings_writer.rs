@@ -257,13 +257,13 @@ pub fn remove_rule(scope: Scope, pattern: &str) -> std::io::Result<bool> {
         let mut removed = false;
 
         for rule_type in ["allow", "ask", "deny"] {
-            if let Some(rules) = permissions.get_mut(rule_type) {
-                if let Some(arr) = rules.as_array_mut() {
-                    let len_before = arr.len();
-                    arr.retain(|r| r.as_str() != Some(&formatted));
-                    if arr.len() < len_before {
-                        removed = true;
-                    }
+            if let Some(rules) = permissions.get_mut(rule_type)
+                && let Some(arr) = rules.as_array_mut()
+            {
+                let len_before = arr.len();
+                arr.retain(|r| r.as_str() != Some(&formatted));
+                if arr.len() < len_before {
+                    removed = true;
                 }
             }
         }
