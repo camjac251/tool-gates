@@ -92,7 +92,7 @@ serial_test = "3" # Serialize tests that mutate process-global env vars
 serde = { version = "1", features = ["derive"] }
 toml = "1.0"
 syn = "2"
-prettyplease = "0.2"
+prettyplease = "0.3"
 
 [profile.release]
 lto = true
