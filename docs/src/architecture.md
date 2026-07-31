@@ -22,7 +22,7 @@
         <span class="lc-icon">▸</span>
         <span class="lc-tag">raw_floor.rs</span>
         <div class="lc-title">Raw-string scan</div>
-        <div class="lc-sub">Shared pre-AST checks cover the top-level command plus executable strings inside local shell wrappers and <code>xargs ... shell -c</code>. The hard/soft-ask catalog lives in <code>security_floor.rs</code>; output-cap hard denials live in <code>pipe_caps.rs</code> and run first.</div>
+        <div class="lc-sub">Shared pre-AST checks cover the top-level command plus executable strings inside local shell wrappers and <code>xargs ... shell -c</code>. The hard/soft-ask catalog lives in <code>security_floor.rs</code>; output-cap hard denials live in <code>pipe_caps.rs</code> and run first. A cap denial records a stable cause plus semantic recovery actions, including a source-file selection only when the parser confirms one unambiguous file reader.</div>
       </div>
       <div class="lc-edge"></div>
       <div class="lc-node hook">
@@ -49,14 +49,14 @@
       <div class="lc-node exec">
         <span class="lc-icon">▷</span>
         <div class="lc-title">Decision on stdout</div>
-        <div class="lc-sub">Serialised per client. Claude: nested <code>hookSpecificOutput.permissionDecision</code>. Codex: empty stdout for allow/ask, nested <code>permissionDecision: "deny"</code> for blocks. Antigravity: flat <code>{decision, reason}</code> for the tightening decisions (<code>deny</code>/<code>ask</code>/<code>force_ask</code>), empty stdout for allow and no-opinion (a hook <code>allow</code> is inert, since agy keeps the strictest decision). Gemini (deprecated): flat <code>decision</code> + <code>reason</code> (tool-gates emits <code>"block"</code> for hard blocks; Gemini also accepts <code>"deny"</code>, and exit code 2 blocks). Modern-CLI hints ride on <code>additionalContext</code>.</div>
+        <div class="lc-sub">Serialised per client. Claude: nested <code>hookSpecificOutput.permissionDecision</code> with recovery in <code>additionalContext</code>. Codex: empty stdout for non-denies; blocks use nested <code>permissionDecision: "deny"</code> with recovery in <code>additionalContext</code>. Antigravity: flat tightening decisions with deny recovery folded into <code>reason</code>, empty stdout for allow and no-opinion. Gemini (deprecated): flat <code>decision</code> + <code>reason</code>; block recovery is folded into the agent-facing reason, while nonblocking context uses the user-facing <code>systemMessage</code>. At this boundary, <code>recovery.rs</code> maps semantic file recovery to <code>Read</code>, <code>read_file</code>, <code>view_file</code>, or a conditional shell fallback according to <code>FILE_TOOL_SPECS</code>.</div>
       </div>
     </div>
   </figure>
   <div class="sec-head">
     <p class="lbl">Task expansion</p>
     <h2>Wrapper tasks are evaluated by their contents.</h2>
-    <p>A task runner's name is not enough to classify its effects. Tool Gates resolves supported task definitions, checks the commands they invoke, and uses the strictest resulting decision.</p>
+    <p>A task runner's name is not enough to classify its effects. Tool Gates resolves supported task definitions, checks the commands they invoke, and uses the strictest resulting decision. Recovery actions survive package-script and mise composition, so a wrapper cannot discard the corrective path attached by an inner denial.</p>
   </div>
   <div class="hook-cards">
     <article class="hook-card">
@@ -94,8 +94,8 @@
   </div>
   <div class="sec-head">
     <p class="lbl">Side data</p>
-    <h2>Hints, tracking, security scan.</h2>
-    <p>Three subsystems run alongside the main pipeline without changing the decision.</p>
+    <h2>Recovery, hints, tracking, security scan.</h2>
+    <p>Four subsystems run alongside the main pipeline without changing the decision.</p>
   </div>
   <div class="data-table-frame">
     <div class="data-table-scroll" data-table-scroll>
@@ -104,7 +104,8 @@
       <tr><th>Subsystem</th><th>Source</th><th>What it does</th></tr>
     </thead>
     <tbody>
-      <tr><td>Modern CLI hints</td><td><code>hints.rs</code></td><td>For allowed commands using legacy tools, append a suggestion on <code>additionalContext</code>. Gated on the modern tool being installed (7-day cache in <code>tool_cache.rs</code>). Session-deduped via <code>hint_tracker.rs</code>.</td></tr>
+      <tr><td>Recovery guidance</td><td><code>recovery.rs</code></td><td>Stores corrective steps as semantic actions, then renders them with the active client's registered capabilities. Causes remain stable across clients; native tool names appear only at serialization. Surfaces without an active hook client, such as the WASM simulator, render neutral recovery without naming a tool.</td></tr>
+      <tr><td>Modern CLI hints</td><td><code>hints.rs</code></td><td>For allowed commands using legacy tools, attach a client-neutral suggestion through the context channel that client supports: Claude agent context, Gemini's user-facing <code>systemMessage</code>, Codex PostToolUse context, and no output for Antigravity no-opinion decisions. Gated on the modern tool being installed (7-day cache in <code>tool_cache.rs</code>). Session-deduped via <code>hint_tracker.rs</code>.</td></tr>
       <tr><td>Approval tracking</td><td><code>tracking.rs</code></td><td>PreToolUse → PostToolUse correlation with 24h TTL. Successful asks land in <code>~/.cache/tool-gates/pending.jsonl</code> for the review TUI.</td></tr>
       <tr><td>Security reminders</td><td><code>security_reminders.rs</code></td><td>Three-tier scan of Write/Edit bodies. Tier 1 denies source writes before they land, with doc-file secrets nudged after write; Tier 2 nudges via PostToolUse; Tier 3 warns on <code>additionalContext</code>. See the <a href="security-reminders.html">Security reminders</a> page.</td></tr>
     </tbody>

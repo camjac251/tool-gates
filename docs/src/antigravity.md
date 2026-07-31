@@ -50,7 +50,7 @@
       <tr><td>Allow (known-safe)</td><td>empty stdout</td><td>tool-gates recognizes the command as safe, but a hook <code>allow</code> is the lowest rank and inert on agy, so it emits nothing and lets agy's engine decide. The native <code>permissions.allow</code> list is what stops the prompt.</td></tr>
       <tr><td>Ask (soft)</td><td><code>{"decision":"ask"}</code></td><td>Prompts, respecting the user's "Always Allow" grants. Used for routine mutations and unknown commands.</td></tr>
       <tr><td>Ask (hard floor)</td><td><code>{"decision":"force_ask"}</code></td><td>Pipe-to-shell, <code>eval</code>, and dangerous substitution. Always prompts, ignoring any "Always Allow" grant, so the floor can never be permanently granted away.</td></tr>
-      <tr><td>Deny</td><td><code>{"decision":"deny"}</code></td><td>Hard block. Remediation text is folded into <code>reason</code> since the Pre output has no <code>additionalContext</code> field.</td></tr>
+      <tr><td>Deny</td><td><code>{"decision":"deny"}</code></td><td>Hard block. Remediation text is folded into <code>reason</code> since the Pre output has no <code>additionalContext</code> field. A confirmed source-file recovery names Antigravity's native <code>view_file</code> tool; streamed output never receives file-reader advice.</td></tr>
     </tbody>
   </table>
     </div>

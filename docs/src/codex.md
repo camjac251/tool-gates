@@ -9,7 +9,7 @@
   <div class="sec-head" style="margin-top: var(--s-6)">
     <p class="lbl">Where the prompt comes from</p>
     <h2>Codex's <code>approval_policy</code> owns the prompt, not tool-gates.</h2>
-    <p>On Codex a tool-gates <code>ask</code> is pass-through. PreToolUse only honours <code>deny</code>, so allow, ask, and unknown all emit empty stdout and hand the decision back to Codex. Whether the user is then prompted depends entirely on Codex's <code>approval_policy</code>.</p>
+    <p>On Codex a tool-gates <code>ask</code> is pass-through. Codex PreToolUse has no supported ask decision; its only positive decision is <code>allow</code> paired with <code>updatedInput</code>. Tool Gates does not turn an ask-level rewrite into an auto-running allow, so all non-denies emit empty stdout and hand the decision back to Codex. Whether the user is then prompted depends entirely on Codex's <code>approval_policy</code>.</p>
   </div>
   <div class="data-table-frame">
     <div class="data-table-scroll" data-table-scroll>
@@ -80,11 +80,15 @@
   <div class="hook-cards">
     <article class="hook-card">
       <h3>Deny always works</h3>
-      <p>A hard <code>deny</code> lands on both PreToolUse and PermissionRequest. The security floor (destructive <code>rm</code>, pipe-to-shell, your own deny rules) is fully enforced on Codex. Every PreToolUse deny includes a nonempty <code>permissionDecisionReason</code>, which Codex displays to the operator as hook feedback.</p>
+      <p>A hard <code>deny</code> lands on both PreToolUse and PermissionRequest. The security floor (destructive <code>rm</code>, pipe-to-shell, your own deny rules) is fully enforced on Codex. Every PreToolUse deny includes a nonempty <code>permissionDecisionReason</code>, which Codex displays as hook feedback. Structured recovery stays separate in Codex's supported PreToolUse <code>additionalContext</code>, which Codex records before returning the blocked result.</p>
     </article>
     <article class="hook-card">
-      <h3>Allow only via PermissionRequest</h3>
-      <p>A positive <code>allow</code> that auto-approves and suppresses the prompt is honoured only on the PermissionRequest hook, and only under <code>untrusted</code>. PreToolUse can never allow, ask, or rewrite input; tool-gates only emits Codex-shaped JSON there for hard denies. (Codex can accept <code>additionalContext</code> on PreToolUse, though tool-gates currently carries hints and Tier-3 warnings on PostToolUse.)</p>
+      <h3>Recovery matches Codex capabilities</h3>
+      <p>The shared gate never embeds another client's tool name. For an output cap over one confirmed source file, Codex receives the requested first or last line count plus a conditional <code>bat -r</code> example. For streamed output such as <code>git log | sed -n '1,10p'</code>, no file reader is suggested; recovery stays at the producer or persisted complete output.</p>
+    </article>
+    <article class="hook-card">
+      <h3>Auto-approval stays on PermissionRequest</h3>
+      <p>A positive <code>allow</code> that auto-approves and suppresses the prompt is honoured on PermissionRequest under <code>untrusted</code>. PreToolUse also accepts <code>allow</code>, but only as an input rewrite paired with <code>updatedInput</code>; plain allow and ask are invalid. Tool Gates deliberately does not map its ask-level command rewrites to that form because doing so would auto-run the replacement. Non-deny hints and Tier-3 warnings remain on PostToolUse; deny recovery uses PreToolUse <code>additionalContext</code>.</p>
     </article>
     <article class="hook-card">
       <h3>Safe-reads are invisible</h3>
@@ -102,7 +106,7 @@
   <div class="sec-head" style="margin-top: var(--s-7)">
     <p class="lbl">Why deny-only</p>
     <h2>There is no <code>ask</code> on Codex PreToolUse.</h2>
-    <p>On Codex, PreToolUse accepts only <code>deny</code>; no hook decision can force a prompt for an otherwise-permitted command. That is why tool-gates can only <code>deny</code> on PreToolUse, and why routing a safe-read to a prompt happens through execpolicy rather than a hook decision.</p>
+    <p>Codex PreToolUse has no ask decision, so no hook output can force a prompt for an otherwise-permitted command. Its positive <code>allow</code> form is reserved for input rewrites and is not a prompt substitute. Tool Gates therefore keeps this phase deny-only, and routing a safe-read to a prompt happens through execpolicy rather than a hook decision.</p>
   </div>
   <div class="config-block">
     <header>

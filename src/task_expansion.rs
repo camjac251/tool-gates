@@ -41,6 +41,7 @@ pub(crate) fn check_mise_task(task_name: &str, cwd: &str, permission_mode: &str)
 
     // Check each command through the gate engine
     let mut block_reasons: Vec<String> = Vec::new();
+    let mut block_recoveries = Vec::new();
     let mut ask_reasons: Vec<String> = Vec::new();
     // One irreversible command anywhere in the task holds the whole task's ask.
     let mut hold_in_auto = false;
@@ -53,6 +54,7 @@ pub(crate) fn check_mise_task(task_name: &str, cwd: &str, permission_mode: &str)
             PermissionDecision::Deny => {
                 let reason = result.reason.as_deref().unwrap_or("Blocked");
                 block_reasons.push(format!("mise {task_name}: {reason}"));
+                block_recoveries.extend(result.recovery_actions);
             }
             // Defer means approval is still needed; under auto the inner check
             // returns Defer where it used to return Ask, so folding it into the
@@ -73,7 +75,7 @@ pub(crate) fn check_mise_task(task_name: &str, cwd: &str, permission_mode: &str)
         } else {
             block_reasons.join("; ")
         };
-        return HookOutput::deny(&combined);
+        return HookOutput::deny(&combined).with_recoveries(block_recoveries);
     }
 
     if !ask_reasons.is_empty() {
@@ -131,6 +133,7 @@ pub(crate) fn check_package_script(
         PermissionDecision::Deny => {
             let reason = result.reason.as_deref().unwrap_or("Blocked");
             HookOutput::deny(&format!("{pm} run {script_name}: {reason}"))
+                .with_recoveries(result.recovery_actions)
         }
         PermissionDecision::Ask => {
             // In acceptEdits mode, check if the underlying command is a file-editing command
@@ -223,6 +226,7 @@ pub(crate) fn check_command_expanded(
 
     // Check each parsed command, tracking cwd changes from "cd" commands
     let mut block_reasons: Vec<String> = Vec::new();
+    let mut block_recoveries = Vec::new();
     let mut ask_reasons: Vec<String> = Vec::new();
     let mut hold_in_auto = false;
     let mut effective_cwd = std::path::PathBuf::from(cwd);
@@ -248,6 +252,7 @@ pub(crate) fn check_command_expanded(
             match result.decision {
                 PermissionDecision::Deny => {
                     block_reasons.push(result.reason.unwrap_or_else(|| "Blocked".to_string()));
+                    block_recoveries.extend(result.recovery_actions);
                 }
                 // Defer is an approval-needed outcome exactly like Ask -- under
                 // auto mode the inner check produces Defer rather than Ask, and
@@ -305,7 +310,7 @@ pub(crate) fn check_command_expanded(
         } else {
             block_reasons.join("; ")
         };
-        return HookOutput::deny(&combined);
+        return HookOutput::deny(&combined).with_recoveries(block_recoveries);
     }
 
     if !ask_reasons.is_empty() {
@@ -330,6 +335,7 @@ mod tests {
     use crate::models::*;
     #[allow(unused_imports)]
     use crate::parser::*;
+    use crate::recovery::{FileSelection, RecoveryAction};
     #[allow(unused_imports)]
     use crate::router::tests::{get_claude_wire_decision, get_decision, get_reason};
     #[allow(unused_imports)]
@@ -656,6 +662,87 @@ run = "echo hello"
             );
 
             let _ = std::fs::remove_dir_all(&tmp);
+        }
+
+        #[test]
+        fn package_script_preserves_output_cap_recovery() {
+            let temp = tempfile::tempdir().expect("package tempdir");
+            std::fs::write(
+                temp.path().join("package.json"),
+                r#"{"scripts": {"inspect": "cat report.txt | head -n 4"}}"#,
+            )
+            .expect("write package.json");
+
+            let result =
+                check_package_script("npm", "inspect", &temp.path().to_string_lossy(), "default");
+
+            assert_eq!(result.decision, PermissionDecision::Deny);
+            assert!(
+                result
+                    .recovery_actions
+                    .contains(&RecoveryAction::ReadSourceFile {
+                        selection: FileSelection::First(4),
+                    }),
+                "package wrapper dropped recovery: {:?}",
+                result.recovery_actions
+            );
+        }
+
+        #[test]
+        fn mise_task_preserves_output_cap_recovery() {
+            let temp = tempfile::tempdir().expect("mise tempdir");
+            std::fs::write(
+                temp.path().join("mise.toml"),
+                r#"
+[tasks.inspect]
+run = "cat report.txt | tail -n 6"
+"#,
+            )
+            .expect("write mise.toml");
+
+            let result = check_mise_task("inspect", &temp.path().to_string_lossy(), "default");
+
+            assert_eq!(result.decision, PermissionDecision::Deny);
+            assert!(
+                result
+                    .recovery_actions
+                    .contains(&RecoveryAction::ReadSourceFile {
+                        selection: FileSelection::Last(6),
+                    }),
+                "mise wrapper dropped recovery: {:?}",
+                result.recovery_actions
+            );
+        }
+
+        #[test]
+        fn nested_package_script_preserves_output_cap_recovery() {
+            let temp = tempfile::tempdir().expect("nested task tempdir");
+            std::fs::write(
+                temp.path().join("mise.toml"),
+                r#"
+[tasks.inspect]
+run = "npm run inspect"
+"#,
+            )
+            .expect("write mise.toml");
+            std::fs::write(
+                temp.path().join("package.json"),
+                r#"{"scripts": {"inspect": "cat report.txt | head -n 9"}}"#,
+            )
+            .expect("write package.json");
+
+            let result = check_mise_task("inspect", &temp.path().to_string_lossy(), "default");
+
+            assert_eq!(result.decision, PermissionDecision::Deny);
+            assert!(
+                result
+                    .recovery_actions
+                    .contains(&RecoveryAction::ReadSourceFile {
+                        selection: FileSelection::First(9),
+                    }),
+                "nested package wrapper dropped recovery: {:?}",
+                result.recovery_actions
+            );
         }
     }
 }

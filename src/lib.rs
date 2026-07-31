@@ -70,6 +70,7 @@ pub mod patterns;
 pub mod permission_request;
 pub mod pipe_caps;
 pub mod raw_floor;
+pub mod recovery;
 pub mod router;
 pub mod rules_export;
 pub mod rules_schema;

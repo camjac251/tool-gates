@@ -422,7 +422,13 @@ impl PermissionDecision {
 pub struct HookOutput {
     pub decision: PermissionDecision,
     pub reason: Option<String>,
+    /// Client-neutral supplemental context rendered through the wire channel
+    /// supported by the selected client.
     pub context: Option<String>,
+    /// Semantic recovery steps rendered with the selected client's tool
+    /// vocabulary at serialization time. The engine stores actions rather
+    /// than prose so safety decisions stay provider-agnostic.
+    pub recovery_actions: Vec<crate::recovery::RecoveryAction>,
     pub updated_command: Option<String>,
     /// When true and decision is `Deny`, the Claude serializer emits a
     /// top-level `systemMessage` alongside the nested
@@ -453,6 +459,7 @@ impl HookOutput {
             decision: PermissionDecision::Approve,
             reason: None,
             context: None,
+            recovery_actions: Vec::new(),
             updated_command: None,
             surface_to_user: false,
             force: false,
@@ -466,6 +473,7 @@ impl HookOutput {
             decision: PermissionDecision::Allow,
             reason: reason.map(String::from),
             context: None,
+            recovery_actions: Vec::new(),
             updated_command: None,
             surface_to_user: false,
             force: false,
@@ -473,12 +481,13 @@ impl HookOutput {
         }
     }
 
-    /// Return explicit allow with additional context for Claude
+    /// Return explicit allow with client-neutral supplemental context.
     pub fn allow_with_context(reason: Option<&str>, context: &str) -> Self {
         Self {
             decision: PermissionDecision::Allow,
             reason: reason.map(String::from),
             context: Some(context.to_string()),
+            recovery_actions: Vec::new(),
             updated_command: None,
             surface_to_user: false,
             force: false,
@@ -492,6 +501,7 @@ impl HookOutput {
             decision: PermissionDecision::Ask,
             reason: Some(reason.to_string()),
             context: None,
+            recovery_actions: Vec::new(),
             updated_command: None,
             surface_to_user: false,
             force: false,
@@ -499,12 +509,13 @@ impl HookOutput {
         }
     }
 
-    /// Return ask with additional context for Claude
+    /// Return ask with client-neutral supplemental context.
     pub fn ask_with_context(reason: &str, context: &str) -> Self {
         Self {
             decision: PermissionDecision::Ask,
             reason: Some(reason.to_string()),
             context: Some(context.to_string()),
+            recovery_actions: Vec::new(),
             updated_command: None,
             surface_to_user: false,
             force: false,
@@ -521,6 +532,7 @@ impl HookOutput {
             decision: PermissionDecision::Defer,
             reason: Some(reason.into()),
             context,
+            recovery_actions: Vec::new(),
             updated_command: None,
             surface_to_user: false,
             force: false,
@@ -538,6 +550,7 @@ impl HookOutput {
             decision: PermissionDecision::Ask,
             reason: Some(reason.to_string()),
             context: context.map(String::from),
+            recovery_actions: Vec::new(),
             updated_command: Some(new_command.to_string()),
             surface_to_user: false,
             force: false,
@@ -555,6 +568,7 @@ impl HookOutput {
             decision: PermissionDecision::Deny,
             reason: Some(reason.to_string()),
             context: None,
+            recovery_actions: Vec::new(),
             updated_command: None,
             surface_to_user: false,
             force: false,
@@ -573,6 +587,7 @@ impl HookOutput {
             decision: PermissionDecision::Deny,
             reason: Some(reason.to_string()),
             context: Some(context.to_string()),
+            recovery_actions: Vec::new(),
             updated_command: None,
             surface_to_user: false,
             force: false,
@@ -587,6 +602,29 @@ impl HookOutput {
     /// already displayed as hook feedback.
     pub fn user_visible(mut self) -> Self {
         self.surface_to_user = true;
+        self
+    }
+
+    /// Attach one semantic recovery step. Duplicate actions are suppressed
+    /// while preserving the first-seen order used by the client renderer.
+    pub fn with_recovery(mut self, action: crate::recovery::RecoveryAction) -> Self {
+        if !self.recovery_actions.contains(&action) {
+            self.recovery_actions.push(action);
+        }
+        self
+    }
+
+    /// Attach semantic recovery steps, suppressing duplicates while
+    /// preserving their first-seen order across composed command wrappers.
+    pub fn with_recoveries(
+        mut self,
+        actions: impl IntoIterator<Item = crate::recovery::RecoveryAction>,
+    ) -> Self {
+        for action in actions {
+            if !self.recovery_actions.contains(&action) {
+                self.recovery_actions.push(action);
+            }
+        }
         self
     }
 
@@ -613,6 +651,17 @@ impl HookOutput {
             Client::Gemini => self.to_gemini_json(),
             Client::Codex => self.to_codex_json(),
             Client::Antigravity => self.to_antigravity_json(),
+        }
+    }
+
+    fn rendered_context(&self, client: Client) -> Option<String> {
+        let recovery = crate::recovery::render_recovery_actions(client, &self.recovery_actions);
+        if recovery.is_empty() {
+            return self.context.clone();
+        }
+        match self.context.as_deref() {
+            Some(context) if !context.is_empty() => Some(format!("{context}\n\n{recovery}")),
+            _ => Some(recovery),
         }
     }
 
@@ -657,7 +706,7 @@ impl HookOutput {
             hso.insert("updatedInput".to_string(), updated_input);
         }
 
-        if let Some(ref ctx) = self.context {
+        if let Some(ctx) = self.rendered_context(Client::Claude) {
             hso.insert("additionalContext".to_string(), serde_json::json!(ctx));
         }
 
@@ -687,7 +736,11 @@ impl HookOutput {
     /// Serialize to Gemini CLI wire format.
     ///
     /// Approve: `{"decision":"allow"}`
-    /// Others: `{"decision":"allow|ask|block","reason":"..."}` with optional hookSpecificOutput for extras
+    /// Deny: `{"decision":"block","reason":"cause\n\nrecovery"}`
+    /// Allow/Ask: flat `decision` + `reason`, with supplemental context in the
+    /// user-facing `systemMessage`.
+    /// Command rewrites additionally use
+    /// `hookSpecificOutput: {"hookEventName":"BeforeTool","tool_input":...}`.
     fn to_gemini_json(&self) -> serde_json::Value {
         if self.decision == PermissionDecision::Approve {
             return serde_json::json!({ "decision": "allow" });
@@ -709,17 +762,44 @@ impl HookOutput {
         };
         out.insert("decision".to_string(), serde_json::json!(decision));
 
-        // Reason at top level
-        if let Some(ref reason) = self.reason {
+        // BeforeTool sends a blocking reason to the agent, while
+        // `systemMessage` is the supported user-facing channel for
+        // non-blocking context. `additionalContext` belongs to AfterTool and
+        // is not consumed on this path.
+        let rendered_context = self.rendered_context(Client::Gemini);
+        if self.decision == PermissionDecision::Deny {
+            let mut reason = self
+                .reason
+                .as_deref()
+                .map(str::trim)
+                .filter(|reason| !reason.is_empty())
+                .unwrap_or("Blocked by tool-gates")
+                .to_string();
+            if let Some(context) = rendered_context
+                .as_deref()
+                .map(str::trim)
+                .filter(|context| !context.is_empty())
+            {
+                reason.push_str("\n\n");
+                reason.push_str(context);
+            }
             out.insert("reason".to_string(), serde_json::json!(reason));
+        } else {
+            if let Some(ref reason) = self.reason {
+                out.insert("reason".to_string(), serde_json::json!(reason));
+            }
+            if let Some(context) = rendered_context
+                .as_deref()
+                .map(str::trim)
+                .filter(|context| !context.is_empty())
+            {
+                out.insert("systemMessage".to_string(), serde_json::json!(context));
+            }
         }
 
-        // Additional context and updated command go in hookSpecificOutput
-        if self.context.is_some() || self.updated_command.is_some() {
+        if self.updated_command.is_some() {
             let mut hook_out = serde_json::Map::new();
-            if let Some(ref ctx) = self.context {
-                hook_out.insert("additionalContext".to_string(), serde_json::json!(ctx));
-            }
+            hook_out.insert("hookEventName".to_string(), serde_json::json!("BeforeTool"));
             if let Some(ref cmd) = self.updated_command {
                 hook_out.insert(
                     "tool_input".to_string(),
@@ -737,13 +817,11 @@ impl HookOutput {
 
     /// Serialize to Codex CLI wire format.
     ///
-    /// Codex's PreToolUse parser only honors `permissionDecision: "deny"`.
-    /// `"allow"` and `"ask"` are marked invalid;
-    /// `updatedInput`/`continue`/`stopReason`/`suppressOutput` are rejected.
-    /// So Codex pass-through means literally empty stdout + exit 0. (Codex does
-    /// accept `additionalContext` on PreToolUse, but tool-gates carries
-    /// hints/Tier-3 on the Codex PostToolUse path, so a non-deny Pre decision
-    /// emits nothing today.)
+    /// Codex's PreToolUse parser honors `permissionDecision: "deny"` and
+    /// accepts `"allow"` only when it carries `updatedInput`; a plain allow and
+    /// `"ask"` are marked invalid. Tool Gates never converts an ask-level
+    /// command rewrite into an auto-running allow, so every non-deny remains
+    /// pass-through: literally empty stdout + exit 0.
     ///
     /// Mapping:
     /// - `Approve` (no opinion)  -> `Value::Null` (caller emits nothing)
@@ -752,10 +830,10 @@ impl HookOutput {
     /// - `Defer`                 -> `Value::Null` (no Codex equivalent)
     /// - `Deny`                  -> `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"..."}}`
     ///
-    /// Hints + Tier-3 warnings (carried in `context`) are dropped here on Pre.
-    /// Tier-3 surfaces via the Codex PostToolUse hint path; deny+context
-    /// remediation text is concatenated into the deny reason since Codex
-    /// has no other place to emit it (the patch was blocked, no Post fires).
+    /// Hints + Tier-3 warnings on non-deny decisions still move to Codex's
+    /// PostToolUse path. On deny, supplemental context is emitted through
+    /// Codex's supported PreToolUse `additionalContext` field, which Codex
+    /// records before returning the blocked result.
     ///
     /// Codex requires a non-empty `permissionDecisionReason` on deny; an
     /// empty reason gets marked as an invalid hook output and the deny is
@@ -770,29 +848,26 @@ impl HookOutput {
         hso.insert("hookEventName".to_string(), serde_json::json!("PreToolUse"));
         hso.insert("permissionDecision".to_string(), serde_json::json!("deny"));
 
-        // Concatenate optional context (Tier-3 remediation, hints) into the
-        // reason: a blocked patch fires no PostToolUse turn to carry it, and
-        // the reason is the only operator-visible field on a Codex deny.
-        let mut reason = self
+        let reason = self
             .reason
             .as_deref()
             .map(str::trim)
             .filter(|s| !s.is_empty())
             .unwrap_or("Blocked by tool-gates")
             .to_string();
-        if let Some(ctx) = self
-            .context
-            .as_deref()
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-        {
-            reason.push_str("\n\n");
-            reason.push_str(ctx);
-        }
         hso.insert(
             "permissionDecisionReason".to_string(),
             serde_json::json!(reason),
         );
+
+        if let Some(context) = self
+            .rendered_context(Client::Codex)
+            .as_deref()
+            .map(str::trim)
+            .filter(|context| !context.is_empty())
+        {
+            hso.insert("additionalContext".to_string(), serde_json::json!(context));
+        }
         serde_json::json!({ "hookSpecificOutput": serde_json::Value::Object(hso) })
     }
 
@@ -868,8 +943,8 @@ impl HookOutput {
                 .filter(|s| !s.is_empty())
                 .unwrap_or("Blocked by tool-gates")
                 .to_string();
-            if let Some(ctx) = self
-                .context
+            let rendered_context = self.rendered_context(Client::Antigravity);
+            if let Some(ctx) = rendered_context
                 .as_deref()
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
@@ -1383,6 +1458,7 @@ mod tests {
             decision: PermissionDecision::Deny,
             reason: Some(String::new()),
             context: None,
+            recovery_actions: Vec::new(),
             updated_command: None,
             surface_to_user: true,
             force: false,
@@ -1492,9 +1568,50 @@ mod tests {
         let gemini = output.serialize(Client::Gemini);
         assert_eq!(gemini["decision"], "allow");
         assert_eq!(gemini["reason"], "Safe");
+        assert_eq!(gemini["systemMessage"], "Use bat instead");
+        assert!(gemini.get("hookSpecificOutput").is_none());
+    }
+
+    #[test]
+    fn test_gemini_ask_with_context_uses_system_message() {
+        let output = HookOutput::ask_with_context("Needs approval", "Prefer the safer form");
+        let gemini = output.serialize(Client::Gemini);
+        assert_eq!(gemini["decision"], "ask");
+        assert_eq!(gemini["reason"], "Needs approval");
+        assert_eq!(gemini["systemMessage"], "Prefer the safer form");
+        assert!(gemini.get("hookSpecificOutput").is_none());
+    }
+
+    #[test]
+    fn test_gemini_deny_folds_context_into_agent_reason() {
+        let output = HookOutput::deny_with_context("Blocked", "Use the safer form");
+        let gemini = output.serialize(Client::Gemini);
+        assert_eq!(gemini["decision"], "block");
+        assert_eq!(gemini["reason"], "Blocked\n\nUse the safer form");
+        assert!(gemini.get("systemMessage").is_none());
+        assert!(gemini.get("hookSpecificOutput").is_none());
+    }
+
+    #[test]
+    fn test_gemini_updated_command_uses_before_tool_shape() {
+        let output =
+            HookOutput::ask_with_updated_command("Needs approval", "ls -la", Some("Review it"));
+        let gemini = output.serialize(Client::Gemini);
+        assert_eq!(gemini["systemMessage"], "Review it");
+        assert_eq!(gemini["hookSpecificOutput"]["hookEventName"], "BeforeTool");
         assert_eq!(
-            gemini["hookSpecificOutput"]["additionalContext"],
-            "Use bat instead"
+            gemini["hookSpecificOutput"]["tool_input"]["command"],
+            "ls -la"
+        );
+        let wire = serde_json::to_string(&gemini).unwrap();
+        assert!(
+            wire.contains("\"hookEventName\":\"BeforeTool\""),
+            "Gemini rewrite must use the exact BeforeTool envelope: {wire}"
+        );
+        assert!(
+            gemini["hookSpecificOutput"]
+                .get("additionalContext")
+                .is_none()
         );
     }
 
@@ -1507,6 +1624,22 @@ mod tests {
             "tool-gates should emit 'block' for Gemini hard blocks: {gemini}"
         );
         assert_eq!(gemini["reason"], "Dangerous command");
+    }
+
+    #[test]
+    fn test_gemini_deny_with_empty_reason_falls_back() {
+        let output = HookOutput {
+            decision: PermissionDecision::Deny,
+            reason: Some(String::new()),
+            context: None,
+            recovery_actions: Vec::new(),
+            updated_command: None,
+            surface_to_user: false,
+            force: false,
+            hold_in_auto: false,
+        };
+        let gemini = output.serialize(Client::Gemini);
+        assert_eq!(gemini["reason"], "Blocked by tool-gates");
     }
 
     #[test]
@@ -1832,6 +1965,7 @@ mod tests {
             decision: PermissionDecision::Deny,
             reason: Some(String::new()),
             context: None,
+            recovery_actions: Vec::new(),
             updated_command: None,
             surface_to_user: false,
             force: false,
@@ -1843,33 +1977,37 @@ mod tests {
     }
 
     #[test]
-    fn codex_deny_concatenates_context_into_reason() {
+    fn codex_deny_uses_supported_additional_context() {
         // When deny carries Tier-1 + Tier-3 context (e.g. AWS key with weak
-        // crypto), a blocked patch fires no PostToolUse turn to carry it. The
-        // serializer concatenates it into the reason so the remediation text
-        // still reaches the operator.
+        // crypto), a blocked patch fires no PostToolUse turn to carry it.
+        // Codex records PreToolUse additionalContext before returning the
+        // blocked result, so keep the denial cause and remediation separate.
         let output = HookOutput {
             decision: PermissionDecision::Deny,
             reason: Some("Hardcoded AWS key detected".to_string()),
             context: Some("Also: weak hash (MD5)".to_string()),
+            recovery_actions: Vec::new(),
             updated_command: None,
             surface_to_user: false,
             force: false,
             hold_in_auto: false,
         };
         let value = output.serialize(Client::Codex);
-        let reason = value["hookSpecificOutput"]["permissionDecisionReason"]
-            .as_str()
-            .unwrap();
-        assert!(reason.contains("Hardcoded AWS key detected"));
-        assert!(reason.contains("Also: weak hash (MD5)"));
+        assert_eq!(
+            value["hookSpecificOutput"]["permissionDecisionReason"],
+            "Hardcoded AWS key detected"
+        );
+        assert_eq!(
+            value["hookSpecificOutput"]["additionalContext"],
+            "Also: weak hash (MD5)"
+        );
     }
 
     #[test]
-    fn test_codex_pre_output_drops_additional_context() {
-        // Hints + Tier-3 warnings ride on PostToolUse for Codex; the Pre wire
-        // shape must not include `additionalContext`, `updatedInput`, or any
-        // other fields the parser rejects.
+    fn test_codex_non_deny_pre_output_stays_empty() {
+        // Hints + Tier-3 warnings ride on PostToolUse for Codex. Although
+        // PreToolUse accepts additionalContext, Tool Gates emits no non-deny
+        // Pre output because plain allow is invalid and ask is unsupported.
         let output = HookOutput::allow_with_context(Some("Safe"), "Use bat instead");
         let value = output.serialize(Client::Codex);
         assert!(
@@ -1879,13 +2017,13 @@ mod tests {
     }
 
     #[test]
-    fn test_codex_deny_output_has_no_extra_fields() {
+    fn test_codex_deny_without_context_has_no_extra_fields() {
         let output = HookOutput::deny("blocked");
         let value = output.serialize(Client::Codex);
         let s = serde_json::to_string(&value).unwrap();
         assert!(
             !s.contains("additionalContext"),
-            "no Pre additionalContext: {s}"
+            "deny without context must not emit additionalContext: {s}"
         );
         assert!(!s.contains("updatedInput"), "no updatedInput: {s}");
         assert!(!s.contains("\"continue\""), "no continue: {s}");
@@ -1905,6 +2043,48 @@ mod tests {
         assert_eq!(gemini["decision"], "block");
         // Codex: nested hookSpecificOutput like Claude but only "deny"
         assert_eq!(codex["hookSpecificOutput"]["permissionDecision"], "deny");
+    }
+
+    #[test]
+    fn recovery_actions_render_only_at_the_client_boundary() {
+        let output = HookOutput::deny("cap blocked").with_recovery(
+            crate::recovery::RecoveryAction::ReadSourceFile {
+                selection: crate::recovery::FileSelection::First(10),
+            },
+        );
+
+        let claude = output.serialize(Client::Claude);
+        assert_eq!(
+            claude["hookSpecificOutput"]["permissionDecisionReason"],
+            "cap blocked"
+        );
+        assert_eq!(
+            claude["hookSpecificOutput"]["additionalContext"],
+            "Use the `Read` tool to inspect the first 10 lines of the source file directly."
+        );
+
+        let gemini = output.serialize(Client::Gemini);
+        assert_eq!(
+            gemini["reason"],
+            "cap blocked\n\nUse the `read_file` tool to inspect the first 10 lines of the source file directly."
+        );
+        assert!(gemini.get("hookSpecificOutput").is_none());
+
+        let codex = output.serialize(Client::Codex);
+        assert_eq!(
+            codex["hookSpecificOutput"]["permissionDecisionReason"],
+            "cap blocked"
+        );
+        assert_eq!(
+            codex["hookSpecificOutput"]["additionalContext"],
+            "Inspect the first 10 lines directly from the source file. If `bat` is available, use `bat -r :10 <file>`."
+        );
+
+        let antigravity = output.serialize(Client::Antigravity);
+        assert_eq!(
+            antigravity["reason"],
+            "cap blocked\n\nUse the `view_file` tool to inspect the first 10 lines of the source file directly."
+        );
     }
 
     #[test]

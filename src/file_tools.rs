@@ -155,6 +155,18 @@ pub fn is_read_tool(tool_name: &str) -> bool {
     spec_for_name(tool_name).is_some_and(|spec| spec.access == FileAccess::Read)
 }
 
+/// Return the client's canonical single-file reader, when one is registered.
+pub fn read_tool_for_client(client: Client) -> Option<&'static str> {
+    FILE_TOOL_SPECS
+        .iter()
+        .find(|spec| {
+            spec.client == client
+                && spec.access == FileAccess::Read
+                && spec.payload == FilePayloadKind::FilePath
+        })
+        .map(|spec| spec.name)
+}
+
 pub fn is_write_tool(tool_name: &str) -> bool {
     spec_for_name(tool_name).is_some_and(|spec| spec.access == FileAccess::Write)
 }
@@ -380,6 +392,14 @@ mod tests {
                 "multi_replace_file_content"
             ]
         );
+    }
+
+    #[test]
+    fn canonical_single_file_readers_match_client_capabilities() {
+        assert_eq!(read_tool_for_client(Client::Claude), Some("Read"));
+        assert_eq!(read_tool_for_client(Client::Gemini), Some("read_file"));
+        assert_eq!(read_tool_for_client(Client::Antigravity), Some("view_file"));
+        assert_eq!(read_tool_for_client(Client::Codex), None);
     }
 
     #[test]

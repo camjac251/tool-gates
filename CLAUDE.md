@@ -32,6 +32,8 @@ Documentation routing:
 - `src/raw_floor.rs`: shared pre-AST checks for top-level and nested shell strings.
 - `src/security_floor.rs`: hard-block and hard-ask pattern catalog.
 - `src/pipe_caps.rs`: output-cap hard denials and carve-outs.
+- `src/recovery.rs`: semantic recovery actions and client-aware rendering.
+- `src/file_tools.rs`: canonical per-client file-tool capability registry.
 - `src/task_expansion.rs`: mise and package-script expansion.
 - `src/main.rs`: CLI, hook entrypoints, client normalization, and output shaping.
 - `src/rules_export.rs`: generated Markdown reference pages.
@@ -78,6 +80,7 @@ Run `mise run build-wasm` when a change affects the browser simulator or the WAS
 - `build.rs` runs `rustfmt --edition 2024` on generated Rust. Keep that explicit edition because generated formatting otherwise drifts when the build cache is invalidated.
 - Wire-format structs are external contracts. Any serialized field added or changed for a client needs a test that asserts its exact JSON key casing and allowed shape.
 - `HookOutput::deny()` always carries a reason. On Claude, it omits the optional top-level `systemMessage` unless `.user_visible()` is called for a denial such as a Tier 1 secret block. Codex displays every deny reason as hook feedback regardless of `.user_visible()`.
+- Shared gates keep causes and recovery actions client-neutral. Attach semantic recovery in `HookOutput`; render native tool names only in the client serializer, sourced from `FILE_TOOL_SPECS`.
 
 ## Client Integration Invariants
 

@@ -2,6 +2,8 @@
 //! producer-aware hard-deny steering callers to source-native output caps.
 
 use crate::models::HookOutput;
+use crate::parser::extract_commands;
+use crate::recovery::{FileSelection, RecoveryAction};
 use crate::security_floor::{strip_comments, strip_quoted_strings};
 use regex::Regex;
 use std::sync::LazyLock;
@@ -86,9 +88,9 @@ pub(crate) fn check_hard_deny_patterns_with_features(
 }
 
 /// Build/test/package-manager producers whose piped output carries diagnostics
-/// that head/tail would truncate away. Used only to tailor the deny *message*;
-/// the deny decision is producer-agnostic (deny-by-default), so a build tool
-/// missing from this list still denies, just with the neutral message.
+/// that head/tail would truncate away. Used to tailor the denial cause and
+/// recovery actions; the deny decision is producer-agnostic (deny-by-default),
+/// so a build tool missing from this list still denies with neutral recovery.
 const BUILD_PRODUCERS: &[&str] = &[
     "mise", "cargo", "npm", "pnpm", "bun", "yarn", "go", "make", "ninja", "ctest", "gradle",
     "gradlew", "mvn", "mvnw", "tsc", "deno", "uv", "pip", "pip3", "poetry", "pytest", "jest",
@@ -221,32 +223,251 @@ fn pipeline_context(unquoted: &str, offset: usize) -> (String, Option<String>) {
     (producer, prior)
 }
 
-/// Deny message for a non-exempt truncation cap. Always producer-native: never
-/// references `max_output` / `output_tail`, which are not stock Bash tool
-/// params (a public tool-gates install may not be on a patched build). The
-/// producer only selects the wording: `gh` and build/test runners get tailored
-/// guidance; every other producer gets the neutral cap-at-the-source message.
-fn head_tail_message(producer: &str, segment: &str) -> String {
+/// Stable denial cause for a non-exempt truncation cap. Never references
+/// `max_output` / `output_tail`, which are not stock Bash tool params (a public
+/// tool-gates install may not be on a patched build). The producer only selects
+/// the cause wording; semantic recovery actions are attached separately.
+fn head_tail_reason(producer: &str, segment: &str) -> String {
     let trimmed = segment.trim();
     if producer == "gh" {
         return format!(
             "`{trimmed}` blocked: this consumer-side cap truncates `gh` output and can drop rows or \
-             cut JSON. Keep the full response; if the task needs a subset, use `gh`'s native options."
+             cut JSON."
         );
     }
     if BUILD_PRODUCERS.contains(&producer) {
         return format!(
             "`{trimmed}` blocked: this consumer-side cap truncates `{producer}` output and can hide \
-             diagnostics. Run it uncapped; if the task needs matching lines, filter by a real pattern \
-             without limiting the stream."
+             diagnostics."
         );
     }
-    // Any other producer (ls, fd, rg, find, git log, cat, custom scripts).
-    format!(
-        "`{trimmed}` blocked: a consumer-side cap truncates unseen output. Use the producer's native \
-         limit; otherwise run uncapped, persist complete output for range inspection, or read a \
-         source file range directly."
-    )
+    format!("`{trimmed}` blocked: a consumer-side cap truncates unseen output.")
+}
+
+fn cap_stage(segment: &str) -> &str {
+    segment
+        .trim()
+        .strip_prefix("|&")
+        .or_else(|| segment.trim().strip_prefix('|'))
+        .unwrap_or(segment)
+        .trim()
+        .trim_end_matches(['|', '&', ';'])
+        .trim()
+}
+
+fn safe_source_path(arg: &str) -> bool {
+    !arg.is_empty()
+        && arg != "-"
+        && !arg.starts_with('-')
+        && !arg
+            .chars()
+            .any(|c| matches!(c, '*' | '?' | '[' | ']' | '{' | '}' | '$' | '`'))
+}
+
+fn reads_one_source_file(program: &str, args: &[String]) -> bool {
+    match normalize_token(program) {
+        "cat" => {
+            if args.iter().any(|arg| arg == "-") {
+                return false;
+            }
+            let paths: Vec<&str> = args
+                .iter()
+                .map(String::as_str)
+                .filter(|arg| *arg != "--" && !arg.starts_with('-'))
+                .collect();
+            paths.len() == 1 && safe_source_path(paths[0])
+        }
+        "bat" => match args {
+            [arg] => safe_source_path(arg),
+            [separator, arg] if separator == "--" => safe_source_path(arg),
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+fn unsigned_decimal(value: &str) -> Option<u64> {
+    if !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()) {
+        value.parse().ok()
+    } else {
+        None
+    }
+}
+
+fn numeric_line_count(args: &[String]) -> Option<u64> {
+    let mut count = None;
+    let mut index = 0;
+    while index < args.len() {
+        let arg = &args[index];
+        if arg == "-c" || arg == "--bytes" || arg.starts_with("--bytes=") {
+            return None;
+        }
+        if arg == "-n" || arg == "--lines" {
+            let value = args.get(index + 1)?;
+            count = Some(unsigned_decimal(value)?);
+            index += 2;
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("--lines=") {
+            count = Some(unsigned_decimal(value)?);
+        } else if let Some(value) = arg.strip_prefix('-') {
+            if !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()) {
+                count = unsigned_decimal(value);
+            }
+        }
+        index += 1;
+    }
+    count.or(Some(10))
+}
+
+fn signed_decimal(value: &str) -> bool {
+    let digits = value
+        .strip_prefix('+')
+        .or_else(|| value.strip_prefix('-'))
+        .unwrap_or(value);
+    unsigned_decimal(digits).is_some()
+}
+
+fn head_tail_reads_stdin(args: &[String]) -> bool {
+    match args {
+        [] => true,
+        [arg] => {
+            let legacy_count = arg
+                .strip_prefix('-')
+                .is_some_and(|value| unsigned_decimal(value).is_some());
+            let attached_count = ["-n", "-c", "--lines=", "--bytes="]
+                .iter()
+                .find_map(|prefix| arg.strip_prefix(prefix))
+                .is_some_and(signed_decimal);
+            legacy_count || attached_count
+        }
+        [flag, value] if matches!(flag.as_str(), "-n" | "--lines" | "-c" | "--bytes") => {
+            signed_decimal(value)
+        }
+        _ => false,
+    }
+}
+
+fn cap_reads_only_stdin(program: &str, args: &[String], raw: &str) -> bool {
+    if strip_quoted_strings(raw).contains('<') {
+        return false;
+    }
+    match normalize_token(program) {
+        "head" | "tail" => head_tail_reads_stdin(args),
+        "sed" => {
+            matches!(args, [script] if !script.is_empty())
+                || matches!(args, [flag, script] if flag == "-n" && !script.is_empty())
+        }
+        "awk" => matches!(args, [script] if !script.is_empty()),
+        // RG_COUNTER_RE is anchored after the catch-all pattern, so a matched
+        // stage cannot carry a path operand after it.
+        "rg" => true,
+        _ => false,
+    }
+}
+
+fn last_number(text: &str) -> Option<u64> {
+    static NUMBER_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"\d+").expect("NUMBER_RE must compile"));
+    NUMBER_RE
+        .find_iter(text)
+        .last()
+        .and_then(|value| value.as_str().parse().ok())
+}
+
+fn selection_for_cap(program: &str, args: &[String], raw: &str) -> FileSelection {
+    match normalize_token(program) {
+        "head" => numeric_line_count(args)
+            .map(FileSelection::First)
+            .unwrap_or(FileSelection::Whole),
+        "tail" => numeric_line_count(args)
+            .map(FileSelection::Last)
+            .unwrap_or(FileSelection::Whole),
+        "sed" | "awk" => last_number(raw)
+            .map(FileSelection::First)
+            .unwrap_or(FileSelection::Whole),
+        "rg" => {
+            let mut count = None;
+            let mut index = 0;
+            while index < args.len() {
+                if args[index] == "-m" || args[index] == "--max-count" {
+                    count = args.get(index + 1).and_then(|value| value.parse().ok());
+                    break;
+                }
+                if let Some(value) = args[index].strip_prefix("--max-count=") {
+                    count = value.parse().ok();
+                    break;
+                }
+                index += 1;
+            }
+            count
+                .map(FileSelection::First)
+                .unwrap_or(FileSelection::Whole)
+        }
+        _ => FileSelection::Whole,
+    }
+}
+
+fn source_file_selection(
+    command_string: &str,
+    segment: &str,
+    prior_program: Option<&str>,
+) -> Option<FileSelection> {
+    let prior_program = prior_program?;
+    if !matches!(prior_program, "cat" | "bat") {
+        return None;
+    }
+    let stage = cap_stage(segment);
+    let commands = extract_commands(command_string);
+    let matches: Vec<usize> = commands
+        .iter()
+        .enumerate()
+        .filter_map(|(index, command)| (command.raw.trim() == stage).then_some(index))
+        .collect();
+    let [cap_index] = matches.as_slice() else {
+        return None;
+    };
+    let source_index = cap_index.checked_sub(1)?;
+    let source = &commands[source_index];
+    if normalize_token(&source.program) != prior_program
+        || !reads_one_source_file(&source.program, &source.args)
+    {
+        return None;
+    }
+    let cap = &commands[*cap_index];
+    if !cap_reads_only_stdin(&cap.program, &cap.args, &cap.raw) {
+        return None;
+    }
+    Some(selection_for_cap(&cap.program, &cap.args, &cap.raw))
+}
+
+fn head_tail_denial(
+    producer: &str,
+    segment: &str,
+    command_string: &str,
+    prior_program: Option<&str>,
+) -> HookOutput {
+    let output = HookOutput::deny(&head_tail_reason(producer, segment));
+    if producer == "gh" {
+        return output
+            .with_recovery(RecoveryAction::KeepCompleteOutput)
+            .with_recovery(RecoveryAction::UseProducerNativeLimit {
+                producer: Some("gh".to_string()),
+            });
+    }
+    if BUILD_PRODUCERS.contains(&producer) {
+        return output
+            .with_recovery(RecoveryAction::RunUncapped)
+            .with_recovery(RecoveryAction::FilterByRealPattern);
+    }
+
+    let output = output
+        .with_recovery(RecoveryAction::UseProducerNativeLimit { producer: None })
+        .with_recovery(RecoveryAction::RunUncappedAndPersist);
+    match source_file_selection(command_string, segment, prior_program) {
+        Some(selection) => output.with_recovery(RecoveryAction::ReadSourceFile { selection }),
+        None => output,
+    }
 }
 
 /// Decide head/tail-pipe handling. Three exemptions pass through silently:
@@ -254,7 +475,7 @@ fn head_tail_message(producer: &str, segment: &str) -> String {
 /// consume all input, so the slice is the selection, not a cap); and head/tail
 /// inside `$(...)` / backticks (a programmatic pick feeding a variable). Every
 /// other non-exempt cap is denied regardless of producer; the producer only
-/// selects the deny message (build/`gh` get tailored wording).
+/// selects the cause and recovery (build/`gh` get tailored guidance).
 fn check_head_tail_pipe(command_string: &str) -> Option<HookOutput> {
     // Strip comments and quoted strings so `rg 'foo | head bar' file.txt` is safe.
     let stripped = strip_comments(command_string);
@@ -281,7 +502,12 @@ fn check_head_tail_pipe(command_string: &str) -> Option<HookOutput> {
             continue;
         }
         // Every non-exempt cap is denied; `producer` only selects the message.
-        return Some(HookOutput::deny(&head_tail_message(&producer, segment)));
+        return Some(head_tail_denial(
+            &producer,
+            segment,
+            command_string,
+            prior.as_deref(),
+        ));
     }
 
     // Backstop: `| sed -n '1,Np'` / `| awk 'NR<=N'` first-N truncation, denied
@@ -316,10 +542,12 @@ fn check_head_tail_pipe(command_string: &str) -> Option<HookOutput> {
         if prior.as_deref() == Some("sort") {
             continue;
         }
-        return Some(HookOutput::deny(&head_tail_message(
+        return Some(head_tail_denial(
             &producer,
             cap.as_str(),
-        )));
+            command_string,
+            prior.as_deref(),
+        ));
     }
 
     // Backstop: `| rg .` / `| rg -m N .` bare-catch-all fake filter, denied for
@@ -343,11 +571,187 @@ fn check_head_tail_pipe(command_string: &str) -> Option<HookOutput> {
         if inside_command_substitution(&unquoted, offset) {
             continue;
         }
-        let (producer, _prior) = pipeline_context(&unquoted, offset);
-        return Some(HookOutput::deny(&head_tail_message(
+        let (producer, prior) = pipeline_context(&unquoted, offset);
+        return Some(head_tail_denial(
             &producer,
             cap.as_str(),
-        )));
+            command_string,
+            prior.as_deref(),
+        ));
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::Client;
+
+    #[test]
+    fn file_head_recovery_uses_client_reader() {
+        let output =
+            check_head_tail_pipe("cat report.txt | head -n 12").expect("cap must be denied");
+
+        assert_eq!(
+            output.reason.as_deref(),
+            Some("`| head -n 12` blocked: a consumer-side cap truncates unseen output.")
+        );
+
+        let claude = output.serialize(Client::Claude);
+        assert_eq!(
+            claude["hookSpecificOutput"]["additionalContext"],
+            "Use the producer's native limit when the task needs a bounded result. \
+             Otherwise run uncapped and persist the complete output for range inspection. \
+             Use the `Read` tool to inspect the first 12 lines of the source file directly."
+        );
+
+        let codex = output.serialize(Client::Codex);
+        assert_eq!(
+            codex["hookSpecificOutput"]["permissionDecisionReason"],
+            "`| head -n 12` blocked: a consumer-side cap truncates unseen output."
+        );
+        assert_eq!(
+            codex["hookSpecificOutput"]["additionalContext"],
+            "Use the producer's native limit when the task needs a bounded result. \
+             Otherwise run uncapped and persist the complete output for range inspection. \
+             Inspect the first 12 lines directly from the source file. If `bat` is available, \
+             use `bat -r :12 <file>`."
+        );
+    }
+
+    #[test]
+    fn streamed_output_does_not_invent_file_reader_recovery() {
+        let output = check_head_tail_pipe("git log | sed -n '1,10p'").expect("cap must be denied");
+
+        assert_eq!(
+            output.reason.as_deref(),
+            Some("`| sed -n '1,10p'` blocked: a consumer-side cap truncates unseen output.")
+        );
+        assert_eq!(
+            output.recovery_actions,
+            vec![
+                RecoveryAction::UseProducerNativeLimit { producer: None },
+                RecoveryAction::RunUncappedAndPersist,
+            ]
+        );
+
+        for client in [
+            Client::Claude,
+            Client::Gemini,
+            Client::Codex,
+            Client::Antigravity,
+        ] {
+            let wire = output.serialize(client).to_string();
+            assert!(
+                !wire.contains("`Read`")
+                    && !wire.contains("`read_file`")
+                    && !wire.contains("`view_file`")
+                    && !wire.contains("`bat"),
+                "{client:?} invented file-reader guidance: {wire}"
+            );
+            assert!(
+                wire.contains("producer's native limit")
+                    && wire.contains("persist the complete output"),
+                "{client:?} omitted stream recovery: {wire}"
+            );
+        }
+    }
+
+    #[test]
+    fn nested_reader_is_not_mistaken_for_the_pipeline_source() {
+        let output = check_head_tail_pipe("printf '%s\\n' \"$(cat report.txt)\" | head -n 3")
+            .expect("cap must be denied");
+
+        assert!(
+            !output
+                .recovery_actions
+                .iter()
+                .any(|action| matches!(action, RecoveryAction::ReadSourceFile { .. })),
+            "nested reader was treated as the direct source: {:?}",
+            output.recovery_actions
+        );
+    }
+
+    #[test]
+    fn ambiguous_reader_inputs_do_not_receive_file_recovery() {
+        for command in [
+            "cat first.txt second.txt | head -n 3",
+            "cat report.txt - | head -n 3",
+            "cat | head -n 3",
+            "cat \"$REPORT\" | head -n 3",
+            "bat first.txt second.txt | head -n 3",
+        ] {
+            let output = check_head_tail_pipe(command).expect("cap must be denied");
+            assert!(
+                !output
+                    .recovery_actions
+                    .iter()
+                    .any(|action| matches!(action, RecoveryAction::ReadSourceFile { .. })),
+                "ambiguous reader received file recovery: {command}\n{:?}",
+                output.recovery_actions
+            );
+        }
+    }
+
+    #[test]
+    fn cap_with_its_own_file_operand_does_not_receive_source_file_recovery() {
+        for command in [
+            "cat report.txt | head -n 3 other.txt",
+            "cat report.txt | tail -n 3 other.txt",
+            "cat report.txt | sed -n '1,3p' other.txt",
+            "cat report.txt | awk 'NR<=3' other.txt",
+            "cat report.txt | head -n 3 < other.txt",
+            "cat report.txt | sed -n '1,3p' < other.txt",
+        ] {
+            let output = check_head_tail_pipe(command).expect("cap must be denied");
+            assert!(
+                !output
+                    .recovery_actions
+                    .iter()
+                    .any(|action| matches!(action, RecoveryAction::ReadSourceFile { .. })),
+                "cap file operand received source-file recovery: {command}\n{:?}",
+                output.recovery_actions
+            );
+        }
+    }
+
+    #[test]
+    fn relative_line_modes_do_not_claim_a_first_or_last_count() {
+        for command in [
+            "cat report.txt | head -n -12",
+            "cat report.txt | tail -n +7",
+        ] {
+            let output = check_head_tail_pipe(command).expect("cap must be denied");
+            assert!(
+                output
+                    .recovery_actions
+                    .contains(&RecoveryAction::ReadSourceFile {
+                        selection: FileSelection::Whole,
+                    }),
+                "relative line mode was misrepresented: {command}\n{:?}",
+                output.recovery_actions
+            );
+        }
+    }
+
+    #[test]
+    fn file_caps_preserve_the_requested_selection() {
+        for (command, selection) in [
+            ("cat report.txt | head", FileSelection::First(10)),
+            ("cat report.txt | tail -7", FileSelection::Last(7)),
+            ("cat report.txt | sed -n '1,20p'", FileSelection::First(20)),
+            ("cat report.txt | awk 'NR<=8'", FileSelection::First(8)),
+            ("cat report.txt | rg -m 5 .", FileSelection::First(5)),
+            ("bat report.txt | rg .", FileSelection::Whole),
+        ] {
+            let output = check_head_tail_pipe(command).expect("cap must be denied");
+            assert!(
+                output
+                    .recovery_actions
+                    .contains(&RecoveryAction::ReadSourceFile { selection }),
+                "selection was not preserved: {command}\n{:?}",
+                output.recovery_actions
+            );
+        }
+    }
 }

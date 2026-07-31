@@ -1,7 +1,8 @@
 //! Modern CLI hints for legacy commands.
 //!
 //! Detects when legacy commands are used and suggests modern alternatives.
-//! These hints are added to `additionalContext` so Claude can learn better patterns.
+//! The hints stay client-neutral; the hook layer delivers them through the
+//! context channel supported by the active client.
 //!
 //! Hints are only shown if the modern tool is actually installed (checked via cache).
 

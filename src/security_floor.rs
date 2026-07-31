@@ -315,6 +315,7 @@ mod tests {
     use crate::models::*;
     #[allow(unused_imports)]
     use crate::parser::*;
+    use crate::recovery::RecoveryAction;
     #[allow(unused_imports)]
     use crate::router::tests::{get_claude_wire_decision, get_decision, get_reason};
     #[allow(unused_imports)]
@@ -611,29 +612,52 @@ mod tests {
         }
 
         #[test]
-        fn test_head_tail_pipe_messages_state_recovery_without_recipe_catalogs() {
+        fn test_head_tail_pipe_reason_and_recovery_are_separate() {
             let generic_result = check_command("ls | head -5");
             let generic = get_reason(&generic_result);
             assert!(generic.contains("consumer-side cap"));
-            assert!(generic.contains("producer's native limit"));
+            assert!(!generic.contains("producer's native limit"));
             assert!(!generic.contains("rg -m"));
             assert!(!generic.contains("fd --max-results"));
             assert!(!generic.contains("sort -rn"));
             assert!(generic.len() <= 250);
+            assert_eq!(
+                generic_result.recovery_actions,
+                vec![
+                    RecoveryAction::UseProducerNativeLimit { producer: None },
+                    RecoveryAction::RunUncappedAndPersist,
+                ]
+            );
 
             let build_result = check_command("cargo test | head -20");
             let build = get_reason(&build_result);
             assert!(build.contains("hide diagnostics"));
-            assert!(build.contains("uncapped"));
+            assert!(!build.contains("uncapped"));
             assert!(!build.contains("rg 'pattern'"));
             assert!(build.len() <= 250);
+            assert_eq!(
+                build_result.recovery_actions,
+                vec![
+                    RecoveryAction::RunUncapped,
+                    RecoveryAction::FilterByRealPattern,
+                ]
+            );
 
             let github_result = check_command("gh api repos/o/r/pulls | head -5");
             let github = get_reason(&github_result);
             assert!(github.contains("drop rows or cut JSON"));
-            assert!(github.contains("native options"));
+            assert!(!github.contains("native options"));
             assert!(!github.contains("--jq"));
             assert!(github.len() <= 250);
+            assert_eq!(
+                github_result.recovery_actions,
+                vec![
+                    RecoveryAction::KeepCompleteOutput,
+                    RecoveryAction::UseProducerNativeLimit {
+                        producer: Some("gh".to_string()),
+                    },
+                ]
+            );
         }
 
         #[test]
@@ -765,42 +789,67 @@ mod tests {
 
         #[test]
         fn test_head_tail_hard_deny_messages() {
-            // Hard-deny messages (gh + build/test only) name the right
-            // alternative and stay stock-safe: never `max_output` /
-            // `output_tail`, which are patched-build-only Bash params.
+            // Causes stay in the shared reason while recovery is rendered
+            // separately with stock-safe client vocabulary.
             let cases = [
-                ("gh pr list | head -20", "native options"),
-                ("gh api repos/o/r/pulls | head -5", "native options"),
-                ("cargo test 2>&1 | tail -40", "hide diagnostics"),
-                ("pnpm test | head -30", "real pattern"),
+                (
+                    "gh pr list | head -20",
+                    "drop rows or cut JSON",
+                    "native options",
+                ),
+                (
+                    "gh api repos/o/r/pulls | head -5",
+                    "drop rows or cut JSON",
+                    "native options",
+                ),
+                ("cargo test 2>&1 | tail -40", "hide diagnostics", "uncapped"),
+                ("pnpm test | head -30", "hide diagnostics", "real pattern"),
             ];
-            for (cmd, needle) in cases {
+            for (cmd, reason_needle, recovery_needle) in cases {
                 let result = check_command(cmd);
                 assert_eq!(get_decision(&result), "deny", "should deny: {cmd}");
                 let reason = get_reason(&result);
                 assert!(
-                    reason.contains(needle),
-                    "expected `{needle}` in message for `{cmd}`\ngot: {reason}"
+                    reason.contains(reason_needle),
+                    "expected `{reason_needle}` in reason for `{cmd}`\ngot: {reason}"
+                );
+                let wire = result.serialize(Client::Claude);
+                let recovery = wire["hookSpecificOutput"]["additionalContext"]
+                    .as_str()
+                    .expect("deny recovery must be rendered");
+                assert!(
+                    recovery.contains(recovery_needle),
+                    "expected `{recovery_needle}` in recovery for `{cmd}`\ngot: {recovery}"
                 );
                 assert!(
-                    !reason.contains("max_output") && !reason.contains("output_tail"),
-                    "message must stay stock-safe for `{cmd}`\ngot: {reason}"
+                    !reason.contains("max_output")
+                        && !reason.contains("output_tail")
+                        && !recovery.contains("max_output")
+                        && !recovery.contains("output_tail"),
+                    "output must stay stock-safe for `{cmd}`\nreason: {reason}\nrecovery: {recovery}"
                 );
             }
         }
 
         #[test]
-        fn test_generic_truncation_message_is_client_neutral() {
+        fn test_generic_stream_recovery_is_client_neutral() {
             let result = check_command("git log | sed -n '1,10p'");
             assert_eq!(get_decision(&result), "deny");
             let reason = get_reason(&result);
-            assert!(
-                reason.contains("read a source file range directly"),
-                "expected client-neutral range guidance\ngot: {reason}"
+            assert_eq!(
+                reason,
+                "`| sed -n '1,10p'` blocked: a consumer-side cap truncates unseen output."
             );
             assert!(
                 !reason.contains("Use Read"),
                 "shared deny reason must not name a client-only tool\ngot: {reason}"
+            );
+            assert_eq!(
+                result.recovery_actions,
+                vec![
+                    RecoveryAction::UseProducerNativeLimit { producer: None },
+                    RecoveryAction::RunUncappedAndPersist,
+                ]
             );
         }
 
@@ -1676,7 +1725,8 @@ mod tests {
                 "defer still carries the PreToolUse envelope: {claude}"
             );
 
-            // Codex has no auto mode and rejects allow/ask, so it stays silent.
+            // Codex has no auto mode or ask decision, and plain allow is
+            // invalid without updatedInput, so it stays silent.
             let codex = serde_json::to_string(&result.serialize(Client::Codex)).unwrap();
             assert_eq!(codex, "null", "Codex must receive empty output: {codex}");
 

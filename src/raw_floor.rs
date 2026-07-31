@@ -115,14 +115,23 @@ pub(crate) fn check_raw_floor(command_string: &str) -> RawFloorChecks {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::recovery::{FileSelection, RecoveryAction};
 
     #[test]
     fn local_shell_scripts_receive_pipe_cap_floor() {
         for invocation in ["bash -c", "bash -lc", "sh -c", "zsh -c"] {
-            let checks = check_raw_floor(&format!("{invocation} 'rg needle src/ | head -5'"));
+            let checks = check_raw_floor(&format!("{invocation} 'cat report.txt | head -5'"));
+            let output = checks
+                .hard_deny
+                .unwrap_or_else(|| panic!("{invocation} must preserve the pipe-cap hard deny"));
             assert!(
-                checks.hard_deny.is_some(),
-                "{invocation} must preserve the pipe-cap hard deny"
+                output
+                    .recovery_actions
+                    .contains(&RecoveryAction::ReadSourceFile {
+                        selection: FileSelection::First(5),
+                    }),
+                "{invocation} must preserve source-file recovery: {:?}",
+                output.recovery_actions
             );
         }
     }

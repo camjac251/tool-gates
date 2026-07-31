@@ -6,6 +6,7 @@ use crate::gates::check_single_command;
 use crate::models::{Decision, is_auto_mode};
 use crate::parser::{extract_commands, neutralize_heredoc_bodies};
 use crate::pipe_caps::check_hard_deny_patterns_with_features;
+use crate::recovery::render_neutral_recovery_actions;
 use crate::router::{check_settings_with_subcommands, matched_subcommand_deny};
 use crate::security_floor::check_raw_string_patterns;
 
@@ -108,7 +109,12 @@ pub fn decide_instrumented(command: &str, mode: &str, settings_json: Option<&str
     // path never reads disk. This matches shipped defaults.
     let features = Features::default();
     if let Some(output) = check_hard_deny_patterns_with_features(scan_string, &features) {
-        let reason = output.reason.unwrap_or_else(|| "Blocked.".to_string());
+        let mut reason = output.reason.unwrap_or_else(|| "Blocked.".to_string());
+        let recovery = render_neutral_recovery_actions(&output.recovery_actions);
+        if !recovery.is_empty() {
+            reason.push_str("\n\n");
+            reason.push_str(&recovery);
+        }
         return SimStages {
             raw_status: "block",
             raw_note: format!("\u{2717} hard-deny match: {reason}"),
@@ -434,6 +440,27 @@ mod tests {
             let sim = decide_instrumented("ls | head -5", "default", None);
             assert_eq!(sim.decision, "block", "head pipe blocks: {sim:?}");
             assert_eq!(sim.raw_status, "block");
+            assert!(
+                sim.reason.contains("producer's native limit")
+                    && sim.reason.contains("persist the complete output"),
+                "simulator dropped output-cap recovery: {sim:?}"
+            );
+        }
+
+        #[test]
+        fn test_file_cap_recovery_stays_client_neutral_in_simulator() {
+            let sim = decide_instrumented("cat report.txt | head -5", "default", None);
+            assert!(
+                sim.reason
+                    .contains("Inspect the first 5 lines of the source file directly."),
+                "simulator dropped source-file recovery: {sim:?}"
+            );
+            for client_tool in ["`Read`", "`read_file`", "`view_file`", "`bat"] {
+                assert!(
+                    !sim.reason.contains(client_tool),
+                    "simulator named a client-specific tool: {sim:?}"
+                );
+            }
         }
 
         #[test]
