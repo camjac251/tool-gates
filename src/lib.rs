@@ -5,6 +5,7 @@
 //! Codex CLI, Antigravity CLI, and the deprecated Gemini CLI.
 //!
 //! **Claude Code hooks:**
+//! - `UserPromptSubmit`: Clear turn-scoped background-task correlation
 //! - `PreToolUse`: Block dangerous commands, allow safe ones, provide hints
 //! - `PermissionRequest`: Approve safe commands for subagents (where PreToolUse allow is ignored)
 //! - `PermissionDenied`: Retry commands incorrectly denied by the auto-mode classifier
@@ -99,6 +100,8 @@ pub mod pending;
 pub mod post_tool_use;
 #[cfg(not(feature = "wasm"))]
 pub mod settings_writer;
+#[cfg(not(feature = "wasm"))]
+pub mod task_output_guard;
 #[cfg(not(feature = "wasm"))]
 pub mod tracking;
 #[cfg(not(feature = "wasm"))]

@@ -5,7 +5,7 @@
     </ol>
   </nav>
   <h1 id="hook-h1">Hook Model</h1>
-  <p class="page-lede">Claude Code exposes many hook points; tool-gates registers on the four that gate tool calls. Each one closes a gap the others can't. Codex CLI and Antigravity CLI expose fewer of them; the engine routes around what's missing. Gemini CLI remains available as a deprecated compatibility path for existing setups; Google's consumer CLI sunset date was 2026-06-18.</p>
+  <p class="page-lede">Claude Code exposes many hook points; tool-gates registers on five events that gate calls, track successful work, and mark user-turn boundaries. Each one closes a gap the others can't. Codex CLI and Antigravity CLI expose fewer of them; the engine routes around what's missing. Gemini CLI remains available as a deprecated compatibility path for existing setups; Google's consumer CLI sunset date was 2026-06-18.</p>
   <p class="note">This page shows when each hook runs. Mode-specific policy lives one layer up in <a href="modes.html">Permission Modes</a>.</p>
   <figure class="lifecycle" aria-labelledby="claude-lifecycle-label">
     <div class="lc-bar">
@@ -15,15 +15,28 @@
     <div class="lc-track">
       <div class="lc-node start">
         <span class="lc-icon">●</span>
+        <div class="lc-title">User prompt</div>
+        <div class="lc-sub">The user starts a new turn.</div>
+      </div>
+      <div class="lc-edge"></div>
+      <div class="lc-node hook">
+        <span class="lc-icon">▸</span>
+        <span class="lc-tag">UserPromptSubmit</span>
+        <div class="lc-title">Mark the turn boundary</div>
+        <div class="lc-sub">Clears any pending immediate-wait correlation from the previous turn. Prompt text is never persisted.</div>
+      </div>
+      <div class="lc-edge"></div>
+      <div class="lc-node start">
+        <span class="lc-icon">●</span>
         <div class="lc-title">Tool call</div>
-        <div class="lc-sub">Bash · Monitor · Write · Edit · MCP · Skill. The assistant emits a tool-use event.</div>
+        <div class="lc-sub">Bash · Monitor · TaskOutput · Write · Edit · MCP · Skill. The assistant emits a tool-use event.</div>
       </div>
       <div class="lc-edge"></div>
       <div class="lc-node hook">
         <span class="lc-icon">▸</span>
         <span class="lc-tag">PreToolUse</span>
         <div class="lc-title">Decide</div>
-        <div class="lc-sub">Shell parsed with tree-sitter and routed to the right gate. Returns <code>allow</code>, <code>ask</code>, or <code>deny</code>. Modern-CLI hints, file guards, and Tier 1 source-file secret denies ride here. Deny recovery is rendered into <code>additionalContext</code>; confirmed source-file recovery names Claude's <code>Read</code> tool.</div>
+        <div class="lc-sub">Shell parsed with tree-sitter and routed to the right gate. Returns <code>allow</code>, <code>ask</code>, or <code>deny</code>. A blocking <code>TaskOutput</code> call is denied only when it immediately follows a positively identified successful background Bash start for the same session and task. Modern-CLI hints, file guards, and Tier 1 source-file secret denies ride here. Deny recovery is rendered into <code>additionalContext</code>; confirmed source-file recovery names Claude's <code>Read</code> tool.</div>
       </div>
       <div class="lc-edge"></div>
       <div class="lc-node hook conditional">
@@ -52,7 +65,7 @@
         <span class="lc-icon">▸</span>
         <span class="lc-tag">PostToolUse</span>
         <div class="lc-title">Track + scan</div>
-        <div class="lc-sub">Successful asks queue for promotion to <code>settings.json</code>. Write/Edit bodies pass the Tier 2 anti-pattern scanner; nudges ride on <code>additionalContext</code>.</div>
+        <div class="lc-sub">Successful asks queue for promotion to <code>settings.json</code>. Every successful non-TaskOutput result closes an earlier immediate sequence; a Bash call with <code>run_in_background=true</code> and a structured task id atomically starts a new one. Write/Edit bodies pass the Tier 2 anti-pattern scanner; nudges ride on <code>additionalContext</code>.</div>
       </div>
     </div>
   </figure>
@@ -172,14 +185,19 @@
   </p>
   <div class="sec-head" style="margin-top:var(--s-7)">
     <p class="lbl">Reference</p>
-    <h2>Why four hooks?</h2>
+    <h2>Why five hooks?</h2>
     <p>Each one closes a specific gap the others leave open. None is redundant.</p>
   </div>
   <div class="hook-cards">
     <article class="hook-card">
+      <h3>UserPromptSubmit</h3>
+      <p>Marks a new user turn so an older background start cannot trigger a later redundant-wait denial.</p>
+      <p class="hook-detail">Only the session id is used to clear bounded state. The submitted prompt is neither inspected nor stored.</p>
+    </article>
+    <article class="hook-card">
       <h3>PreToolUse</h3>
-      <p>The main gate. Bash / Monitor, Read / Write / Edit, Glob / Grep, MCP, and Skill calls pass through and get a decision back.</p>
-      <p class="hook-detail">Also injects modern-CLI hints via <code>additionalContext</code>, blocks Tier 1 secrets in source Write/Edit bodies, and enforces file guards on symlinked AI-config files like <code>CLAUDE.md</code> and <code>.cursorrules</code>.</p>
+      <p>The main gate. Bash / Monitor / TaskOutput, Read / Write / Edit, Glob / Grep, MCP, and Skill calls pass through and get a decision back.</p>
+      <p class="hook-detail">Also blocks an immediate redundant blocking wait, injects modern-CLI hints via <code>additionalContext</code>, blocks Tier 1 secrets in source Write/Edit bodies, and enforces file guards on symlinked AI-config files like <code>CLAUDE.md</code> and <code>.cursorrules</code>.</p>
     </article>
     <article class="hook-card">
       <h3>PermissionRequest</h3>
@@ -193,7 +211,7 @@
     </article>
     <article class="hook-card">
       <h3>PostToolUse</h3>
-      <p>Fires after the call runs. Used for approval learning (queue successful asks) and Tier 2 anti-pattern nudges on Write/Edit content.</p>
+      <p>Fires after every successful call. Used to close immediate-wait correlation after completed work, start new background-Bash correlation, learn approvals, and run Tier 2 anti-pattern nudges on Write/Edit content.</p>
       <p class="hook-detail">On Codex, tool-gates currently carries Tier 3 informational warnings and modern-CLI hints here rather than on PreToolUse.</p>
     </article>
   </div>

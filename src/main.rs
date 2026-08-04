@@ -7,7 +7,7 @@
 //!
 //! Supports Claude Code, Codex CLI, and Antigravity CLI hook systems, plus
 //! deprecated Gemini CLI:
-//! - Claude Code: `PreToolUse`, `PermissionRequest`, `PermissionDenied`, `PostToolUse` (Bash, Monitor, Write, Edit)
+//! - Claude Code: `UserPromptSubmit`, `PreToolUse`, `PermissionRequest`, `PermissionDenied`, `PostToolUse`
 //! - Codex CLI:   `PreToolUse`, `PermissionRequest`, `PostToolUse` (Bash, apply_patch, mcp__*). Selected via `--client codex`.
 //! - Antigravity CLI (`agy`): `PreToolUse` (run_command, view_file, write_to_file, replace_file_content, ...). Selected via `--client antigravity`.
 //! - Gemini CLI:  `BeforeTool` (tool_name: "run_shell_command"). Deprecated compatibility for existing setups; Google's consumer Gemini CLI sunset date was 2026-06-18. Use Antigravity instead.
@@ -44,6 +44,7 @@ use tool_gates::security_reminders::check_security_reminders_for_content;
 use tool_gates::settings_writer::{
     RuleType, Scope, add_rule, list_all_rules, list_rules, remove_rule,
 };
+use tool_gates::task_output_guard;
 use tool_gates::tool_blocks::check_tool_block;
 use tool_gates::tool_cache;
 use tool_gates::tracking::{ApprovalOrigin, CommandPart, TrackedCommand, track_ask_command};
@@ -205,6 +206,11 @@ fn main() {
 
     // Route based on hook event type
     match hook_event.as_deref() {
+        Some("UserPromptSubmit") => {
+            if let Some(session_id) = input.get("session_id").and_then(|value| value.as_str()) {
+                task_output_guard::clear_session(session_id);
+            }
+        }
         Some("PermissionRequest") => {
             handle_permission_request_hook(input, client);
         }
@@ -560,6 +566,13 @@ fn handle_pre_tool_use_hook(input: serde_json::Value, client: Client) {
     };
 
     let config = config::load();
+
+    if client == Client::Claude
+        && let Some(output) = task_output_guard::check_task_output(&hook_input)
+    {
+        emit_pre_tool_use_output(&output, client);
+        return;
+    }
 
     let empty_tool_input = serde_json::Map::new();
     let tool_input_map = hook_input.tool_input.as_map().unwrap_or(&empty_tool_input);
@@ -958,6 +971,9 @@ fn handle_post_tool_use_hook(input: serde_json::Value, client: Client) {
     };
 
     let tool_name = post_input.tool_name.as_str();
+    if client == Client::Claude {
+        task_output_guard::observe_post_tool_use(&post_input);
+    }
     if Client::is_shell_tool(tool_name) {
         // Shell commands: track successful executions for approval learning.
         // Gemini doesn't provide tool_use_id, so tracking can't correlate
@@ -1133,12 +1149,13 @@ fn matcher_with_file_tools(
 }
 
 /// PreToolUse matcher for built-in tools (exact match mode).
-/// Bash (gate engine), file tools (guards), Glob/Grep (block rules).
+/// Bash (gate engine), TaskOutput (wait guard), file tools (guards),
+/// Glob/Grep (block rules).
 fn pre_tool_use_matcher() -> String {
     matcher_with_file_tools(
         Client::Claude,
         FileHookEvent::PreToolUse,
-        &["Bash", "Monitor"],
+        &["Bash", "Monitor", "TaskOutput"],
         &["Glob", "Grep", "Skill"],
     )
 }
@@ -1163,16 +1180,6 @@ fn permission_request_matcher() -> String {
 /// handled by the classifier alone.
 const PERMISSION_DENIED_MATCHER: &str = "Bash|Monitor";
 
-/// PostToolUse matcher for Bash (approval tracking) + file tools (security reminders).
-fn post_tool_use_matcher() -> String {
-    matcher_with_file_tools(
-        Client::Claude,
-        FileHookEvent::PostToolUse,
-        &["Bash", "Monitor"],
-        &[],
-    )
-}
-
 fn generate_hook_entry(binary_path: &str, matcher: &str) -> serde_json::Value {
     serde_json::json!({
         "matcher": matcher,
@@ -1180,11 +1187,17 @@ fn generate_hook_entry(binary_path: &str, matcher: &str) -> serde_json::Value {
     })
 }
 
+fn generate_unmatched_hook_entry(binary_path: &str) -> serde_json::Value {
+    serde_json::json!({
+        "hooks": [{"type": "command", "command": binary_path, "timeout": 10}]
+    })
+}
+
 fn generate_hooks_json(binary_path: &str) -> serde_json::Value {
     let pre_tool_use_matcher = pre_tool_use_matcher();
     let permission_request_matcher = permission_request_matcher();
-    let post_tool_use_matcher = post_tool_use_matcher();
     serde_json::json!({
+        "UserPromptSubmit": [generate_unmatched_hook_entry(binary_path)],
         "PreToolUse": [
             generate_hook_entry(binary_path, &pre_tool_use_matcher),
             generate_hook_entry(binary_path, MCP_TOOL_USE_MATCHER),
@@ -1194,9 +1207,7 @@ fn generate_hooks_json(binary_path: &str) -> serde_json::Value {
             generate_hook_entry(binary_path, MCP_TOOL_USE_MATCHER),
         ],
         "PermissionDenied": [generate_hook_entry(binary_path, PERMISSION_DENIED_MATCHER)],
-        "PostToolUse": [
-            generate_hook_entry(binary_path, &post_tool_use_matcher),
-        ]
+        "PostToolUse": [generate_unmatched_hook_entry(binary_path)]
     })
 }
 
@@ -1628,8 +1639,13 @@ fn install_hooks(scope: &str, dry_run: bool) {
     let perm_request_entry = generate_hook_entry(&binary_path, &permission_request_matcher());
     let mcp_perm_request_entry = generate_hook_entry(&binary_path, MCP_TOOL_USE_MATCHER);
     let perm_denied_entry = generate_hook_entry(&binary_path, PERMISSION_DENIED_MATCHER);
-    let post_tool_use_entry = generate_hook_entry(&binary_path, &post_tool_use_matcher());
+    let post_tool_use_entry = generate_unmatched_hook_entry(&binary_path);
+    let user_prompt_submit_entry = generate_unmatched_hook_entry(&binary_path);
     let expected_events = vec![
+        (
+            "UserPromptSubmit".to_string(),
+            vec![user_prompt_submit_entry],
+        ),
         (
             "PreToolUse".to_string(),
             vec![pre_tool_use_entry, mcp_tool_use_entry],
@@ -2345,6 +2361,7 @@ fn handle_hooks_status() {
         ("local", get_settings_path("local")),
     ];
     let claude_hooks = [
+        "UserPromptSubmit",
         "PreToolUse",
         "PermissionRequest",
         "PermissionDenied",
@@ -3452,6 +3469,10 @@ fn handle_doctor_subcommand(args: &[String]) {
             None => continue,
         };
 
+        let has_prompt = hooks
+            .get("UserPromptSubmit")
+            .map(has_tool_gates_hook)
+            .unwrap_or(false);
         let has_pre = hooks
             .get("PreToolUse")
             .map(has_tool_gates_hook)
@@ -3469,7 +3490,7 @@ fn handle_doctor_subcommand(args: &[String]) {
             .map(has_tool_gates_hook)
             .unwrap_or(false);
 
-        let count = [has_pre, has_perm, has_perm_denied, has_post]
+        let count = [has_prompt, has_pre, has_perm, has_perm_denied, has_post]
             .iter()
             .filter(|&&x| x)
             .count();
@@ -3478,11 +3499,14 @@ fn handle_doctor_subcommand(args: &[String]) {
         }
 
         any_installed = true;
-        if count == 4 {
-            eprintln!("  ✓ Hooks (claude {}): all 4 installed", scope);
+        if count == 5 {
+            eprintln!("  ✓ Hooks (claude {}): all 5 installed", scope);
             ok_count += 1;
         } else {
             let mut missing = Vec::new();
+            if !has_prompt {
+                missing.push("UserPromptSubmit");
+            }
             if !has_pre {
                 missing.push("PreToolUse");
             }
@@ -3497,7 +3521,7 @@ fn handle_doctor_subcommand(args: &[String]) {
             }
             let msg = format!("Missing Claude hooks in {}: {}", scope, missing.join(", "));
             eprintln!(
-                "  ⚠ Hooks (claude {}): {}/4 (missing {})",
+                "  ⚠ Hooks (claude {}): {}/5 (missing {})",
                 scope,
                 count,
                 missing.join(", ")
@@ -3792,6 +3816,7 @@ fn handle_doctor_subcommand(args: &[String]) {
         ("available-tools.json", "Tool detection cache"),
         ("hint-tracker.json", "Hint dedup tracker"),
         ("pending.jsonl", "Pending approvals"),
+        ("task-output-guard.json", "TaskOutput correlation"),
         ("tracking.json", "Ask tracking (PreToolUse->PostToolUse)"),
     ];
 
@@ -4726,15 +4751,23 @@ mod tests {
     fn claude_hooks_json_shape_includes_mcp_on_permission_request() {
         let hooks = generate_hooks_json("/path/to/tool-gates");
         let obj = hooks.as_object().unwrap();
+        assert_eq!(obj.len(), 5);
+        assert!(obj.contains_key("UserPromptSubmit"));
         assert!(obj.contains_key("PreToolUse"));
         assert!(obj.contains_key("PermissionRequest"));
         assert!(obj.contains_key("PermissionDenied"));
         assert!(obj.contains_key("PostToolUse"));
 
+        let prompt = obj["UserPromptSubmit"].as_array().unwrap();
+        assert_eq!(prompt.len(), 1);
+        assert!(prompt[0].get("matcher").is_none());
+        assert_eq!(prompt[0]["hooks"][0]["command"], "/path/to/tool-gates");
+
         // PreToolUse: built-in tools + MCP.
         let pre = obj["PreToolUse"].as_array().unwrap();
         assert_eq!(pre.len(), 2);
         assert_eq!(pre[0]["matcher"], pre_tool_use_matcher());
+        assert!(pre_tool_use_matcher().contains("TaskOutput"));
         assert!(pre_tool_use_matcher().contains("NotebookEdit"));
         assert!(!pre_tool_use_matcher().contains("MultiEdit"));
         assert_eq!(pre[1]["matcher"], MCP_TOOL_USE_MATCHER);
@@ -4752,11 +4785,11 @@ mod tests {
         assert_eq!(denied.len(), 1);
         assert_eq!(denied[0]["matcher"], PERMISSION_DENIED_MATCHER);
 
-        // PostToolUse: shell tracking + file security.
+        // PostToolUse observes successful work from every Claude tool. The
+        // handler still routes shell tracking and file security by tool name.
         let post = obj["PostToolUse"].as_array().unwrap();
         assert_eq!(post.len(), 1);
-        assert_eq!(post[0]["matcher"], post_tool_use_matcher());
-        assert!(post_tool_use_matcher().contains("NotebookEdit"));
+        assert!(post[0].get("matcher").is_none());
     }
 
     #[test]

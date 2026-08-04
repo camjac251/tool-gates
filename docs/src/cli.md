@@ -19,7 +19,7 @@
     <tbody>
       <tr>
         <td><code>tool-gates hooks add -s user</code></td>
-        <td>Wire all four tool-gates hooks into <code>~/.claude/settings.json</code>. Use <code>-s project</code> or <code>-s local</code> for project-scoped installs.</td>
+        <td>Wire all five tool-gates hooks into <code>~/.claude/settings.json</code>. Use <code>-s project</code> or <code>-s local</code> for project-scoped installs.</td>
       </tr>
       <tr>
         <td><code>tool-gates hooks add --gemini</code></td>

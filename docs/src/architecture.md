@@ -15,7 +15,7 @@
       <div class="lc-node start">
         <span class="lc-icon">●</span>
         <div class="lc-title">Tool-call JSON on stdin</div>
-        <div class="lc-sub">Client auto-detected from <code>hook_event_name</code> (or the <code>--client codex</code> / <code>--client antigravity</code> flag; Antigravity payloads are normalized into the canonical shape first). Routes by <code>tool_name</code>: Bash/Monitor to the gate engine, Write/Edit to file guards + security reminders, MCP to block rules + accept-edits, Skill to auto-approval rules.</div>
+        <div class="lc-sub">Client auto-detected from <code>hook_event_name</code> (or the <code>--client codex</code> / <code>--client antigravity</code> flag; Antigravity payloads are normalized into the canonical shape first). Routes by <code>tool_name</code>: Bash/Monitor to the gate engine, TaskOutput to the immediate-wait guard, Write/Edit to file guards + security reminders, MCP to block rules + accept-edits, Skill to auto-approval rules. Claude's UserPromptSubmit event clears prior-turn wait correlation.</div>
       </div>
       <div class="lc-edge"></div>
       <div class="lc-node hook">
@@ -95,7 +95,7 @@
   <div class="sec-head">
     <p class="lbl">Side data</p>
     <h2>Recovery, hints, tracking, security scan.</h2>
-    <p>Four subsystems run alongside the main pipeline without changing the decision.</p>
+    <p>Five subsystems run alongside the main pipeline; the TaskOutput guard can deny one narrowly correlated sequence.</p>
   </div>
   <div class="data-table-frame">
     <div class="data-table-scroll" data-table-scroll>
@@ -107,6 +107,7 @@
       <tr><td>Recovery guidance</td><td><code>recovery.rs</code></td><td>Stores corrective steps as semantic actions, then renders them with the active client's registered capabilities. Causes remain stable across clients; native tool names appear only at serialization. Surfaces without an active hook client, such as the WASM simulator, render neutral recovery without naming a tool.</td></tr>
       <tr><td>Modern CLI hints</td><td><code>hints.rs</code></td><td>For allowed commands using legacy tools, attach a client-neutral suggestion through the context channel that client supports: Claude agent context, Gemini's user-facing <code>systemMessage</code>, Codex PostToolUse context, and no output for Antigravity no-opinion decisions. Gated on the modern tool being installed (7-day cache in <code>tool_cache.rs</code>). Session-deduped via <code>hint_tracker.rs</code>.</td></tr>
       <tr><td>Approval tracking</td><td><code>tracking.rs</code></td><td>PreToolUse → PostToolUse correlation with 24h TTL. Successful asks land in <code>~/.cache/tool-gates/pending.jsonl</code> for the review TUI.</td></tr>
+      <tr><td>TaskOutput guard</td><td><code>task_output_guard.rs</code></td><td>Records only successful background Bash results with a structured task id. A blocking TaskOutput call is denied only for the same session and task with no intervening successful tool work or user turn. Successful non-TaskOutput results close the immediate sequence. State expires after 10 minutes and is capped at 128 sessions.</td></tr>
       <tr><td>Security reminders</td><td><code>security_reminders.rs</code></td><td>Three-tier scan of Write/Edit bodies. Tier 1 denies source writes before they land, with doc-file secrets nudged after write; Tier 2 nudges via PostToolUse; Tier 3 warns on <code>additionalContext</code>. See the <a href="security-reminders.html">Security reminders</a> page.</td></tr>
     </tbody>
   </table>

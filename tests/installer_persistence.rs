@@ -132,6 +132,22 @@ fn hook_installers_preserve_config_backup_permissions_and_idempotence() {
         } else {
             assert_eq!(root["other"]["preserved"], true);
             assert!(root["hooks"].get("CustomEvent").is_some());
+            if case.name == "claude" {
+                let hooks = root["hooks"].as_object().expect("Claude hooks object");
+                assert!(hooks.contains_key("UserPromptSubmit"));
+                let pre_matcher = hooks["PreToolUse"][0]["matcher"]
+                    .as_str()
+                    .expect("Claude PreToolUse matcher");
+                assert!(pre_matcher.split('|').any(|tool| tool == "TaskOutput"));
+                let post = hooks["PostToolUse"]
+                    .as_array()
+                    .expect("Claude PostToolUse entries");
+                assert_eq!(post.len(), 1);
+                assert!(
+                    post[0].get("matcher").is_none(),
+                    "Claude PostToolUse must observe successful work from every tool"
+                );
+            }
         }
 
         let backups = backup_paths(&path);
