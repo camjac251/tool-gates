@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.34.0](https://github.com/camjac251/tool-gates/compare/v1.33.5...v1.34.0) - 2026-08-06
+
+### Added
+
+- *(comment-lint)* add opt-in comment-volume gate
+
+### Other
+
+- add v1.33.1 through v1.33.5 to Recent Releases
+
 ## [1.33.5](https://github.com/camjac251/tool-gates/compare/v1.33.4...v1.33.5) - 2026-08-06
 
 ### Fixed
