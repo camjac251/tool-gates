@@ -1044,7 +1044,10 @@ fn handle_post_tool_use_hook(input: serde_json::Value, client: Client) {
             return;
         }
         let config = config::load();
-        if !config.features.security_reminders && !config.features.design_lint {
+        if !config.features.security_reminders
+            && !config.features.design_lint
+            && !config.features.comment_lint
+        {
             return;
         }
         let empty_tool_input = serde_json::Map::new();
@@ -1069,6 +1072,14 @@ fn handle_post_tool_use_hook(input: serde_json::Value, client: Client) {
             && let Some(output) = tool_gates::design_lint::check_design_lint_post_for_content(
                 &content_pairs,
                 &config.design_lint,
+            )
+        {
+            outputs.push(output);
+        }
+        if config.features.comment_lint
+            && let Some(output) = tool_gates::comment_lint::check_comment_lint_post_for_content(
+                &content_pairs,
+                &config.comment_lint,
             )
         {
             outputs.push(output);
@@ -2744,8 +2755,8 @@ fn handle_rules_export(args: &[String]) {
                 out_path.display()
             );
             eprintln!(
-                "  {}/gates/*.md + {}/security-floor.md + {}/hints.md + {}/security-reminders.md + {}/design-lint.md",
-                out, out, out, out, out
+                "  {}/gates/*.md + {}/security-floor.md + {}/hints.md + {}/security-reminders.md + {}/design-lint.md + {}/comment-lint.md",
+                out, out, out, out, out, out
             );
         }
         Err(e) => {
@@ -2767,7 +2778,7 @@ fn print_rules_export_help() {
     eprintln!("      --rules-dir <path>  Source rules directory (default: rules)");
     eprintln!();
     eprintln!(
-        "Writes gate pages plus security-floor.md, hints.md, security-reminders.md, and design-lint.md under <out>."
+        "Writes gate pages plus security-floor.md, hints.md, security-reminders.md, design-lint.md, and comment-lint.md under <out>."
     );
     eprintln!("Output is deterministic: re-running with the same source inputs is byte-identical.");
 }
@@ -3392,6 +3403,7 @@ fn handle_doctor_subcommand(args: &[String]) {
                         ("head_tail_pipe_block", features.head_tail_pipe_block),
                         ("git_aliases", features.git_aliases),
                         ("design_lint", features.design_lint),
+                        ("comment_lint", features.comment_lint),
                     ];
                     let disabled: Vec<&str> = feature_states
                         .iter()

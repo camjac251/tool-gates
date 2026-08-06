@@ -30,7 +30,7 @@ fn doctor_uses_xdg_config_path_and_reports_every_disabled_feature() {
     let config_path = config_dir.join("config.toml");
     std::fs::write(
         &config_path,
-        "[features]\ngit_aliases = false\ndesign_lint = false\n",
+        "[features]\ngit_aliases = false\ndesign_lint = false\ncomment_lint = false\n",
     )
     .expect("write config");
 
@@ -45,7 +45,7 @@ fn doctor_uses_xdg_config_path_and_reports_every_disabled_feature() {
         "doctor did not report the XDG config path: {stderr}"
     );
     assert!(
-        stderr.contains("Features disabled: git_aliases, design_lint"),
+        stderr.contains("Features disabled: git_aliases, design_lint, comment_lint"),
         "doctor omitted disabled features: {stderr}"
     );
 }

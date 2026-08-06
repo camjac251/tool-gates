@@ -12,7 +12,7 @@
   </div>
 <pre class="code-block"><span class="prompt">$</span> tool-gates doctor
 <span class="comment">✓ binary: ~/.local/bin/tool-gates (vX.Y.Z)</span>
-<span class="comment">✓ config: ~/.config/tool-gates/config.toml (valid; design_lint disabled by default)</span>
+<span class="comment">✓ config: ~/.config/tool-gates/config.toml (valid; design_lint and comment_lint disabled by default)</span>
 <span class="comment">✓ hooks · claude:    user + project (4 hooks each)</span>
 <span class="comment">✓ hooks · codex:       user (3 hooks)</span>
 <span class="comment">✓ hooks · antigravity: user (1 hook)</span>

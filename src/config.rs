@@ -118,6 +118,9 @@ pub struct Config {
     /// Frontend design-lint customization.
     #[serde(default)]
     pub design_lint: DesignLintConfig,
+    /// Comment-volume lint customization.
+    #[serde(default)]
+    pub comment_lint: CommentLintConfig,
     /// Auto-approve rules for Skill tool calls.
     #[serde(default)]
     pub auto_approve_skills: Vec<SkillApprovalRule>,
@@ -170,6 +173,12 @@ pub struct Features {
     /// Opt-in: a design-quality convention, not a universal safety floor, so it
     /// defaults off.
     pub design_lint: bool,
+    /// Comment-volume linting for code file Write/Edit on PostToolUse. Flags an
+    /// edit that adds far more narrative commentary than code, and any single
+    /// comment that runs longer than a short paragraph. Doc comments and
+    /// tooling directives are exempt. Opt-in: a house style, not a safety
+    /// floor, so it defaults off.
+    pub comment_lint: bool,
 }
 
 impl Default for Features {
@@ -182,6 +191,7 @@ impl Default for Features {
             head_tail_pipe_block: true,
             git_aliases: true,
             design_lint: false,
+            comment_lint: false,
         }
     }
 }
@@ -445,6 +455,36 @@ impl Default for SecurityRemindersConfig {
 pub struct DesignLintConfig {
     /// Rule ids to disable, e.g. ["color/default-indigo", "content/dash"].
     pub disable_rules: Vec<String>,
+}
+
+/// Comment-volume lint configuration.
+///
+/// Only takes effect when `features.comment_lint` is enabled (default off).
+/// The defaults target the tail, not the median: a PostToolUse nudge costs
+/// tokens and disturbs the prompt cache, so it should stay rare.
+#[derive(Debug, Deserialize, Clone)]
+#[serde(default)]
+pub struct CommentLintConfig {
+    /// Rule ids to disable, e.g. ["volume/long-block"].
+    pub disable_rules: Vec<String>,
+    /// Narrative comment lines per 100 code lines above which an edit is flagged.
+    pub max_per_100: usize,
+    /// Added code lines an edit needs before the density rule applies. Small
+    /// edits are legitimately comment-dense and would otherwise dominate.
+    pub min_code_lines: usize,
+    /// Longest run of consecutive own-line comments before flagging.
+    pub max_block_lines: usize,
+}
+
+impl Default for CommentLintConfig {
+    fn default() -> Self {
+        Self {
+            disable_rules: Vec::new(),
+            max_per_100: 40,
+            min_code_lines: 15,
+            max_block_lines: 5,
+        }
+    }
 }
 
 /// File guard configuration for extending or replacing guarded paths.

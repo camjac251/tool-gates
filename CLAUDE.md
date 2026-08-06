@@ -17,7 +17,7 @@ Documentation routing:
 | Permission modes and precedence | `docs/src/modes.md`, `docs/src/auto-mode.md`, `docs/src/settings-precedence.md` |
 | Scratch auto-approval | `docs/src/scratch.md` |
 | Raw command guardrails | `docs/src/security-floor.md` |
-| Write/Edit scanning | `docs/src/security-reminders.md`, `docs/src/design-lint.md` |
+| Write/Edit scanning | `docs/src/security-reminders.md`, `docs/src/design-lint.md`, `docs/src/comment-lint.md` |
 | Declarative gates and custom handlers | `docs/src/contributing.md`, `docs/src/custom-handlers.md` |
 | Permission reason copy | `docs/src/reason-style.md` |
 | CLI or configuration | `docs/src/cli.md`, `docs/src/configuration.md` |
@@ -107,6 +107,7 @@ When any of these rules change, update the exact serialization tests plus `docs/
 - `docs/src/hints.md`
 - `docs/src/security-reminders.md`
 - `docs/src/design-lint.md`
+- `docs/src/comment-lint.md`
 
 Change their source catalogs or `src/rules_export.rs`, then regenerate. Do not hand-edit generated pages unless the generator itself is the subject of the change. Other pages under `docs/src/` are hand-maintained.
 

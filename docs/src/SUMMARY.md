@@ -48,6 +48,7 @@
 - [Security Floor](security-floor.md)
 - [Security Reminders](security-reminders.md)
 - [Design Lint](design-lint.md)
+- [Comment Lint](comment-lint.md)
 - [Modern CLI Hints](hints.md)
 - [Recent Releases](whats-new.md)
 - [Glossary](glossary.md)

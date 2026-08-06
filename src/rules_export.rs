@@ -121,6 +121,7 @@ pub fn export_markdown(rules_dir: &Path, out_dir: &Path) -> io::Result<()> {
         render_security_reminders_page(),
     )?;
     fs::write(out_dir.join("design-lint.md"), render_design_lint_page())?;
+    fs::write(out_dir.join("comment-lint.md"), render_comment_lint_page())?;
 
     Ok(())
 }
@@ -1211,6 +1212,33 @@ fn render_design_lint_page() -> String {
     out
 }
 
+/// Render `comment-lint.md` from `comment_lint::rules()`. One card, every rule a
+/// `Nudge` row, so the row count equals `rules().len()` (guarded by a test).
+fn render_comment_lint_page() -> String {
+    let rules = crate::comment_lint::rules();
+
+    let mut out = String::new();
+    out.push_str("  <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n    <ol>\n      <li><a href=\"index.html\">Reference</a></li>\n      <li aria-current=\"page\">Comment lint</li>\n    </ol>\n  </nav>\n");
+    out.push_str("  <h1 id=\"comment-lint-h1\">Comment lint</h1>\n");
+    out.push_str("  <p class=\"page-lede\">tool-gates measures how much narrative commentary a write or edit adds relative to the code it adds, and how long any single comment runs. It covers Claude <code>Write</code>/<code>Edit</code> and Codex <code>apply_patch</code> added lines on the PostToolUse path, the same path as the security-reminder and design-lint nudges. Antigravity has no PostToolUse hook, so comment lint does not run there. Findings are a single tier: a match attaches a post-write nudge so the next action can trim. Nothing is blocked. The gate is opt-in (default off) and only scans code extensions; Markdown, JSON, and other prose or data files are skipped.</p>\n");
+    out.push_str("  <div class=\"sec-head\" style=\"margin-top: var(--s-6)\">\n    <p class=\"lbl\">Why it is opt-in</p>\n    <h2>Volume, not judgement.</h2>\n    <p>Assistant prompts already say <em>whether</em> to write a comment. Nothing bounds how many or how long, which is where commentary accumulates: an edit that adds more narration than code, or one comment that runs a full paragraph. These rules measure only that. They make no claim about whether an individual comment is worth keeping.</p>\n    <p>Doc comments are exempt. <code>///</code>, <code>//!</code>, <code>/** */</code>, and Python docstrings are API documentation, and flagging them would push toward undocumented public surfaces. Tooling directives (<code>#\u{a0}noqa</code>, <code>//nolint</code>, <code>eslint-disable</code>, <code>@ts-expect-error</code>) are exempt too: they are machine instructions, not prose.</p>\n    <p>Defaults are tuned to the tail rather than the median. Every <code>additionalContext</code> injection costs tokens and disturbs the prompt cache, so a gate that fires on a typical edit costs more than it saves.</p>\n  </div>\n");
+
+    let rows: Vec<String> = rules
+        .iter()
+        .map(|r| scanner_row(r.id, RowDecision::Nudge, false, r.message))
+        .collect();
+    out.push_str(&scanner_card(
+        "Comment volume",
+        "post-write nudge \u{b7} PostToolUse",
+        &rows,
+    ));
+    out.push('\n');
+
+    out.push_str("  <div class=\"config-block\">\n    <header>\n      <h3>Configure</h3>\n      <span class=\"src-tag\">documented</span>\n    </header>\n    <div class=\"config-body\">\n      <div class=\"config-toml\">\n<pre><span class=\"sec\">[features]</span>\n<span class=\"k\">comment_lint</span> = <span class=\"b\">true</span>\n<span class=\"sec\">[comment_lint]</span>\n<span class=\"k\">max_per_100</span> = <span class=\"b\">40</span>\n<span class=\"k\">min_code_lines</span> = <span class=\"b\">15</span>\n<span class=\"k\">max_block_lines</span> = <span class=\"b\">5</span>\n<span class=\"k\">disable_rules</span> = [<span class=\"s\">\"volume/long-block\"</span>]</pre>\n      </div>\n      <div class=\"config-prose\">\n        <p>Opt-in. Set <code>comment_lint = true</code> under <code>[features]</code> to turn the gate on; it is off by default.</p>\n        <p><code>max_per_100</code> is narrative comment lines per 100 code lines before <code>volume/comment-heavy</code> fires. <code>min_code_lines</code> is how much code an edit must add before that rule applies at all, so a small edit that is legitimately comment-dense stays quiet.</p>\n        <p><code>max_block_lines</code> is the longest run of consecutive own-line comments allowed before <code>volume/long-block</code> fires. Raise it for codebases that favor long explanatory headers.</p>\n        <p>Lower the thresholds to tighten the house style; raise them to make the gate rarer. Disable a single rule by id via <code>disable_rules</code>.</p>\n      </div>\n    </div>\n  </div>\n");
+
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1410,6 +1438,16 @@ mod tests {
     }
 
     #[test]
+    fn comment_lint_page_row_count_matches_rules() {
+        let page = render_comment_lint_page();
+        assert_eq!(
+            row_count(&page),
+            crate::comment_lint::rules().len(),
+            "every comment-lint rule must render exactly one row"
+        );
+    }
+
+    #[test]
     fn scanner_pages_use_nudge_not_ask_for_post_write_rows() {
         // The old hand-written pages mislabeled post-write nudges as
         // data-decision="ask"; generated pages must use the nudge decision.
@@ -1420,6 +1458,12 @@ mod tests {
         assert!(
             !design.contains("data-decision=\"ask\""),
             "design-lint rows are all nudges, never asks"
+        );
+        let comment = render_comment_lint_page();
+        assert!(comment.contains("data-decision=\"nudge\""));
+        assert!(
+            !comment.contains("data-decision=\"ask\""),
+            "comment-lint rows are all nudges, never asks"
         );
     }
 }

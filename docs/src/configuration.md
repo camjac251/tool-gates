@@ -20,14 +20,15 @@
 <span class="k">security_reminders</span>   = <span class="b">true</span>
 <span class="k">head_tail_pipe_block</span> = <span class="b">true</span>
 <span class="k">git_aliases</span>          = <span class="b">true</span>
-<span class="k">design_lint</span>          = <span class="b">false</span></pre>
+<span class="k">design_lint</span>          = <span class="b">false</span>
+<span class="k">comment_lint</span>         = <span class="b">false</span></pre>
       </div>
       <div class="config-prose">
         <p>Each subsystem can be turned off independently. Toggles merge with defaults; missing keys keep their default value.</p>
         <p><code>head_tail_pipe_block</code> denies consumer-side <code>| head -N</code> and <code>| tail -N</code> caps for every producer so the agent uses a source-native bound such as <code>rg -m N</code>, <code>fd --max-results N</code>, or <code>bat -r START:END</code>. The producer changes the recovery message, not the decision. First-N slices through <code>sed</code> or <code>awk</code>, plus catch-all <code>| rg .</code> filters, use the same floor.</p>
         <p>Streaming <code>tail -f</code>/<code>-F</code>, top-N selection after <code>sort</code>, and picks inside command substitutions or backticks are exempt. Quoted literals and standalone <code>head</code>/<code>tail</code> calls with no upstream pipe are not caps. Complete-stream aggregation with <code>rg -c .</code>, <code>--count</code>, or <code>--count-matches</code> is also exempt, but combining count mode with <code>-m</code>/<code>--max-count</code> remains blocked.</p>
         <p><code>git_aliases</code> resolves user-defined aliases against <code>~/.gitconfig</code> so <code>git st</code> runs through the same allow/ask rules as <code>git status</code>.</p>
-        <p><code>design_lint</code> is the one opt-in subsystem (default <code>false</code>): a frontend design-quality linter for UI writes. Security reminders cover the safety floor; this one covers style. Set it <code>true</code> to enable.</p>
+        <p><code>design_lint</code> and <code>comment_lint</code> are the opt-in subsystems (default <code>false</code>). Security reminders cover the safety floor; these two cover house style. <code>design_lint</code> is a frontend design-quality linter for UI writes; <code>comment_lint</code> flags code writes that add far more narrative commentary than code. Set either <code>true</code> to enable.</p>
       </div>
     </div>
   </div>
@@ -202,6 +203,28 @@
       <div class="config-prose">
         <p>Opt-in (default off). Set <code>design_lint = true</code> under <code>[features]</code> to scan UI file writes and edits for generic, templated design patterns and missing UI-quality basics.</p>
         <p>Disable individual rules by id (for example <code>color/default-indigo</code> or <code>content/dash</code>) when a project deliberately uses that pattern. CSS custom-property <em>definitions</em> in a <code>:root</code> block are exempt from the raw-color rules, so defining a brand token is never flagged.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h2>Comment lint</h2>
+      <span class="src-tag">documented</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec">[features]</span>
+<span class="k">comment_lint</span> = <span class="b">true</span>
+<span class="sec">[comment_lint]</span>
+<span class="k">max_per_100</span> = <span class="b">40</span>
+<span class="k">min_code_lines</span> = <span class="b">15</span>
+<span class="k">max_block_lines</span> = <span class="b">5</span>
+<span class="k">disable_rules</span> = [<span class="s">"volume/long-block"</span>]</pre>
+      </div>
+      <div class="config-prose">
+        <p>Opt-in (default off). Set <code>comment_lint = true</code> under <code>[features]</code> to measure how much narrative commentary a code write or edit adds relative to the code it adds.</p>
+        <p><code>max_per_100</code> is narrative comment lines per 100 code lines before <code>volume/comment-heavy</code> fires, and <code>min_code_lines</code> is how much code an edit must add before that rule applies at all. <code>max_block_lines</code> caps the longest run of consecutive own-line comments before <code>volume/long-block</code> fires.</p>
+        <p>Doc comments (<code>///</code>, <code>//!</code>, <code>/** */</code>, Python docstrings) and tooling directives (<code>#&nbsp;noqa</code>, <code>//nolint</code>, <code>eslint-disable</code>) are exempt, and only code extensions are scanned.</p>
       </div>
     </div>
   </div>
