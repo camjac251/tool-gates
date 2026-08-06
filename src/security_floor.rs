@@ -34,11 +34,14 @@ pub struct FloorHit {
 // pattern's regex is generated into `src/generated/rules.rs` from
 // `rules/security.toml`; do not re-add migrated statics here.
 //
-// Every target class stops at the unquoted shell metacharacters that end a word
-// (`;`, `|`, `(`, `)`, `<`, `>`, `&`, whitespace). A class that swallows them
+// Every target class stops at the unquoted shell metacharacters that close a
+// word (`;`, `|`, `)`, `<`, `>`, `&`, whitespace). A class that swallows them
 // mis-resolves the destination: `2>/dev/null; echo done` captures `/dev/null;`,
 // which fails the `/dev/null` exemption below and then reads as a clobber of a
-// system path.
+// system path. `(` is deliberately NOT in that set: it only ever opens a target
+// (`>(cmd)` process substitution), and excluding it drops the match entirely, so
+// `echo x >(cat)` would resolve to a plain read-only command instead of a
+// subprocess write.
 
 /// Output redirection to a file (`>`, `>>`, including fd-prefixed forms like
 /// `2>`, `9>>`). The optional `[0-9]*` after the boundary consumes the fd
@@ -48,21 +51,21 @@ pub struct FloorHit {
 /// `&`; the `>&FILE` write form is handled by `FD_AMP_REDIRECT_RE`. Group 2 is
 /// the file target.
 static REDIRECT_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(^|[^0-9&=/$])[0-9]*>{1,2}\s*([^>&\s;|()<]+)").expect("REDIRECT_RE must compile")
+    Regex::new(r"(^|[^0-9&=/$])[0-9]*>{1,2}\s*([^>&\s;|)<]+)").expect("REDIRECT_RE must compile")
 });
 
 /// `&> file` redirection pattern (both streams to a file). `&>>file` falls to
 /// `REDIRECT_RE`, which takes the second `>` as its operator and captures the
 /// same target.
 static AMP_REDIRECT_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"&>\s*([^>&\s;|()<]+)").expect("AMP_REDIRECT_RE must compile"));
+    LazyLock::new(|| Regex::new(r"&>\s*([^>&\s;|)<]+)").expect("AMP_REDIRECT_RE must compile"));
 
 /// `>& file` / `N>& file` / `>>& file` redirection (both streams to a file).
 /// Distinct from fd duplication (`2>&1`, `>&2`, `2>&-`): the target class
 /// rejects a leading digit or `-`, so only a real path matches and a dup is
 /// left alone. Group 2 is the file target.
 static FD_AMP_REDIRECT_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(^|[^0-9&=/$])[0-9]*>{1,2}&\s*([^>&\s;|()<0-9-][^>&\s;|()<]*)")
+    Regex::new(r"(^|[^0-9&=/$])[0-9]*>{1,2}&\s*([^>&\s;|)<0-9-][^>&\s;|)<]*)")
         .expect("FD_AMP_REDIRECT_RE must compile")
 });
 
@@ -1165,6 +1168,8 @@ mod tests {
                 "command > /dev/null 2>&1",
                 "command &>/dev/null",
                 "command &> /dev/null",
+                "command &>>/dev/null",
+                "command >>& /dev/null",
                 "rg pattern 2>/dev/null",
                 "grep foo 2>/dev/null | grep -v bar > /dev/null",
             ] {
@@ -1197,6 +1202,27 @@ mod tests {
                 assert!(
                     !reason.contains("Output redirection"),
                     "False positive for: {cmd}"
+                );
+            }
+        }
+
+        /// `>(cmd)` runs a subprocess, and the redirect floor is what puts it
+        /// in front of a person. `(` opens a target rather than closing one, so
+        /// excluding it from the target class drops the match entirely and
+        /// `echo x >(cat)` reads as a plain read-only command.
+        #[test]
+        fn test_process_substitution_still_flagged() {
+            for cmd in [
+                "cat f > >(cat)",
+                "echo x >(cat)",
+                "tee >(cat)",
+                "cat f > >(gzip)",
+            ] {
+                let result = check_command(cmd);
+                assert_eq!(get_decision(&result), "ask", "Failed for: {cmd}");
+                assert!(
+                    get_reason(&result).contains("redirection"),
+                    "Failed for: {cmd}"
                 );
             }
         }
