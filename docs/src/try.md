@@ -1,6 +1,7 @@
   <nav class="breadcrumb" aria-label="Breadcrumb">
     <ol>
-      <li><a href="index.html">Getting Started</a></li>
+      <li><a href="index.html">tool-gates</a></li>
+      <li>Start</li>
       <li aria-current="page">Try the Simulator</li>
     </ol>
   </nav>

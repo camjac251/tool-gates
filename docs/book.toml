@@ -42,4 +42,10 @@ limit-results = 30
 use-boolean-and = true
 
 [output.html.fold]
-enable = false
+# The 13 gate pages are a lookup catalog, not reading material, and they made up a
+# third of a 39-row flat nav. Folding them behind the "All Gates" parent keeps every
+# other section reachable without scrolling. level = 0 collapses the group by
+# default; mdBook auto-expands the ancestors of the active page, so a visitor
+# reading gates/git.html still sees its siblings.
+enable = true
+level = 0

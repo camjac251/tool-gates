@@ -1,6 +1,7 @@
   <nav class="breadcrumb" aria-label="Breadcrumb">
     <ol>
-      <li><a href="index.html">Core Concepts</a></li>
+      <li><a href="index.html">tool-gates</a></li>
+      <li>How It Decides</li>
       <li aria-current="page">Settings Precedence</li>
     </ol>
   </nav>

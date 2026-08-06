@@ -1,17 +1,37 @@
   <nav class="breadcrumb" aria-label="Breadcrumb">
     <ol>
-      <li><a href="index.html">Reference</a></li>
-      <li aria-current="page">Recent Releases</li>
+      <li><a href="index.html">tool-gates</a></li>
+      <li>Start</li>
+      <li aria-current="page">What's New</li>
     </ol>
   </nav>
-  <h1 id="whatsnew-h1">Recent Releases</h1>
+  <h1 id="whatsnew-h1">What's new</h1>
   <p class="page-lede">Release cadence is fast. Start with the latest eight versions, then open the historical archive when you need an earlier change. The complete release history remains in <a href="https://github.com/camjac251/tool-gates/blob/main/CHANGELOG.md" target="_blank" rel="noopener">CHANGELOG.md</a>.</p>
   <section class="release-current" aria-labelledby="release-current-title">
     <header class="sec-head release-section-head">
       <span class="lbl">Current window</span>
       <h2 id="release-current-title">Latest eight versions</h2>
-      <p>From v1.33.5 through v1.32.3, newest first.</p>
+      <p>From v1.34.0 through v1.32.4, newest first.</p>
     </header>
+  <div class="config-block">
+    <header>
+      <h3>v1.34.0 · August 6, 2026</h3>
+      <span class="src-tag">opt-in comment-volume lint · <a href="https://github.com/camjac251/tool-gates/commit/d7f833c" target="_blank" rel="noopener">d7f833c</a></span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  flag an edit that adds far more commentary than code
+  flag a single comment block running past a short paragraph
+  tune thresholds and disable individual rules under [comment_lint]</pre>
+      </div>
+      <div class="config-prose">
+        <p>Existing guidance covers whether a comment is worth writing; nothing bounded how many or how long. Two volume rules now do. The first fires when an edit's narrative comment lines outweigh the code it adds, and the second when one run of own-line comments stretches past a short paragraph. Doc comments and tooling directives are exempt, because both are addressed to a reader who asked for them, and only code extensions are scanned.</p>
+        <p>The check runs on the PostToolUse path beside security reminders and design lint, so it sees Claude <code>Write</code>/<code>Edit</code> and Codex <code>apply_patch</code> added lines through one shared surface. Thresholds target the tail rather than the median: 40 comment lines per 100 code lines, applied only once an edit adds 15 code lines, and a maximum run of 5 consecutive comment lines. Small edits are legitimately comment-dense and would otherwise dominate, and every injection costs tokens and disturbs the prompt cache, so the floor is deliberately high.</p>
+        <p>Off by default. This is a house style rather than a safety floor, so it stays behind <code>features.comment_lint</code>; thresholds and individual rule ids are configurable under <code>[comment_lint]</code>.</p>
+      </div>
+    </div>
+  </div>
   <div class="config-block">
     <header>
       <h3>v1.33.5 · August 6, 2026</h3>
@@ -140,6 +160,17 @@
       </div>
     </div>
   </div>
+  </section>
+  <details class="release-archive" id="release-archive" aria-labelledby="release-archive-title">
+    <summary>
+      <h2 class="release-summary" id="release-archive-title">
+        <span class="release-summary-kicker">Historical archive</span>
+        <span class="release-summary-title">Browse 58 earlier releases</span>
+        <span class="release-summary-range">v1.32.3 to v1.1.0</span>
+        <span class="release-summary-icon" aria-hidden="true"></span>
+      </h2>
+    </summary>
+    <div class="release-archive-list">
   <div class="config-block">
     <header>
       <h3>v1.32.3 · July 26, 2026</h3>
@@ -158,17 +189,6 @@
       </div>
     </div>
   </div>
-  </section>
-  <details class="release-archive" id="release-archive" aria-labelledby="release-archive-title">
-    <summary>
-      <h2 class="release-summary" id="release-archive-title">
-        <span class="release-summary-kicker">Historical archive</span>
-        <span class="release-summary-title">Browse 57 earlier releases</span>
-        <span class="release-summary-range">v1.32.2 to v1.1.0</span>
-        <span class="release-summary-icon" aria-hidden="true"></span>
-      </h2>
-    </summary>
-    <div class="release-archive-list">
   <div class="config-block">
     <header>
       <h3>v1.32.2 · July 26, 2026</h3>

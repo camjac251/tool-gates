@@ -1,7 +1,8 @@
 <div class="gate-head">
   <nav class="breadcrumb" aria-label="Breadcrumb">
     <ol>
-      <li><a href="../index.html">Gates</a></li>
+      <li><a href="../index.html">tool-gates</a></li>
+      <li><a href="index.html">Gates</a></li>
       <li aria-current="page">Language Runtimes</li>
     </ol>
   </nav>

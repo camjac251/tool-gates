@@ -1,6 +1,7 @@
   <nav class="breadcrumb" aria-label="Breadcrumb">
     <ol>
-      <li><a href="index.html">Reference</a></li>
+      <li><a href="index.html">tool-gates</a></li>
+      <li>Reference</li>
       <li aria-current="page">CLI Reference</li>
     </ol>
   </nav>

@@ -1,6 +1,7 @@
   <nav class="breadcrumb" aria-label="Breadcrumb">
     <ol>
-      <li><a href="index.html">Development</a></li>
+      <li><a href="index.html">tool-gates</a></li>
+      <li>Contribute</li>
       <li aria-current="page">Reason Style</li>
     </ol>
   </nav>

@@ -214,39 +214,12 @@ textarea:focus-visible,
 .brand .dim {
   color: var(--text-3);
 }
-.ver {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s-2);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-2);
-  padding: var(--s-1) var(--s-3);
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: 9999px;
-  text-decoration: none;
-  transition:
-    color 160ms var(--ease),
-    border-color 160ms var(--ease),
-    background 160ms var(--ease);
-}
-.ver::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--allow);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--allow) 18%, transparent);
-}
-.ver:hover {
-  color: var(--text-1);
-  background: var(--surface-2);
-  border-color: color-mix(in oklab, var(--allow) 30%, var(--border-2));
-}
-.ver .ver-num {
-  font-weight: var(--weight-emphasis);
-  letter-spacing: 0.01em;
+/* The bar's wordmark is the drawer-breakpoint fallback only. At >=1080px the
+ * sidebar head owns it, and repeating it here left two wordmarks 300px apart. */
+@media (min-width: 1080px) {
+  #mdbook-menu-bar .brand {
+    display: none;
+  }
 }
 
 .bar-spacer {
@@ -517,11 +490,61 @@ ul#mdbook-searchresults span.teaser {
   flex-direction: column;
   border-right: 1px solid var(--border);
 }
+/* Sidebar head: wordmark row, flush with the menu bar's own height so the two
+ * chrome bands read as one horizontal line across the top of the page. */
+.sidebar .sidebar-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  height: var(--bar-h);
+  padding: 0 var(--s-3) 0 var(--s-5);
+  border-bottom: 1px solid var(--border);
+}
+.sidebar-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-3);
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: var(--weight-emphasis);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.sidebar-brand:hover {
+  color: var(--text-1);
+}
+.sidebar-brand .gate {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  color: var(--accent);
+  background: currentColor;
+  -webkit-mask: url('{{ resource "favicon.svg" }}') center / contain no-repeat;
+  mask: url('{{ resource "favicon.svg" }}') center / contain no-repeat;
+}
+.sidebar-brand b {
+  font-weight: var(--weight-emphasis);
+}
+.sidebar-brand .dim {
+  color: var(--text-3);
+}
+/* Pinned rows sit outside the scrollbox, so they never move as the nav scrolls. */
+.sidebar .sidebar-pinned {
+  position: relative;
+  inset: auto;
+  flex: none;
+  display: grid;
+  gap: var(--s-2);
+  margin: var(--s-4) var(--s-3) var(--s-2) var(--s-5);
+}
 .sidebar .sidebar-cta {
   position: relative;
   inset: auto;
   flex: none;
-  margin: var(--s-4) var(--s-3) var(--s-2) var(--s-5);
+  margin: 0;
 }
 .sidebar .sidebar-scrollbox {
   position: static;
@@ -533,6 +556,16 @@ ul#mdbook-searchresults span.teaser {
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: var(--s-2) var(--s-3) var(--s-7) var(--s-5);
+  /* The pinned rows stay put while this scrolls, so a section label scrolling
+   * under them read as a collision. Fading the first few pixels of the scroll
+   * area resolves the boundary without drawing a rule the layout does not need.
+   * The mask only engages once there is something scrolled above it. */
+  mask-image: linear-gradient(to bottom, transparent 0, #000 var(--s-3), #000 100%);
+}
+@supports not (mask-image: linear-gradient(#000, #000)) {
+  .sidebar .sidebar-scrollbox {
+    padding-top: var(--s-3);
+  }
 }
 .sidebar-close {
   display: none;
@@ -620,28 +653,106 @@ ul#mdbook-searchresults span.teaser {
   border-radius: 0 2px 2px 0;
   box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 25%, transparent);
 }
-/* Sidebar try.html hide */
-.sidebar-scrollbox li:has(a[href*="try.html"]) {
-  display: none !important;
+
+/* Foldable group. The toggle is an anchor with no href, so `.chapter li a` (1,1,2)
+ * outranks a bare `.chapter-fold-toggle` (1,1,0) and every rule here needs
+ * `a.chapter-fold-toggle`. Unfocusable too, hence initFoldToggles(). */
+#mdbook-sidebar
+  .chapter
+  li:has(> .chapter-link-wrapper > .chapter-fold-toggle)
+  > .chapter-link-wrapper {
+  display: flex;
+  align-items: center;
+}
+#mdbook-sidebar .chapter-link-wrapper > a:not(.chapter-fold-toggle) {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+#mdbook-sidebar .chapter li a.chapter-fold-toggle {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  min-height: 28px;
+  height: 28px;
+  margin-inline-start: 0;
+  margin-inline-end: 2px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-1);
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+}
+#mdbook-sidebar .chapter li a.chapter-fold-toggle:hover {
+  background: var(--surface-2);
+  color: var(--text-1);
+}
+/* mdBook ships the chevron as text content, which inherits the row's font and
+ * renders at a random size. Replace it with a drawn caret that matches the
+ * stroke weight of the icon set used elsewhere in the chrome. The glyph is the
+ * toggle's only content, so initFoldToggles() supplies an aria-label before this
+ * hides it; otherwise the control would reach assistive tech unnamed. */
+#mdbook-sidebar .chapter li a.chapter-fold-toggle > * {
+  display: none;
+}
+#mdbook-sidebar .chapter li a.chapter-fold-toggle::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border-right: 1.6px solid currentColor;
+  border-bottom: 1.6px solid currentColor;
+  border-radius: 1px;
+  transform: rotate(-45deg) translate(-1px, -1px);
+  transition: transform 160ms var(--ease);
+}
+#mdbook-sidebar .chapter li.expanded > .chapter-link-wrapper > a.chapter-fold-toggle::before {
+  transform: rotate(45deg) translate(-1px, -1px);
+}
+/* The noscript fallback renders toc.html in an iframe, where nothing can expand a
+ * folded group. Show every child there and drop the inert toggle. */
+.sidebar-iframe-inner .chapter li:not(.expanded) > ol {
+  display: block;
+}
+.sidebar-iframe-inner .chapter-fold-toggle {
+  display: none;
 }
 
-/* Priority badge: margin-inline-start:auto pushes it to the right edge
- * of the flex row. */
-.sidebar-scrollbox a[href*="git.html"]::after,
-.sidebar-scrollbox a[href*="gh.html"]::after,
-.sidebar-scrollbox a[href*="cloud.html"]::after,
-.sidebar-scrollbox a[href*="package_managers.html"]::after,
-.sidebar-scrollbox a[href*="beads.html"]::after,
-.sidebar-scrollbox a[href*="tool_gates.html"]::after,
-.sidebar-scrollbox a[href*="devtools.html"]::after,
-.sidebar-scrollbox a[href*="runtimes.html"]::after,
-.sidebar-scrollbox a[href*="filesystem.html"]::after,
-.sidebar-scrollbox a[href*="network.html"]::after,
-.sidebar-scrollbox a[href*="system.html"]::after,
-.sidebar-scrollbox a[href*="shortcut.html"]::after,
-.sidebar-scrollbox a[href*="basics.html"]::after {
+/* Children of a folded group. The 1px rail ties the 13 gate rows to their parent
+ * and gives the eye a return path when the list is long. */
+#mdbook-sidebar .chapter li > ol.section {
+  margin: 2px 0 var(--s-2);
+  padding-inline-start: var(--s-3);
+  border-inline-start: 1px solid var(--border);
+  list-style: none;
+}
+#mdbook-sidebar .chapter li > ol.section > li > .chapter-link-wrapper > a {
+  font-size: 13.5px;
+}
+
+/* Nav badges: rule count, not `priority`. Priority is engine dispatch order and
+ * misleads at a glance ("Basic Utilities 100" reads as a score). Hand-maintained;
+ * refresh from `rg -c 'class="rule-row"' docs/src/gates/*.md`. Ends-with matching
+ * covers both `gates/git.html` and `../gates/git.html`. */
+.sidebar-scrollbox a[href$="gates/index.html"]::after,
+.sidebar-scrollbox a[href$="gates/git.html"]::after,
+.sidebar-scrollbox a[href$="gates/gh.html"]::after,
+.sidebar-scrollbox a[href$="gates/cloud.html"]::after,
+.sidebar-scrollbox a[href$="gates/package_managers.html"]::after,
+.sidebar-scrollbox a[href$="gates/beads.html"]::after,
+.sidebar-scrollbox a[href$="gates/tool_gates.html"]::after,
+.sidebar-scrollbox a[href$="gates/devtools.html"]::after,
+.sidebar-scrollbox a[href$="gates/runtimes.html"]::after,
+.sidebar-scrollbox a[href$="gates/filesystem.html"]::after,
+.sidebar-scrollbox a[href$="gates/network.html"]::after,
+.sidebar-scrollbox a[href$="gates/system.html"]::after,
+.sidebar-scrollbox a[href$="gates/shortcut.html"]::after,
+.sidebar-scrollbox a[href$="gates/basics.html"]::after {
+  /* margin-inline-start:auto pushes the badge to the right edge of the flex row.
+   * Tabular figures keep the right edges of 17 / 106 / 497 on one vertical line. */
   margin-inline-start: auto;
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-size: 10.5px;
   line-height: 1.4;
   color: var(--text-3);
@@ -651,60 +762,66 @@ ul#mdbook-searchresults span.teaser {
   border-radius: var(--r-1);
   display: inline-block;
 }
-.sidebar-scrollbox a.active[href*="git.html"]::after,
-.sidebar-scrollbox a.active[href*="gh.html"]::after,
-.sidebar-scrollbox a.active[href*="cloud.html"]::after,
-.sidebar-scrollbox a.active[href*="package_managers.html"]::after,
-.sidebar-scrollbox a.active[href*="beads.html"]::after,
-.sidebar-scrollbox a.active[href*="tool_gates.html"]::after,
-.sidebar-scrollbox a.active[href*="devtools.html"]::after,
-.sidebar-scrollbox a.active[href*="runtimes.html"]::after,
-.sidebar-scrollbox a.active[href*="filesystem.html"]::after,
-.sidebar-scrollbox a.active[href*="network.html"]::after,
-.sidebar-scrollbox a.active[href*="system.html"]::after,
-.sidebar-scrollbox a.active[href*="shortcut.html"]::after,
-.sidebar-scrollbox a.active[href*="basics.html"]::after {
+.sidebar-scrollbox a.active[href$="gates/index.html"]::after,
+.sidebar-scrollbox a.active[href$="gates/git.html"]::after,
+.sidebar-scrollbox a.active[href$="gates/gh.html"]::after,
+.sidebar-scrollbox a.active[href$="gates/cloud.html"]::after,
+.sidebar-scrollbox a.active[href$="gates/package_managers.html"]::after,
+.sidebar-scrollbox a.active[href$="gates/beads.html"]::after,
+.sidebar-scrollbox a.active[href$="gates/tool_gates.html"]::after,
+.sidebar-scrollbox a.active[href$="gates/devtools.html"]::after,
+.sidebar-scrollbox a.active[href$="gates/runtimes.html"]::after,
+.sidebar-scrollbox a.active[href$="gates/filesystem.html"]::after,
+.sidebar-scrollbox a.active[href$="gates/network.html"]::after,
+.sidebar-scrollbox a.active[href$="gates/system.html"]::after,
+.sidebar-scrollbox a.active[href$="gates/shortcut.html"]::after,
+.sidebar-scrollbox a.active[href$="gates/basics.html"]::after {
   color: var(--text-2);
 }
 
-.sidebar-scrollbox a[href*="git.html"]::after {
-  content: "10";
+.sidebar-scrollbox a[href$="gates/index.html"]::after {
+  content: "13";
 }
-.sidebar-scrollbox a[href*="gh.html"]::after {
-  content: "10";
+.sidebar-scrollbox a[href$="gates/system.html"]::after {
+  content: "497";
 }
-.sidebar-scrollbox a[href*="cloud.html"]::after {
-  content: "15";
+.sidebar-scrollbox a[href$="gates/package_managers.html"]::after {
+  content: "453";
 }
-.sidebar-scrollbox a[href*="package_managers.html"]::after {
-  content: "20";
+.sidebar-scrollbox a[href$="gates/cloud.html"]::after {
+  content: "419";
 }
-.sidebar-scrollbox a[href*="beads.html"]::after {
-  content: "22";
+.sidebar-scrollbox a[href$="gates/beads.html"]::after {
+  content: "220";
 }
-.sidebar-scrollbox a[href*="tool_gates.html"]::after {
-  content: "23";
+.sidebar-scrollbox a[href$="gates/devtools.html"]::after {
+  content: "158";
 }
-.sidebar-scrollbox a[href*="devtools.html"]::after {
-  content: "25";
+.sidebar-scrollbox a[href$="gates/gh.html"]::after {
+  content: "134";
 }
-.sidebar-scrollbox a[href*="runtimes.html"]::after {
-  content: "27";
+.sidebar-scrollbox a[href$="gates/git.html"]::after {
+  content: "106";
 }
-.sidebar-scrollbox a[href*="filesystem.html"]::after {
+.sidebar-scrollbox a[href$="gates/runtimes.html"]::after {
+  content: "85";
+}
+.sidebar-scrollbox a[href$="gates/network.html"]::after {
+  content: "38";
+}
+.sidebar-scrollbox a[href$="gates/shortcut.html"]::after {
   content: "30";
 }
-.sidebar-scrollbox a[href*="network.html"]::after {
-  content: "35";
+.sidebar-scrollbox a[href$="gates/filesystem.html"]::after {
+  content: "22";
 }
-.sidebar-scrollbox a[href*="system.html"]::after {
-  content: "40";
+.sidebar-scrollbox a[href$="gates/tool_gates.html"]::after {
+  content: "17";
 }
-.sidebar-scrollbox a[href*="shortcut.html"]::after {
-  content: "45";
-}
-.sidebar-scrollbox a[href*="basics.html"]::after {
-  content: "100";
+/* basics defines no per-program rules, so a count would be a lie. An en dash
+ * holds the column and reads as "not applicable" rather than "zero rules". */
+.sidebar-scrollbox a[href$="gates/basics.html"]::after {
+  content: "\2013";
 }
 
 /* Content column. mdBook's .content is the scroll/padding wrapper; .content main
@@ -1742,6 +1859,117 @@ ul#mdbook-searchresults span.teaser {
   font-size: var(--text-body);
 }
 
+/* Gates index.
+ *
+ * The landing page for the folded gate group. Rows rather than a card grid: the
+ * reader is scanning thirteen named things for one of them, and a row keeps the
+ * names on a single left edge and the counts on a single right edge, which is
+ * what makes a list scannable. The count and priority columns are fixed-width and
+ * tabular so 17 and 497 line up. */
+.gate-index {
+  margin-top: var(--s-6);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-3);
+  overflow: hidden;
+  list-style: none;
+}
+.gate-index > li {
+  margin: 0;
+  list-style: none;
+}
+.gate-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 5.5rem 3rem;
+  grid-template-areas:
+    "name  count prio"
+    "desc  desc  desc";
+  gap: 2px var(--s-4);
+  padding: var(--s-3) var(--s-5);
+  text-decoration: none;
+  border-top: 1px solid var(--border);
+  transition: background 140ms var(--ease);
+}
+.gate-index > li:first-child > .gate-card {
+  border-top: 0;
+}
+.gate-card:hover {
+  background: var(--surface-1);
+}
+.gate-index .gate-card .gc-name {
+  grid-area: name;
+  align-self: baseline;
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: var(--weight-emphasis);
+  color: var(--text-1);
+  letter-spacing: -0.005em;
+}
+.gate-card:hover .gc-name {
+  color: var(--accent);
+}
+.gate-index .gate-card .gc-count,
+.gate-index .gate-card .gc-prio {
+  align-self: baseline;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-meta);
+  text-align: right;
+  white-space: nowrap;
+}
+.gate-index .gate-card .gc-count {
+  grid-area: count;
+  color: var(--text-1);
+}
+.gate-index .gate-card .gc-count-empty {
+  color: var(--text-3);
+  font-size: 10.5px;
+}
+.gate-index .gate-card .gc-prio {
+  grid-area: prio;
+  color: var(--text-3);
+}
+.gate-index .gate-card .gc-desc {
+  grid-area: desc;
+  max-width: 76ch;
+  font-size: var(--text-label);
+  line-height: 1.5;
+  color: var(--text-2);
+}
+/* Column headers, drawn once above the list rather than repeated per row. */
+.gate-index::before {
+  content: "gate / rules / priority";
+  display: block;
+  padding: var(--s-2) var(--s-5);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.gate-index-foot {
+  margin-top: var(--s-4);
+  font-size: var(--text-label);
+  color: var(--text-3);
+}
+@media (max-width: 620px) {
+  .gate-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: var(--s-3);
+    grid-template-areas:
+      "name  count"
+      "desc  desc";
+  }
+  .gate-index .gate-card .gc-prio {
+    display: none;
+  }
+  .gate-index::before {
+    content: "gate / rules";
+  }
+}
+
 .chips {
   display: flex;
   flex-wrap: wrap;
@@ -2110,9 +2338,6 @@ footer.site .stamp {
     flex: 0 1 auto;
     gap: var(--s-2);
   }
-  .ver {
-    display: none !important;
-  }
   #mdbook-sidebar .chapter li a,
   #mdbook-menu-bar .brand {
     min-height: 44px;
@@ -2155,7 +2380,12 @@ footer.site .stamp {
     background: var(--surface-1);
     border-color: var(--border);
   }
-  .sidebar .sidebar-cta {
+  /* In drawer mode the menu bar already shows the wordmark, and the close button
+   * owns the drawer's top row, so a second wordmark here would only cost height. */
+  .sidebar .sidebar-head {
+    display: none;
+  }
+  .sidebar .sidebar-pinned {
     margin-top: var(--s-1);
   }
   #mdbook-search-wrapper.inline-search:not(.hidden) {
@@ -2805,14 +3035,19 @@ pre.code-block .flag {
   border: 1px solid var(--border);
   border-radius: var(--r-1);
 }
+/* Side-by-side source and prose. A short cell no longer stretches to its
+ * neighbour's height; nothing was ever painted in the stretched area. */
 .config-body {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  align-items: stretch;
+  align-items: start;
 }
 .config-body .config-toml {
   padding: var(--s-4) var(--s-5);
 }
+/* The divider between rail and prose. It hangs off the prose column, which is the
+ * taller of the two on every entry, so it still spans the full row now that the
+ * rail no longer stretches. */
 .config-body .config-prose {
   padding: var(--s-4) var(--s-5);
   border-left: 1px solid var(--border);
@@ -2922,17 +3157,42 @@ pre.code-block .flag {
   .config-body {
     grid-template-columns: 1fr;
   }
+  /* Do not reset .config-toml positioning here: it is position:relative so the
+   * injected .tg-copy-btn can anchor to it, and a static override sends every
+   * copy button to the document corner. */
   .config-body .config-prose {
     border-left: 0;
     border-top: 1px solid var(--border);
   }
 }
 
-/* Recent Releases: foreground the active window and retain the full history
+/* What's new: foreground the active window and retain the full history
  * behind one native, keyboard-operable disclosure. */
 .release-current,
 .release-archive {
   margin-top: var(--s-7);
+}
+
+/* Release entries stack; config examples elsewhere stay side by side. A short
+ * summary against long reasoning left the old even split mostly empty (2,739px of
+ * blank column across the current window) and squeezed the prose to ~50ch. */
+.release-current .config-body,
+.release-archive .config-body {
+  grid-template-columns: minmax(0, 1fr);
+}
+.release-current .config-body .config-toml,
+.release-archive .config-body .config-toml {
+  padding: var(--s-4) var(--s-5);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+/* border-top: 0 because the summary strip above already draws the divider; the
+ * stacked breakpoint would otherwise add a second one. */
+.release-current .config-body .config-prose,
+.release-archive .config-body .config-prose {
+  border-left: 0;
+  border-top: 0;
+  max-width: 72ch;
 }
 .release-section-head {
   margin: 0 0 var(--s-4);
@@ -3736,6 +3996,59 @@ pre.code-block .flag {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-3);
+}
+
+/* What's new row. The changelog was row 34 of 39, below the fold, and the only
+ * version affordance linked out to GitHub instead. Pinned here, the live tag is
+ * the link. Quieter than the Try CTA: that one is the site's call to action. */
+.sidebar-cta.cta-news {
+  grid-template-columns: 36px 1fr auto;
+  background: var(--surface-1);
+  border-color: var(--border);
+}
+.sidebar-cta.cta-news::before {
+  background: linear-gradient(
+    to right,
+    color-mix(in oklab, var(--allow) 70%, transparent) 0%,
+    color-mix(in oklab, var(--allow) 12%, transparent) 100%
+  );
+}
+.sidebar-cta.cta-news:hover {
+  background: var(--surface-2);
+  border-color: var(--border-2);
+}
+.sidebar-cta.cta-news[aria-current="page"] {
+  border-color: color-mix(in oklab, var(--allow) 45%, var(--border-2));
+}
+.sidebar-cta.cta-news .cta-icon {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+/* Live release tag from the GitHub API, painted by initVersionPill(). The dot
+ * mirrors the allow indicator used across the decision vocabulary. */
+.sidebar-cta .cta-ver {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 10.5px;
+  font-weight: var(--weight-emphasis);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.sidebar-cta .cta-ver::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--allow);
+  box-shadow: 0 0 0 2.5px color-mix(in oklab, var(--allow) 18%, transparent);
+}
+.sidebar-cta.cta-news:link .cta-ver,
+.sidebar-cta.cta-news:visited .cta-ver {
+  color: var(--text-2);
 }
 
 /* ===== Content link-color reclaim =====

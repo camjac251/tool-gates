@@ -93,16 +93,24 @@
     });
   }
 
-  /* ===== Version pill (GitHub Releases API, 1h localStorage cache) ===== */
+  /* ===== Version pill (GitHub Releases API, 1h localStorage cache) =====
+   * Targets are matched by [data-tg-version] rather than a single id, so the same
+   * fetched tag can label more than one surface (today: the sidebar's What's new
+   * row). Every target links to the site's own changelog page, not to GitHub. */
   function initVersionPill() {
-    var badge = document.getElementById("versionNum");
-    if (!badge) return;
+    var badges = document.querySelectorAll("[data-tg-version]");
+    if (!badges.length) return;
+    function paint(text) {
+      badges.forEach((el) => {
+        el.textContent = text;
+      });
+    }
     var cacheKey = "tg-latest-version";
     var cacheTtl = 60 * 60 * 1000;
     try {
       var cached = JSON.parse(localStorage.getItem(cacheKey) || "null");
       if (cached && Date.now() - cached.t < cacheTtl && cached.v) {
-        badge.textContent = cached.v;
+        paint(cached.v);
         return;
       }
     } catch (_e) {}
@@ -112,16 +120,16 @@
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (!data?.tag_name) {
-          badge.textContent = "latest";
+          paint("latest");
           return;
         }
-        badge.textContent = data.tag_name;
+        paint(data.tag_name);
         try {
           localStorage.setItem(cacheKey, JSON.stringify({ v: data.tag_name, t: Date.now() }));
         } catch (_e) {}
       })
       .catch(() => {
-        badge.textContent = "latest";
+        paint("latest");
       });
   }
 
@@ -1137,8 +1145,47 @@
         requestAnimationFrame(() => control.focus({ preventScroll: true }));
       }
     });
-    new MutationObserver(syncSidebarState).observe(sidebar, { childList: true, subtree: true });
+    new MutationObserver(() => {
+      syncSidebarState();
+      initFoldToggles(sidebar);
+    }).observe(sidebar, { childList: true, subtree: true });
     syncSidebarState();
+    initFoldToggles(sidebar);
+  }
+
+  /* ===== Fold toggle promotion =====
+   * toc.js emits the fold control as an href-less <a>, so it is unfocusable, has
+   * no role or state, and its only name is a glyph the theme hides. */
+  function initFoldToggles(scope) {
+    (scope || document).querySelectorAll(".chapter-fold-toggle").forEach((el) => {
+      // The sidebar re-renders; without this guard each mutation leaks an observer.
+      if (el.dataset.tgFold) return;
+      var item = el.closest("li");
+      if (!item) return;
+      el.dataset.tgFold = "1";
+
+      var label = item.querySelector("a:not(.chapter-fold-toggle)");
+      var name = label ? label.textContent.trim() : "section";
+      function syncExpanded() {
+        el.setAttribute("aria-expanded", String(item.classList.contains("expanded")));
+      }
+
+      el.setAttribute("role", "button");
+      el.setAttribute("tabindex", "0");
+      el.setAttribute("aria-label", `Show or hide pages under ${name}`);
+      syncExpanded();
+
+      el.addEventListener("keydown", (ev) => {
+        if (ev.key !== "Enter" && ev.key !== " " && ev.key !== "Spacebar") return;
+        ev.preventDefault();
+        el.click();
+      });
+      el.addEventListener("click", () => requestAnimationFrame(syncExpanded));
+      new MutationObserver(syncExpanded).observe(item, {
+        attributes: true,
+        attributeFilter: ["class"],
+      });
+    });
   }
 
   /* ===== Binary theme toggle (moon/sun, right side) ===== */

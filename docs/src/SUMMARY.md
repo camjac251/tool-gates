@@ -1,41 +1,48 @@
 # Summary
 
-# Getting Started
+# Start
 
 - [Introduction](index.md)
 - [Installation](install.md)
 - [Try the Simulator](try.md)
+- [What's New](whats-new.md)
 
 ---
 
-# Core Concepts
+# How It Decides
 
 - [Hook Model](hook-model.md)
 - [Permission Modes](modes.md)
 - [Auto Mode](auto-mode.md)
-- [Codex Approval Model](codex.md)
-- [Antigravity CLI](antigravity.md)
 - [Settings Precedence](settings-precedence.md)
 - [Approval Learning](approval-learning.md)
 - [Scratch Directory](scratch.md)
 
 ---
 
-# Permission Gates
+# Your Client
 
-- [Git](gates/git.md)
-- [GitHub CLI](gates/gh.md)
-- [Cloud Providers](gates/cloud.md)
-- [Package Managers](gates/package_managers.md)
-- [Beads Tracker (bd)](gates/beads.md)
-- [Tool Gates CLI](gates/tool_gates.md)
-- [Development Tools](gates/devtools.md)
-- [Language Runtimes](gates/runtimes.md)
-- [Filesystem Operations](gates/filesystem.md)
-- [Network & HTTP](gates/network.md)
-- [System Commands](gates/system.md)
-- [Shortcut CLI](gates/shortcut.md)
-- [Basic Utilities](gates/basics.md)
+- [Codex Approval Model](codex.md)
+- [Antigravity CLI](antigravity.md)
+
+---
+
+# Gates
+
+- [All Gates](gates/index.md)
+  - [Basic Utilities](gates/basics.md)
+  - [Beads Tracker (bd)](gates/beads.md)
+  - [Cloud Providers](gates/cloud.md)
+  - [Development Tools](gates/devtools.md)
+  - [Filesystem Operations](gates/filesystem.md)
+  - [Git](gates/git.md)
+  - [GitHub CLI](gates/gh.md)
+  - [Language Runtimes](gates/runtimes.md)
+  - [Network & HTTP](gates/network.md)
+  - [Package Managers](gates/package_managers.md)
+  - [Shortcut CLI](gates/shortcut.md)
+  - [System Commands](gates/system.md)
+  - [Tool Gates CLI](gates/tool_gates.md)
 
 ---
 
@@ -50,12 +57,11 @@
 - [Design Lint](design-lint.md)
 - [Comment Lint](comment-lint.md)
 - [Modern CLI Hints](hints.md)
-- [Recent Releases](whats-new.md)
 - [Glossary](glossary.md)
 
 ---
 
-# Development
+# Contribute
 
 - [Architecture](architecture.md)
 - [Custom Handlers](custom-handlers.md)

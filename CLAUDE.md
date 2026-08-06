@@ -22,6 +22,7 @@ Documentation routing:
 | Permission reason copy | `docs/src/reason-style.md` |
 | CLI or configuration | `docs/src/cli.md`, `docs/src/configuration.md` |
 | Recent user-facing changes | `docs/src/whats-new.md` |
+| Sidebar structure and nav chrome | `docs/src/SUMMARY.md`, `docs/theme/index.hbs` |
 
 ## Repository Map
 
@@ -111,9 +112,11 @@ When any of these rules change, update the exact serialization tests plus `docs/
 
 Change their source catalogs or `src/rules_export.rs`, then regenerate. Do not hand-edit generated pages unless the generator itself is the subject of the change. Other pages under `docs/src/` are hand-maintained.
 
+`docs/src/gates/index.md` is the exception inside that directory: it is hand-maintained and the export does not touch it. It restates each gate's rule count and priority, as do the sidebar count badges in `docs/theme/css/tool-gates.css`. Both drift when a rule is added or removed. Refresh them from `rg -c 'class="rule-row"' docs/src/gates/*.md` after a rules change.
+
 ## Releases And Recent Releases
 
-- `docs/src/whats-new.md` is the hand-curated Recent Releases page. Keep the newest version first and preserve the existing HTML entry shape.
+- `docs/src/whats-new.md` is the hand-curated What's New page. Keep the newest version first and preserve the existing HTML entry shape.
 - A released version's `src-tag` links to its `chore: release vX.Y.Z` commit, not a feature or merge commit. Find it with `git log --oneline --grep "chore: release vX.Y.Z" origin/main`.
 - A version without a merged release PR uses `release pending` with no commit link. Replace it with the release commit after the release lands.
 - Curated release prose describes changes in Tool Gates itself. Omit GitHub workflow-only plumbing unless it changes user-visible behavior or the delivered release.

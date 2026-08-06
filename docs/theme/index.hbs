@@ -138,16 +138,42 @@
             <button id="mdbook-sidebar-close" class="sidebar-close" type="button" title="Close table of contents" aria-label="Close table of contents">
                 {{fa "solid" "xmark"}}
             </button>
-            <!-- Featured CTA above the SUMMARY-derived nav (mdBook has no native featured item) -->
-            <a href="{{ path_to_root }}try.html" class="sidebar-cta" aria-label="Try a command interactive simulator">
-                <span class="cta-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>
-                </span>
-                <span class="cta-label">
-                    <span class="cta-title">Try a command</span>
-                    <span class="cta-sub">Interactive</span>
-                </span>
-            </a>
+            <!-- Sidebar head. The wordmark lives here rather than in the menu bar: it is
+                 the canonical home anchor, and the bar's copy floated between the
+                 hamburger and the search with nothing to align to. The bar keeps its own
+                 .brand for the sub-1080px drawer breakpoint, where this head is offscreen. -->
+            <div class="sidebar-head">
+                <a href="{{ path_to_root }}index.html" class="sidebar-brand" aria-label="tool-gates home">
+                    <span class="gate" aria-hidden="true"></span>
+                    <b>tool<span class="dim">-</span>gates</b>
+                </a>
+            </div>
+            <!-- Pinned rows above the SUMMARY-derived nav (mdBook has no native featured
+                 item). Both pages also carry an ordinary nav row in Start; the card is the
+                 promotion, the nav row is the map position. -->
+            <div class="sidebar-pinned">
+                <a href="{{ path_to_root }}try.html" class="sidebar-cta" aria-label="Try a command interactive simulator">
+                    <span class="cta-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>
+                    </span>
+                    <span class="cta-label">
+                        <span class="cta-title">Try a command</span>
+                        <span class="cta-sub">Interactive</span>
+                    </span>
+                </a>
+                <!-- No aria-label: it would override the computed name and silence the
+                     live version tag, which is the row's whole point. -->
+                <a href="{{ path_to_root }}whats-new.html" class="sidebar-cta cta-news">
+                    <span class="cta-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"></path><polyline points="3 4 3 9 8 9"></polyline><polyline points="12 8 12 12 15 14"></polyline></svg>
+                    </span>
+                    <span class="cta-label">
+                        <span class="cta-title">What's new</span>
+                        <span class="cta-sub">Changelog</span>
+                    </span>
+                    <span class="cta-ver" data-tg-version>latest</span>
+                </a>
+            </div>
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
@@ -182,17 +208,19 @@
                         </button>
                         {{/if}}
 
-                        <!-- tool-gates brand + autofetched version pill -->
+                        <!-- Drawer-breakpoint brand. Hidden at >=1080px, where the sidebar
+                             head owns the wordmark. -->
                         <a href="{{ path_to_root }}index.html" class="brand" aria-label="tool-gates home">
                             <span class="gate" aria-hidden="true"></span>
                             <b>tool<span class="dim">-</span>gates</b>
                         </a>
-                        <a href="https://github.com/camjac251/tool-gates/releases/latest" class="ver" id="versionBadge" target="_blank" rel="noopener" title="Latest release on GitHub">
-                            <span class="ver-num" id="versionNum">latest</span>
-                        </a>
                     </div>
 
-                    <h1 class="menu-title">{{ book_title }}</h1>
+                    <!-- book.js scrollToTop() binds to .menu-title with no null guard, so the
+                         node must stay. It is display:none and was a second <h1> on every
+                         page, competing with the real page heading; a <div> keeps the binding
+                         and leaves one <h1> per document. -->
+                    <div class="menu-title">{{ book_title }}</div>
 
                     {{#if search_enabled}}
                     <div id="mdbook-search-wrapper" class="inline-search hidden">

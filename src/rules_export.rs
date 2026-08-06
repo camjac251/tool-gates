@@ -770,7 +770,7 @@ fn render_gate_head(gate: &Gate, counts: Option<&Counts>) -> String {
     };
 
     format!(
-        "<div class=\"gate-head\">\n  <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n    <ol>\n      <li><a href=\"../index.html\">Gates</a></li>\n      <li aria-current=\"page\">{name}</li>\n    </ol>\n  </nav>\n  <h1>{name} gate</h1>\n  <div class=\"gate-meta\">\n    {meta}\n  </div>{summary}{lede}\n</div>{chips}",
+        "<div class=\"gate-head\">\n  <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n    <ol>\n      <li><a href=\"../index.html\">tool-gates</a></li>\n      <li><a href=\"index.html\">Gates</a></li>\n      <li aria-current=\"page\">{name}</li>\n    </ol>\n  </nav>\n  <h1>{name} gate</h1>\n  <div class=\"gate-meta\">\n    {meta}\n  </div>{summary}{lede}\n</div>{chips}",
         name = gate.name,
         meta = meta,
         summary = summary_html,
@@ -1002,7 +1002,7 @@ fn render_security_floor(gates: &[Gate], floor: &SecurityFloorFile) -> String {
     let (hard_blocks, warn_rules) = collect_floor(gates);
 
     let mut out = String::new();
-    out.push_str("<nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n  <ol>\n    <li><a href=\"index.html\">Reference</a></li>\n    <li aria-current=\"page\">Security floor</li>\n  </ol>\n</nav>\n");
+    out.push_str("<nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n  <ol>\n    <li><a href=\"index.html\">tool-gates</a></li>\n    <li>Reference</li>\n    <li aria-current=\"page\">Security floor</li>\n  </ol>\n</nav>\n");
     out.push_str("<h1>Security floor</h1>\n");
     out.push_str("<p class=\"page-lede\">Every <code>block</code> rule and every <code>warn = true</code> rule across all 13 gates, on one page. The hard-deny floor fires regardless of <code>settings.json</code>; warn rules ask first but are marked dangerous-but-recoverable. The raw-string catalog runs against top-level commands and executable strings inside supported local shell wrappers, including shells invoked through <code>xargs</code>. Generated from <code>rules/*.toml</code>; authoritative for security review.</p>\n\n");
 
@@ -1047,7 +1047,7 @@ fn hint_row(entry: &HintCatalogEntry) -> String {
 /// fixed, so the page is byte-identical on re-run.
 fn render_hints_page() -> String {
     let mut out = String::new();
-    out.push_str("<nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n  <ol>\n    <li><a href=\"index.html\">Reference</a></li>\n    <li aria-current=\"page\">Modern CLI hints</li>\n  </ol>\n</nav>\n");
+    out.push_str("<nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n  <ol>\n    <li><a href=\"index.html\">tool-gates</a></li>\n    <li>Reference</li>\n    <li aria-current=\"page\">Modern CLI hints</li>\n  </ol>\n</nav>\n");
     out.push_str("<h1 id=\"hints-h1\">Modern CLI hints</h1>\n");
     out.push_str("<p class=\"page-lede\">When a command reaches for a legacy tool that has a sharper modern alternative, tool-gates may attach a one-line suggestion via <code>additionalContext</code>. Hints never determine the permission decision; applicable allow and ask responses can carry them. They fire only when the modern tool is installed on this machine. Repeated suggestions are deduplicated, and each response carries at most three unique hints. Code-search guidance names capabilities rather than project-scoped tools that may not be loaded. Generated from the hint catalog in <code>src/hints.rs</code>.</p>\n\n");
 
@@ -1131,7 +1131,7 @@ fn render_security_reminders_page() -> String {
     };
 
     let mut out = String::new();
-    out.push_str("  <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n    <ol>\n      <li><a href=\"index.html\">Reference</a></li>\n      <li aria-current=\"page\">Security reminders</li>\n    </ol>\n  </nav>\n");
+    out.push_str("  <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n    <ol>\n      <li><a href=\"index.html\">tool-gates</a></li>\n      <li>Reference</li>\n      <li aria-current=\"page\">Security reminders</li>\n    </ol>\n  </nav>\n");
     out.push_str("  <h1 id=\"secrems-h1\">Security reminders</h1>\n");
     out.push_str(&format!(
         "  <p class=\"page-lede\">tool-gates scans write/edit bodies for {count} anti-patterns organised into three tiers, including Claude <code>Write</code>/<code>Edit</code>, Codex <code>apply_patch</code> added lines, Antigravity <code>write_to_file</code>/<code>replace_file_content</code>/<code>multi_replace_file_content</code>, and Gemini <code>write_file</code>/<code>replace</code> before-tool checks. The hard floor denies source writes before the file ever lands, while documentation files get a post-write warning. The middle tier nudges the assistant after a write so the next action can self-correct. The top tier informs without blocking.</p>\n",
@@ -1185,7 +1185,7 @@ fn render_design_lint_page() -> String {
     ];
 
     let mut out = String::new();
-    out.push_str("  <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n    <ol>\n      <li><a href=\"index.html\">Reference</a></li>\n      <li aria-current=\"page\">Design lint</li>\n    </ol>\n  </nav>\n");
+    out.push_str("  <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n    <ol>\n      <li><a href=\"index.html\">tool-gates</a></li>\n      <li>Reference</li>\n      <li aria-current=\"page\">Design lint</li>\n    </ol>\n  </nav>\n");
     out.push_str("  <h1 id=\"design-lint-h1\">Design lint</h1>\n");
     out.push_str("  <p class=\"page-lede\">tool-gates scans UI file write/edit bodies for generic, templated design patterns and missing UI-quality basics. It covers Claude <code>Write</code>/<code>Edit</code> and Codex <code>apply_patch</code> added lines on the PostToolUse path, the same path as the security-reminder nudges. Antigravity has no PostToolUse hook, so design-lint does not run there. Findings are a single tier: every match attaches a post-write nudge so the next action can self-correct. Nothing is blocked. The gate is opt-in (default off) and only scans UI extensions (<code>.tsx</code>, <code>.jsx</code>, <code>.vue</code>, <code>.svelte</code>, <code>.astro</code>, <code>.html</code>, <code>.css</code>, <code>.scss</code>, and similar).</p>\n");
     out.push_str("  <div class=\"sec-head\" style=\"margin-top: var(--s-6)\">\n    <p class=\"lbl\">Why it is opt-in</p>\n    <h2>A design opinion you switch on per project.</h2>\n    <p>Security reminders enforce a safety floor everywhere. These rules encode a house style for frontend output: avoid the patterns that read as generic or templated, and keep the accessibility basics. That is a deliberate choice a project opts into, so the gate defaults off. When enabled, each match attaches a <code>&lt;system-reminder&gt;</code> via <code>additionalContext</code> after the write lands. Raw color values inside a <code>:root</code> token <em>definition</em> are exempt: defining a brand token is legitimate; reaching for the same value in markup is what gets flagged.</p>\n  </div>\n");
@@ -1218,7 +1218,7 @@ fn render_comment_lint_page() -> String {
     let rules = crate::comment_lint::rules();
 
     let mut out = String::new();
-    out.push_str("  <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n    <ol>\n      <li><a href=\"index.html\">Reference</a></li>\n      <li aria-current=\"page\">Comment lint</li>\n    </ol>\n  </nav>\n");
+    out.push_str("  <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n    <ol>\n      <li><a href=\"index.html\">tool-gates</a></li>\n      <li>Reference</li>\n      <li aria-current=\"page\">Comment lint</li>\n    </ol>\n  </nav>\n");
     out.push_str("  <h1 id=\"comment-lint-h1\">Comment lint</h1>\n");
     out.push_str("  <p class=\"page-lede\">tool-gates measures how much narrative commentary a write or edit adds relative to the code it adds, and how long any single comment runs. It covers Claude <code>Write</code>/<code>Edit</code> and Codex <code>apply_patch</code> added lines on the PostToolUse path, the same path as the security-reminder and design-lint nudges. Antigravity has no PostToolUse hook, so comment lint does not run there. Findings are a single tier: a match attaches a post-write nudge so the next action can trim. Nothing is blocked. The gate is opt-in (default off) and only scans code extensions; Markdown, JSON, and other prose or data files are skipped.</p>\n");
     out.push_str("  <div class=\"sec-head\" style=\"margin-top: var(--s-6)\">\n    <p class=\"lbl\">Why it is opt-in</p>\n    <h2>Volume, not judgement.</h2>\n    <p>Assistant prompts already say <em>whether</em> to write a comment. Nothing bounds how many or how long, which is where commentary accumulates: an edit that adds more narration than code, or one comment that runs a full paragraph. These rules measure only that. They make no claim about whether an individual comment is worth keeping.</p>\n    <p>Doc comments are exempt. <code>///</code>, <code>//!</code>, <code>/** */</code>, and Python docstrings are API documentation, and flagging them would push toward undocumented public surfaces. Tooling directives (<code>#\u{a0}noqa</code>, <code>//nolint</code>, <code>eslint-disable</code>, <code>@ts-expect-error</code>) are exempt too: they are machine instructions, not prose.</p>\n    <p>Defaults are tuned to the tail rather than the median. Every <code>additionalContext</code> injection costs tokens and disturbs the prompt cache, so a gate that fires on a typical edit costs more than it saves.</p>\n  </div>\n");

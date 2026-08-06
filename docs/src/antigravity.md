@@ -1,6 +1,7 @@
   <nav class="breadcrumb" aria-label="Breadcrumb">
     <ol>
-      <li><a href="index.html">Core Concepts</a></li>
+      <li><a href="index.html">tool-gates</a></li>
+      <li>Your Client</li>
       <li aria-current="page">Antigravity CLI</li>
     </ol>
   </nav>
