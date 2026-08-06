@@ -10,8 +10,92 @@
     <header class="sec-head release-section-head">
       <span class="lbl">Current window</span>
       <h2 id="release-current-title">Latest eight versions</h2>
-      <p>From v1.33.0 through v1.31.0, newest first.</p>
+      <p>From v1.33.5 through v1.32.3, newest first.</p>
     </header>
+  <div class="config-block">
+    <header>
+      <h3>v1.33.5 · August 6, 2026</h3>
+      <span class="src-tag">redirect targets + background waits · <a href="https://github.com/camjac251/tool-gates/commit/f305d71" target="_blank" rel="noopener">f305d71</a></span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec fixed">Fixed</span>
+  stop redirect targets at shell separators
+  keep process substitution in the redirect target
+  reject a blocking wait on a just-started background task</pre>
+      </div>
+      <div class="config-prose">
+        <p>The redirect floor resolved an unquoted target by reading to the next whitespace, so a separator glued to the path became part of it. <code>2&gt;/dev/null; echo done</code> resolved to <code>/dev/null;</code>, which missed the <code>/dev/null</code> exemption and then matched the <code>/dev/</code> prefix, reporting a discarded stream as a clobber of a system path. Subshell and unspaced pipe forms failed the same way, and a redirect into the session scratch dir lost its exemption for the same reason. Every target class now stops at the metacharacters that close a bash word.</p>
+        <p><code>(</code> is deliberately not in that set. It only ever opens a target, so excluding it drops the match for <code>&gt;(cmd)</code> process substitution entirely and <code>echo x &gt;(cat)</code> reads as a plain read-only command rather than a subprocess write. A differential sweep across 1,930 redirect forms confirms the <code>/dev/null</code> exemption is the only resulting behavior change, in either direction.</p>
+        <p>A command started with <code>run_in_background</code> for concurrency could be followed immediately by a blocking <code>TaskOutput</code>, which discards the concurrency and spends a turn waiting. Successful background starts are now correlated by session and task, and only that immediate pairing is denied. A later intentional wait on the same task still runs, and non-blocking status checks are never affected. The correlation is session-scoped with a ten-minute expiry and fails open on any ambiguity, so a missing or malformed argument allows rather than blocks.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.33.4 · July 31, 2026</h3>
+      <span class="src-tag">client-aware recovery · <a href="https://github.com/camjac251/tool-gates/commit/dfaec8f" target="_blank" rel="noopener">dfaec8f</a></span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec fixed">Fixed</span>
+  keep output-cap recovery semantic until serialization
+  distinguish source files from streams in recovery advice
+  preserve recovery actions through task expansion</pre>
+      </div>
+      <div class="config-prose">
+        <p>Output-cap denials mixed the shared safety cause with reader advice that could name a tool the client does not have or use a wire field it does not consume. Recovery is now carried as a semantic action until serialization, so each client renders it through its own supported channel and its own tool names, sourced from the per-client file-tool registry instead of being fixed in shared copy. Advice distinguishes a source file from a stream, and actions survive mise and package-script expansion, so a wrapped command keeps the guidance its inner command earned.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.33.3 · July 30, 2026</h3>
+      <span class="src-tag">client-neutral feedback · <a href="https://github.com/camjac251/tool-gates/commit/d003f6b" target="_blank" rel="noopener">d003f6b</a></span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec fixed">Fixed</span>
+  keep shared deny copy portable across clients
+  drop client-only tool names from the less hint</pre>
+      </div>
+      <div class="config-prose">
+        <p>Shared feedback is written once and rendered for every client, so naming one client's tools inside it leaves the others with advice they cannot follow. Routine denies stay operator-visible even when the optional top-level warning is omitted, and the per-client visibility contract is now documented rather than implied. The <code>less</code> hint drops its reference to specific tool names and states the portable reason instead: line-numbered output supports precise follow-up edits and range reads.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.33.2 · July 30, 2026</h3>
+      <span class="src-tag">sensitive redirect holds · <a href="https://github.com/camjac251/tool-gates/commit/7b03484" target="_blank" rel="noopener">7b03484</a></span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec fixed">Fixed</span>
+  hold redirects to system and credential paths under auto mode</pre>
+      </div>
+      <div class="config-prose">
+        <p>v1.33.0 routed soft asks to auto mode's classifier, which treated every output redirect alike, so clobbering <code>/etc/passwd</code> or rewriting <code>~/.ssh/authorized_keys</code> became a classifier decision where it had been a prompt. Writing one named file is the most common shell shape there is and belongs on the classifier; a sensitive destination does not. The redirect handler already resolves its target to exempt <code>/dev/null</code> and the session scratch dir, so it keeps the ask when that path is a system directory, a credential store, or a key file, and names the target in the reason. The per-path test was split out of the acceptEdits policy so the floor asks the same question rather than growing a second list that can drift. Ordinary destinations, and <code>/dev/null</code>, are unchanged.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.33.1 · July 30, 2026</h3>
+      <span class="src-tag">build drift detection · <a href="https://github.com/camjac251/tool-gates/commit/1d4fb4e" target="_blank" rel="noopener">1d4fb4e</a></span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec fixed">Fixed</span>
+  flag clients whose hooks resolve to different builds
+  report a hook command that resolves to no binary</pre>
+      </div>
+      <div class="config-prose">
+        <p>Installed is not the same as current. Every hook check reported a client as installed while the command it invokes resolved to an older binary, so a stale absolute path, or a bare name shadowed earlier on <code>PATH</code>, kept answering permission checks with previous logic and <code>doctor</code> still passed. Doctor now resolves the binary behind every installed hook across all four clients and groups them by target, and clients disagreeing with each other is the reported failure. Comparing them to each other rather than to the running process avoids flagging a build run out of the source tree, whose path legitimately differs from the installed one.</p>
+        <p>Resolution mirrors what the shell would do: first word, quotes stripped because the Antigravity installer writes them, bare names looked up on <code>PATH</code>, and the result canonicalized so a symlinked install compares equal to its target. A command that resolves to no binary is reported separately, since that hook cannot run at all. The remediation names the reason the installer must be invoked by absolute path: it records argv[0] when that contains a separator and otherwise resolves through <code>PATH</code>, which is how a shadowed binary reinstalls itself.</p>
+      </div>
+    </div>
+  </div>
   <div class="config-block">
     <header>
       <h3>v1.33.0 · July 30, 2026</h3>
@@ -74,6 +158,17 @@
       </div>
     </div>
   </div>
+  </section>
+  <details class="release-archive" id="release-archive" aria-labelledby="release-archive-title">
+    <summary>
+      <h2 class="release-summary" id="release-archive-title">
+        <span class="release-summary-kicker">Historical archive</span>
+        <span class="release-summary-title">Browse 57 earlier releases</span>
+        <span class="release-summary-range">v1.32.2 to v1.1.0</span>
+        <span class="release-summary-icon" aria-hidden="true"></span>
+      </h2>
+    </summary>
+    <div class="release-archive-list">
   <div class="config-block">
     <header>
       <h3>v1.32.2 · July 26, 2026</h3>
@@ -172,17 +267,6 @@
       </div>
     </div>
   </div>
-  </section>
-  <details class="release-archive" id="release-archive" aria-labelledby="release-archive-title">
-    <summary>
-      <h2 class="release-summary" id="release-archive-title">
-        <span class="release-summary-kicker">Historical archive</span>
-        <span class="release-summary-title">Browse 52 earlier releases</span>
-        <span class="release-summary-range">v1.30.0 to v1.1.0</span>
-        <span class="release-summary-icon" aria-hidden="true"></span>
-      </h2>
-    </summary>
-    <div class="release-archive-list">
   <div class="config-block">
     <header>
       <h3>v1.30.0 · June 23, 2026</h3>
