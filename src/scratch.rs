@@ -873,6 +873,16 @@ mod tests {
             get_decision(&check_command("echo x > /tmp/cc-scratch-test/f")),
             "allow"
         );
+        // A separator glued to the target must not ride along and defeat the
+        // scratch prefix match.
+        assert_eq!(
+            get_decision(&check_command("echo x > /tmp/cc-scratch-test/f; echo done")),
+            "allow"
+        );
+        assert_eq!(
+            get_decision(&check_command("echo x > /tmp/cc-scratch-test/f;echo done")),
+            "allow"
+        );
 
         unsafe {
             match saved {

@@ -33,6 +33,12 @@ pub struct FloorHit {
 // The regex statics below back the two Rust handler rows. Every other floor
 // pattern's regex is generated into `src/generated/rules.rs` from
 // `rules/security.toml`; do not re-add migrated statics here.
+//
+// Every target class stops at the unquoted shell metacharacters that end a word
+// (`;`, `|`, `(`, `)`, `<`, `>`, `&`, whitespace). A class that swallows them
+// mis-resolves the destination: `2>/dev/null; echo done` captures `/dev/null;`,
+// which fails the `/dev/null` exemption below and then reads as a clobber of a
+// system path.
 
 /// Output redirection to a file (`>`, `>>`, including fd-prefixed forms like
 /// `2>`, `9>>`). The optional `[0-9]*` after the boundary consumes the fd
@@ -42,19 +48,21 @@ pub struct FloorHit {
 /// `&`; the `>&FILE` write form is handled by `FD_AMP_REDIRECT_RE`. Group 2 is
 /// the file target.
 static REDIRECT_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(^|[^0-9&=/$])[0-9]*>{1,2}\s*([^>&\s]+)").expect("REDIRECT_RE must compile")
+    Regex::new(r"(^|[^0-9&=/$])[0-9]*>{1,2}\s*([^>&\s;|()<]+)").expect("REDIRECT_RE must compile")
 });
 
-/// `&> file` redirection pattern (both streams to a file).
+/// `&> file` redirection pattern (both streams to a file). `&>>file` falls to
+/// `REDIRECT_RE`, which takes the second `>` as its operator and captures the
+/// same target.
 static AMP_REDIRECT_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"&>\s*([^\s]+)").expect("AMP_REDIRECT_RE must compile"));
+    LazyLock::new(|| Regex::new(r"&>\s*([^>&\s;|()<]+)").expect("AMP_REDIRECT_RE must compile"));
 
 /// `>& file` / `N>& file` / `>>& file` redirection (both streams to a file).
 /// Distinct from fd duplication (`2>&1`, `>&2`, `2>&-`): the target class
 /// rejects a leading digit or `-`, so only a real path matches and a dup is
 /// left alone. Group 2 is the file target.
 static FD_AMP_REDIRECT_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(^|[^0-9&=/$])[0-9]*>{1,2}&\s*([^\s0-9>&|-][^\s>&]*)")
+    Regex::new(r"(^|[^0-9&=/$])[0-9]*>{1,2}&\s*([^>&\s;|()<0-9-][^>&\s;|()<]*)")
         .expect("FD_AMP_REDIRECT_RE must compile")
 });
 
@@ -1168,6 +1176,58 @@ mod tests {
                     "False positive for: {cmd}"
                 );
             }
+        }
+
+        /// A separator glued to the target must not become part of it. A
+        /// captured `/dev/null;` misses the exemption and, because it still
+        /// starts with `/dev/`, reads as a clobber of a system path.
+        #[test]
+        fn test_dev_null_followed_by_separator_allowed() {
+            for cmd in [
+                "command 2>/dev/null; echo done",
+                "command 2>/dev/null;echo done",
+                "(command 2>/dev/null)",
+                "command 2>/dev/null|cat",
+                "command >/dev/null&& echo ok",
+                "command &>/dev/null; echo done",
+                "command >&/dev/null; echo done",
+            ] {
+                let result = check_command(cmd);
+                let reason = get_reason(&result);
+                assert!(
+                    !reason.contains("Output redirection"),
+                    "False positive for: {cmd}"
+                );
+            }
+        }
+
+        /// The separator is trimmed from the target rather than from the
+        /// detection: a real write glued to `;` or `)` still asks, and a
+        /// sensitive destination is still named without the separator.
+        #[test]
+        fn test_redirect_target_excludes_trailing_separator() {
+            for cmd in [
+                "echo hi > out.txt; echo done",
+                "(echo hi > out.txt)",
+                "echo hi &>out.txt;echo done",
+                "echo hi &>>out.txt",
+                "echo hi >&out.txt; echo done",
+            ] {
+                let result = check_command(cmd);
+                assert_eq!(get_decision(&result), "ask", "Failed for: {cmd}");
+                assert!(
+                    get_reason(&result).contains("redirection"),
+                    "Failed for: {cmd}"
+                );
+            }
+
+            let named = check_command("echo x > /etc/hosts; echo done");
+            assert_eq!(get_decision(&named), "ask");
+            assert!(
+                get_reason(&named).contains("`/etc/hosts`"),
+                "got: {}",
+                get_reason(&named)
+            );
         }
 
         #[test]
