@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.33.5](https://github.com/camjac251/tool-gates/compare/v1.33.4...v1.33.5) - 2026-08-06
+
+### Fixed
+
+- *(security-floor)* keep process substitution in the redirect target
+- *(security-floor)* stop redirect targets at shell separators
+- *(hooks)* reject redundant background waits
+
+### Other
+
+- *(deps)* align prettyplease with Syn 3
+- *(deps)* update checkout action to 6.1.0
+- *(deps)* update Syn and wasm-bindgen
+- *(deps)* update derive dependencies to Syn 3
+- *(deps)* refresh runtime and release tooling
+- *(deps)* update toolchain and dependencies
+
 ## [1.33.4](https://github.com/camjac251/tool-gates/compare/v1.33.3...v1.33.4) - 2026-07-31
 
 ### Fixed
