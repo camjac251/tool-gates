@@ -86,7 +86,7 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(lib_only)'] }
 
 [dev-dependencies]
 proptest = "1"    # Property-based/fuzz testing
-serial_test = "3" # Serialize tests that mutate process-global env vars
+serial_test = "4" # Serialize tests that mutate process-global env vars
 
 [build-dependencies]
 serde = { version = "1", features = ["derive"] }
