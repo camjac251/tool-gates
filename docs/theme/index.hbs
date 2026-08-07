@@ -217,9 +217,11 @@
                     </div>
 
                     <!-- book.js scrollToTop() binds to .menu-title with no null guard, so the
-                         node must stay. It is display:none and was a second <h1> on every
-                         page, competing with the real page heading; a <div> keeps the binding
-                         and leaves one <h1> per document. -->
+                         node must stay. It is display:none and used to be a second top-level
+                         heading on every page, competing with the real one. A div keeps the
+                         binding and leaves a single top-level heading per document. Spell the
+                         tag names out: literal markup here ships in every built page and
+                         inflates any heading audit that greps the HTML. -->
                     <div class="menu-title">{{ book_title }}</div>
 
                     {{#if search_enabled}}
