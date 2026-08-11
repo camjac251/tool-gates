@@ -11,8 +11,25 @@
     <header class="sec-head release-section-head">
       <span class="lbl">Current window</span>
       <h2 id="release-current-title">Latest eight versions</h2>
-      <p>From v1.34.0 through v1.32.4, newest first.</p>
+      <p>From v1.34.1 through v1.33.0, newest first.</p>
     </header>
+  <div class="config-block">
+    <header>
+      <h3>v1.34.1 · release pending</h3>
+      <span class="src-tag">classifier retry hints · release pending</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec fixed">Fixed</span>
+  skip retry hints on safety-filter refusal denials
+  skip retry hints when the classifier request was aborted</pre>
+      </div>
+      <div class="config-prose">
+        <p>PermissionDenied retry hints close the loop on classifier false positives: when auto mode's classifier denies a command the gate engine would allow, tool-gates tells the model it may retry. Two denial classes wear the classifier's label without being a judgment of the command, and both were getting a contradictory hint. A safety filter can refuse to evaluate the check because of earlier conversation content; that block is about the transcript, not the action, and Claude Code already tells the model to move past it, so a retry only re-triggers the refusal. A classifier request aborted by an interrupt or timeout is a stop signal, and a retry hint talks over it. Both now match the non-judgment guard and suppress the hint.</p>
+        <p>The boundary is deliberate: plain could-not-evaluate errors and transcript-too-long denials stay retryable, because the guidance there is to retry or compact and the hint still helps. With auto mode becoming the default permission mode for new sessions on August 14, 2026, the PermissionDenied path moves from opt-in traffic to the common case; the <a href="auto-mode.html">Auto mode</a> page now documents the rollout, the repo-level opt-out, and how <code>classifyAllShell</code> interacts with the gate catalog.</p>
+      </div>
+    </div>
+  </div>
   <div class="config-block">
     <header>
       <h3>v1.34.0 · August 6, 2026</h3>
@@ -142,6 +159,17 @@
       </div>
     </div>
   </div>
+  </section>
+  <details class="release-archive" id="release-archive" aria-labelledby="release-archive-title">
+    <summary>
+      <h2 class="release-summary" id="release-archive-title">
+        <span class="release-summary-kicker">Historical archive</span>
+        <span class="release-summary-title">Browse 59 earlier releases</span>
+        <span class="release-summary-range">v1.32.4 to v1.1.0</span>
+        <span class="release-summary-icon" aria-hidden="true"></span>
+      </h2>
+    </summary>
+    <div class="release-archive-list">
   <div class="config-block">
     <header>
       <h3>v1.32.4 · July 28, 2026</h3>
@@ -160,17 +188,6 @@
       </div>
     </div>
   </div>
-  </section>
-  <details class="release-archive" id="release-archive" aria-labelledby="release-archive-title">
-    <summary>
-      <h2 class="release-summary" id="release-archive-title">
-        <span class="release-summary-kicker">Historical archive</span>
-        <span class="release-summary-title">Browse 58 earlier releases</span>
-        <span class="release-summary-range">v1.32.3 to v1.1.0</span>
-        <span class="release-summary-icon" aria-hidden="true"></span>
-      </h2>
-    </summary>
-    <div class="release-archive-list">
   <div class="config-block">
     <header>
       <h3>v1.32.3 · July 26, 2026</h3>

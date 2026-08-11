@@ -23,7 +23,7 @@
         <tr>
           <td><code>default</code></td>
           <td>Claude Code, Codex CLI, Antigravity CLI, Gemini CLI</td>
-          <td>Normal gate flow. Known-safe commands can allow, dangerous commands deny, and unknown or mutating commands ask or defer. On Codex, whether an ask becomes a visible prompt also depends on <code>approval_policy</code>. On Antigravity, a hook allow does not suppress a prompt (agy keeps the strictest decision); its native <code>permissions.allow</code> does.</td>
+          <td>Normal gate flow. Known-safe commands can allow, dangerous commands deny, and unknown or mutating commands ask or defer. Claude Code labels this mode "Manual" in its UI and accepts <code>manual</code> as an alias; hooks still receive <code>default</code>. On Codex, whether an ask becomes a visible prompt also depends on <code>approval_policy</code>. On Antigravity, a hook allow does not suppress a prompt (agy keeps the strictest decision); its native <code>permissions.allow</code> does.</td>
         </tr>
         <tr>
           <td><code>acceptEdits</code></td>
@@ -32,8 +32,8 @@
         </tr>
         <tr>
           <td><code>auto</code></td>
-          <td>Claude Code</td>
-          <td>Allowed commands skip the classifier and run. Denied commands stay denied. Asks go to Claude Code's classifier instead of a human prompt. tool-gates promotes high-risk asks such as pipe-to-shell and <code>eval</code> to deny, avoids adding classifier approvals to the human pending queue, and emits PermissionDenied retry hints when the classifier rejects a command the gate engine would allow.</td>
+          <td>Claude Code (default for new sessions on Pro, Max, and Team plans since August 14, 2026)</td>
+          <td>Allowed commands skip the classifier and run. Denied commands stay denied. Asks go to Claude Code's classifier instead of a human prompt. tool-gates promotes high-risk asks such as pipe-to-shell and <code>eval</code> to deny, avoids adding classifier approvals to the human pending queue, and emits PermissionDenied retry hints when the classifier rejects a command the gate engine would allow. See <a href="auto-mode.html">Auto mode</a> for the rollout details and repo-level opt-out.</td>
         </tr>
         <tr>
           <td><code>plan</code></td>

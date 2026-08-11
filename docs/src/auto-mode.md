@@ -39,6 +39,25 @@
     </article>
   </div>
   <div class="sec-head">
+    <p class="lbl">Default rollout</p>
+    <h2>Auto is the default mode.</h2>
+    <p>Starting August 14, 2026, new Claude Code sessions on Pro, Max, and Team plans open in auto mode unless a <code>permissions.defaultMode</code> is pinned. Three rollout facts shape how tool-gates behaves.</p>
+  </div>
+  <div class="hook-cards">
+    <article class="hook-card">
+      <h3>Repos can veto auto, not grant it</h3>
+      <p><code>defaultMode: "auto"</code> is honored only from managed, user, and <code>--settings</code> scopes; project <code>.claude/settings.json</code> and <code>settings.local.json</code> cannot switch a session into auto mode. The kill switch reads merged settings, so a repository can opt its checkout out entirely with <code>"permissions": {"disableAutoMode": "disable"}</code>.</p>
+    </article>
+    <article class="hook-card">
+      <h3>Headless holds fail closed</h3>
+      <p>A held ask cannot prompt in a non-interactive session (<code>claude -p</code>). Claude Code converts it to a deny that names the missing approval, so <code>auto = "prompt"</code> rules stop the action outright instead of leaking to the classifier.</p>
+    </article>
+    <article class="hook-card">
+      <h3>classifyAllShell and the gate catalog</h3>
+      <p><code>autoMode.classifyAllShell</code> suspends Claude Code's own Bash/PowerShell allow rules while auto mode is active. tool-gates decisions are hook output, not permission rules, so gate allows still short-circuit: the deterministic floor decides first and the classifier sees only what defers.</p>
+    </article>
+  </div>
+  <div class="sec-head">
     <p class="lbl">What changes</p>
     <h2>Auto mode strengthens the floor.</h2>
     <p>The deterministic rules tighten in four places, plus two ergonomic additions.</p>
