@@ -66,10 +66,13 @@ fn decision_to_stage_status(decision: Decision) -> &'static str {
 /// dispatch (strictest-wins across sub-commands), recording each stage. Returns
 /// the per-stage statuses/notes plus the collapsed final decision and reason.
 ///
-/// `mode` accepts `default | acceptEdits | auto | bypassPermissions`; v1 treats
-/// every mode as `default` (no auto-mode hard-ask promotion, no settings) and
-/// records that in the settings-stage note. Settings are not loaded in the wasm
-/// build, so the settings stage is always `skipped`.
+/// `mode` accepts `default | acceptEdits | auto | bypassPermissions`. Auto
+/// mode promotes raw-string hard asks to block, and acceptEdits/auto can
+/// auto-allow path-safe edit commands when `settings_json` is provided.
+/// Settings come only from `settings_json` (the wasm build never reads disk);
+/// without it the settings stage is `skipped`. Wire-level defer is not
+/// modeled: gate asks the native engine would hand to Claude's resolver or
+/// auto-mode classifier render as plain `ask` here.
 #[cfg(feature = "wasm")]
 pub fn decide_instrumented(command: &str, mode: &str, settings_json: Option<&str>) -> SimStages {
     use crate::config::Features;

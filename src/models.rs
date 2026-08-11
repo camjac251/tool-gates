@@ -1242,14 +1242,20 @@ impl PermissionDeniedInput {
     /// True when `reason` shows this denial did not come from the classifier
     /// judging the command.
     ///
-    /// Claude Code labels two other outcomes with the same classifier
-    /// decision reason, and retrying either is useless or harmful:
+    /// Claude Code labels several other outcomes with the same classifier
+    /// decision reason, and retrying any of them is useless or harmful:
     ///
     /// - the classifier service was unreachable, so nothing was judged and a
     ///   retry just fails again;
     /// - the session hit its consecutive/total denial limit and fell back to
     ///   prompting, which is a signal to stop and let the user look, not to
-    ///   push the model at it again.
+    ///   push the model at it again;
+    /// - a safety filter refused to evaluate the check because of earlier
+    ///   conversation content, so the block is about the transcript, not the
+    ///   command, and a retry re-triggers the same refusal Claude Code has
+    ///   already told the model to move past;
+    /// - the classifier request was aborted (interrupt or timeout), where a
+    ///   retry hint can talk over the user's stop signal.
     ///
     /// The hook payload carries no field distinguishing these, so the reason
     /// text is the only signal. Match conservatively and fail open: an
@@ -1257,8 +1263,14 @@ impl PermissionDeniedInput {
     pub fn is_non_judgment_denial(&self) -> bool {
         const CLASSIFIER_UNAVAILABLE: &str = "Classifier unavailable";
         const DENIAL_LIMIT: &str = "Please review the transcript before continuing.";
+        const SAFETY_FILTER_REFUSAL: &str =
+            "a safety check separate from auto mode blocked this request";
+        const REQUEST_ABORTED: &str = "Classifier request aborted";
 
-        self.reason.contains(CLASSIFIER_UNAVAILABLE) || self.reason.contains(DENIAL_LIMIT)
+        self.reason.contains(CLASSIFIER_UNAVAILABLE)
+            || self.reason.contains(DENIAL_LIMIT)
+            || self.reason.contains(SAFETY_FILTER_REFUSAL)
+            || self.reason.contains(REQUEST_ABORTED)
     }
 
     /// Extract command string from `tool_input` (for Bash-style tools)
@@ -1830,6 +1842,27 @@ mod tests {
         assert!(
             with_reason(
                 "20 actions were blocked this session. Please review the transcript before continuing.\n\nLatest blocked action: curl example.com"
+            )
+            .is_non_judgment_denial()
+        );
+
+        // Safety-filter refusal: the block is about conversation content, not
+        // the command, so retrying re-triggers it.
+        assert!(
+            with_reason(
+                "Auto mode could not evaluate this action and is blocking it for safety \u{2014} a safety check separate from auto mode blocked this request because of earlier conversation content \u{2014} it isn't about the action itself \u{2014} run with --debug for details"
+            )
+            .is_non_judgment_denial()
+        );
+
+        // Aborted request: a retry hint would talk over the user's stop signal.
+        assert!(with_reason("Classifier request aborted").is_non_judgment_denial());
+
+        // Plain could-not-evaluate stays retryable; only the refusal wording
+        // marks a block a retry cannot clear.
+        assert!(
+            !with_reason(
+                "Auto mode could not evaluate this action and is blocking it for safety \u{2014} run with --debug for details"
             )
             .is_non_judgment_denial()
         );

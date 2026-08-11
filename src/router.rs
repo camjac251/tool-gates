@@ -652,8 +652,9 @@ fn check_command_with_settings_and_session_inner(
     //
     // In auto mode, CC also probes whether the tool would be allowed in
     // acceptEdits before invoking the classifier. If the command is on that
-    // hardcoded Bash list and tool-gates did not already allow it above, deny
-    // here so Claude's acceptEdits fast path cannot silently approve it.
+    // hardcoded Bash list and tool-gates did not already allow it above, hold
+    // an explicit ask: a hook ask short-circuits CC's resolver before the
+    // probe runs, so the acceptEdits fast path cannot silently approve it.
     if gate_result.decision == PermissionDecision::Ask {
         let hard_ask_in_accept_edits =
             needs_explicit_ask_to_avoid_claude_accept_edits_passthrough(&commands);
