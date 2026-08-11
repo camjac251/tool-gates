@@ -15,8 +15,8 @@
     </header>
   <div class="config-block">
     <header>
-      <h3>v1.34.1 · release pending</h3>
-      <span class="src-tag">classifier retry hints · release pending</span>
+      <h3>v1.34.1 · August 11, 2026</h3>
+      <span class="src-tag">classifier retry hints · <a href="https://github.com/camjac251/tool-gates/commit/e5135ca" target="_blank" rel="noopener">e5135ca</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
