@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.34.1](https://github.com/camjac251/tool-gates/compare/v1.34.0...v1.34.1) - 2026-08-11
+
+### Fixed
+
+- *(auto-mode)* skip retry hints on refusal and aborted classifier denials
+
+### Other
+
+- cover the auto-mode default rollout
+- stop the menu-title comment inflating heading audits
+- restructure the sidebar and surface the changelog
+
 ## [1.34.0](https://github.com/camjac251/tool-gates/compare/v1.33.5...v1.34.0) - 2026-08-06
 
 ### Added
