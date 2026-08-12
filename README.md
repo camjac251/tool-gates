@@ -2,201 +2,217 @@
 
 # Tool Gates
 
-**Intelligent tool permission gate for AI coding assistants**
+<p><strong>Deterministic guardrails for autonomous coding agents</strong></p>
 
-[![Documentation](https://img.shields.io/badge/docs-live-blue.svg)](https://camjac251.github.io/tool-gates/) [![CI](https://github.com/camjac251/tool-gates/actions/workflows/ci.yml/badge.svg)](https://github.com/camjac251/tool-gates/actions/workflows/ci.yml) [![Release](https://github.com/camjac251/tool-gates/actions/workflows/release.yml/badge.svg)](https://github.com/camjac251/tool-gates/actions/workflows/release.yml) [![Rust](https://img.shields.io/badge/rust-1.97.1+-orange.svg)](https://www.rust-lang.org/) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Documentation](https://img.shields.io/badge/docs-live-0969da.svg?style=flat-square)](https://camjac251.github.io/tool-gates/) [![CI](https://github.com/camjac251/tool-gates/actions/workflows/ci.yml/badge.svg)](https://github.com/camjac251/tool-gates/actions/workflows/ci.yml) [![Release](https://github.com/camjac251/tool-gates/actions/workflows/release.yml/badge.svg)](https://github.com/camjac251/tool-gates/actions/workflows/release.yml) [![MSRV](https://img.shields.io/badge/MSRV-1.97.1-f74c00.svg?style=flat-square)](https://www.rust-lang.org/) [![License: MIT](https://img.shields.io/badge/license-MIT-0969da.svg?style=flat-square)](https://spdx.org/licenses/MIT.html)
 
-A hook for [Claude Code](https://code.claude.com/docs/en/hooks), [Codex CLI](https://github.com/openai/codex), [Antigravity CLI](https://antigravity.google/docs/cli-overview), and the deprecated [Gemini CLI](https://github.com/google-gemini/gemini-cli) that gates Bash commands, file operations, and tool invocations using AST parsing. Determines whether to allow, ask, or block based on potential impact.
+Tool Gates evaluates shell commands, file operations, and tool calls before they run. It combines tree-sitter parsing with a non-configurable safety floor and per-tool policy, then returns the narrowest safe decision for the active client.
 
-### 📚 [Read the Live Documentation](https://camjac251.github.io/tool-gates/)
+[**Read the documentation →**](https://camjac251.github.io/tool-gates/)
 
-[Installation](#installation) · [Quick Start](#quick-start) · [Features](#features) · [Architecture](#architecture)
+[Why Tool Gates?](#why-tool-gates) · [Quick start](#quick-start) · [How it works](#how-it-works) · [Clients](#client-support) · [Configuration](#configuration)
 
 </div>
 
----
+> [!IMPORTANT] **Claude Code Auto Mode changes the job of a permission hook.** New Claude Code sessions on Pro, Max, and Team plans use Auto Mode by default unless a different default is already pinned. **Auto Mode does not bypass Tool Gates.** Tool Gates still evaluates each supported hook call before Claude's classifier: known-safe calls can run, hard-denied calls remain blocked, and selected irreversible actions can still require a human. See [Tool Gates and Auto Mode](#tool-gates-and-auto-mode) and [Anthropic's rollout announcement](https://claude.com/blog/auto-mode-default-in-claude-code).
 
-## Quick Start
+## Why Tool Gates?
 
-Tool Gates integrates into your AI assistant session by checking tool calls before they run.
+Native permission systems have different wire formats, defaults, and ideas of what counts as safe. Tool Gates puts one predictable policy layer in front of them.
 
-### 1. Installation
+| Without a shared gate | With Tool Gates |
+| --- | --- |
+| Repeated prompts encourage broad, permanent allow rules | Known-safe operations can be approved precisely |
+| Text matching misses shell structure inside chains and pipelines | Commands are parsed as syntax with `tree-sitter-bash` |
+| A probabilistic classifier makes every borderline decision | Deterministic denials and explicit human holds run first |
+| Client behavior drifts across Claude, Codex, and Antigravity | One gate engine renders a client-native result |
+| An approval disappears after the session | Successful human approvals can be reviewed and saved intentionally |
 
-#### Homebrew (macOS & Linux)
+Tool Gates is a guardrail layer, not a sandbox or a replacement for code review. Its purpose is to reduce needless friction while keeping deterministic policy in the loop as agents become more autonomous.
+
+## Quick start
+
+Install with Homebrew on macOS or Linux:
 
 ```bash
 brew install camjac251/tap/tool-gates
 ```
 
-For other installation methods, see the [Installation Guide](https://camjac251.github.io/tool-gates/install.html).
-
-### 2. Configure Hooks
-
-Install the hooks automatically for your preferred CLI tool:
+Add the Claude Code hooks and verify the installation:
 
 ```bash
-# For Claude Code (recommended)
 tool-gates hooks add -s user
-
-# For Codex CLI
-tool-gates hooks add --codex
-
-# For Antigravity CLI (agy)
-tool-gates hooks add --antigravity  # ~/.gemini/config/hooks.json
-tool-gates hooks add --antigravity -s project  # .agents/hooks.json
-tool-gates agy allowlist --apply    # stop agy prompting for read-only commands (native permissions.allow)
-
-# For existing Gemini CLI setups (deprecated compatibility; sunset date was 2026-06-18)
-tool-gates hooks add --gemini
-```
-
-Verify your installation using the doctor command:
-
-```bash
 tool-gates doctor
 ```
 
----
+For binaries, Cargo installation, and upgrades, see the [installation guide](https://camjac251.github.io/tool-gates/install.html).
+
+<details>
+<summary><strong>Codex CLI setup</strong></summary>
+
+```bash
+tool-gates hooks add --codex
+tool-gates doctor
+```
+
+</details>
+
+<details>
+<summary><strong>Antigravity CLI setup</strong></summary>
+
+```bash
+# User hooks: ~/.gemini/config/hooks.json
+tool-gates hooks add --antigravity
+
+# Optional project hooks: .agents/hooks.json
+tool-gates hooks add --antigravity -s project
+
+# Add native allow rules for recognized read-only commands
+tool-gates agy allowlist --apply
+
+tool-gates doctor
+```
+
+</details>
+
+<details>
+<summary><strong>Gemini CLI compatibility setup</strong></summary>
+
+Gemini CLI support is deprecated and retained only for existing installations. New Google client integrations should target Antigravity.
+
+```bash
+tool-gates hooks add --gemini
+tool-gates doctor
+```
+
+</details>
+
+## How it works
+
+Every supported client is normalized into the same gate pipeline. Raw-command checks run before AST parsing, configured rules are merged with the deterministic safety floor, and only then is the result translated into the client's native hook format.
+
+```mermaid
+flowchart LR
+    CALL[Tool call] --> NORMALIZE[Normalize client input]
+    NORMALIZE --> FLOOR[Raw safety floor]
+    FLOOR --> PARSE[Parse command or inspect tool input]
+    PARSE --> GATES[Apply gates and settings]
+    GATES --> DECISION{Decision}
+
+    DECISION -->|allow| RUN[Execute]
+    DECISION -->|deny| STOP[Block with reason and recovery]
+    DECISION -->|ask or defer| CLIENT{Client permission layer}
+
+    CLIENT -->|Claude Auto| CLASSIFIER[Safety classifier]
+    CLIENT -->|Manual or held ask| HUMAN[Human approval]
+    CLIENT -->|Codex or Antigravity| NATIVE[Native policy]
+
+    CLASSIFIER --> RUN
+    CLASSIFIER --> STOP
+    HUMAN --> RUN
+    HUMAN --> STOP
+    NATIVE --> RUN
+    NATIVE --> STOP
+
+    RUN --> POST[Post-tool reminders and approval tracking]
+```
+
+| Engine outcome | Meaning | What happens next |
+| --- | --- | --- |
+| **Allow** | The operation matches known-safe policy | It runs immediately where the client honors hook allows |
+| **Ask / defer** | The operation is mutating, unknown, or needs another decision | The user, Claude's Auto classifier, or the client's native policy decides |
+| **Deny** | The safety floor or an explicit block rule rejected the operation | Execution stops with a specific reason and, when available, a safer recovery action |
+
+Read the [architecture](https://camjac251.github.io/tool-gates/architecture.html) and [hook model](https://camjac251.github.io/tool-gates/hook-model.html) for the full precedence and serialization contracts.
+
+## Tool Gates and Auto Mode
+
+Auto Mode replaces many human approval prompts with a separate safety classifier. It does not make deterministic hooks redundant; it changes which layer resolves an undecided call.
+
+| Tool Gates result in Claude Auto Mode | Result |
+| --- | --- |
+| Known-safe **allow** | Runs without classifier review |
+| Ordinary gate **ask** | Becomes a defer so the classifier can allow or deny it |
+| Explicit `auto = "prompt"` rule | Remains a human approval; non-interactive sessions fail closed |
+| Hard **deny** | Remains denied; the classifier does not get a vote |
+| Classifier denial of a gate-safe command | Can produce a retry hint with a narrower, safer alternative |
+
+Tool Gates also promotes high-risk shell asks such as pipe-to-shell and `eval` to denials in Auto Mode, and it does not record silent classifier approvals as prior human consent. See the complete [Auto Mode guide](https://camjac251.github.io/tool-gates/auto-mode.html), including rollout, opt-out, `classifyAllShell`, and settings-precedence details.
 
 ## Features
 
-- **AST Parsing**: Uses [tree-sitter-bash](https://github.com/tree-sitter/tree-sitter-bash) to parse shell commands, handling `&&`, `||`, `|`, and `;` chains correctly.
-- **Approval Learning**: Tracks manually approved commands and uses the review TUI to save patterns to `settings.json`.
-- **Security Floor**: Blocks dangerous shell patterns like pipe-to-shell, command injection, and `eval`. For details, see the [Security Floor documentation](https://camjac251.github.io/tool-gates/security-floor.html).
-- **Security Reminders**: Scans file contents on writes and edits for 28 anti-patterns across three tiers. For details, see the [Security Reminders documentation](https://camjac251.github.io/tool-gates/security-reminders.html).
-- **Design Lint**: Scans UI file writes and edits for generic, templated design patterns and missing UI-quality basics (overused gradients and palettes, the default sans font, placeholder content, em dashes in copy, hardcoded palette colors, missing focus styles). Opt-in. For details, see the [Design Lint documentation](https://camjac251.github.io/tool-gates/design-lint.html).
-- **File Guards**: Protects sensitive AI configuration files (like `CLAUDE.md`, `.cursorrules`) from symlink-based read or write attacks.
-- **Modern CLI Hints**: Recommends modern alternatives like `bat`, `rg`, or `fd` when legacy commands are run.
-- **Auto Mode & Accept Edits**: Adapts behavior dynamically based on the current session permission mode.
+| Capability | What it provides |
+| --- | --- |
+| **Shell-aware gates** | Correct handling of pipelines, substitutions, wrappers, and `&&`, ` |  | `, `;` command chains |
+| **Security floor** | Non-configurable blocks and asks for command injection, pipe-to-shell, `eval`, unsafe output caps, and other high-impact forms |
+| **File guards** | Symlink and sensitive-path protection for agent instruction and configuration files |
+| **Security reminders** | Write/Edit scans for 28 security anti-patterns across three severity tiers |
+| **Design and comment lint** | Opt-in reminders for templated UI patterns, missing interaction basics, and low-value code comments |
+| **Approval learning** | A review queue that turns successful human approvals into deliberate reusable rules |
+| **CLI guidance** | Contextual recovery actions and modern command alternatives such as `bat`, `rg`, and `fd` |
+| **Mode awareness** | Separate behavior for manual/default, `acceptEdits`, Auto, plan, and bypass modes |
 
-> [!TIP]
->
-> For a full list of features and details on how they work, read the [Introduction](https://camjac251.github.io/tool-gates/).
+Explore the [gate reference](https://camjac251.github.io/tool-gates/gates/), [security floor](https://camjac251.github.io/tool-gates/security-floor.html), [security reminders](https://camjac251.github.io/tool-gates/security-reminders.html), and [design lint](https://camjac251.github.io/tool-gates/design-lint.html).
 
----
+## Client support
 
-## Architecture
+| Client | Integration behavior | Setup |
+| --- | --- | --- |
+| [Claude Code](https://code.claude.com/docs/en/hooks) | Full mode-aware hook lifecycle, including Auto classifier routing, permission-denial recovery, and approval tracking | `tool-gates hooks add -s user` |
+| [Codex CLI](https://github.com/openai/codex) | Pre-execution output is deny-only; non-denies stay silent so Codex can apply its own `approval_policy` | `tool-gates hooks add --codex` |
+| [Antigravity CLI](https://antigravity.google/docs/hooks) | Hook decisions only tighten native policy; use the generated native allowlist for prompt-free recognized reads | `tool-gates hooks add --antigravity` |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | Deprecated compatibility for existing setups | `tool-gates hooks add --gemini` |
 
-Tool Gates operates at the hook layer to analyze and intercept actions before execution:
-
-```mermaid
-flowchart TD
-    CC[AI Assistant] --> TOOL{Tool Type}
-    TOOL -->|Bash/Monitor| CMD[Shell Command]
-    TOOL -->|Write/Edit| FILE[File Operation]
-
-    subgraph PTU [PreToolUse Hook]
-        direction TB
-        PTU_CHECK[tool-gates check] --> PTU_DEC{Decision}
-        PTU_DEC -->|dangerous| PTU_DENY[deny]
-        PTU_DEC -->|risky| PTU_ASK[ask + track]
-        PTU_DEC -->|safe| PTU_CTX{Context?}
-        PTU_CTX -->|main session| PTU_ALLOW[allow ✓]
-        PTU_CTX -->|subagent| PTU_IGNORED[ignored by Claude]
-    end
-
-    subgraph PTU_FILE [PreToolUse - File Tools]
-        direction TB
-        FG[Symlink guard] --> FG_DEC{Symlink?}
-        FG_DEC -->|guarded symlink| FG_DENY[deny - use real path]
-        FG_DEC -->|ok| SEC{Content scan}
-        SEC -->|hardcoded secret| SEC_DENY[deny - Tier 1]
-        SEC -->|safe| SEC_PASS[pass through]
-    end
-
-    CMD --> PTU
-    FILE --> PTU_FILE
-
-    PTU_IGNORED --> INTERNAL[Claude internal checks]
-    INTERNAL -->|path outside cwd| PR_HOOK
-
-    subgraph PR_HOOK [PermissionRequest Hook]
-        direction TB
-        PR_CHECK[tool-gates re-check] --> PR_DEC{Decision}
-        PR_DEC -->|safe| PR_ALLOW[allow ✓]
-        PR_DEC -->|dangerous| PR_DENY[deny]
-        PR_DEC -->|risky| PR_PROMPT[show prompt]
-    end
-
-    PTU_ASK --> EXEC[Command Executes]
-    PR_PROMPT --> USER_APPROVE[User Approves] --> EXEC
-    SEC_PASS --> FILE_EXEC[Write Succeeds]
-
-    subgraph POST [PostToolUse Hook]
-        direction TB
-        POST_CHECK[check tracking] --> POST_DEC{Tracked + Success?}
-        POST_DEC -->|yes| PENDING[add to pending queue]
-        POST_DEC -->|no| POST_SKIP[skip]
-        POST_SEC[Security scan] --> POST_SEC_DEC{Anti-pattern?}
-        POST_SEC_DEC -->|yes| NUDGE[inject reminder]
-        POST_SEC_DEC -->|no| POST_SKIP
-    end
-
-    EXEC --> POST
-    FILE_EXEC --> POST_SEC
-    PENDING --> REVIEW[tool-gates review]
-    REVIEW --> SETTINGS[settings.json]
-```
-
-> [!NOTE]
->
-> To learn more about the lifecycle, read the [Hook Model documentation](https://camjac251.github.io/tool-gates/hook-model.html).
-
----
+Client behavior is intentionally not flattened into a false common denominator. The shared engine keeps one policy, while each serializer emits only decisions that its client can honor safely.
 
 ## Configuration
 
-Tool Gates is highly customizable via `~/.config/tool-gates/config.toml`. Key configuration options include:
+User configuration lives at `~/.config/tool-gates/config.toml`. Project and client settings participate in a documented precedence model, while the hard safety floor remains non-configurable.
 
-- **Feature Toggles**: Selectively enable or disable gates, file guards, hints, and security reminders.
-- **Git Aliases**: Automatically resolve git aliases against your git configuration.
-- **Tool Blocking**: Block specific tools or restrict them from accessing certain domains.
-- **Skill Auto-Approval**: Define rules to automatically approve skills under trusted paths or project conditions.
-- **Codex Project Edits**: Automatically approve patch applications inside the project directory.
+Common configuration areas include:
 
-> [!NOTE]
->
-> Refer to the [Configuration Reference](https://camjac251.github.io/tool-gates/configuration.html) for detailed settings templates and examples.
+- enabling or disabling individual gates, hints, and optional content scans;
+- adding explicit allow, ask, deny, or Auto-specific prompt rules;
+- resolving Git aliases before gate evaluation;
+- blocking selected tools or restricting their domains;
+- auto-approving trusted skills under scoped paths and project conditions; and
+- allowing Codex patch applications inside the project directory.
 
----
+Start with the [configuration reference](https://camjac251.github.io/tool-gates/configuration.html), then review [permission modes](https://camjac251.github.io/tool-gates/modes.html) and [settings precedence](https://camjac251.github.io/tool-gates/settings-precedence.html).
 
-## CLI & Approval Learning
+## Approval learning and diagnostics
 
-You can manage learned patterns and configure permissions directly using the CLI:
+Tool Gates records successful prompt-backed decisions for later review. Nothing is learned permanently until you select and save it.
 
 ```bash
-# Start the interactive TUI to review pending approvals
+# Review pending human approvals in the TUI
 tool-gates review
 
-# List currently stored rules
+# Inspect stored rules
 tool-gates rules list
 
-# Check hook and configuration health
+# Check binaries, hooks, and configuration health
 tool-gates doctor
 ```
 
-> [!NOTE]
->
-> For more CLI commands, see the [CLI Command Reference](https://camjac251.github.io/tool-gates/cli.html) and [Approval Learning](https://camjac251.github.io/tool-gates/approval-learning.html).
+See the [CLI reference](https://camjac251.github.io/tool-gates/cli.html) and [approval learning guide](https://camjac251.github.io/tool-gates/approval-learning.html).
 
-## Credits
+## Acknowledgements
 
 Security reminder patterns were built on and informed by:
 
-- [Anthropic's security-guidance plugin](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/security-guidance), the official Claude Code security hook (9 base patterns we expanded to 28)
-- [Arcanum-Sec/sec-context](https://github.com/Arcanum-Sec/sec-context), curated security anti-pattern database synthesized from 150+ sources
-- [SecureCodeWarrior/ai-security-rules](https://github.com/SecureCodeWarrior/ai-security-rules), security rule files for AI coding tools
-- [OWASP Top 10](https://owasp.org/www-project-top-ten/), standard web application security risks
-- [dwarvesf/claude-guardrails](https://github.com/dwarvesf/claude-guardrails), multi-layer defense hooks for Claude Code
-- [GitHub Actions workflow injection research](https://github.blog/security/vulnerability-research/how-to-catch-github-actions-workflow-injections-before-attackers-do/), GHA injection patterns and remediation
+- [Anthropic's security-guidance plugin](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/security-guidance), the official Claude Code security hook whose base patterns were expanded here;
+- [Arcanum-Sec/sec-context](https://github.com/Arcanum-Sec/sec-context), a curated security anti-pattern database synthesized from more than 150 sources;
+- [SecureCodeWarrior/ai-security-rules](https://github.com/SecureCodeWarrior/ai-security-rules), security rule files for coding tools;
+- the [OWASP Top 10](https://owasp.org/www-project-top-ten/), standard web application security risks;
+- [dwarvesf/claude-guardrails](https://github.com/dwarvesf/claude-guardrails), multi-layer defense hooks for Claude Code; and
+- GitHub's [workflow injection research](https://github.blog/security/vulnerability-research/how-to-catch-github-actions-workflow-injections-before-attackers-do/).
 
----
+## Project links
 
-## References
-
-- [Live Documentation Website](https://camjac251.github.io/tool-gates/)
-- [13 Gates Reference](https://camjac251.github.io/tool-gates/gates/git.html)
-- [Claude Code Hooks Guide](https://code.claude.com/docs/en/hooks)
-- [Antigravity CLI Hooks](https://antigravity.google/docs/hooks)
-- [Gemini CLI Repository](https://github.com/google-gemini/gemini-cli)
+- [Live documentation](https://camjac251.github.io/tool-gates/)
+- [What's new](https://camjac251.github.io/tool-gates/whats-new.html)
+- [Gate reference](https://camjac251.github.io/tool-gates/gates/)
+- [Claude Code hooks](https://code.claude.com/docs/en/hooks)
+- [Antigravity CLI hooks](https://antigravity.google/docs/hooks)
 - [tree-sitter-bash](https://github.com/tree-sitter/tree-sitter-bash)
