@@ -14,7 +14,9 @@ Tool Gates evaluates shell commands, file operations, and tool calls before they
 
 </div>
 
-> [!IMPORTANT] **Claude Code Auto Mode changes the job of a permission hook.** New Claude Code sessions on Pro, Max, and Team plans use Auto Mode by default unless a different default is already pinned. **Auto Mode does not bypass Tool Gates.** Tool Gates still evaluates each supported hook call before Claude's classifier: known-safe calls can run, hard-denied calls remain blocked, and selected irreversible actions can still require a human. See [Tool Gates and Auto Mode](#tool-gates-and-auto-mode) and [Anthropic's rollout announcement](https://claude.com/blog/auto-mode-default-in-claude-code).
+> [!IMPORTANT]
+>
+> **Claude Code Auto Mode changes the job of a permission hook.** New Claude Code sessions on Pro, Max, and Team plans use Auto Mode by default unless a different default is already pinned. **Auto Mode does not bypass Tool Gates.** Tool Gates still evaluates each supported hook call before Claude's classifier: known-safe calls can run, hard-denied calls remain blocked, and selected irreversible actions can still require a human. See [Tool Gates and Auto Mode](#tool-gates-and-auto-mode) and [Anthropic's rollout announcement](https://claude.com/blog/auto-mode-default-in-claude-code).
 
 ## Why Tool Gates?
 
@@ -143,7 +145,7 @@ Tool Gates also promotes high-risk shell asks such as pipe-to-shell and `eval` t
 
 | Capability | What it provides |
 | --- | --- |
-| **Shell-aware gates** | Correct handling of pipelines, substitutions, wrappers, and `&&`, ` |  | `, `;` command chains |
+| **Shell-aware gates** | Correct handling of pipelines, substitutions, wrappers, and `&&`, <code>&#124;&#124;</code>, `;` command chains |
 | **Security floor** | Non-configurable blocks and asks for command injection, pipe-to-shell, `eval`, unsafe output caps, and other high-impact forms |
 | **File guards** | Symlink and sensitive-path protection for agent instruction and configuration files |
 | **Security reminders** | Write/Edit scans for 28 security anti-patterns across three severity tiers |
