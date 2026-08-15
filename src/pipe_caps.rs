@@ -36,15 +36,13 @@ static SED_AWK_TRUNC_RE: LazyLock<Regex> = LazyLock::new(|| {
     .expect("SED_AWK_TRUNC_RE must compile")
 });
 
-/// `| rg .` / `| rg -m N .` bare-catch-all "fake filter", the backstop sibling
-/// of head/tail. The agent pipes to rg with a match-anything pattern purely to
-/// cap volume, which silently drops everything past the cap. Matches ONLY the
-/// catch-all forms (`.`, `.*`, `''`, `""`, `'.'`, `'.*'`) after optional flags
-/// (incl. `-m N`), anchored to the end of the pipe segment. Pure `-c` /
-/// `--count` output is exempted below because it consumes the complete stream.
-/// A real content filter like `rg 'FAILED'`, `rg error`, or `rg -m 5 '.rs'` is
-/// NOT matched, so legitimate filtering is untouched; only the no-op pattern
-/// is caught.
+/// `| rg -m N .` capped catch-all "fake filter", the backstop sibling of
+/// head/tail: a match-anything pattern plus max-count caps volume and drops
+/// everything past the cap. Matches catch-all forms (`.`, `.*`, `''`, `""`,
+/// `'.'`, `'.*'`) after optional flags, anchored to the pipe-segment end. The
+/// deny below additionally requires a max-count: a bare `| rg .` drops empty
+/// lines only, so a truncation deny there would be false. Real content
+/// filters (`rg 'FAILED'`, `rg -m 5 '.rs'`) never match.
 static RG_COUNTER_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r#"\|&?\s*rg\s+(?:-{1,2}[A-Za-z-]+\s+(?:\d+\s+)?)*(?:\.|\.\*|''|""|'\.'|'\.\*'|"\."|"\.\*")\s*(?:$|[|;&])"#,
@@ -60,6 +58,14 @@ static RG_FULL_COUNT_RE: LazyLock<Regex> = LazyLock::new(|| {
         r#"^\|&?\s*rg\s+(?:-c|--count(?:-matches)?)\s+(?:\.|\.\*|''|""|'\.'|'\.\*'|"\."|"\.\*")\s*(?:$|[|;&])"#,
     )
     .expect("RG_FULL_COUNT_RE must compile")
+});
+
+/// Max-count flag inside a matched catch-all rg stage: the form that actually
+/// caps output. Within an `RG_COUNTER_RE` match the flag can only appear as
+/// `-m N` or `--max-count N` (attached `=`/bundled forms fail the stage regex
+/// before reaching this check).
+static RG_MAX_COUNT_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?:^|\s)(?:-m|--max-count)\s+\d+\b").expect("RG_MAX_COUNT_RE must compile")
 });
 
 /// Hard-deny raw-string patterns: no ask tier, no settings override, no mode carve-out.
@@ -552,14 +558,15 @@ fn check_head_tail_pipe(command_string: &str) -> Option<HookOutput> {
         ));
     }
 
-    // Backstop: `| rg .` / `| rg -m N .` bare-catch-all fake filter, denied for
-    // every producer (mirrors head/tail). Scan `stripped` because the catch-all
-    // pattern may be quoted (`rg ''`); the offset is valid in `unquoted` too
-    // (length-preserving strip). Pure count output consumes the entire stream
-    // and is exempted. A real `rg 'pattern'` content filter does not match
-    // RG_COUNTER_RE, so legitimate filtering passes.
+    // Backstop: `| rg -m N .` capped catch-all fake filter, denied for every
+    // producer (mirrors head/tail). Scan `stripped` because the catch-all may
+    // be quoted (`rg ''`); offsets stay valid in `unquoted` (length-preserving
+    // strip). Full-stream count output and the cap-free bare catch-all pass.
     for cap in RG_COUNTER_RE.find_iter(&stripped) {
         if RG_FULL_COUNT_RE.is_match(cap.as_str()) {
+            continue;
+        }
+        if !RG_MAX_COUNT_RE.is_match(cap.as_str()) {
             continue;
         }
         let offset = cap.start();
@@ -588,6 +595,22 @@ fn check_head_tail_pipe(command_string: &str) -> Option<HookOutput> {
 mod tests {
     use super::*;
     use crate::models::Client;
+
+    #[test]
+    fn bare_catch_all_rg_without_max_count_is_not_denied() {
+        // `| rg .` drops empty lines only; nothing unseen is truncated, so the
+        // truncation deny must not fire without a max-count cap.
+        for command in [
+            "eza -l a b | rg '.'",
+            "mytool list | rg .",
+            "mytool list | rg \".*\"",
+        ] {
+            assert!(
+                check_head_tail_pipe(command).is_none(),
+                "bare catch-all must pass: {command}"
+            );
+        }
+    }
 
     #[test]
     fn file_head_recovery_uses_client_reader() {
@@ -744,7 +767,10 @@ mod tests {
             ("cat report.txt | sed -n '1,20p'", FileSelection::First(20)),
             ("cat report.txt | awk 'NR<=8'", FileSelection::First(8)),
             ("cat report.txt | rg -m 5 .", FileSelection::First(5)),
-            ("bat report.txt | rg .", FileSelection::Whole),
+            (
+                "bat report.txt | rg --max-count 3 .",
+                FileSelection::First(3),
+            ),
         ] {
             let output = check_head_tail_pipe(command).expect("cap must be denied");
             assert!(

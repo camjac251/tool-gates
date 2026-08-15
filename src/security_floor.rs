@@ -916,17 +916,14 @@ mod tests {
 
         #[test]
         fn test_rg_counter_truncation_backstop() {
-            // Backstop: bare-catch-all `rg .` / `rg -m N .` fake filter is denied
-            // for every producer (caps volume with a no-op pattern).
+            // Backstop: `rg -m N .` capped catch-all fake filter is denied for
+            // every producer (caps volume with a no-op pattern).
             for cmd in [
                 "cargo test | rg -m 20 .",
-                "mise test | rg .",
                 "bun test 2>&1 | rg -m 5 ''",
-                "gh pr list | rg \".*\"",
                 "uv run x | rg -m 5 .",
                 "pnpm test | rg -m 3 '.'",
                 "ls | rg -m 20 .",
-                "find . -type f | rg .",
             ] {
                 let result = check_command(cmd);
                 assert_eq!(
@@ -937,6 +934,27 @@ mod tests {
                 assert!(
                     get_reason(&result).contains("truncate"),
                     "expected truncation deny for: {cmd}"
+                );
+            }
+        }
+
+        #[test]
+        fn test_rg_bare_catch_all_without_cap_not_truncation() {
+            // A cap-free catch-all drops empty lines only; nothing unseen is
+            // truncated, so the truncation deny must not fire.
+            for cmd in [
+                "mise test | rg .",
+                "gh pr list | rg \".*\"",
+                "find . -type f | rg .",
+                "eza -l a b | rg '.'",
+            ] {
+                let result = check_command(cmd);
+                let reason = get_reason(&result);
+                let denied_truncation =
+                    get_decision(&result) == "deny" && reason.contains("truncate");
+                assert!(
+                    !denied_truncation,
+                    "cap-free catch-all must not hit the truncation backstop: {cmd}\ngot: {reason}"
                 );
             }
         }
