@@ -7,9 +7,10 @@ use crate::gates::helpers::{
     upgrade_to_scratch_allow,
 };
 use crate::generated::rules::{
-    check_curl_declarative, check_nc_declarative, check_nmap_declarative, check_rsync_declarative,
-    check_scp_declarative, check_sftp_declarative, check_socat_declarative, check_ssh_declarative,
-    check_telnet_declarative, check_wget_declarative,
+    check_curl_declarative, check_lychee_declarative, check_nc_declarative, check_nmap_declarative,
+    check_rsync_declarative, check_scp_declarative, check_sftp_declarative,
+    check_socat_declarative, check_ssh_declarative, check_telnet_declarative,
+    check_wget_declarative,
 };
 use crate::models::{CommandInfo, GateResult};
 
@@ -40,6 +41,7 @@ pub fn check_network(cmd: &CommandInfo) -> GateResult {
         }
         "telnet" => check_telnet_declarative(cmd)
             .unwrap_or_else(|| GateResult::ask("telnet: Network connection")),
+        "lychee" => check_lychee_declarative(cmd).unwrap_or_else(GateResult::allow),
         _ => GateResult::skip(),
     }
 }
@@ -517,6 +519,14 @@ mod tests {
     #[test]
     fn test_xh_non_github_allows() {
         let result = check_network(&make_cmd("xh", &["https://example.com/path"]));
+        assert_eq!(result.decision, Decision::Allow);
+    }
+
+    #[test]
+    fn test_lychee_routes_to_declarative_allow() {
+        // The wrapper is a hand-matched dispatch; without an arm, lychee
+        // would skip past its generated rule and fall through to unknown.
+        let result = check_network(&make_cmd("lychee", &["docs/"]));
         assert_eq!(result.decision, Decision::Allow);
     }
 }
