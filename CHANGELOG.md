@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.35.0](https://github.com/camjac251/tool-gates/compare/v1.34.2...v1.35.0) - 2026-08-15
+
+### Added
+
+- *(gates)* cover newly installed modern tools with rules and hints
+
 ## [1.34.2](https://github.com/camjac251/tool-gates/compare/v1.34.1...v1.34.2) - 2026-08-15
 
 ### Fixed
