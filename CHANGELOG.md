@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.34.2](https://github.com/camjac251/tool-gates/compare/v1.34.1...v1.34.2) - 2026-08-15
+
+### Fixed
+
+- *(pipe-caps)* deny rg catch-all pipes only when capped
+
+### Other
+
+- preserve GitHub README rendering
+- clarify Tool Gates role in Auto Mode
+- link the v1.34.1 release commit in What's New
+
 ## [1.34.1](https://github.com/camjac251/tool-gates/compare/v1.34.0...v1.34.1) - 2026-08-11
 
 ### Fixed
