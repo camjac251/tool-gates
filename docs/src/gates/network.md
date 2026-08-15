@@ -15,13 +15,13 @@
   </div>
 
   <section class="summary" aria-label="Rule counts at a glance">
-    <div class="seg-bar" role="img" aria-label="19 allow, 18 ask, 1 block">
-      <div class="seg allow" style="flex: 19"></div>
+    <div class="seg-bar" role="img" aria-label="20 allow, 18 ask, 1 block">
+      <div class="seg allow" style="flex: 20"></div>
       <div class="seg ask"   style="flex: 18"></div>
       <div class="seg block" style="flex: 1"></div>
     </div>
     <div class="counts">
-      <span class="ca"><i></i><b>19</b> allow</span>
+      <span class="ca"><i></i><b>20</b> allow</span>
       <span class="cas"><i></i><b>18</b> ask</span>
       <span class="cb"><i></i><b>1</b> block</span>
     </div>
@@ -31,12 +31,12 @@
 </div>
 
 <div class="chips" role="group" aria-label="Filter rules by decision" aria-describedby="rule-filter-status">
-  <button class="chip all"   data-filter="all"   aria-pressed="true"><i></i>All <span class="n">38</span></button>
-  <button class="chip allow" data-filter="allow" aria-pressed="false"><i></i>Allow <span class="n">19</span></button>
+  <button class="chip all"   data-filter="all"   aria-pressed="true"><i></i>All <span class="n">39</span></button>
+  <button class="chip allow" data-filter="allow" aria-pressed="false"><i></i>Allow <span class="n">20</span></button>
   <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">18</span></button>
   <button class="chip block" data-filter="block" aria-pressed="false"><i></i>Block <span class="n">1</span></button>
 </div>
-<p class="rule-filter-status" id="rule-filter-status" role="status" aria-live="polite" aria-atomic="true">Showing all 38 rules.</p>
+<p class="rule-filter-status" id="rule-filter-status" role="status" aria-live="polite" aria-atomic="true">Showing all 39 rules.</p>
 
 <div class="rule-card">
   <header>
@@ -62,7 +62,7 @@
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
       rules/network.toml#allow
     </a>
-    <span class="count">19 patterns</span>
+    <span class="count">20 patterns</span>
   </header>
 
 <div class="rule-row" data-decision="allow" id="network-curl-version">
@@ -99,6 +99,11 @@
   <div class="rule-cmd"><span class="prog">http</span> GET</div>
   <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
   <div class="rule-reason">HTTPie GET requests, including URL-only invocations that default to GET. <code>check_httpie</code> routes POST/PUT/DELETE/PATCH to ask.</div>
+</div>
+<div class="rule-row" data-decision="allow" id="network-lychee">
+  <div class="rule-cmd"><span class="prog">lychee</span> <span class="sub-note">(all subcommands)</span></div>
+  <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
+  <div class="rule-reason">Checks links in files or sites with GET/HEAD requests and reports broken ones. Read-only; writes nothing beyond its cache.</div>
 </div>
 <div class="rule-row" data-decision="allow" id="network-nmap-version">
   <div class="rule-cmd"><span class="prog">nmap</span> --version</div>

@@ -16,6 +16,11 @@
 # - ruff: Python linter/formatter
 # - black: Python formatter
 # - isort: Python import sorter
+# - typos: Source spell checker (check safe, --write-changes asks)
+# - duckdb: SQL over local data files (-readonly safe)
+# - dive: Docker image layer inspector (--ci safe, TUI asks)
+# - osv-scanner: Dependency advisory scanner (read-only)
+# - cargo-deny: Rust advisories/licenses/bans checker (read-only)
 #
 # Pattern: Most tools are safe in read mode, risky with write flags
 
@@ -24,7 +29,7 @@ name = "Development Tools"
 description = "Developer tools permission gate"
 priority = 25
 lede = "Developer tools that can modify files. Linters and type checkers run in inspection mode by default and ask when a write flag (<code>--write</code>, <code>--fix</code>, <code>-i</code>, <code>-w</code>) appears. Default <code>unknown_action</code> is <code>allow</code> because most tools in this category are read-only analysis."
-behavior_tags = ["covers <b>77+ tools</b>", "write-flag detection"]
+behavior_tags = ["covers <b>82+ tools</b>", "write-flag detection"]
 
 [meta.card_titles]
 allow = "read-only modes"
@@ -1306,3 +1311,65 @@ unknown_action = "ask"
 [[programs.allow]]
 if_flags_any = ["-version", "-buildconf", "-L", "-h", "--help"]
 reason = "Prints ffmpeg version, build config, license, or usage help. Read-only info flags; no transcode runs."
+
+# =============================================================================
+# TYPOS (check mode safe, --write-changes asks)
+# =============================================================================
+
+[[programs]]
+name = "typos"
+unknown_action = "allow"
+reason = "Reports spelling mistakes in source trees. Read-only in its default check mode; writing fixes needs `-w`/`--write-changes`."
+
+[[programs.ask]]
+if_flags_any = ["-w", "--write-changes"]
+reason = "typos `-w`/`--write-changes`: rewrites the flagged files in place with its suggested corrections. Run without the flag first and review the report."
+accept_edits_auto_allow = true
+
+# =============================================================================
+# DUCKDB (-readonly safe; default session can write files via COPY/ATTACH)
+# =============================================================================
+
+[[programs]]
+name = "duckdb"
+unknown_action = "ask"
+
+[[programs.allow]]
+if_flags_any = ["-readonly", "--readonly"]
+reason = "Runs SQL over local data files with writes disabled at the engine level. `-readonly` blocks COPY TO, EXPORT, and database writes."
+
+[[programs.ask]]
+reason = "duckdb without `-readonly` can write: `COPY TO`/`EXPORT` create files and `ATTACH` opens databases writable. Add `-readonly` for query-only work."
+
+# =============================================================================
+# DIVE (--ci safe; default launches a TUI that hangs non-interactive shells)
+# =============================================================================
+
+[[programs]]
+name = "dive"
+unknown_action = "ask"
+
+[[programs.allow]]
+if_flags_any = ["--ci"]
+reason = "Analyzes Docker image layers and prints a pass/fail efficiency report. `--ci` is the non-interactive read-only mode."
+
+[[programs.ask]]
+reason = "dive without `--ci` opens a fullscreen TUI that hangs a non-interactive shell. Use `dive --ci <image>` for the scriptable report."
+
+# =============================================================================
+# OSV-SCANNER (read-only advisory lookups)
+# =============================================================================
+
+[[programs]]
+name = "osv-scanner"
+unknown_action = "allow"
+reason = "Scans lockfiles, directories, or images and queries the OSV database for known-vulnerable dependency versions. Read-only; writes nothing."
+
+# =============================================================================
+# CARGO-DENY (read-only advisories/licenses/bans checks)
+# =============================================================================
+
+[[programs]]
+name = "cargo-deny"
+unknown_action = "allow"
+reason = "Checks a Rust workspace for security advisories, license violations, and banned crates. Read-only report; changes nothing."

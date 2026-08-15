@@ -310,3 +310,12 @@ unknown_action = "ask"
 
 [[programs.ask]]
 reason = "Opens a cleartext telnet session to a host/port. No encryption; credentials sent in the clear."
+
+# =============================================================================
+# LYCHEE (read-only link checker)
+# =============================================================================
+
+[[programs]]
+name = "lychee"
+unknown_action = "allow"
+reason = "Checks links in files or sites with GET/HEAD requests and reports broken ones. Read-only; writes nothing beyond its cache."

@@ -117,6 +117,12 @@ pub fn hint_catalog() -> &'static [HintCatalogEntry] {
             why: "Shorter syntax, .gitignore-aware, faster.",
             program_level: Some("find"),
         },
+        HintCatalogEntry {
+            legacy: "rg/grep on PDFs, office docs, archives",
+            modern: "rga",
+            why: "Searches inside PDF, docx, epub, and archives; plain rg/grep sees only bytes there.",
+            program_level: None,
+        },
         // Text processing
         HintCatalogEntry {
             legacy: "sed s/.../.../",
@@ -162,6 +168,13 @@ pub fn hint_catalog() -> &'static [HintCatalogEntry] {
             why: "Readable columns and a tree view.",
             program_level: None,
         },
+        // Watching
+        HintCatalogEntry {
+            legacy: "watch",
+            modern: "viddy",
+            why: "Diff highlighting and history; watchexec when a file change should trigger the command.",
+            program_level: Some("watch"),
+        },
         // Network
         HintCatalogEntry {
             legacy: "curl <github-url>",
@@ -201,6 +214,20 @@ pub fn hint_catalog() -> &'static [HintCatalogEntry] {
             modern: "tldr",
             why: "Practical examples, concise output.",
             program_level: Some("man"),
+        },
+        // Spelling
+        HintCatalogEntry {
+            legacy: "aspell / codespell",
+            modern: "typos",
+            why: "Fast source-aware spell check with low false positives; read-only by default.",
+            program_level: Some("aspell"),
+        },
+        // Media
+        HintCatalogEntry {
+            legacy: "youtube-dl",
+            modern: "yt-dlp",
+            why: "Maintained fork; youtube-dl is abandoned and breaks on current sites.",
+            program_level: Some("youtube-dl"),
         },
         // Python tooling
         HintCatalogEntry {
@@ -260,6 +287,7 @@ pub fn program_hint(program: &str) -> Option<&'static HintCatalogEntry> {
         "nslookup" => "dig",
         "hexdump" => "xxd",
         "ack" => "ag",
+        "codespell" => "aspell",
         other => other,
     };
     hint_catalog()
@@ -287,7 +315,7 @@ pub fn get_modern_hint(cmd: &CommandInfo) -> Option<ModernHint> {
         "tail" => hint_tail(cmd),
         "less" | "more" => Some(hint_less(cmd)),
         // Search & find
-        "grep" => hint_grep(cmd),
+        "grep" => hint_binary_doc_search(cmd).or_else(|| hint_grep(cmd)),
         "sg" => Some(hint_sg()),
         "ag" | "ack" => Some(hint_ag_ack(cmd)),
         "find" => Some(hint_find(cmd)),
@@ -301,6 +329,8 @@ pub fn get_modern_hint(cmd: &CommandInfo) -> Option<ModernHint> {
         "tree" => hint_tree(cmd),
         // Process (for debugging)
         "ps" => hint_ps(cmd),
+        // Watching
+        "watch" => Some(hint_watch()),
         // Network (for API exploration)
         "curl" => hint_curl(cmd),
         "wget" => hint_wget(cmd),
@@ -312,6 +342,10 @@ pub fn get_modern_hint(cmd: &CommandInfo) -> Option<ModernHint> {
         "cloc" => Some(hint_cloc(cmd)),
         // Documentation (understanding APIs/libraries)
         "man" => hint_man(cmd),
+        // Spelling
+        "aspell" | "codespell" => Some(hint_spell(cmd)),
+        // Media
+        "youtube-dl" => Some(hint_youtube_dl()),
         // Python tooling
         "pip" | "pip3" => Some(hint_pip(cmd)),
         "python" | "python3" => hint_python(cmd),
@@ -323,7 +357,7 @@ pub fn get_modern_hint(cmd: &CommandInfo) -> Option<ModernHint> {
         "tar" => hint_tar(cmd),
         // Anti-patterns (bad flags, wrong tool for job)
         "bat" => hint_bat_flags(cmd),
-        "rg" => hint_rg_on_code(cmd),
+        "rg" => hint_binary_doc_search(cmd).or_else(|| hint_rg_on_code(cmd)),
         "git" => hint_git_antipatterns(cmd),
         _ => None,
     }?;
@@ -450,6 +484,33 @@ fn hint_sg() -> ModernHint {
         modern_command: "ast-grep",
         hint: "Use the supported executable explicitly: `ast-grep run` for one-shot structural search/rewrite, `ast-grep scan` for YAML rules, or `ast-grep outline` for symbol/signature inventory.".to_string(),
     }
+}
+
+/// Extensions rg/grep cannot search as text: containers and binary document
+/// formats where a plain grep returns silence or byte noise instead of a miss.
+const BINARY_DOC_EXTENSIONS: &[&str] = &[
+    ".pdf", ".docx", ".doc", ".epub", ".odt", ".pptx", ".xlsx", ".zip", ".tar", ".tgz", ".gz",
+    ".7z",
+];
+
+/// rg/grep pointed at a PDF, office document, or archive: the search runs but
+/// sees compressed bytes, so "no matches" is silence, not absence.
+fn hint_binary_doc_search(cmd: &CommandInfo) -> Option<ModernHint> {
+    let target = cmd
+        .args
+        .iter()
+        .filter(|arg| !arg.starts_with('-'))
+        .find(|arg| {
+            let lower = arg.to_lowercase();
+            BINARY_DOC_EXTENSIONS.iter().any(|ext| lower.ends_with(ext))
+        })?;
+    Some(ModernHint {
+        legacy_command: "rg/grep on binary documents",
+        modern_command: "rga",
+        hint: format!(
+            "`{target}` is a binary document or archive; rg/grep sees bytes there and an empty result means nothing. Use `rga '<pattern>' {target}` to search inside PDFs, office docs, epub, and archives."
+        ),
+    })
 }
 
 fn hint_grep(cmd: &CommandInfo) -> Option<ModernHint> {
@@ -889,6 +950,35 @@ fn hint_cloc(_cmd: &CommandInfo) -> ModernHint {
     }
 }
 
+fn hint_watch() -> ModernHint {
+    ModernHint {
+        legacy_command: "watch",
+        modern_command: "viddy",
+        hint: "Use `viddy` instead of `watch` (diff highlighting, history). When a file change should trigger the command, `watchexec` beats polling.".to_string(),
+    }
+}
+
+fn hint_spell(cmd: &CommandInfo) -> ModernHint {
+    let legacy = if cmd.program == "codespell" {
+        "codespell"
+    } else {
+        "aspell"
+    };
+    ModernHint {
+        legacy_command: legacy,
+        modern_command: "typos",
+        hint: "Use `typos` for source spell checking. Fast, low-false-positive, read-only by default (`-w` writes fixes).".to_string(),
+    }
+}
+
+fn hint_youtube_dl() -> ModernHint {
+    ModernHint {
+        legacy_command: "youtube-dl",
+        modern_command: "yt-dlp",
+        hint: "Use `yt-dlp` instead of `youtube-dl`. Maintained fork with the same interface; youtube-dl is abandoned and breaks on current sites.".to_string(),
+    }
+}
+
 fn hint_tree(_cmd: &CommandInfo) -> Option<ModernHint> {
     Some(ModernHint {
         legacy_command: "tree",
@@ -1150,7 +1240,7 @@ fn looks_like_symbol_inventory_pattern(pattern: &str) -> bool {
 /// Build the right hint for a code-targeted grep/rg invocation.
 fn code_search_hint_text(pattern: &str, has_context_flag: bool) -> String {
     if looks_like_symbol_inventory_pattern(pattern) {
-        return "Use `ast-grep outline --items structure --view signatures <path>` for symbol/signature inventory. Use `ast-grep run -p '<pattern>' <path>` when matching a specific declaration shape.".to_string();
+        return "Use `ast-grep outline --items structure --view signatures <path>` for symbol/signature inventory, or LSP documentSymbol where available. Use `ast-grep run -p '<pattern>' <path>` when matching a specific declaration shape.".to_string();
     }
 
     if has_context_flag {
@@ -2144,5 +2234,66 @@ mod tests {
     fn test_tar_help_no_hint() {
         let hint = hint_tar(&cmd("tar", &["--version"]));
         assert!(hint.is_none());
+    }
+
+    #[test]
+    fn test_hint_youtube_dl() {
+        let hint = hint_youtube_dl();
+        assert_eq!(hint.legacy_command, "youtube-dl");
+        assert_eq!(hint.modern_command, "yt-dlp");
+    }
+
+    #[test]
+    fn test_hint_watch() {
+        let hint = hint_watch();
+        assert_eq!(hint.modern_command, "viddy");
+        assert!(hint.hint.contains("watchexec"));
+    }
+
+    #[test]
+    fn test_hint_spell_reflects_program() {
+        assert_eq!(
+            hint_spell(&cmd("codespell", &["src/"])).legacy_command,
+            "codespell"
+        );
+        assert_eq!(
+            hint_spell(&cmd("aspell", &["check", "notes.txt"])).legacy_command,
+            "aspell"
+        );
+        assert_eq!(hint_spell(&cmd("aspell", &[])).modern_command, "typos");
+    }
+
+    #[test]
+    fn test_binary_doc_search_fires_on_pdf() {
+        let hint = hint_binary_doc_search(&cmd("rg", &["pattern", "report.pdf"]))
+            .expect("pdf target must hint rga");
+        assert_eq!(hint.modern_command, "rga");
+        assert!(hint.hint.contains("report.pdf"));
+
+        let archive = hint_binary_doc_search(&cmd("grep", &["-i", "needle", "logs.tar.gz"]))
+            .expect("archive target must hint rga");
+        assert_eq!(archive.modern_command, "rga");
+    }
+
+    #[test]
+    fn test_binary_doc_search_ignores_text_targets() {
+        assert!(hint_binary_doc_search(&cmd("rg", &["pattern", "src/main.rs"])).is_none());
+        assert!(hint_binary_doc_search(&cmd("grep", &["-r", "pattern", "."])).is_none());
+        assert!(hint_binary_doc_search(&cmd("rg", &["--type", "pdf", "pattern"])).is_none());
+    }
+
+    #[test]
+    fn test_program_hint_covers_new_entries_and_aliases() {
+        assert_eq!(program_hint("youtube-dl").unwrap().modern, "yt-dlp");
+        assert_eq!(program_hint("watch").unwrap().modern, "viddy");
+        assert_eq!(program_hint("aspell").unwrap().modern, "typos");
+        assert_eq!(program_hint("codespell").unwrap().modern, "typos");
+    }
+
+    #[test]
+    fn test_symbol_inventory_hint_mentions_lsp() {
+        let text = code_search_hint_text("^(def |class |function )", false);
+        assert!(text.contains("ast-grep outline"));
+        assert!(text.contains("documentSymbol"));
     }
 }

@@ -10,19 +10,19 @@
   <div class="gate-meta">
     <span class="tag">priority <b>25</b></span>
     <span class="tag">unknown <b>ask</b></span>
-    <span class="tag">covers <b>77+ tools</b></span>
+    <span class="tag">covers <b>82+ tools</b></span>
     <span class="tag">write-flag detection</span>
   </div>
 
   <section class="summary" aria-label="Rule counts at a glance">
-    <div class="seg-bar" role="img" aria-label="81 allow, 77 ask, 0 block">
-      <div class="seg allow" style="flex: 81"></div>
-      <div class="seg ask"   style="flex: 77"></div>
+    <div class="seg-bar" role="img" aria-label="85 allow, 80 ask, 0 block">
+      <div class="seg allow" style="flex: 85"></div>
+      <div class="seg ask"   style="flex: 80"></div>
       <div class="seg block" style="flex: 0"></div>
     </div>
     <div class="counts">
-      <span class="ca"><i></i><b>81</b> allow</span>
-      <span class="cas"><i></i><b>77</b> ask</span>
+      <span class="ca"><i></i><b>85</b> allow</span>
+      <span class="cas"><i></i><b>80</b> ask</span>
       <span class="cb"><i></i><b>0</b> block</span>
     </div>
   </section>
@@ -31,12 +31,12 @@
 </div>
 
 <div class="chips" role="group" aria-label="Filter rules by decision" aria-describedby="rule-filter-status">
-  <button class="chip all"   data-filter="all"   aria-pressed="true"><i></i>All <span class="n">158</span></button>
-  <button class="chip allow" data-filter="allow" aria-pressed="false"><i></i>Allow <span class="n">81</span></button>
-  <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">77</span></button>
+  <button class="chip all"   data-filter="all"   aria-pressed="true"><i></i>All <span class="n">165</span></button>
+  <button class="chip allow" data-filter="allow" aria-pressed="false"><i></i>Allow <span class="n">85</span></button>
+  <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">80</span></button>
   <button class="chip block" data-filter="block" aria-pressed="false"><i></i>Block <span class="n">0</span></button>
 </div>
-<p class="rule-filter-status" id="rule-filter-status" role="status" aria-live="polite" aria-atomic="true">Showing all 158 rules.</p>
+<p class="rule-filter-status" id="rule-filter-status" role="status" aria-live="polite" aria-atomic="true">Showing all 165 rules.</p>
 
 <div class="rule-card">
   <header>
@@ -45,7 +45,7 @@
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
       rules/devtools.toml#allow
     </a>
-    <span class="count">81 patterns</span>
+    <span class="count">85 patterns</span>
   </header>
 
 <div class="rule-row" data-decision="allow" id="devtools-actionlint">
@@ -97,6 +97,11 @@
   <div class="rule-cmd"><span class="prog">buf</span> --version</div>
   <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
   <div class="rule-reason">Prints the <code>buf</code> version. Read-only.</div>
+</div>
+<div class="rule-row" data-decision="allow" id="devtools-cargo-deny">
+  <div class="rule-cmd"><span class="prog">cargo-deny</span> <span class="sub-note">(all subcommands)</span></div>
+  <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
+  <div class="rule-reason">Checks a Rust workspace for security advisories, license violations, and banned crates. Read-only report; changes nothing.</div>
 </div>
 <div class="rule-row" data-decision="allow" id="devtools-coverage-report">
   <div class="rule-cmd"><span class="prog">coverage</span> report</div>
@@ -162,6 +167,16 @@
   <div class="rule-cmd"><span class="prog">dart</span> --version</div>
   <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
   <div class="rule-reason">Prints the Dart SDK version. Read-only.</div>
+</div>
+<div class="rule-row" data-decision="allow" id="devtools-dive-ci">
+  <div class="rule-cmd"><span class="prog">dive</span> <span class="flag">--ci</span></div>
+  <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
+  <div class="rule-reason">Analyzes Docker image layers and prints a pass/fail efficiency report. <code>--ci</code> is the non-interactive read-only mode.</div>
+</div>
+<div class="rule-row" data-decision="allow" id="devtools-duckdb-readonly-readonly">
+  <div class="rule-cmd"><span class="prog">duckdb</span> <span class="flag">-readonly</span> <span class="flag">--readonly</span></div>
+  <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
+  <div class="rule-reason">Runs SQL over local data files with writes disabled at the engine level. <code>-readonly</code> blocks COPY TO, EXPORT, and database writes.</div>
 </div>
 <div class="rule-row" data-decision="allow" id="devtools-esbuild">
   <div class="rule-cmd"><span class="prog">esbuild</span> <span class="sub-note">(all subcommands)</span></div>
@@ -257,6 +272,11 @@
   <div class="rule-cmd"><span class="prog">nx</span> <span class="sub-note">(all subcommands)</span></div>
   <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
   <div class="rule-reason">Runs Nx workspace tasks. Executes the configured target scripts.</div>
+</div>
+<div class="rule-row" data-decision="allow" id="devtools-osv-scanner">
+  <div class="rule-cmd"><span class="prog">osv-scanner</span> <span class="sub-note">(all subcommands)</span></div>
+  <div><span class="pill allow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Allow</span></div>
+  <div class="rule-reason">Scans lockfiles, directories, or images and queries the OSV database for known-vulnerable dependency versions. Read-only; writes nothing.</div>
 </div>
 <div class="rule-row" data-decision="allow" id="devtools-oxlint">
   <div class="rule-cmd"><span class="prog">oxlint</span> <span class="sub-note">(all subcommands)</span></div>
@@ -462,7 +482,7 @@
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
       rules/devtools.toml#ask
     </a>
-    <span class="count">77 patterns</span>
+    <span class="count">80 patterns</span>
   </header>
 
 <div class="rule-row" data-decision="ask" id="devtools-ast-grep-u-update-all">
@@ -570,10 +590,20 @@
   <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
   <div class="rule-reason">Formatting files</div>
 </div>
+<div class="rule-row" data-decision="ask" id="devtools-dive">
+  <div class="rule-cmd"><span class="prog">dive</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">dive without <code>--ci</code> opens a fullscreen TUI that hangs a non-interactive shell. Use <code>dive --ci &lt;image&gt;</code> for the scriptable report.</div>
+</div>
 <div class="rule-row" data-decision="ask" id="devtools-dos2unix">
   <div class="rule-cmd"><span class="prog">dos2unix</span></div>
   <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
   <div class="rule-reason">Converting line endings</div>
+</div>
+<div class="rule-row" data-decision="ask" id="devtools-duckdb">
+  <div class="rule-cmd"><span class="prog">duckdb</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">duckdb without <code>-readonly</code> can write: <code>COPY TO</code>/<code>EXPORT</code> create files and <code>ATTACH</code> opens databases writable. Add <code>-readonly</code> for query-only work.</div>
 </div>
 <div class="rule-row" data-decision="ask" id="devtools-elm-format">
   <div class="rule-cmd"><span class="prog">elm-format</span></div>
@@ -809,6 +839,11 @@
   <div class="rule-cmd"><span class="prog">ty</span> <span class="flag">--add-ignore</span></div>
   <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
   <div class="rule-reason">ty --add-ignore: inserts <code>ty: ignore</code> comments into source files at flagged diagnostics. Default ty only reports.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="devtools-typos-w-write-changes">
+  <div class="rule-cmd"><span class="prog">typos</span> <span class="flag">-w</span> <span class="flag">--write-changes</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">typos <code>-w</code>/<code>--write-changes</code>: rewrites the flagged files in place with its suggested corrections. Run without the flag first and review the report.</div>
 </div>
 <div class="rule-row" data-decision="ask" id="devtools-unix2dos">
   <div class="rule-cmd"><span class="prog">unix2dos</span></div>

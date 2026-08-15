@@ -48,7 +48,7 @@
 
 <li><a class="gate-card" href="devtools.html">
   <span class="gc-name">Development Tools</span>
-  <span class="gc-count">158<span class="sr-only"> rules</span></span>
+  <span class="gc-count">165<span class="sr-only"> rules</span></span>
   <span class="gc-prio">25<span class="sr-only"> priority</span></span>
   <span class="gc-desc">Tools that can modify files. Linters and type checkers inspect by default and ask once a write flag appears.</span>
 </a></li>
@@ -83,7 +83,7 @@
 
 <li><a class="gate-card" href="network.html">
   <span class="gc-name">Network &amp; HTTP</span>
-  <span class="gc-count">38<span class="sr-only"> rules</span></span>
+  <span class="gc-count">39<span class="sr-only"> rules</span></span>
   <span class="gc-prio">35<span class="sr-only"> priority</span></span>
   <span class="gc-desc">GET requests and head checks pass through. Mutating, downloading, and interactive calls pause for approval.</span>
 </a></li>

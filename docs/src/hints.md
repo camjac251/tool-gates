@@ -68,6 +68,12 @@
   <div class="why"><b>Tip from tool-gates:</b> Shorter syntax, .gitignore-aware, faster.</div>
 </div>
 <div class="hint-row">
+  <div class="old"><span class="prog">$</span> <s>rg/grep on PDFs, office docs, archives</s></div>
+  <div class="arrow">→</div>
+  <div class="new"><span class="prog">$</span> rga</div>
+  <div class="why"><b>Tip from tool-gates:</b> Searches inside PDF, docx, epub, and archives; plain rg/grep sees only bytes there.</div>
+</div>
+<div class="hint-row">
   <div class="old"><span class="prog">$</span> <s>sed s/.../.../</s></div>
   <div class="arrow">→</div>
   <div class="new"><span class="prog">$</span> sd</div>
@@ -110,6 +116,12 @@
   <div class="why"><b>Tip from tool-gates:</b> Readable columns and a tree view.</div>
 </div>
 <div class="hint-row">
+  <div class="old"><span class="prog">$</span> <s>watch</s></div>
+  <div class="arrow">→</div>
+  <div class="new"><span class="prog">$</span> viddy</div>
+  <div class="why"><b>Tip from tool-gates:</b> Diff highlighting and history; watchexec when a file change should trigger the command.</div>
+</div>
+<div class="hint-row">
   <div class="old"><span class="prog">$</span> <s>curl &lt;github-url&gt;</s></div>
   <div class="arrow">→</div>
   <div class="new"><span class="prog">$</span> gh api</div>
@@ -144,6 +156,18 @@
   <div class="arrow">→</div>
   <div class="new"><span class="prog">$</span> tldr</div>
   <div class="why"><b>Tip from tool-gates:</b> Practical examples, concise output.</div>
+</div>
+<div class="hint-row">
+  <div class="old"><span class="prog">$</span> <s>aspell / codespell</s></div>
+  <div class="arrow">→</div>
+  <div class="new"><span class="prog">$</span> typos</div>
+  <div class="why"><b>Tip from tool-gates:</b> Fast source-aware spell check with low false positives; read-only by default.</div>
+</div>
+<div class="hint-row">
+  <div class="old"><span class="prog">$</span> <s>youtube-dl</s></div>
+  <div class="arrow">→</div>
+  <div class="new"><span class="prog">$</span> yt-dlp</div>
+  <div class="why"><b>Tip from tool-gates:</b> Maintained fork; youtube-dl is abandoned and breaks on current sites.</div>
 </div>
 <div class="hint-row">
   <div class="old"><span class="prog">$</span> <s>pip install</s></div>

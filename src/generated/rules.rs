@@ -1,4 +1,4 @@
-// tool-gates-generation-fingerprint: cb38b123bcce9029:eec0510d74896e7c
+// tool-gates-generation-fingerprint: 69214e52993967f4:e6a8642a5cb05c37
 //! Auto-generated from rules/*.toml files.
 //! DO NOT EDIT - changes will be overwritten by build.rs
 
@@ -62,6 +62,7 @@ pub static SAFE_COMMANDS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "find",
         "fmt",
         "fold",
+        "fq",
         "free",
         "fzf",
         "getconf",
@@ -69,6 +70,7 @@ pub static SAFE_COMMANDS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "glow",
         "glxinfo",
         "grep",
+        "grex",
         "gron",
         "groups",
         "hash",
@@ -133,6 +135,7 @@ pub static SAFE_COMMANDS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "realpath",
         "rev",
         "rg",
+        "rga",
         "ripgrep",
         "route",
         "scc",
@@ -227,6 +230,7 @@ pub static ANTIGRAVITY_ALLOW_COMMANDS: &[&str] = &[
     "bc",
     "btop",
     "cal",
+    "cargo-deny",
     "cat",
     "cheat",
     "choose",
@@ -263,6 +267,7 @@ pub static ANTIGRAVITY_ALLOW_COMMANDS: &[&str] = &[
     "flake8",
     "fmt",
     "fold",
+    "fq",
     "free",
     "fzf",
     "getconf",
@@ -271,6 +276,7 @@ pub static ANTIGRAVITY_ALLOW_COMMANDS: &[&str] = &[
     "glow",
     "glxinfo",
     "grep",
+    "grex",
     "gron",
     "groups",
     "hadolint",
@@ -304,6 +310,7 @@ pub static ANTIGRAVITY_ALLOW_COMMANDS: &[&str] = &[
     "lsof",
     "lspci",
     "lsusb",
+    "lychee",
     "man",
     "md5sum",
     "mktemp",
@@ -318,6 +325,7 @@ pub static ANTIGRAVITY_ALLOW_COMMANDS: &[&str] = &[
     "numbat",
     "nx",
     "od",
+    "osv-scanner",
     "oxlint",
     "paste",
     "pastel",
@@ -341,6 +349,7 @@ pub static ANTIGRAVITY_ALLOW_COMMANDS: &[&str] = &[
     "realpath",
     "rev",
     "rg",
+    "rga",
     "ripgrep",
     "rollup",
     "route",
@@ -9592,6 +9601,183 @@ pub fn check_ffmpeg_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     Some(GateResult::ask(format!("ffmpeg: {}", subcmd_single)))
 }
 
+// === TYPOS (from devtools.toml) ===
+
+/// Check typos commands declaratively
+pub fn check_typos_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["typos"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
+
+    // Check ask rules with flag/prefix conditions
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["-w", "--write-changes"].contains(&a.as_str()))
+    {
+        return Some(GateResult::ask(
+            "typos `-w`/`--write-changes`: rewrites the flagged files in place with its suggested corrections. Run without the flag first and review the report.",
+        ));
+    }
+
+    Some(GateResult::allow())
+}
+
+// === DUCKDB (from devtools.toml) ===
+
+/// Check duckdb commands declaratively
+pub fn check_duckdb_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["duckdb"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
+
+    // Check conditional allow rules
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["-readonly", "--readonly"].contains(&a.as_str()))
+    {
+        return Some(GateResult::allow_with_reason(
+            "Runs SQL over local data files with writes disabled at the engine level. `-readonly` blocks COPY TO, EXPORT, and database writes.",
+        ));
+    }
+
+    // Bare ask rule - any duckdb invocation asks
+    Some(GateResult::ask(
+        "duckdb: duckdb without `-readonly` can write: `COPY TO`/`EXPORT` create files and `ATTACH` opens databases writable. Add `-readonly` for query-only work.",
+    ))
+}
+
+// === DIVE (from devtools.toml) ===
+
+/// Check dive commands declaratively
+pub fn check_dive_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["dive"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
+
+    // Check conditional allow rules
+    if true && cmd.args.iter().any(|a| ["--ci"].contains(&a.as_str())) {
+        return Some(GateResult::allow_with_reason(
+            "Analyzes Docker image layers and prints a pass/fail efficiency report. `--ci` is the non-interactive read-only mode.",
+        ));
+    }
+
+    // Bare ask rule - any dive invocation asks
+    Some(GateResult::ask(
+        "dive: dive without `--ci` opens a fullscreen TUI that hangs a non-interactive shell. Use `dive --ci <image>` for the scriptable report.",
+    ))
+}
+
+// === OSV-SCANNER (from devtools.toml) ===
+
+/// Check osv-scanner commands declaratively
+pub fn check_osv_scanner_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["osv-scanner"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
+
+    Some(GateResult::allow())
+}
+
+// === CARGO-DENY (from devtools.toml) ===
+
+/// Check cargo-deny commands declaratively
+pub fn check_cargo_deny_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["cargo-deny"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
+
+    Some(GateResult::allow())
+}
+
 // === PYTHON3 (from runtimes.toml) ===
 
 /// Check python3 commands declaratively
@@ -11405,6 +11591,34 @@ pub fn check_telnet_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     Some(GateResult::ask(
         "telnet: Opens a cleartext telnet session to a host/port. No encryption; credentials sent in the clear.",
     ))
+}
+
+// === LYCHEE (from network.toml) ===
+
+/// Check lychee commands declaratively
+pub fn check_lychee_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["lychee"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
+
+    Some(GateResult::allow())
 }
 
 // === SHUTDOWN (from system.toml) ===
@@ -16257,6 +16471,21 @@ pub fn check_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if let Some(result) = check_ffmpeg_declarative(cmd) {
         return Some(result);
     }
+    if let Some(result) = check_typos_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_duckdb_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_dive_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_osv_scanner_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_cargo_deny_declarative(cmd) {
+        return Some(result);
+    }
     if let Some(result) = check_python3_declarative(cmd) {
         return Some(result);
     }
@@ -16366,6 +16595,9 @@ pub fn check_declarative(cmd: &CommandInfo) -> Option<GateResult> {
         return Some(result);
     }
     if let Some(result) = check_telnet_declarative(cmd) {
+        return Some(result);
+    }
+    if let Some(result) = check_lychee_declarative(cmd) {
         return Some(result);
     }
     if let Some(result) = check_shutdown_declarative(cmd) {
@@ -16777,7 +17009,7 @@ pub fn check_tool_gates_gate(cmd: &CommandInfo) -> GateResult {
 /// Programs handled by the tool_gates gate
 pub static TOOL_GATES_PROGRAMS: &[&str] = &["tool-gates", "bash-gates"];
 
-/// Generated gate for devtools - handles: sd, awk, gawk, mawk, sad, ast-grep, sg, yq, jq, semgrep, comby, grit, watchexec, biome, prettier, eslint, ruff, black, isort, shellcheck, hadolint, golangci-lint, gci, air, actionlint, gitleaks, lefthook, vite, vitest, jest, mocha, tsc, tsup, esbuild, turbo, nx, knip, oxlint, gofmt, gofumpt, goimports, shfmt, rustfmt, stylua, clang-format, autopep8, rubocop, standardrb, patch, dos2unix, unix2dos, stylelint, mix, perltidy, dartfmt, dart, elm-format, scalafmt, ktlint, swiftformat, buf, pytest, py.test, mypy, pyright, basedpyright, pylint, flake8, bandit, coverage, tox, nox, autoflake, tsx, ts-node, webpack, webpack-cli, rollup, swc, parcel, playwright, cypress, wrangler, ty, markdownlint, rumdl, markdownlint-cli2, taplo, mdbook, ffprobe, d2, ffmpeg
+/// Generated gate for devtools - handles: sd, awk, gawk, mawk, sad, ast-grep, sg, yq, jq, semgrep, comby, grit, watchexec, biome, prettier, eslint, ruff, black, isort, shellcheck, hadolint, golangci-lint, gci, air, actionlint, gitleaks, lefthook, vite, vitest, jest, mocha, tsc, tsup, esbuild, turbo, nx, knip, oxlint, gofmt, gofumpt, goimports, shfmt, rustfmt, stylua, clang-format, autopep8, rubocop, standardrb, patch, dos2unix, unix2dos, stylelint, mix, perltidy, dartfmt, dart, elm-format, scalafmt, ktlint, swiftformat, buf, pytest, py.test, mypy, pyright, basedpyright, pylint, flake8, bandit, coverage, tox, nox, autoflake, tsx, ts-node, webpack, webpack-cli, rollup, swc, parcel, playwright, cypress, wrangler, ty, markdownlint, rumdl, markdownlint-cli2, taplo, mdbook, ffprobe, d2, ffmpeg, typos, duckdb, dive, osv-scanner, cargo-deny
 /// Custom handlers needed for: ["awk", "sd"]
 pub fn check_devtools_gate(cmd: &CommandInfo) -> GateResult {
     match cmd.program.as_str() {
@@ -16874,6 +17106,11 @@ pub fn check_devtools_gate(cmd: &CommandInfo) -> GateResult {
         "ffprobe" => check_ffprobe_declarative(cmd).unwrap_or_else(GateResult::skip),
         "d2" => check_d2_declarative(cmd).unwrap_or_else(GateResult::skip),
         "ffmpeg" => check_ffmpeg_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "typos" => check_typos_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "duckdb" => check_duckdb_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "dive" => check_dive_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "osv-scanner" => check_osv_scanner_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "cargo-deny" => check_cargo_deny_declarative(cmd).unwrap_or_else(GateResult::skip),
         _ => GateResult::skip(),
     }
 }
@@ -16972,6 +17209,11 @@ pub static DEVTOOLS_PROGRAMS: &[&str] = &[
     "ffprobe",
     "d2",
     "ffmpeg",
+    "typos",
+    "duckdb",
+    "dive",
+    "osv-scanner",
+    "cargo-deny",
 ];
 
 /// Generated gate for runtimes - handles: python3, python, python3.11, python3.12, python3.13, python3.14, node, ruby, deno, php, lua, luajit, lua5.1, lua5.2, lua5.3, lua5.4, java, javac, dotnet, swift, elixir, iex
@@ -17052,7 +17294,7 @@ pub static FILESYSTEM_PROGRAMS: &[&str] = &[
     "unzip", "zip",
 ];
 
-/// Generated gate for network - handles: curl, wget, ssh, scp, sftp, rsync, nc, ncat, netcat, http, https, xh, nmap, socat, telnet
+/// Generated gate for network - handles: curl, wget, ssh, scp, sftp, rsync, nc, ncat, netcat, http, https, xh, nmap, socat, telnet, lychee
 /// Custom handlers needed for: ["curl", "http", "nc", "rsync", "wget"]
 pub fn check_network_gate(cmd: &CommandInfo) -> GateResult {
     match cmd.program.as_str() {
@@ -17067,6 +17309,7 @@ pub fn check_network_gate(cmd: &CommandInfo) -> GateResult {
         "nmap" => check_nmap_declarative(cmd).unwrap_or_else(GateResult::skip),
         "socat" => check_socat_declarative(cmd).unwrap_or_else(GateResult::skip),
         "telnet" => check_telnet_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "lychee" => check_lychee_declarative(cmd).unwrap_or_else(GateResult::skip),
         _ => GateResult::skip(),
     }
 }
@@ -17074,7 +17317,7 @@ pub fn check_network_gate(cmd: &CommandInfo) -> GateResult {
 /// Programs handled by the network gate
 pub static NETWORK_PROGRAMS: &[&str] = &[
     "curl", "wget", "ssh", "scp", "sftp", "rsync", "nc", "ncat", "netcat", "http", "https", "xh",
-    "nmap", "socat", "telnet",
+    "nmap", "socat", "telnet", "lychee",
 ];
 
 /// Generated gate for system - handles: shutdown, reboot, poweroff, halt, init, mkfs, fdisk, parted, gdisk, dd, shred, wipe, mke2fs, mkswap, wipefs, hdparm, insmod, rmmod, modprobe, grub-install, update-grub, useradd, userdel, usermod, passwd, chsh, iptables, ufw, firewall-cmd, chattr, mount, umount, swapoff, swapon, lvremove, vgremove, pvremove, psql, createdb, dropdb, pg_dump, pg_restore, migrate, goose, dbmate, flyway, alembic, mysql, sqlite3, mongosh, mongo, redis-cli, kill, pkill, killall, xkill, make, cmake, ninja, just, task, gradle, gradlew, ./gradlew, mvn, maven, ./mvnw, mvnw, bazel, bazelisk, meson, ansible, ansible-playbook, ansible-galaxy, ansible-vault, vagrant, hyperfine, sudo, doas, systemctl, service, crontab, apt, apt-get, apt-cache, dnf, yum, pacman, yay, paru, brew, zypper, apk, nix, nix-env, nix-shell, flatpak, snap, dpkg, apt-mark, pactl, openssl, gpg, gpg2, ssh-keygen, age, age-keygen
@@ -17360,6 +17603,7 @@ pub static FILE_EDITING_PROGRAMS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "terraform",
         "tofu",
         "ty",
+        "typos",
         "unix2dos",
         "yq",
     ]
@@ -17528,6 +17772,10 @@ pub fn is_file_editing_command(cmd: &CommandInfo) -> bool {
             .args
             .iter()
             .any(|a| ["--add-ignore"].contains(&a.as_str())),
+        "typos" => cmd
+            .args
+            .iter()
+            .any(|a| ["-w", "--write-changes"].contains(&a.as_str())),
         "unix2dos" => {
             // Bare rule: always file-editing
             true

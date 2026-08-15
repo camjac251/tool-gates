@@ -795,7 +795,7 @@ ul#mdbook-searchresults span.teaser {
   content: "220";
 }
 .sidebar-scrollbox a[href$="gates/devtools.html"]::after {
-  content: "158";
+  content: "165";
 }
 .sidebar-scrollbox a[href$="gates/gh.html"]::after {
   content: "134";
@@ -807,7 +807,7 @@ ul#mdbook-searchresults span.teaser {
   content: "85";
 }
 .sidebar-scrollbox a[href$="gates/network.html"]::after {
-  content: "38";
+  content: "39";
 }
 .sidebar-scrollbox a[href$="gates/shortcut.html"]::after {
   content: "30";
