@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.36.0](https://github.com/camjac251/tool-gates/compare/v1.35.0...v1.36.0) - 2026-08-17
+
+### Added
+
+- *(settings)* honor allowManagedPermissionRulesOnly
+
+### Other
+
+- verify the README's GitHub rendering
+
 ## [1.35.0](https://github.com/camjac251/tool-gates/compare/v1.34.2...v1.35.0) - 2026-08-15
 
 ### Added
