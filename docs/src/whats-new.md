@@ -11,12 +11,12 @@
     <header class="sec-head release-section-head">
       <span class="lbl">Current window</span>
       <h2 id="release-current-title">Latest eight versions</h2>
-      <p>From v1.36.0 through v1.33.1, newest first.</p>
+      <p>From v1.36.0 through v1.33.3, newest first.</p>
     </header>
   <div class="config-block">
     <header>
       <h3>v1.36.0 · August 17, 2026</h3>
-      <span class="src-tag">managed-only permission sources · release pending</span>
+      <span class="src-tag">managed-only permission sources · <a href="https://github.com/camjac251/tool-gates/commit/67b50a2" target="_blank" rel="noopener">67b50a2</a></span>
     </header>
     <div class="config-body">
       <div class="config-toml">
@@ -31,6 +31,46 @@
         <p>Claude Code's enterprise managed settings document can set <code>allowManagedPermissionRulesOnly</code>, which tells the client to evaluate permission rules from that document alone. tool-gates read the key as unknown JSON and went on merging all four scopes, so a personal <code>~/.claude/settings.json</code> allow rule still granted commands the managed policy had withheld. On a shared machine that is the whole point of the flag, and losing it is the difference between a locked policy and a suggestion.</p>
         <p>The loader now reads the managed document apart from the lower scopes and, for Claude, treats a boolean <code>true</code> there as a source boundary rather than a grants filter. Lower <code>deny</code> and <code>ask</code> entries drop out alongside lower <code>allow</code> entries and <code>additionalDirectories</code>, because a policy that keeps a personal deny is still letting a personal file steer the decision. Empty or malformed managed permissions resolve to no rules; neither falls back to a lower scope. Only the platform managed path can assert the flag, and only as a boolean, so the same key written into a user, project, or local file changes nothing.</p>
         <p>The calling client is now an explicit input to settings resolution rather than something inferred, so Codex, Antigravity, and deprecated Gemini keep the behavior they had regardless of what Claude's managed document says. Nested evaluation carries the same policy: mise task expansion, package-script expansion, compound sub-command checks, the <code>acceptEdits</code> directory check, and the PostToolUse approval-queue filter all resolve under the client that started the invocation instead of reloading. The safety floor is unchanged, so a managed <code>allow</code> still cannot unlock a destructive command or a pipe-to-shell.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.35.0 · August 15, 2026</h3>
+      <span class="src-tag">modern tool coverage · <a href="https://github.com/camjac251/tool-gates/commit/08c35b4" target="_blank" rel="noopener">08c35b4</a></span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  allow rga, fq, grex, osv-scanner, cargo-deny, and lychee as read-only
+  gate typos, duckdb, and dive on the mode that writes
+  hint youtube-dl to yt-dlp, watch to viddy, aspell to typos
+  point rg and grep at rga on PDFs, office documents, and archives
+<span class="sec fixed">Fixed</span>
+  route lychee through the network wrapper dispatch</pre>
+      </div>
+      <div class="config-prose">
+        <p>A tool the catalog has never heard of falls through as an unknown command and asks on every invocation, whatever it actually does. Six read-only tools now allow outright: <code>rga</code>, <code>fq</code>, and <code>grex</code> join the basics allowlist, and <code>osv-scanner</code>, <code>cargo-deny</code>, and <code>lychee</code> allow as auditors that only report. Three others are gated on the mode that writes rather than on the program name. <code>typos</code> allows its check mode and asks on <code>--write-changes</code>; <code>duckdb</code> allows <code>-readonly</code> and asks otherwise, because <code>COPY TO</code>, <code>EXPORT</code>, and <code>ATTACH</code> can all write; <code>dive</code> allows <code>--ci</code> and asks on its default TUI, which hangs a non-interactive shell rather than returning.</p>
+        <p>Among the new hints, the <code>rga</code> one changes an outcome rather than a preference. Running <code>rg</code> or <code>grep</code> against a PDF, office document, or archive searches the container's bytes, so it returns silence or noise; that reads as "no match" and the search looks answered when it never ran. A conditional hint now fires on those extensions and names <code>rga</code>, which searches inside them. Three program-level pairings joined the catalog (<code>youtube-dl</code> to <code>yt-dlp</code>, <code>watch</code> to <code>viddy</code> or to <code>watchexec</code> when a file change should drive the command, and <code>aspell</code>/<code>codespell</code> to <code>typos</code>), and the symbol-inventory hint now names LSP <code>documentSymbol</code> alongside <code>ast-grep outline</code>.</p>
+      </div>
+    </div>
+  </div>
+  <div class="config-block">
+    <header>
+      <h3>v1.34.2 · August 15, 2026</h3>
+      <span class="src-tag">uncapped rg pipes · <a href="https://github.com/camjac251/tool-gates/commit/500d655" target="_blank" rel="noopener">500d655</a></span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec fixed">Fixed</span>
+  deny rg catch-all pipes only when capped
+<span class="sec other">Other</span>
+  preserve GitHub README rendering
+  clarify Tool Gates role in Auto Mode
+  link the v1.34.1 release commit in What's New</pre>
+      </div>
+      <div class="config-prose">
+        <p>The output-cap floor counted <code>| rg .</code> as a truncation, but a bare catch-all <code>rg</code> drops empty lines and passes everything else through, so nothing unseen was being cut. The denial was factually wrong for that shape and cost a retry while protecting nothing. The rule now additionally requires <code>-m</code> or <code>--max-count</code> in the matched stage, which is the flag that actually caps the stream. Capped forms, <code>head</code>/<code>tail</code>, <code>sed</code>/<code>awk</code> first-N truncation, and count-plus-max-count all behave as they did.</p>
       </div>
     </div>
   </div>
@@ -122,6 +162,17 @@
       </div>
     </div>
   </div>
+  </section>
+  <details class="release-archive" id="release-archive" aria-labelledby="release-archive-title">
+    <summary>
+      <h2 class="release-summary" id="release-archive-title">
+        <span class="release-summary-kicker">Historical archive</span>
+        <span class="release-summary-title">Browse 62 earlier releases</span>
+        <span class="release-summary-range">v1.33.2 to v1.1.0</span>
+        <span class="release-summary-icon" aria-hidden="true"></span>
+      </h2>
+    </summary>
+    <div class="release-archive-list">
   <div class="config-block">
     <header>
       <h3>v1.33.2 · July 30, 2026</h3>
@@ -154,17 +205,6 @@
       </div>
     </div>
   </div>
-  </section>
-  <details class="release-archive" id="release-archive" aria-labelledby="release-archive-title">
-    <summary>
-      <h2 class="release-summary" id="release-archive-title">
-        <span class="release-summary-kicker">Historical archive</span>
-        <span class="release-summary-title">Browse 60 earlier releases</span>
-        <span class="release-summary-range">v1.33.0 to v1.1.0</span>
-        <span class="release-summary-icon" aria-hidden="true"></span>
-      </h2>
-    </summary>
-    <div class="release-archive-list">
   <div class="config-block">
     <header>
       <h3>v1.33.0 · July 30, 2026</h3>
