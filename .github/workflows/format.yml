@@ -39,7 +39,18 @@ jobs:
         run: |
           git ls-files '*.md' '*.yml' '*.yaml' \
             | while IFS= read -r f; do [ -L "$f" ] || printf '%s\n' "$f"; done \
-            | xargs -r npx --yes prettier@3.8.3 --check
+            | xargs -r npx --yes prettier@3.9.6 --check
+
+      - name: README GitHub rendering
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --method POST /markdown \
+            -F text=@README.md \
+            -f mode=gfm \
+            -f context="$GITHUB_REPOSITORY" \
+            > "$RUNNER_TEMP/readme.html"
+          python3 .github/scripts/check_readme_gfm.py "$RUNNER_TEMP/readme.html"
 
       - name: taplo (toml)
         run: git ls-files '*.toml' | xargs taplo fmt --check
