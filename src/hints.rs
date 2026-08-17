@@ -8,7 +8,8 @@
 
 use crate::models::CommandInfo;
 use crate::tool_cache::{ToolCache, get_cache};
-use std::sync::OnceLock;
+use regex::Regex;
+use std::sync::{LazyLock, OnceLock};
 
 /// Global tool cache - loaded once per process
 static TOOL_CACHE: OnceLock<ToolCache> = OnceLock::new();
@@ -1237,14 +1238,54 @@ fn looks_like_symbol_inventory_pattern(pattern: &str) -> bool {
     .any(|prefix| trimmed.starts_with(prefix))
 }
 
+/// Context window at or above which a search stops being "show the surrounding
+/// lines" and becomes an attempt to capture a whole construct, which a line
+/// count cannot delimit correctly.
+const BLOCK_CONTEXT_LINES: u32 = 6;
+
+/// Widest `-A`/`-B`/`-C` window in the invocation, in either the separated
+/// (`-A 8`), attached (`-A8`), or long (`--context=8`) form.
+fn widest_context_window(args: &[String]) -> Option<u32> {
+    let mut widest: Option<u32> = None;
+    let mut iter = args.iter().peekable();
+    while let Some(arg) = iter.next() {
+        let s = arg.as_str();
+        let value = if matches!(
+            s,
+            "-A" | "-B" | "-C" | "--after-context" | "--before-context" | "--context"
+        ) {
+            iter.next().and_then(|v| v.parse::<u32>().ok())
+        } else if let Some(rest) = s
+            .strip_prefix("--after-context=")
+            .or_else(|| s.strip_prefix("--before-context="))
+            .or_else(|| s.strip_prefix("--context="))
+        {
+            rest.parse::<u32>().ok()
+        } else if let Some(rest) = s
+            .strip_prefix("-A")
+            .or_else(|| s.strip_prefix("-B"))
+            .or_else(|| s.strip_prefix("-C"))
+            .filter(|rest| !rest.is_empty())
+        {
+            rest.parse::<u32>().ok()
+        } else {
+            None
+        };
+        if let Some(v) = value {
+            widest = Some(widest.map_or(v, |w| w.max(v)));
+        }
+    }
+    widest
+}
+
 /// Build the right hint for a code-targeted grep/rg invocation.
-fn code_search_hint_text(pattern: &str, has_context_flag: bool) -> String {
+fn code_search_hint_text(pattern: &str, captures_block: bool) -> String {
     if looks_like_symbol_inventory_pattern(pattern) {
         return "Use `ast-grep outline --items structure --view signatures <path>` for symbol/signature inventory, or LSP documentSymbol where available. Use `ast-grep run -p '<pattern>' <path>` when matching a specific declaration shape.".to_string();
     }
 
-    if has_context_flag {
-        return "Use `ast-grep run -p '<pattern>' src/` instead of `rg -A`/`-B`/`-C` for syntax-shaped function/class bodies. AST-aware matching gives exact boundaries.".to_string();
+    if captures_block {
+        return "**NEVER** size a function or class body with `rg -A`/`-B`/`-C`: the window ends at a line count, not at the construct, so it cuts mid-body or swallows the next one. Use `ast-grep run -p '<pattern>' src/` for exact boundaries.".to_string();
     }
 
     if is_identifier_shape(pattern) {
@@ -1297,35 +1338,23 @@ fn hint_rg_on_code(cmd: &CommandInfo) -> Option<ModernHint> {
         return None;
     }
 
-    let has_context_flag = cmd.args.iter().any(|a| {
-        let s = a.as_str();
-        s == "-A"
-            || s == "-B"
-            || s == "-C"
-            || s == "--after-context"
-            || s.starts_with("--after-context=")
-            || s == "--before-context"
-            || s.starts_with("--before-context=")
-            || s == "--context"
-            || s.starts_with("--context=")
-            || (s.starts_with("-A") && s.len() > 2 && s[2..].chars().all(|c| c.is_ascii_digit()))
-            || (s.starts_with("-B") && s.len() > 2 && s[2..].chars().all(|c| c.is_ascii_digit()))
-            || (s.starts_with("-C") && s.len() > 2 && s[2..].chars().all(|c| c.is_ascii_digit()))
-    });
+    let captures_block = widest_context_window(&cmd.args).is_some_and(|n| n >= BLOCK_CONTEXT_LINES);
 
     let needs_typed_search = looks_like_symbol_inventory_pattern(pattern)
         || looks_like_code_pattern(pattern)
         || pattern.contains('(')
         || pattern.contains('{')
         || is_natural_language_shape(pattern);
-    if !needs_typed_search {
+    // A block-sized window is its own trigger: the pattern is often a plain
+    // identifier while the window is still reaching for the whole body.
+    if !needs_typed_search && !captures_block {
         return None;
     }
 
     Some(ModernHint {
         legacy_command: "rg",
         modern_command: "ast-grep",
-        hint: code_search_hint_text(pattern, has_context_flag),
+        hint: code_search_hint_text(pattern, captures_block),
     })
 }
 
@@ -1346,7 +1375,7 @@ fn hint_git_antipatterns(cmd: &CommandInfo) -> Option<ModernHint> {
                 return Some(ModernHint {
                     legacy_command: "git",
                     modern_command: "git",
-                    hint: "Avoid `git status -uall` on large repos (memory issues). Use `git status` without `-uall`.".to_string(),
+                    hint: "Use plain `git status`; `-uall` walks every untracked directory and can exhaust memory on a large repo. Pass `-uall` only when you need untracked files listed individually.".to_string(),
                 });
             }
             None
@@ -1361,7 +1390,7 @@ fn hint_git_antipatterns(cmd: &CommandInfo) -> Option<ModernHint> {
                 return Some(ModernHint {
                     legacy_command: "git",
                     modern_command: "git",
-                    hint: "Never use `git add -p` or `git add -i` (interactive, hangs the agent). Use the `git-history-and-staging` skill for surgical staging recipes."
+                    hint: "**NEVER** use `git add -p` or `git add -i`: both open an interactive prompt the agent cannot answer, so the command hangs until it is killed. Use the `git-history-and-staging` skill for surgical staging."
                         .to_string(),
                 });
             }
@@ -1373,7 +1402,7 @@ fn hint_git_antipatterns(cmd: &CommandInfo) -> Option<ModernHint> {
                 return Some(ModernHint {
                     legacy_command: "git",
                     modern_command: "git",
-                    hint: "Stage specific files by name instead of `git add -A` or `git add .` (can include secrets, large binaries).".to_string(),
+                    hint: "**NEVER** stage with `git add -A` or `git add .`: they stage every dirty path, including secrets, build output, and another task's work. Name each file you intend to commit.".to_string(),
                 });
             }
             None
@@ -1384,7 +1413,7 @@ fn hint_git_antipatterns(cmd: &CommandInfo) -> Option<ModernHint> {
                 return Some(ModernHint {
                     legacy_command: "git",
                     modern_command: "git",
-                    hint: "Never use `git rebase -i` (interactive, hangs agent). Use `git revise --autosquash` for fixups, `git absorb --and-rebase` for auto-folding, or `git reset --soft HEAD~N && git commit` for squashing.".to_string(),
+                    hint: "**NEVER** use `git rebase -i`: it opens an editor the agent cannot answer, so the command hangs until it is killed. Use `git revise --autosquash` for fixups, `git absorb --and-rebase` for auto-folding, or `git reset --soft HEAD~N && git commit` to squash.".to_string(),
                 });
             }
             None
@@ -1429,7 +1458,7 @@ fn hint_git_antipatterns(cmd: &CommandInfo) -> Option<ModernHint> {
                     return Some(ModernHint {
                         legacy_command: "git",
                         modern_command: "git",
-                        hint: "Never force push to main/master. Use `--force-with-lease` on feature branches if needed.".to_string(),
+                        hint: "**NEVER** force push to `main` or `master`: it destroys published history that every other clone depends on. On a feature branch use `--force-with-lease`, which aborts if the remote moved.".to_string(),
                     });
                 }
             }
@@ -1591,6 +1620,51 @@ pub fn format_hints(hints: &[ModernHint]) -> String {
         .join("\n")
 }
 
+/// Structured-data parsers that can only consume their own input format, so
+/// folding stderr into their stdin corrupts the parse instead of adding to it.
+const STRUCTURED_PARSERS: &[&str] = &["jq", "yq", "dasel", "gron", "htmlq"];
+
+/// `2>&1 |` (or bash's `|&`) feeding a structured parser, capturing the parser
+/// program and the rest of its stage so a raw-input flag can exempt it.
+static STDERR_INTO_PARSER_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?:2>&1\s*\||\|&)\s*([a-z]+)\b([^|;&\n]*)")
+        .expect("STDERR_INTO_PARSER_RE must compile")
+});
+
+/// Flags that put a parser into raw/line mode, where merged stderr is ordinary
+/// input rather than a corrupted document.
+fn reads_raw_input(stage_args: &str) -> bool {
+    stage_args.split_whitespace().any(|tok| {
+        tok == "-R"
+            || tok == "--raw-input"
+            || (tok.starts_with('-')
+                && !tok.starts_with("--")
+                && tok.chars().skip(1).any(|c| c == 'R'))
+    })
+}
+
+/// Warn when stderr is merged into a stream that is parsed as structured data.
+///
+/// The merge does not add diagnostics to the result, it destroys the result: the
+/// parser fails on the first non-conforming byte, so the command's real error
+/// message surfaces as a parse error instead. Operates on the raw command string
+/// because the redirect belongs to the producing stage, not the parsing one.
+pub fn stderr_into_parser_hint(command: &str) -> Option<ModernHint> {
+    let caps = STDERR_INTO_PARSER_RE.captures_iter(command).find(|caps| {
+        STRUCTURED_PARSERS.contains(&&caps[1])
+            && !reads_raw_input(caps.get(2).map_or("", |m| m.as_str()))
+    })?;
+    let parser = &caps[1];
+
+    Some(ModernHint {
+        legacy_command: "2>&1",
+        modern_command: "2>&1",
+        hint: format!(
+            "**NEVER** merge stderr into `{parser}`: it parses structured input, so one diagnostic line breaks the parse and the real error surfaces as a syntax error. Drop the `2>&1`; stderr already returns on its own channel."
+        ),
+    })
+}
+
 /// Compute and format modern-CLI hints for a raw shell command.
 ///
 /// Used by the Codex PostToolUse path where hints are deferred because
@@ -1607,6 +1681,9 @@ pub fn compute_hints_for_command(command: &str, session_id: &str) -> String {
         if let Some(hint) = get_modern_hint(cmd) {
             hints.push(hint);
         }
+    }
+    if let Some(hint) = stderr_into_parser_hint(command) {
+        hints.push(hint);
     }
     crate::hint_tracker::filter_hints(session_id, &mut hints);
     format_hints(&hints)
@@ -2025,10 +2102,90 @@ mod tests {
     }
 
     #[test]
+    fn a_block_sized_context_window_on_code_triggers_on_its_own() {
+        // A plain identifier passes every typed-search shape test, so before the
+        // window itself counted as a trigger this case produced no hint at all.
+        let hint = hint_rg_on_code(&cmd("rg", &["-A", "8", "persistMetrics", "src/main.rs"]));
+        assert!(
+            hint.is_some_and(|h| h.hint.contains("**NEVER** size a function or class body")),
+            "a wide window on a code target must be flagged"
+        );
+    }
+
+    #[test]
+    fn a_few_lines_of_context_stay_ordinary_lexical_search() {
+        for args in [
+            ["-A", "3", "persistMetrics", "src/main.rs"],
+            ["-C", "2", "persistMetrics", "src/main.rs"],
+        ] {
+            assert!(
+                hint_rg_on_code(&cmd("rg", &args)).is_none(),
+                "small context windows are legitimate: {args:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn context_windows_parse_in_every_flag_form() {
+        for (args, expected) in [
+            (vec!["-A".to_string(), "8".to_string()], Some(8)),
+            (vec!["-C12".to_string()], Some(12)),
+            (vec!["--context=20".to_string()], Some(20)),
+            (
+                vec![
+                    "-A".to_string(),
+                    "2".to_string(),
+                    "-B".to_string(),
+                    "9".to_string(),
+                ],
+                Some(9),
+            ),
+            (vec!["-n".to_string(), "pattern".to_string()], None),
+        ] {
+            assert_eq!(widest_context_window(&args), expected, "{args:?}");
+        }
+    }
+
+    #[test]
+    fn stderr_merged_into_a_structured_parser_is_flagged() {
+        for command in [
+            "gh pr list --json number 2>&1 | jq -r '.[].number'",
+            "kubectl get pods -o yaml 2>&1 | yq '.items'",
+            "cargo metadata |& jq '.packages'",
+            "xh GET https://example.com 2>&1 | htmlq 'a'",
+        ] {
+            let hint = stderr_into_parser_hint(command);
+            assert!(hint.is_some(), "must flag merged stderr: {command}");
+            assert!(
+                hint.unwrap().hint.contains("**NEVER** merge stderr into"),
+                "{command}"
+            );
+        }
+    }
+
+    #[test]
+    fn raw_input_mode_and_separated_stderr_are_left_alone() {
+        for command in [
+            // Raw mode consumes arbitrary lines, so merged stderr is just input.
+            "cargo build 2>&1 | jq -R .",
+            "cargo build 2>&1 | jq -Rn '[inputs]'",
+            // stderr never reaches the parser.
+            "gh pr list --json number | jq -r '.[].number'",
+            "cargo build 2>&1 | rg 'warning'",
+            "cargo build 2>/dev/null | jq .",
+        ] {
+            assert!(
+                stderr_into_parser_hint(command).is_none(),
+                "must not flag: {command}"
+            );
+        }
+    }
+
+    #[test]
     fn test_git_add_all_hint() {
         let hint = hint_git_antipatterns(&cmd("git", &["add", "-A"]));
         assert!(hint.is_some());
-        assert!(hint.unwrap().hint.contains("specific files"));
+        assert!(hint.unwrap().hint.contains("**NEVER** stage with"));
     }
 
     #[test]
@@ -2060,14 +2217,14 @@ mod tests {
     fn test_git_add_interactive_hint() {
         let hint = hint_git_antipatterns(&cmd("git", &["add", "-i"]));
         assert!(hint.is_some());
-        assert!(hint.unwrap().hint.contains("hangs the agent"));
+        assert!(hint.unwrap().hint.contains("**NEVER** use `git add -p`"));
     }
 
     #[test]
     fn test_git_rebase_interactive_hint() {
         let hint = hint_git_antipatterns(&cmd("git", &["rebase", "-i", "HEAD~3"]));
         assert!(hint.is_some());
-        assert!(hint.unwrap().hint.contains("hangs agent"));
+        assert!(hint.unwrap().hint.contains("**NEVER** use `git rebase -i`"));
     }
 
     #[test]
@@ -2100,7 +2257,7 @@ mod tests {
     fn test_git_push_force_main_hint() {
         let hint = hint_git_antipatterns(&cmd("git", &["push", "--force", "origin", "main"]));
         assert!(hint.is_some());
-        assert!(hint.unwrap().hint.contains("Never force push"));
+        assert!(hint.unwrap().hint.contains("**NEVER** force push"));
     }
 
     #[test]

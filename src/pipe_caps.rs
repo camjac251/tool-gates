@@ -103,6 +103,28 @@ const BUILD_PRODUCERS: &[&str] = &[
     "vitest", "tox", "rake", "rspec",
 ];
 
+/// Producers that document an output-limiting option of their own. Naming one
+/// in the recovery text points the caller at a flag they can actually reach for,
+/// and at the pipeline position where it belongs. A producer with no such option
+/// (`cat`, `ls`, `printf`) keeps the neutral wording, because inventing
+/// "`cat`'s limiting options" would be worse guidance than none.
+const NATIVE_LIMIT_PRODUCERS: &[&str] = &[
+    "aws",
+    "docker",
+    "fd",
+    "gcloud",
+    "gh",
+    "git",
+    "journalctl",
+    "jq",
+    "kubectl",
+    "mlr",
+    "podman",
+    "qsv",
+    "rg",
+    "yq",
+];
+
 /// Launcher wrappers that prefix the real command (`timeout 60 npm test`,
 /// `nice -n10 cargo build`, `sudo make`). Producer detection sees through them
 /// so a wrapped build/`gh` is still hard-denied, not mistaken for the wrapper.
@@ -470,7 +492,11 @@ fn head_tail_denial(
     }
 
     let output = output
-        .with_recovery(RecoveryAction::UseProducerNativeLimit { producer: None })
+        .with_recovery(RecoveryAction::UseProducerNativeLimit {
+            producer: NATIVE_LIMIT_PRODUCERS
+                .contains(&producer)
+                .then(|| producer.to_string()),
+        })
         .with_recovery(RecoveryAction::RunUncappedAndPersist);
     match source_file_selection(command_string, segment, prior_program) {
         Some(selection) => output.with_recovery(RecoveryAction::ReadSourceFile { selection }),
@@ -645,6 +671,33 @@ mod tests {
     }
 
     #[test]
+    fn a_limit_capable_producer_is_named_with_its_pipeline_position() {
+        // The caller reaches for a sanctioned flag in the wrong stage. Naming the
+        // producer tells them which command already holds the option they want.
+        let output =
+            check_head_tail_pipe("rg -o 'pattern' src/lib.rs | rg -m 25 '.'").expect("cap denied");
+
+        let wire = output.serialize(Client::Claude).to_string();
+        assert!(
+            wire.contains("`rg`'s own limiting options at the head of the pipeline"),
+            "the producer feeding the cap must be named: {wire}"
+        );
+    }
+
+    #[test]
+    fn a_producer_without_a_native_limit_keeps_neutral_recovery() {
+        let output = check_head_tail_pipe("cat notes.txt | head -n 5").expect("cap denied");
+
+        assert!(
+            output
+                .recovery_actions
+                .contains(&RecoveryAction::UseProducerNativeLimit { producer: None }),
+            "`cat` has no limiting option worth naming: {:?}",
+            output.recovery_actions
+        );
+    }
+
+    #[test]
     fn streamed_output_does_not_invent_file_reader_recovery() {
         let output = check_head_tail_pipe("git log | sed -n '1,10p'").expect("cap must be denied");
 
@@ -655,7 +708,9 @@ mod tests {
         assert_eq!(
             output.recovery_actions,
             vec![
-                RecoveryAction::UseProducerNativeLimit { producer: None },
+                RecoveryAction::UseProducerNativeLimit {
+                    producer: Some("git".to_string()),
+                },
                 RecoveryAction::RunUncappedAndPersist,
             ]
         );
@@ -675,7 +730,7 @@ mod tests {
                 "{client:?} invented file-reader guidance: {wire}"
             );
             assert!(
-                wire.contains("producer's native limit")
+                wire.contains("`git`'s own limiting options")
                     && wire.contains("persist the complete output"),
                 "{client:?} omitted stream recovery: {wire}"
             );

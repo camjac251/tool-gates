@@ -806,12 +806,12 @@ mod tests {
                 (
                     "gh pr list | head -20",
                     "drop rows or cut JSON",
-                    "native options",
+                    "own limiting options",
                 ),
                 (
                     "gh api repos/o/r/pulls | head -5",
                     "drop rows or cut JSON",
-                    "native options",
+                    "own limiting options",
                 ),
                 ("cargo test 2>&1 | tail -40", "hide diagnostics", "uncapped"),
                 ("pnpm test | head -30", "hide diagnostics", "real pattern"),
@@ -858,7 +858,9 @@ mod tests {
             assert_eq!(
                 result.recovery_actions,
                 vec![
-                    RecoveryAction::UseProducerNativeLimit { producer: None },
+                    RecoveryAction::UseProducerNativeLimit {
+                        producer: Some("git".to_string()),
+                    },
                     RecoveryAction::RunUncappedAndPersist,
                 ]
             );

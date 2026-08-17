@@ -102,7 +102,7 @@ fn render_recovery_actions_for(client: Option<Client>, actions: &[RecoveryAction
             RecoveryAction::UseProducerNativeLimit {
                 producer: Some(producer),
             } => format!(
-                "Use `{producer}`'s native options when the task needs a bounded result."
+                "Use `{producer}`'s own limiting options at the head of the pipeline. A limit flag on a later stage is still a consumer cap."
             ),
             RecoveryAction::RunUncapped => "Run the command uncapped.".to_string(),
             RecoveryAction::RunUncappedAndPersist => {
@@ -204,7 +204,7 @@ mod tests {
                 RecoveryAction::UseProducerNativeLimit {
                     producer: Some("gh".to_string()),
                 },
-                "Use `gh`'s native options when the task needs a bounded result.",
+                "Use `gh`'s own limiting options at the head of the pipeline. A limit flag on a later stage is still a consumer cap.",
             ),
             (RecoveryAction::RunUncapped, "Run the command uncapped."),
             (

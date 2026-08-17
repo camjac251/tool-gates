@@ -81,7 +81,7 @@ pub fn check_command_for_session(command_string: &str, session_id: &str) -> Hook
 /// Separated from `check_command_for_session` so callers that already have
 /// parsed commands (and already ran raw string checks) can skip the duplicate work.
 fn check_command_for_session_with_commands(
-    _command_string: &str,
+    command_string: &str,
     session_id: &str,
     commands: &[CommandInfo],
 ) -> HookOutput {
@@ -125,6 +125,12 @@ fn check_command_for_session_with_commands(
                 ask_reasons.push(format!("Unknown command: {}", cmd.program));
             }
         }
+    }
+
+    // Whole-string check: the redirect belongs to the producing stage, so no
+    // single parsed command carries both halves of the pattern.
+    if let Some(hint) = crate::hints::stderr_into_parser_hint(command_string) {
+        hints.push(hint);
     }
 
     hint_tracker::filter_hints(session_id, &mut hints);
