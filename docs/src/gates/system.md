@@ -15,14 +15,14 @@
   </div>
 
   <section class="summary" aria-label="Rule counts at a glance">
-    <div class="seg-bar" role="img" aria-label="275 allow, 186 ask, 36 block">
+    <div class="seg-bar" role="img" aria-label="275 allow, 187 ask, 36 block">
       <div class="seg allow" style="flex: 275"></div>
-      <div class="seg ask"   style="flex: 186"></div>
+      <div class="seg ask"   style="flex: 187"></div>
       <div class="seg block" style="flex: 36"></div>
     </div>
     <div class="counts">
       <span class="ca"><i></i><b>275</b> allow</span>
-      <span class="cas"><i></i><b>186</b> ask</span>
+      <span class="cas"><i></i><b>187</b> ask</span>
       <span class="cb"><i></i><b>36</b> block</span>
     </div>
   </section>
@@ -31,12 +31,12 @@
 </div>
 
 <div class="chips" role="group" aria-label="Filter rules by decision" aria-describedby="rule-filter-status">
-  <button class="chip all"   data-filter="all"   aria-pressed="true"><i></i>All <span class="n">497</span></button>
+  <button class="chip all"   data-filter="all"   aria-pressed="true"><i></i>All <span class="n">498</span></button>
   <button class="chip allow" data-filter="allow" aria-pressed="false"><i></i>Allow <span class="n">275</span></button>
-  <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">186</span></button>
+  <button class="chip ask"   data-filter="ask"   aria-pressed="false"><i></i>Ask <span class="n">187</span></button>
   <button class="chip block" data-filter="block" aria-pressed="false"><i></i>Block <span class="n">36</span></button>
 </div>
-<p class="rule-filter-status" id="rule-filter-status" role="status" aria-live="polite" aria-atomic="true">Showing all 497 rules.</p>
+<p class="rule-filter-status" id="rule-filter-status" role="status" aria-live="polite" aria-atomic="true">Showing all 498 rules.</p>
 
 <div class="rule-card">
   <header>
@@ -1624,7 +1624,7 @@
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
       rules/system.toml#ask
     </a>
-    <span class="count">186 patterns</span>
+    <span class="count">187 patterns</span>
   </header>
 
 <div class="rule-row" data-decision="ask" id="system-age">
@@ -2041,6 +2041,11 @@
   <div class="rule-cmd"><span class="prog">flyway</span></div>
   <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
   <div class="rule-reason">Runs a database migration via Flyway. Applies schema changes; review the migration files first.</div>
+</div>
+<div class="rule-row" data-decision="ask" id="system-fuser-k-kill">
+  <div class="rule-cmd"><span class="prog">fuser</span> <span class="flag">-k</span> <span class="flag">--kill</span></div>
+  <div><span class="pill ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>Ask</span></div>
+  <div class="rule-reason">Signals every process holding the target open. Run <code>fuser -v &lt;target&gt;</code> first to see which processes would be hit.</div>
 </div>
 <div class="rule-row" data-decision="ask" id="system-goose">
   <div class="rule-cmd"><span class="prog">goose</span></div>

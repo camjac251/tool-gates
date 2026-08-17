@@ -749,7 +749,7 @@ ul#mdbook-searchresults span.teaser {
 .sidebar-scrollbox a[href$="gates/shortcut.html"]::after,
 .sidebar-scrollbox a[href$="gates/basics.html"]::after {
   /* margin-inline-start:auto pushes the badge to the right edge of the flex row.
-   * Tabular figures keep the right edges of 17 / 106 / 497 on one vertical line. */
+   * Tabular figures keep the right edges of 17 / 106 / 498 on one vertical line. */
   margin-inline-start: auto;
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
@@ -783,7 +783,7 @@ ul#mdbook-searchresults span.teaser {
   content: "13";
 }
 .sidebar-scrollbox a[href$="gates/system.html"]::after {
-  content: "497";
+  content: "498";
 }
 .sidebar-scrollbox a[href$="gates/package_managers.html"]::after {
   content: "453";

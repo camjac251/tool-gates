@@ -85,6 +85,7 @@ safe_commands = [
   "procs",
   "pgrep",
   "pidof",
+  "getent",
   "uptime",
   "w",
   "who",
@@ -125,6 +126,7 @@ safe_commands = [
   "tracepath",
   "mtr",
   "dig",
+  "doggo",
   "nslookup",
   "host",
   "whois",
@@ -152,6 +154,8 @@ safe_commands = [
   "jq",
   "yq",
   "gron",
+  "dasel",
+  "htmlq",
   "hexdump",
   "xxd",
   "base64",
@@ -160,12 +164,16 @@ safe_commands = [
   "strings",
   "delta",
   "difft",
+  "grepdiff",
+  "filterdiff",
+  "lsdiff",
   "rga",
   "fq",
   "grex",
   "dust",
   "pastel",
   "numbat",
+  "pg_isready",
   "fzf",
   "tig",
   "z",
@@ -232,6 +240,9 @@ safe_commands = [
   # Shell builtins (used in while read loops, etc.)
   "read",
   "exit",
+  "break",
+  "continue",
+  ":",
 ]
 
 [meta]
@@ -240,7 +251,7 @@ description = "Safe read-only shell commands"
 priority = 100
 lede = "The default-safe list. Unlike other gates, basics doesn't define per-program rules: it's one big <code>safe_commands = […]</code> array of commands that are always allowed without prompting. Lowest priority (100) so other gates' specific rules win first."
 note = """<b>Three custom handlers extend the list.</b> <code>check_xargs</code> allows <code>xargs</code> only when the target command is itself in <code>safe_commands</code>; otherwise asks. <code>check_shell_c</code> parses <code>bash -c/-lc '…'</code> / <code>sh -c '…'</code> / <code>zsh -c '…'</code> and runs the raw security floor, then checks every command in the inner script. <code>check_command_builtin</code> handles <code>command -v</code> / <code>-V</code> and evaluates other invocations through the gate engine."""
-behavior_tags = ["structure <b>safe_commands</b> array", "~180 commands"]
+behavior_tags = ["structure <b>safe_commands</b> array", "~195 commands"]
 
 [meta.card_titles]
 allow = "default-safe commands"
@@ -335,6 +346,7 @@ commands = [
   "procs",
   "pgrep",
   "pidof",
+  "getent",
   "uptime",
   "w",
   "who",
@@ -371,6 +383,7 @@ commands = [
   "tracepath",
   "mtr",
   "dig",
+  "doggo",
   "nslookup",
   "host",
   "whois",
@@ -397,6 +410,8 @@ commands = [
   "jq",
   "yq",
   "gron",
+  "dasel",
+  "htmlq",
   "hexdump",
   "xxd",
   "base64",
@@ -405,12 +420,16 @@ commands = [
   "strings",
   "delta",
   "difft",
+  "grepdiff",
+  "filterdiff",
+  "lsdiff",
   "rga",
   "fq",
   "grex",
   "dust",
   "pastel",
   "numbat",
+  "pg_isready",
   "fzf",
   "tig",
   "glow",
@@ -472,6 +491,9 @@ commands = [
   "dpkg-query",
   "read",
   "exit",
+  "break",
+  "continue",
+  ":",
 ]
 
 # xargs needs custom handling to check target command

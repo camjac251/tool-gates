@@ -525,6 +525,15 @@ unknown_action = "ask"
 [[programs.ask]]
 reason = "Click-to-kill X11 utility. Sends a KILL signal to whatever window is clicked next."
 
+[[programs]]
+name = "fuser"
+unknown_action = "allow"
+reason = "Reports which processes hold a file, directory, or socket open. Read-only unless `-k` is present."
+
+[[programs.ask]]
+if_flags_any = ["-k", "--kill"]
+reason = "Signals every process holding the target open. Run `fuser -v <target>` first to see which processes would be hit."
+
 # =============================================================================
 # MAKE
 # =============================================================================

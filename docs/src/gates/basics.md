@@ -11,7 +11,7 @@
     <span class="tag">priority <b>100</b></span>
     <span class="tag">unknown <b>ask</b></span>
     <span class="tag">structure <b>safe_commands</b> array</span>
-    <span class="tag">~180 commands</span>
+    <span class="tag">~195 commands</span>
   </div>
 
   <p class="gate-lede">The default-safe list. Unlike other gates, basics doesn't define per-program rules: it's one big <code>safe_commands = […]</code> array of commands that are always allowed without prompting. Lowest priority (100) so other gates' specific rules win first.</p>
@@ -36,7 +36,7 @@
   </div>
   <div class="cat">
     <h2>Process &amp; system info</h2>
-    <div class="chips-line"><span>ps</span><span>top</span><span>htop</span><span>btop</span><span>procs</span><span>pgrep</span><span>pidof</span><span>uptime</span><span>w</span><span>who</span><span>whoami</span><span>id</span><span>groups</span><span>uname</span><span>hostname</span><span>hostnamectl</span><span>date</span><span>cal</span><span>free</span><span>vmstat</span><span>iostat</span><span>nproc</span><span>lscpu</span><span>lsmem</span><span>lsblk</span><span>lspci</span><span>lsusb</span><span>locale</span><span>getconf</span></div>
+    <div class="chips-line"><span>ps</span><span>top</span><span>htop</span><span>btop</span><span>procs</span><span>pgrep</span><span>pidof</span><span>getent</span><span>uptime</span><span>w</span><span>who</span><span>whoami</span><span>id</span><span>groups</span><span>uname</span><span>hostname</span><span>hostnamectl</span><span>date</span><span>cal</span><span>free</span><span>vmstat</span><span>iostat</span><span>nproc</span><span>lscpu</span><span>lsmem</span><span>lsblk</span><span>lspci</span><span>lsusb</span><span>locale</span><span>getconf</span></div>
   </div>
   <div class="cat">
     <h2>GPU &amp; display info</h2>
@@ -44,7 +44,7 @@
   </div>
   <div class="cat">
     <h2>Network info</h2>
-    <div class="chips-line"><span>ping</span><span>traceroute</span><span>tracepath</span><span>mtr</span><span>dig</span><span>nslookup</span><span>host</span><span>whois</span><span>ss</span><span>netstat</span><span>ip</span><span>ifconfig</span><span>route</span><span>arp</span></div>
+    <div class="chips-line"><span>ping</span><span>traceroute</span><span>tracepath</span><span>mtr</span><span>dig</span><span>doggo</span><span>nslookup</span><span>host</span><span>whois</span><span>ss</span><span>netstat</span><span>ip</span><span>ifconfig</span><span>route</span><span>arp</span></div>
   </div>
   <div class="cat">
     <h2>Archive &amp; document inspection</h2>
@@ -52,7 +52,7 @@
   </div>
   <div class="cat">
     <h2>Dev tools (read-only)</h2>
-    <div class="chips-line"><span>tokei</span><span>cloc</span><span>scc</span><span>loc</span><span>token-counter</span><span>jq</span><span>yq</span><span>gron</span><span>hexdump</span><span>xxd</span><span>base64</span><span>od</span><span>hexyl</span><span>strings</span><span>delta</span><span>difft</span><span>rga</span><span>fq</span><span>grex</span><span>dust</span><span>pastel</span><span>numbat</span><span>fzf</span><span>tig</span><span>glow</span><span>jc</span></div>
+    <div class="chips-line"><span>tokei</span><span>cloc</span><span>scc</span><span>loc</span><span>token-counter</span><span>jq</span><span>yq</span><span>gron</span><span>dasel</span><span>htmlq</span><span>hexdump</span><span>xxd</span><span>base64</span><span>od</span><span>hexyl</span><span>strings</span><span>delta</span><span>difft</span><span>grepdiff</span><span>filterdiff</span><span>lsdiff</span><span>rga</span><span>fq</span><span>grex</span><span>dust</span><span>pastel</span><span>numbat</span><span>pg_isready</span><span>fzf</span><span>tig</span><span>glow</span><span>jc</span></div>
   </div>
   <div class="cat">
     <h2>Navigation</h2>
@@ -68,7 +68,7 @@
   </div>
   <div class="cat">
     <h2>Shell built-ins &amp; misc</h2>
-    <div class="chips-line"><span>mktemp</span><span>true</span><span>false</span><span>yes</span><span>seq</span><span>expr</span><span>bc</span><span>dc</span><span>factor</span><span>sleep</span><span>wait</span><span>printenv</span><span>env</span><span>export</span><span>set</span><span>pwd</span><span>cd</span><span>pushd</span><span>popd</span><span>dirs</span><span>unalias</span><span>hash</span><span>test</span><span>[</span><span>[[</span><span>dpkg-query</span><span>read</span><span>exit</span></div>
+    <div class="chips-line"><span>mktemp</span><span>true</span><span>false</span><span>yes</span><span>seq</span><span>expr</span><span>bc</span><span>dc</span><span>factor</span><span>sleep</span><span>wait</span><span>printenv</span><span>env</span><span>export</span><span>set</span><span>pwd</span><span>cd</span><span>pushd</span><span>popd</span><span>dirs</span><span>unalias</span><span>hash</span><span>test</span><span>[</span><span>[[</span><span>dpkg-query</span><span>read</span><span>exit</span><span>break</span><span>continue</span><span>:</span></div>
   </div>
 </div>
 

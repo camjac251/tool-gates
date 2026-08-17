@@ -104,7 +104,7 @@
 
 <li><a class="gate-card" href="system.html">
   <span class="gc-name">System Commands</span>
-  <span class="gc-count">497<span class="sr-only"> rules</span></span>
+  <span class="gc-count">498<span class="sr-only"> rules</span></span>
   <span class="gc-prio">40<span class="sr-only"> priority</span></span>
   <span class="gc-desc">OS-level operations: power, disk, kernel modules, firewall, users, database clients, crypto. The largest block floor of any gate.</span>
 </a></li>

@@ -1,4 +1,4 @@
-// tool-gates-generation-fingerprint: 69214e52993967f4:e6a8642a5cb05c37
+// tool-gates-generation-fingerprint: 4c77566b40f8d755:af106f5f21f3363c
 //! Auto-generated from rules/*.toml files.
 //! DO NOT EDIT - changes will be overwritten by build.rs
 
@@ -13,6 +13,7 @@ use std::sync::LazyLock;
 /// Safe commands that are always allowed
 pub static SAFE_COMMANDS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
     [
+        ":",
         "[",
         "[[",
         "arp",
@@ -23,6 +24,7 @@ pub static SAFE_COMMANDS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "bat",
         "batcat",
         "bc",
+        "break",
         "btop",
         "cal",
         "cat",
@@ -35,7 +37,9 @@ pub static SAFE_COMMANDS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "cmp",
         "column",
         "comm",
+        "continue",
         "cut",
+        "dasel",
         "date",
         "dc",
         "delta",
@@ -45,6 +49,7 @@ pub static SAFE_COMMANDS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "dig",
         "dirname",
         "dirs",
+        "doggo",
         "dpkg-query",
         "du",
         "dust",
@@ -59,6 +64,7 @@ pub static SAFE_COMMANDS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "false",
         "fd",
         "file",
+        "filterdiff",
         "find",
         "fmt",
         "fold",
@@ -66,10 +72,12 @@ pub static SAFE_COMMANDS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "free",
         "fzf",
         "getconf",
+        "getent",
         "getfacl",
         "glow",
         "glxinfo",
         "grep",
+        "grepdiff",
         "grex",
         "gron",
         "groups",
@@ -81,6 +89,7 @@ pub static SAFE_COMMANDS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "host",
         "hostname",
         "hostnamectl",
+        "htmlq",
         "htop",
         "id",
         "ifconfig",
@@ -99,6 +108,7 @@ pub static SAFE_COMMANDS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "lsblk",
         "lscpu",
         "lsd",
+        "lsdiff",
         "lsmem",
         "lsof",
         "lspci",
@@ -118,6 +128,7 @@ pub static SAFE_COMMANDS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
         "pastel",
         "pdfinfo",
         "pdftotext",
+        "pg_isready",
         "pgrep",
         "pidof",
         "ping",
@@ -242,6 +253,7 @@ pub static ANTIGRAVITY_ALLOW_COMMANDS: &[&str] = &[
     "comm",
     "cut",
     "d2",
+    "dasel",
     "date",
     "dc",
     "delta",
@@ -250,6 +262,7 @@ pub static ANTIGRAVITY_ALLOW_COMMANDS: &[&str] = &[
     "difft",
     "dig",
     "dirname",
+    "doggo",
     "dpkg-query",
     "du",
     "dust",
@@ -263,6 +276,7 @@ pub static ANTIGRAVITY_ALLOW_COMMANDS: &[&str] = &[
     "fd",
     "ffprobe",
     "file",
+    "filterdiff",
     "find",
     "flake8",
     "fmt",
@@ -271,11 +285,13 @@ pub static ANTIGRAVITY_ALLOW_COMMANDS: &[&str] = &[
     "free",
     "fzf",
     "getconf",
+    "getent",
     "getfacl",
     "gitleaks",
     "glow",
     "glxinfo",
     "grep",
+    "grepdiff",
     "grex",
     "gron",
     "groups",
@@ -286,6 +302,7 @@ pub static ANTIGRAVITY_ALLOW_COMMANDS: &[&str] = &[
     "host",
     "hostname",
     "hostnamectl",
+    "htmlq",
     "htop",
     "id",
     "ifconfig",
@@ -306,6 +323,7 @@ pub static ANTIGRAVITY_ALLOW_COMMANDS: &[&str] = &[
     "lsblk",
     "lscpu",
     "lsd",
+    "lsdiff",
     "lsmem",
     "lsof",
     "lspci",
@@ -332,6 +350,7 @@ pub static ANTIGRAVITY_ALLOW_COMMANDS: &[&str] = &[
     "pdfinfo",
     "pdftotext",
     "pg_dump",
+    "pg_isready",
     "pgrep",
     "pidof",
     "ping",
@@ -12788,6 +12807,46 @@ pub fn check_xkill_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     ))
 }
 
+// === FUSER (from system.toml) ===
+
+/// Check fuser commands declaratively
+pub fn check_fuser_declarative(cmd: &CommandInfo) -> Option<GateResult> {
+    if !["fuser"].contains(&cmd.program.as_str()) {
+        return None;
+    }
+
+    #[allow(unused_variables)]
+    let subcmd = if cmd.args.is_empty() {
+        String::new()
+    } else if cmd.args.len() == 1 {
+        cmd.args[0].clone()
+    } else {
+        format!("{} {}", cmd.args[0], cmd.args[1])
+    };
+    #[allow(unused_variables)]
+    let subcmd_single = cmd.args.first().map(String::as_str).unwrap_or("");
+    #[allow(unused_variables)]
+    let subcmd_triple = if cmd.args.len() >= 3 {
+        format!("{} {} {}", cmd.args[0], cmd.args[1], cmd.args[2])
+    } else {
+        String::new()
+    };
+
+    // Check ask rules with flag/prefix conditions
+    if true
+        && cmd
+            .args
+            .iter()
+            .any(|a| ["-k", "--kill"].contains(&a.as_str()))
+    {
+        return Some(GateResult::ask(
+            "Signals every process holding the target open. Run `fuser -v <target>` first to see which processes would be hit.",
+        ));
+    }
+
+    Some(GateResult::allow())
+}
+
 // === MAKE (from system.toml) ===
 
 /// Check make commands declaratively
@@ -16765,6 +16824,9 @@ pub fn check_declarative(cmd: &CommandInfo) -> Option<GateResult> {
     if let Some(result) = check_xkill_declarative(cmd) {
         return Some(result);
     }
+    if let Some(result) = check_fuser_declarative(cmd) {
+        return Some(result);
+    }
     if let Some(result) = check_make_declarative(cmd) {
         return Some(result);
     }
@@ -17320,7 +17382,7 @@ pub static NETWORK_PROGRAMS: &[&str] = &[
     "nmap", "socat", "telnet", "lychee",
 ];
 
-/// Generated gate for system - handles: shutdown, reboot, poweroff, halt, init, mkfs, fdisk, parted, gdisk, dd, shred, wipe, mke2fs, mkswap, wipefs, hdparm, insmod, rmmod, modprobe, grub-install, update-grub, useradd, userdel, usermod, passwd, chsh, iptables, ufw, firewall-cmd, chattr, mount, umount, swapoff, swapon, lvremove, vgremove, pvremove, psql, createdb, dropdb, pg_dump, pg_restore, migrate, goose, dbmate, flyway, alembic, mysql, sqlite3, mongosh, mongo, redis-cli, kill, pkill, killall, xkill, make, cmake, ninja, just, task, gradle, gradlew, ./gradlew, mvn, maven, ./mvnw, mvnw, bazel, bazelisk, meson, ansible, ansible-playbook, ansible-galaxy, ansible-vault, vagrant, hyperfine, sudo, doas, systemctl, service, crontab, apt, apt-get, apt-cache, dnf, yum, pacman, yay, paru, brew, zypper, apk, nix, nix-env, nix-shell, flatpak, snap, dpkg, apt-mark, pactl, openssl, gpg, gpg2, ssh-keygen, age, age-keygen
+/// Generated gate for system - handles: shutdown, reboot, poweroff, halt, init, mkfs, fdisk, parted, gdisk, dd, shred, wipe, mke2fs, mkswap, wipefs, hdparm, insmod, rmmod, modprobe, grub-install, update-grub, useradd, userdel, usermod, passwd, chsh, iptables, ufw, firewall-cmd, chattr, mount, umount, swapoff, swapon, lvremove, vgremove, pvremove, psql, createdb, dropdb, pg_dump, pg_restore, migrate, goose, dbmate, flyway, alembic, mysql, sqlite3, mongosh, mongo, redis-cli, kill, pkill, killall, xkill, fuser, make, cmake, ninja, just, task, gradle, gradlew, ./gradlew, mvn, maven, ./mvnw, mvnw, bazel, bazelisk, meson, ansible, ansible-playbook, ansible-galaxy, ansible-vault, vagrant, hyperfine, sudo, doas, systemctl, service, crontab, apt, apt-get, apt-cache, dnf, yum, pacman, yay, paru, brew, zypper, apk, nix, nix-env, nix-shell, flatpak, snap, dpkg, apt-mark, pactl, openssl, gpg, gpg2, ssh-keygen, age, age-keygen
 /// Custom handlers needed for: ["apt", "brew", "crontab", "dnf", "kill", "make", "mysql", "pacman", "pkill", "psql", "sudo", "systemctl"]
 pub fn check_system_gate(cmd: &CommandInfo) -> GateResult {
     match cmd.program.as_str() {
@@ -17379,6 +17441,7 @@ pub fn check_system_gate(cmd: &CommandInfo) -> GateResult {
         "pkill" => GateResult::skip(), // custom handler: check_pkill
         "killall" => check_killall_declarative(cmd).unwrap_or_else(GateResult::skip),
         "xkill" => check_xkill_declarative(cmd).unwrap_or_else(GateResult::skip),
+        "fuser" => check_fuser_declarative(cmd).unwrap_or_else(GateResult::skip),
         "make" => GateResult::skip(), // custom handler: check_make
         "cmake" => check_cmake_declarative(cmd).unwrap_or_else(GateResult::skip),
         "ninja" => check_ninja_declarative(cmd).unwrap_or_else(GateResult::skip),
@@ -17481,6 +17544,7 @@ pub static SYSTEM_PROGRAMS: &[&str] = &[
     "pkill",
     "killall",
     "xkill",
+    "fuser",
     "make",
     "cmake",
     "ninja",
