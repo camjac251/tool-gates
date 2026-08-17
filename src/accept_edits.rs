@@ -347,30 +347,47 @@ mod tests {
 
         #[test]
         fn test_sd_allowed_in_accept_edits() {
-            let result =
-                check_command_with_settings("sd 'old' 'new' file.txt", "/tmp", "acceptEdits");
+            let result = check_command_with_settings(
+                "sd 'old' 'new' file.txt",
+                "/tmp",
+                "acceptEdits",
+                Client::Claude,
+            );
             assert_eq!(get_decision(&result), "allow");
             assert!(get_reason(&result).contains("acceptEdits"));
         }
 
         #[test]
         fn test_sd_asks_in_default_mode() {
-            let result = check_command_with_settings("sd 'old' 'new' file.txt", "/tmp", "default");
+            let result = check_command_with_settings(
+                "sd 'old' 'new' file.txt",
+                "/tmp",
+                "default",
+                Client::Claude,
+            );
             assert_eq!(get_decision(&result), "ask");
         }
 
         #[test]
         fn test_prettier_write_allowed_in_accept_edits() {
-            let result =
-                check_command_with_settings("prettier --write src/", "/tmp", "acceptEdits");
+            let result = check_command_with_settings(
+                "prettier --write src/",
+                "/tmp",
+                "acceptEdits",
+                Client::Claude,
+            );
             assert_eq!(get_decision(&result), "allow");
         }
 
         #[test]
         fn test_prettier_check_allowed_as_readonly() {
             // prettier --check is read-only, so it's allowed by the devtools gate
-            let result =
-                check_command_with_settings("prettier --check src/", "/tmp", "acceptEdits");
+            let result = check_command_with_settings(
+                "prettier --check src/",
+                "/tmp",
+                "acceptEdits",
+                Client::Claude,
+            );
             assert_eq!(get_decision(&result), "allow");
         }
 
@@ -380,6 +397,7 @@ mod tests {
                 "ast-grep -p 'old' -r 'new' -U src/",
                 "/tmp",
                 "acceptEdits",
+                Client::Claude,
             );
             assert_eq!(get_decision(&result), "allow");
         }
@@ -387,36 +405,54 @@ mod tests {
         #[test]
         fn test_ast_grep_search_asks_in_accept_edits() {
             // ast-grep without -U is read-only search
-            let result =
-                check_command_with_settings("ast-grep -p 'pattern' src/", "/tmp", "acceptEdits");
+            let result = check_command_with_settings(
+                "ast-grep -p 'pattern' src/",
+                "/tmp",
+                "acceptEdits",
+                Client::Claude,
+            );
             // Should still be allowed (read-only), let me check the gate
             assert_eq!(get_decision(&result), "allow"); // ast-grep search is allowed by devtools gate
         }
 
         #[test]
         fn test_sed_i_allowed_in_accept_edits() {
-            let result =
-                check_command_with_settings("sed -i 's/old/new/g' file.txt", "/tmp", "acceptEdits");
+            let result = check_command_with_settings(
+                "sed -i 's/old/new/g' file.txt",
+                "/tmp",
+                "acceptEdits",
+                Client::Claude,
+            );
             assert_eq!(get_decision(&result), "allow");
         }
 
         #[test]
         fn test_black_allowed_in_accept_edits() {
-            let result = check_command_with_settings("black src/", "/tmp", "acceptEdits");
+            let result =
+                check_command_with_settings("black src/", "/tmp", "acceptEdits", Client::Claude);
             assert_eq!(get_decision(&result), "allow");
         }
 
         #[test]
         fn test_rustfmt_allowed_in_accept_edits() {
-            let result = check_command_with_settings("rustfmt src/main.rs", "/tmp", "acceptEdits");
+            let result = check_command_with_settings(
+                "rustfmt src/main.rs",
+                "/tmp",
+                "acceptEdits",
+                Client::Claude,
+            );
             assert_eq!(get_decision(&result), "allow");
         }
 
         #[test]
         fn test_mkdir_allowed_in_accept_edits() {
             // mkdir within project directory should be auto-allowed
-            let result =
-                check_command_with_settings("mkdir -p src/components", "/tmp", "acceptEdits");
+            let result = check_command_with_settings(
+                "mkdir -p src/components",
+                "/tmp",
+                "acceptEdits",
+                Client::Claude,
+            );
             assert_eq!(get_decision(&result), "allow");
         }
 
@@ -427,6 +463,7 @@ mod tests {
                 "mkdir /other/path",
                 "/home/user/project",
                 "acceptEdits",
+                Client::Claude,
             );
             assert_eq!(get_decision(&result), "ask");
         }
@@ -434,13 +471,19 @@ mod tests {
         #[test]
         fn test_npm_install_still_asks_in_accept_edits() {
             // npm install is NOT a file-editing command - it's package management
-            let result = check_command_with_settings("npm install", "/tmp", "acceptEdits");
+            let result =
+                check_command_with_settings("npm install", "/tmp", "acceptEdits", Client::Claude);
             assert_eq!(get_decision(&result), "ask");
         }
 
         #[test]
         fn test_npm_install_defers_at_wire_level_in_accept_edits() {
-            let result = check_command_with_settings("npm install foo", "/tmp", "acceptEdits");
+            let result = check_command_with_settings(
+                "npm install foo",
+                "/tmp",
+                "acceptEdits",
+                Client::Claude,
+            );
             assert_eq!(result.decision, PermissionDecision::Defer);
             let json =
                 serde_json::to_string(&result.serialize(crate::models::Client::Claude)).unwrap();
@@ -453,20 +496,23 @@ mod tests {
         #[test]
         fn test_git_push_still_asks_in_accept_edits() {
             // git push is NOT a file-editing command
-            let result = check_command_with_settings("git push", "/tmp", "acceptEdits");
+            let result =
+                check_command_with_settings("git push", "/tmp", "acceptEdits", Client::Claude);
             assert_eq!(get_decision(&result), "ask");
         }
 
         #[test]
         fn test_rm_still_asks_in_accept_edits() {
             // rm is deletion, not editing - should still ask
-            let result = check_command_with_settings("rm file.txt", "/tmp", "acceptEdits");
+            let result =
+                check_command_with_settings("rm file.txt", "/tmp", "acceptEdits", Client::Claude);
             assert_eq!(get_decision(&result), "ask");
         }
 
         #[test]
         fn test_rm_hard_asks_at_wire_level_in_accept_edits() {
-            let result = check_command_with_settings("rm file.txt", "/tmp", "acceptEdits");
+            let result =
+                check_command_with_settings("rm file.txt", "/tmp", "acceptEdits", Client::Claude);
             assert_eq!(result.decision, PermissionDecision::Ask);
             assert!(
                 get_claude_wire_decision(&result).as_deref() == Some("ask"),
@@ -477,7 +523,8 @@ mod tests {
         #[test]
         fn test_tool_gates_accept_edits_keeps_own_allows_for_claude_bases() {
             for command in ["mkdir -p src/components", "sed -i 's/old/new/g' file.txt"] {
-                let result = check_command_with_settings(command, "/tmp", "acceptEdits");
+                let result =
+                    check_command_with_settings(command, "/tmp", "acceptEdits", Client::Claude);
                 assert_eq!(
                     get_claude_wire_decision(&result).as_deref(),
                     Some("allow"),
@@ -496,7 +543,8 @@ mod tests {
                 "mv old.txt new.txt",
                 "cp src.txt dst.txt",
             ] {
-                let result = check_command_with_settings(command, "/tmp", "acceptEdits");
+                let result =
+                    check_command_with_settings(command, "/tmp", "acceptEdits", Client::Claude);
                 assert_eq!(
                     get_claude_wire_decision(&result).as_deref(),
                     Some("ask"),
@@ -508,7 +556,7 @@ mod tests {
         #[test]
         fn test_tool_gates_accept_edits_keeps_own_allows_under_auto_mode() {
             for command in ["mkdir -p src/components", "sed -i 's/old/new/g' file.txt"] {
-                let result = check_command_with_settings(command, "/tmp", "auto");
+                let result = check_command_with_settings(command, "/tmp", "auto", Client::Claude);
                 assert_eq!(
                     get_claude_wire_decision(&result).as_deref(),
                     Some("allow"),
@@ -533,7 +581,7 @@ mod tests {
                 "mv old.txt new.txt",
                 "cp src.txt dst.txt",
             ] {
-                let result = check_command_with_settings(command, "/tmp", "auto");
+                let result = check_command_with_settings(command, "/tmp", "auto", Client::Claude);
                 assert_eq!(
                     get_claude_wire_decision(&result).as_deref(),
                     Some("ask"),
@@ -548,8 +596,12 @@ mod tests {
             // flow as soon as one sub-command is off its base list, so a mixed
             // chain can never reach it. Holding an ask here would exclude the
             // classifier for no safety gain.
-            let result =
-                check_command_with_settings("mkdir -p dist && cargo build", "/tmp", "auto");
+            let result = check_command_with_settings(
+                "mkdir -p dist && cargo build",
+                "/tmp",
+                "auto",
+                Client::Claude,
+            );
             assert_eq!(
                 result.decision,
                 PermissionDecision::Defer,
@@ -560,7 +612,8 @@ mod tests {
         #[test]
         fn test_blocked_still_blocks_in_accept_edits() {
             // Dangerous commands should still be blocked
-            let result = check_command_with_settings("rm -rf /", "/tmp", "acceptEdits");
+            let result =
+                check_command_with_settings("rm -rf /", "/tmp", "acceptEdits", Client::Claude);
             assert_eq!(get_decision(&result), "deny");
         }
 
@@ -570,19 +623,30 @@ mod tests {
                 "yq -i '.key = \"value\"' file.yaml",
                 "/tmp",
                 "acceptEdits",
+                Client::Claude,
             );
             assert_eq!(get_decision(&result), "allow");
         }
 
         #[test]
         fn test_eslint_fix_allowed_in_accept_edits() {
-            let result = check_command_with_settings("eslint --fix src/", "/tmp", "acceptEdits");
+            let result = check_command_with_settings(
+                "eslint --fix src/",
+                "/tmp",
+                "acceptEdits",
+                Client::Claude,
+            );
             assert_eq!(get_decision(&result), "allow");
         }
 
         #[test]
         fn test_ruff_format_allowed_in_accept_edits() {
-            let result = check_command_with_settings("ruff format src/", "/tmp", "acceptEdits");
+            let result = check_command_with_settings(
+                "ruff format src/",
+                "/tmp",
+                "acceptEdits",
+                Client::Claude,
+            );
             assert_eq!(get_decision(&result), "allow");
         }
 
@@ -595,6 +659,7 @@ mod tests {
                 "sd 'old' 'new' /etc/config",
                 "/home/user/project",
                 "acceptEdits",
+                Client::Claude,
             );
             assert_eq!(get_decision(&result), "ask");
         }
@@ -606,6 +671,7 @@ mod tests {
                 "sd 'old' 'new' /home/user/project/file.txt",
                 "/home/user/project",
                 "acceptEdits",
+                Client::Claude,
             );
             assert_eq!(get_decision(&result), "allow");
         }
@@ -617,6 +683,7 @@ mod tests {
                 "sd 'old' 'new' ~/file.txt",
                 "/home/user/project",
                 "acceptEdits",
+                Client::Claude,
             );
             assert_eq!(get_decision(&result), "ask");
         }
@@ -628,6 +695,7 @@ mod tests {
                 "sd 'old' 'new' ../../file.txt",
                 "/home/user/project",
                 "acceptEdits",
+                Client::Claude,
             );
             assert_eq!(get_decision(&result), "ask");
         }
@@ -639,6 +707,7 @@ mod tests {
                 "sd 'old' 'new' foo/../../../bar.txt",
                 "/home/user/project",
                 "acceptEdits",
+                Client::Claude,
             );
             assert_eq!(get_decision(&result), "ask");
         }
@@ -650,6 +719,7 @@ mod tests {
                 "sd 'old' 'new' foo/../bar.txt",
                 "/home/user/project",
                 "acceptEdits",
+                Client::Claude,
             );
             assert_eq!(get_decision(&result), "allow");
         }
@@ -661,6 +731,7 @@ mod tests {
                 "sd 'old' 'new' src/file.txt",
                 "/home/user/project",
                 "acceptEdits",
+                Client::Claude,
             );
             assert_eq!(get_decision(&result), "allow");
         }
@@ -672,6 +743,7 @@ mod tests {
                 "sd 'old' 'new' ./file.txt",
                 "/home/user/project",
                 "acceptEdits",
+                Client::Claude,
             );
             assert_eq!(get_decision(&result), "allow");
         }
@@ -683,6 +755,7 @@ mod tests {
                 "sd 'old' 'new' /home/user/project/../other/file.txt",
                 "/home/user/project",
                 "acceptEdits",
+                Client::Claude,
             );
             assert_eq!(get_decision(&result), "ask");
         }
@@ -694,6 +767,7 @@ mod tests {
                 "sd 'old' 'new' /home/user/projectX/file.txt",
                 "/home/user/project",
                 "acceptEdits",
+                Client::Claude,
             );
             assert_eq!(get_decision(&result), "ask");
         }
@@ -705,6 +779,7 @@ mod tests {
                 "rustfmt /home/user/project",
                 "/home/user/project",
                 "acceptEdits",
+                Client::Claude,
             );
             assert_eq!(get_decision(&result), "allow");
         }
@@ -716,49 +791,81 @@ mod tests {
 
         #[test]
         fn test_rmdir_still_asks_in_accept_edits() {
-            let result = check_command_with_settings("rmdir old_dir", "/tmp", "acceptEdits");
+            let result =
+                check_command_with_settings("rmdir old_dir", "/tmp", "acceptEdits", Client::Claude);
             assert_eq!(get_decision(&result), "ask");
         }
 
         #[test]
         fn test_mv_still_asks_in_accept_edits() {
-            let result = check_command_with_settings("mv old.txt new.txt", "/tmp", "acceptEdits");
+            let result = check_command_with_settings(
+                "mv old.txt new.txt",
+                "/tmp",
+                "acceptEdits",
+                Client::Claude,
+            );
             assert_eq!(get_decision(&result), "ask");
         }
 
         #[test]
         fn test_cp_still_asks_in_accept_edits() {
-            let result = check_command_with_settings("cp src.txt dst.txt", "/tmp", "acceptEdits");
+            let result = check_command_with_settings(
+                "cp src.txt dst.txt",
+                "/tmp",
+                "acceptEdits",
+                Client::Claude,
+            );
             assert_eq!(get_decision(&result), "ask");
         }
 
         #[test]
         fn test_chmod_still_asks_in_accept_edits() {
-            let result = check_command_with_settings("chmod 755 script.sh", "/tmp", "acceptEdits");
+            let result = check_command_with_settings(
+                "chmod 755 script.sh",
+                "/tmp",
+                "acceptEdits",
+                Client::Claude,
+            );
             assert_eq!(get_decision(&result), "ask");
         }
 
         #[test]
         fn test_ln_symlink_still_asks_in_accept_edits() {
-            let result = check_command_with_settings("ln -s target link", "/tmp", "acceptEdits");
+            let result = check_command_with_settings(
+                "ln -s target link",
+                "/tmp",
+                "acceptEdits",
+                Client::Claude,
+            );
             assert_eq!(get_decision(&result), "ask");
         }
 
         #[test]
         fn test_touch_still_asks_in_accept_edits() {
-            let result = check_command_with_settings("touch newfile.txt", "/tmp", "acceptEdits");
+            let result = check_command_with_settings(
+                "touch newfile.txt",
+                "/tmp",
+                "acceptEdits",
+                Client::Claude,
+            );
             assert_eq!(get_decision(&result), "ask");
         }
 
         #[test]
         fn test_rm_recursive_still_asks_in_accept_edits() {
-            let result = check_command_with_settings("rm -r ./src/old", "/tmp", "acceptEdits");
+            let result = check_command_with_settings(
+                "rm -r ./src/old",
+                "/tmp",
+                "acceptEdits",
+                Client::Claude,
+            );
             assert_eq!(get_decision(&result), "ask");
         }
 
         #[test]
         fn test_rm_glob_still_asks_in_accept_edits() {
-            let result = check_command_with_settings("rm *.txt", "/tmp", "acceptEdits");
+            let result =
+                check_command_with_settings("rm *.txt", "/tmp", "acceptEdits", Client::Claude);
             assert_eq!(get_decision(&result), "ask");
         }
 
@@ -773,6 +880,7 @@ mod tests {
                 "sd 'old' 'new' file.txt && rm file.txt",
                 "/tmp",
                 "acceptEdits",
+                Client::Claude,
             );
             assert_eq!(get_decision(&result), "ask");
         }
@@ -784,6 +892,7 @@ mod tests {
                 "prettier --write . && git push",
                 "/tmp",
                 "acceptEdits",
+                Client::Claude,
             );
             assert_eq!(get_decision(&result), "ask");
         }
@@ -795,6 +904,7 @@ mod tests {
                 "sd 'old' 'new' file.txt && prettier --write file.txt",
                 "/tmp",
                 "acceptEdits",
+                Client::Claude,
             );
             assert_eq!(get_decision(&result), "allow");
             assert!(get_reason(&result).contains("acceptEdits"));
@@ -811,6 +921,7 @@ mod tests {
                 "patch < diff.patch",
                 "/home/user/project",
                 "acceptEdits",
+                Client::Claude,
             );
             assert_eq!(get_decision(&result), "ask");
         }
@@ -821,6 +932,7 @@ mod tests {
                 "patch /etc/config < diff.patch",
                 "/home/user/project",
                 "acceptEdits",
+                Client::Claude,
             );
             assert_eq!(get_decision(&result), "ask");
         }
@@ -834,6 +946,7 @@ mod tests {
                 "sd old new ./file.txt /etc/passwd",
                 "/home/user/project",
                 "acceptEdits",
+                Client::Claude,
             );
             assert_eq!(get_decision(&result), "ask");
         }
@@ -844,6 +957,7 @@ mod tests {
                 "prettier --write ./src /etc/config",
                 "/home/user/project",
                 "acceptEdits",
+                Client::Claude,
             );
             assert_eq!(get_decision(&result), "ask");
         }
@@ -858,6 +972,7 @@ mod tests {
                 "sd 'old' 'new' ./../../escape.txt",
                 "/home/user/project",
                 "acceptEdits",
+                Client::Claude,
             );
             assert_eq!(get_decision(&result), "ask");
         }
@@ -870,6 +985,7 @@ mod tests {
                 "sd 'old' 'new' /home/user/projectX/file.txt",
                 "/home/user/project",
                 "acceptEdits",
+                Client::Claude,
             );
             assert_eq!(get_decision(&result), "ask");
         }
@@ -881,6 +997,7 @@ mod tests {
                 "sd 'old' 'new' //etc/passwd",
                 "/home/user/project",
                 "acceptEdits",
+                Client::Claude,
             );
             assert_eq!(get_decision(&result), "ask");
         }
@@ -890,27 +1007,46 @@ mod tests {
 
         #[test]
         fn test_uv_run_ruff_format_allowed_in_accept_edits() {
-            let result = check_command_with_settings("uv run ruff format .", "/tmp", "acceptEdits");
+            let result = check_command_with_settings(
+                "uv run ruff format .",
+                "/tmp",
+                "acceptEdits",
+                Client::Claude,
+            );
             assert_eq!(get_decision(&result), "allow");
         }
 
         #[test]
         fn test_uv_run_ruff_check_fix_allowed_in_accept_edits() {
-            let result =
-                check_command_with_settings("uv run ruff check --fix .", "/tmp", "acceptEdits");
+            let result = check_command_with_settings(
+                "uv run ruff check --fix .",
+                "/tmp",
+                "acceptEdits",
+                Client::Claude,
+            );
             assert_eq!(get_decision(&result), "allow");
         }
 
         #[test]
         fn test_uv_run_ruff_check_readonly_allows() {
             // ruff check without --fix is read-only, allowed by gate directly
-            let result = check_command_with_settings("uv run ruff check .", "/tmp", "acceptEdits");
+            let result = check_command_with_settings(
+                "uv run ruff check .",
+                "/tmp",
+                "acceptEdits",
+                Client::Claude,
+            );
             assert_eq!(get_decision(&result), "allow");
         }
 
         #[test]
         fn test_uv_run_black_allowed_in_accept_edits() {
-            let result = check_command_with_settings("uv run black .", "/tmp", "acceptEdits");
+            let result = check_command_with_settings(
+                "uv run black .",
+                "/tmp",
+                "acceptEdits",
+                Client::Claude,
+            );
             assert_eq!(get_decision(&result), "allow");
         }
 
@@ -921,44 +1057,65 @@ mod tests {
                 "uv run --only-dev ruff format .",
                 "/tmp",
                 "acceptEdits",
+                Client::Claude,
             );
             assert_eq!(get_decision(&result), "allow");
         }
 
         #[test]
         fn test_pnpm_biome_check_write_allowed_in_accept_edits() {
-            let result =
-                check_command_with_settings("pnpm biome check --write .", "/tmp", "acceptEdits");
+            let result = check_command_with_settings(
+                "pnpm biome check --write .",
+                "/tmp",
+                "acceptEdits",
+                Client::Claude,
+            );
             assert_eq!(get_decision(&result), "allow");
         }
 
         #[test]
         fn test_pnpm_biome_format_write_allowed_in_accept_edits() {
-            let result =
-                check_command_with_settings("pnpm biome format --write .", "/tmp", "acceptEdits");
+            let result = check_command_with_settings(
+                "pnpm biome format --write .",
+                "/tmp",
+                "acceptEdits",
+                Client::Claude,
+            );
             assert_eq!(get_decision(&result), "allow");
         }
 
         #[test]
         fn test_pnpm_eslint_fix_allowed_in_accept_edits() {
-            let result =
-                check_command_with_settings("pnpm eslint --fix src/", "/tmp", "acceptEdits");
+            let result = check_command_with_settings(
+                "pnpm eslint --fix src/",
+                "/tmp",
+                "acceptEdits",
+                Client::Claude,
+            );
             assert_eq!(get_decision(&result), "allow");
         }
 
         #[test]
         fn test_npx_prettier_write_still_asks_in_accept_edits() {
             // npx downloads from npm, so even known tools must prompt
-            let result =
-                check_command_with_settings("npx prettier --write .", "/tmp", "acceptEdits");
+            let result = check_command_with_settings(
+                "npx prettier --write .",
+                "/tmp",
+                "acceptEdits",
+                Client::Claude,
+            );
             assert_eq!(get_decision(&result), "ask");
         }
 
         #[test]
         fn test_uv_run_non_editor_still_asks() {
             // uv run with a non-file-editing tool should still ask
-            let result =
-                check_command_with_settings("uv run some-unknown-tool", "/tmp", "acceptEdits");
+            let result = check_command_with_settings(
+                "uv run some-unknown-tool",
+                "/tmp",
+                "acceptEdits",
+                Client::Claude,
+            );
             assert_eq!(get_decision(&result), "ask");
         }
 
@@ -1169,7 +1326,12 @@ mod tests {
 
             // In acceptEdits mode, sd would normally be auto-allowed
             // But with deny rule, it should be denied
-            let result = check_command_with_settings("sd 'old' 'new' file.txt", cwd, "acceptEdits");
+            let result = check_command_with_settings(
+                "sd 'old' 'new' file.txt",
+                cwd,
+                "acceptEdits",
+                Client::Claude,
+            );
             assert_eq!(
                 get_decision(&result),
                 "deny",
@@ -1202,7 +1364,12 @@ mod tests {
 
             // prettier --write would normally be auto-allowed in acceptEdits
             // But with deny rule, it should be denied
-            let result = check_command_with_settings("prettier --write src/", cwd, "acceptEdits");
+            let result = check_command_with_settings(
+                "prettier --write src/",
+                cwd,
+                "acceptEdits",
+                Client::Claude,
+            );
             assert_eq!(
                 get_decision(&result),
                 "deny",
@@ -1228,7 +1395,8 @@ mod tests {
             fs::write(temp.path().join("package.json"), pkg).unwrap();
 
             let cwd = temp.path().to_str().unwrap();
-            let result = check_command_with_settings("pnpm run check", cwd, "default");
+            let result =
+                check_command_with_settings("pnpm run check", cwd, "default", Client::Claude);
             assert_eq!(result.decision, PermissionDecision::Defer);
             let json =
                 serde_json::to_string(&result.serialize(crate::models::Client::Claude)).unwrap();
@@ -1248,7 +1416,8 @@ mod tests {
             fs::write(temp.path().join("package.json"), pkg).unwrap();
 
             let cwd = temp.path().to_str().unwrap();
-            let result = check_command_with_settings("pnpm run check", cwd, "acceptEdits");
+            let result =
+                check_command_with_settings("pnpm run check", cwd, "acceptEdits", Client::Claude);
             assert_eq!(result.decision, PermissionDecision::Defer);
             let json =
                 serde_json::to_string(&result.serialize(crate::models::Client::Claude)).unwrap();
@@ -1275,7 +1444,8 @@ run = "mytool42 verify"
             fs::write(temp.path().join("mise.toml"), mise_toml).unwrap();
 
             let cwd = temp.path().to_str().unwrap();
-            let result = check_command_with_settings("mise run check", cwd, "default");
+            let result =
+                check_command_with_settings("mise run check", cwd, "default", Client::Claude);
             assert_eq!(result.decision, PermissionDecision::Defer);
             let json =
                 serde_json::to_string(&result.serialize(crate::models::Client::Claude)).unwrap();
@@ -1298,7 +1468,8 @@ run = "mytool42 verify"
             fs::write(temp.path().join("mise.toml"), mise_toml).unwrap();
 
             let cwd = temp.path().to_str().unwrap();
-            let result = check_command_with_settings("mise run check", cwd, "acceptEdits");
+            let result =
+                check_command_with_settings("mise run check", cwd, "acceptEdits", Client::Claude);
             assert_eq!(result.decision, PermissionDecision::Defer);
             let json =
                 serde_json::to_string(&result.serialize(crate::models::Client::Claude)).unwrap();
@@ -1320,7 +1491,7 @@ run = "mytool42 verify"
             fs::write(temp.path().join("package.json"), pkg).unwrap();
 
             let cwd = temp.path().to_str().unwrap();
-            let result = check_command_with_settings("pnpm run check", cwd, "auto");
+            let result = check_command_with_settings("pnpm run check", cwd, "auto", Client::Claude);
             assert_eq!(result.decision, PermissionDecision::Defer);
         }
 
@@ -1337,7 +1508,7 @@ run = "mytool42 verify"
             fs::write(temp_dir.path().join("package.json"), pkg).unwrap();
 
             let cwd = temp_dir.path().to_str().unwrap();
-            let result = check_command_with_settings("pnpm run setup", cwd, "auto");
+            let result = check_command_with_settings("pnpm run setup", cwd, "auto", Client::Claude);
             assert_eq!(
                 get_decision(&result),
                 "deny",
@@ -1366,7 +1537,12 @@ run = "mytool42 verify"
             let cwd = temp_dir.path().to_str().unwrap();
 
             // sd should be auto-allowed in acceptEdits mode (no deny rule)
-            let result = check_command_with_settings("sd 'old' 'new' file.txt", cwd, "acceptEdits");
+            let result = check_command_with_settings(
+                "sd 'old' 'new' file.txt",
+                cwd,
+                "acceptEdits",
+                Client::Claude,
+            );
             assert_eq!(
                 get_decision(&result),
                 "allow",
@@ -1395,7 +1571,8 @@ run = "mytool42 verify"
             fs::write(claude_dir.join("settings.json"), settings_content).unwrap();
 
             let cwd = temp_dir.path().to_str().unwrap();
-            let result = check_command_with_settings("npm install foo", cwd, "acceptEdits");
+            let result =
+                check_command_with_settings("npm install foo", cwd, "acceptEdits", Client::Claude);
 
             assert_eq!(result.decision, PermissionDecision::Allow);
             assert!(
@@ -1421,7 +1598,8 @@ run = "mytool42 verify"
             fs::write(claude_dir.join("settings.json"), settings_content).unwrap();
 
             let cwd = temp_dir.path().to_str().unwrap();
-            let result = check_command_with_settings("npm install foo", cwd, "acceptEdits");
+            let result =
+                check_command_with_settings("npm install foo", cwd, "acceptEdits", Client::Claude);
 
             assert_eq!(result.decision, PermissionDecision::Ask);
             let json =

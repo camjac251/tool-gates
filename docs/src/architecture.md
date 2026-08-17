@@ -43,8 +43,8 @@
       <div class="lc-node hook">
         <span class="lc-icon">▸</span>
         <span class="lc-tag">settings.rs</span>
-        <div class="lc-title">Settings.json merge</div>
-        <div class="lc-sub">Reads four files in priority order (managed → local → project → user). Deny rules win unconditionally. Otherwise: ask vs allow resolved by pattern specificity (longest non-wildcard prefix; ties go to ask). <code>$HOME</code> expansion applied before match.</div>
+        <div class="lc-title">Settings.json resolution</div>
+        <div class="lc-sub">Reads up to four files in priority order (managed → local → project → user), merging them unless the managed document sets <code>allowManagedPermissionRulesOnly</code>, which reduces Claude's set to that one file (see <a href="settings-precedence.html">Settings Precedence</a>). The calling client is an explicit input, so Codex and Antigravity always keep the merge. Deny rules win unconditionally. Otherwise: ask vs allow resolved by pattern specificity (longest non-wildcard prefix; ties go to ask). <code>$HOME</code> expansion applied before match.</div>
       </div>
       <div class="lc-edge"></div>
       <div class="lc-node exec">
@@ -89,8 +89,8 @@
       <p>Specific gates (git, gh, cloud) decide before <code>basics</code> catches anything as safe. Otherwise <code>git status</code> would be allowed by basics before the git gate could surface its real reason text.</p>
     </article>
     <article class="hook-card">
-      <h3>Settings merge last</h3>
-      <p>Gate blocks always win over settings.json (the safety floor is not configurable). Otherwise: explicit deny &gt; explicit ask &gt; explicit allow &gt; gate decision &gt; unknown (defer or ask).</p>
+      <h3>Settings resolved last</h3>
+      <p>Gate blocks always win over settings.json (the safety floor is not configurable), whichever sources contributed the rule. Otherwise: explicit deny &gt; explicit ask &gt; explicit allow &gt; gate decision &gt; unknown (defer or ask).</p>
     </article>
   </div>
   <div class="sec-head">

@@ -2,11 +2,16 @@
 //!
 //! Loads user (~/.claude/settings.json) and project (.claude/settings.json)
 //! settings to check if a command matches any allow/deny/ask rules.
+//!
+//! Which of those scopes participate is a per-client decision: see
+//! [`Settings::resolve`] for the enterprise managed-only branch.
 
 use serde::Deserialize;
 use std::borrow::Cow;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
+
+use crate::models::Client;
 
 /// Normalize a path by resolving `.` and `..` components without requiring the path to exist.
 fn normalize_path(path: &Path) -> String {
@@ -113,6 +118,184 @@ pub struct Settings {
     pub permissions: Permissions,
 }
 
+/// The enterprise managed settings document.
+///
+/// Parsed apart from the lower scopes for two reasons: it is the only document
+/// whose `allowManagedPermissionRulesOnly` value has authority, and a malformed
+/// `permissions` block in it must not fall back to lower scopes.
+#[derive(Debug, Default)]
+pub struct ManagedSettings {
+    /// Top-level `allowManagedPermissionRulesOnly`, honored as a boolean only.
+    /// When true, Claude's permission set is this document and nothing else.
+    pub permission_rules_only: bool,
+    pub permissions: Permissions,
+}
+
+impl ManagedSettings {
+    /// Parse a managed document. Returns `None` when the content is not valid
+    /// JSON, which keeps the managed scope out of resolution entirely.
+    ///
+    /// A document that is valid JSON but carries a malformed `permissions`
+    /// block yields an empty permission set rather than an error. The flag is
+    /// still authoritative there, and recovering by merging lower scopes would
+    /// hand the invocation exactly the grants the flag exists to withhold.
+    pub fn parse(content: &str) -> Option<Self> {
+        let root: serde_json::Value = serde_json::from_str(content).ok()?;
+        Some(Self {
+            permission_rules_only: root
+                .get("allowManagedPermissionRulesOnly")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false),
+            permissions: root
+                .get("permissions")
+                .and_then(|value| serde_json::from_value::<Permissions>(value.clone()).ok())
+                .unwrap_or_default(),
+        })
+    }
+}
+
+/// Enterprise managed settings location for the host platform.
+fn platform_managed_path() -> Option<PathBuf> {
+    #[cfg(target_os = "linux")]
+    {
+        Some(PathBuf::from("/etc/claude-code/managed-settings.json"))
+    }
+    #[cfg(target_os = "macos")]
+    {
+        Some(PathBuf::from(
+            "/Library/Application Support/ClaudeCode/managed-settings.json",
+        ))
+    }
+    #[cfg(target_os = "windows")]
+    {
+        Some(PathBuf::from(
+            "C:\\Program Files\\ClaudeCode\\managed-settings.json",
+        ))
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    {
+        None
+    }
+}
+
+/// Host locations the settings loader reads. Project and local documents are
+/// always derived from the invocation `cwd`, so only the two machine-global
+/// scopes appear here.
+#[derive(Debug, Clone, Default)]
+pub struct SettingsPaths {
+    /// Directory holding the user document, which is `settings.json` inside it.
+    pub user_config_dir: Option<PathBuf>,
+    /// The enterprise managed document.
+    pub managed: Option<PathBuf>,
+}
+
+impl SettingsPaths {
+    /// The real locations for this platform.
+    pub fn platform() -> Self {
+        Self {
+            user_config_dir: std::env::var("CLAUDE_CONFIG_DIR")
+                .map(PathBuf::from)
+                .ok()
+                .or_else(|| dirs::home_dir().map(|home| home.join(".claude"))),
+            managed: platform_managed_path(),
+        }
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Settings locations installed by [`with_settings_paths`] for one test.
+    static TEST_SETTINGS_PATHS: std::cell::RefCell<Option<SettingsPaths>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Run `body` with `paths` standing in for the host settings locations.
+///
+/// Thread-local, so parallel tests do not need serializing against each other.
+#[cfg(test)]
+pub(crate) fn with_settings_paths<T>(paths: SettingsPaths, body: impl FnOnce() -> T) -> T {
+    struct Restore(Option<SettingsPaths>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            TEST_SETTINGS_PATHS.with(|slot| *slot.borrow_mut() = self.0.take());
+        }
+    }
+
+    let previous = TEST_SETTINGS_PATHS.with(|slot| slot.borrow_mut().replace(paths));
+    let _restore = Restore(previous);
+    body()
+}
+
+/// Locations the loader actually reads.
+///
+/// Under `cfg(test)` the managed document defaults out unless a test installs
+/// one, so a developer machine's real enterprise policy cannot steer the suite.
+fn effective_paths() -> SettingsPaths {
+    #[cfg(test)]
+    {
+        TEST_SETTINGS_PATHS
+            .with(|slot| slot.borrow().clone())
+            .unwrap_or_else(|| SettingsPaths {
+                managed: None,
+                ..SettingsPaths::platform()
+            })
+    }
+    #[cfg(not(test))]
+    {
+        SettingsPaths::platform()
+    }
+}
+
+/// The permission documents from every scope, before a client's source policy
+/// decides which of them participate.
+#[derive(Debug, Default)]
+pub struct SettingsSources {
+    /// `~/.claude/settings.json`, or `$CLAUDE_CONFIG_DIR/settings.json`.
+    pub user: Option<Settings>,
+    /// `.claude/settings.json` under the invocation cwd.
+    pub project: Option<Settings>,
+    /// `.claude/settings.local.json` under the invocation cwd.
+    pub local: Option<Settings>,
+    /// The platform's enterprise managed document.
+    pub managed: Option<ManagedSettings>,
+}
+
+impl SettingsSources {
+    /// Read every scope from disk.
+    pub fn load(cwd: &str) -> Self {
+        Self::load_from(&effective_paths(), cwd)
+    }
+
+    /// Read every scope, taking the two machine-global documents from `paths`.
+    pub fn load_from(paths: &SettingsPaths, cwd: &str) -> Self {
+        let user = paths
+            .user_config_dir
+            .as_ref()
+            .and_then(|dir| Settings::load_file(&dir.join("settings.json")));
+        let (project, local) = if cwd.is_empty() {
+            (None, None)
+        } else {
+            let root = Path::new(cwd);
+            (
+                Settings::load_file(&root.join(".claude/settings.json")),
+                Settings::load_file(&root.join(".claude/settings.local.json")),
+            )
+        };
+        let managed = paths
+            .managed
+            .as_ref()
+            .and_then(|path| fs::read_to_string(path).ok())
+            .and_then(|content| ManagedSettings::parse(&content));
+
+        Self {
+            user,
+            project,
+            local,
+            managed,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SettingsDecision {
     Allow,
@@ -122,87 +305,69 @@ pub enum SettingsDecision {
 }
 
 impl Settings {
-    /// Load and merge settings from all locations.
+    /// Load the effective permission set for `client` at `cwd`.
     ///
-    /// Settings precedence (highest to lowest):
-    /// 1. Managed settings (`/etc/claude-code/managed-settings.json` on Linux)
-    /// 2. Local project settings (`.claude/settings.local.json`)
-    /// 3. Shared project settings (`.claude/settings.json`)
-    /// 4. User settings (`~/.claude/settings.json`)
+    /// `client` is a parameter rather than something the loader infers, because
+    /// the managed-only branch below applies to Claude alone and every other
+    /// client keeps the four-source merge.
+    pub fn load(client: Client, cwd: &str) -> Self {
+        Self::resolve(client, SettingsSources::load(cwd))
+    }
+
+    /// Apply a client's source policy to documents that have already been read.
     ///
-    /// We load in reverse order and merge, so higher priority settings override.
-    pub fn load(cwd: &str) -> Self {
+    /// Claude honors the managed document's `allowManagedPermissionRulesOnly`:
+    /// when it is boolean `true`, that document is the entire permission set.
+    /// The flag draws a source boundary rather than filtering grants, so the
+    /// user, project, and local documents drop out completely, their `deny` and
+    /// `ask` entries included. An empty managed `permissions` object therefore
+    /// resolves to no rules at all, not to a lower scope's rules.
+    ///
+    /// Every other client merges all four scopes in priority order, lowest
+    /// first, exactly as it did before the flag existed.
+    pub fn resolve(client: Client, sources: SettingsSources) -> Self {
+        let SettingsSources {
+            user,
+            project,
+            local,
+            managed,
+        } = sources;
+
+        let managed_permissions = match managed {
+            Some(doc) if client == Client::Claude && doc.permission_rules_only => {
+                return Settings {
+                    permissions: doc.permissions,
+                };
+            }
+            Some(doc) => Some(doc.permissions),
+            None => None,
+        };
+
         let mut merged = Settings::default();
-
-        // 4. User settings (~/.claude/settings.json) - lowest priority
-        // Check CLAUDE_CONFIG_DIR env var first, fall back to ~/.claude
-        let user_config_dir = std::env::var("CLAUDE_CONFIG_DIR")
-            .map(PathBuf::from)
-            .ok()
-            .or_else(|| dirs::home_dir().map(|h| h.join(".claude")));
-        if let Some(config_dir) = user_config_dir {
-            let user_path = config_dir.join("settings.json");
-            if let Ok(s) = Self::load_file(&user_path) {
-                merged.merge(s);
-            }
+        for settings in [user, project, local].into_iter().flatten() {
+            merged.merge(settings.permissions);
         }
-
-        // 3. Shared project settings (.claude/settings.json)
-        if !cwd.is_empty() {
-            let project_path = Path::new(cwd).join(".claude/settings.json");
-            if let Ok(s) = Self::load_file(&project_path) {
-                merged.merge(s);
-            }
+        if let Some(permissions) = managed_permissions {
+            merged.merge(permissions);
         }
-
-        // 2. Local project settings (.claude/settings.local.json)
-        if !cwd.is_empty() {
-            let local_path = Path::new(cwd).join(".claude/settings.local.json");
-            if let Ok(s) = Self::load_file(&local_path) {
-                merged.merge(s);
-            }
-        }
-
-        // 1. Enterprise managed settings - highest priority
-        #[cfg(target_os = "linux")]
-        {
-            let managed_path = Path::new("/etc/claude-code/managed-settings.json");
-            if let Ok(s) = Self::load_file(managed_path) {
-                merged.merge(s);
-            }
-        }
-        #[cfg(target_os = "macos")]
-        {
-            let managed_path =
-                Path::new("/Library/Application Support/ClaudeCode/managed-settings.json");
-            if let Ok(s) = Self::load_file(managed_path) {
-                merged.merge(s);
-            }
-        }
-        #[cfg(target_os = "windows")]
-        {
-            let managed_path = Path::new("C:\\Program Files\\ClaudeCode\\managed-settings.json");
-            if let Ok(s) = Self::load_file(managed_path) {
-                merged.merge(s);
-            }
-        }
-
         merged
     }
 
-    fn load_file(path: &Path) -> Result<Self, Box<dyn std::error::Error>> {
-        let content = fs::read_to_string(path)?;
-        let settings: Settings = serde_json::from_str(&content)?;
-        Ok(settings)
+    /// Read one lower-scope document. A missing file and an unparseable one
+    /// both yield `None`: Claude Code itself skips a settings file it cannot
+    /// read, and refusing to gate at all would be the less safe divergence.
+    fn load_file(path: &Path) -> Option<Self> {
+        let content = fs::read_to_string(path).ok()?;
+        serde_json::from_str(&content).ok()
     }
 
-    fn merge(&mut self, other: Settings) {
-        self.permissions.allow.extend(other.permissions.allow);
-        self.permissions.deny.extend(other.permissions.deny);
-        self.permissions.ask.extend(other.permissions.ask);
+    fn merge(&mut self, other: Permissions) {
+        self.permissions.allow.extend(other.allow);
+        self.permissions.deny.extend(other.deny);
+        self.permissions.ask.extend(other.ask);
         self.permissions
             .additional_directories
-            .extend(other.permissions.additional_directories);
+            .extend(other.additional_directories);
     }
 
     /// Get all allowed directories (cwd + additionalDirectories from settings).
@@ -473,6 +638,91 @@ impl Settings {
             (Some(_), _) => SettingsDecision::Ask,
             (_, Some(_)) => SettingsDecision::Allow,
             _ => SettingsDecision::NoMatch,
+        }
+    }
+}
+
+/// Hermetic settings fixtures shared by the tests in this crate.
+///
+/// Every scope is written under one temporary directory, so a test can prove
+/// what a managed document excludes without touching the host's real user or
+/// enterprise settings.
+#[cfg(test)]
+pub(crate) mod fixtures {
+    use super::{SettingsPaths, with_settings_paths};
+    use std::fs;
+    use std::path::PathBuf;
+
+    pub(crate) struct SettingsFixture {
+        _root: tempfile::TempDir,
+        /// Canonical form of the temp root, so a path written into a fixture
+        /// document compares equal to the same path after symlink resolution.
+        path: PathBuf,
+    }
+
+    impl SettingsFixture {
+        pub(crate) fn new() -> Self {
+            let root = tempfile::TempDir::new().expect("tempdir for settings fixture");
+            let path = fs::canonicalize(root.path()).expect("canonical fixture root");
+            fs::create_dir_all(path.join("project/.claude")).expect("project dir");
+            fs::create_dir_all(path.join("user-config")).expect("user config dir");
+            fs::create_dir_all(path.join("managed")).expect("managed dir");
+            Self { _root: root, path }
+        }
+
+        /// The invocation cwd the project and local documents belong to.
+        pub(crate) fn cwd(&self) -> String {
+            self.path.join("project").to_string_lossy().into_owned()
+        }
+
+        /// A synthetic directory inside the fixture, for `additionalDirectories`.
+        pub(crate) fn dir(&self, name: &str) -> String {
+            let path = self.path.join(name);
+            fs::create_dir_all(&path).expect("fixture directory");
+            path.to_string_lossy().into_owned()
+        }
+
+        pub(crate) fn with_user(self, json: &str) -> Self {
+            self.write("user-config/settings.json", json)
+        }
+
+        pub(crate) fn with_project(self, json: &str) -> Self {
+            self.write("project/.claude/settings.json", json)
+        }
+
+        pub(crate) fn with_local(self, json: &str) -> Self {
+            self.write("project/.claude/settings.local.json", json)
+        }
+
+        pub(crate) fn with_managed(self, json: &str) -> Self {
+            self.write("managed/managed-settings.json", json)
+        }
+
+        /// Write an arbitrary file under the fixture root, for tests that need
+        /// a `mise.toml` or `package.json` beside the settings documents.
+        pub(crate) fn write_file(self, relative: &str, contents: &str) -> Self {
+            self.write(relative, contents)
+        }
+
+        fn write(self, relative: &str, contents: &str) -> Self {
+            fs::write(self.path.join(relative), contents).expect("fixture write");
+            self
+        }
+
+        pub(crate) fn paths(&self) -> SettingsPaths {
+            SettingsPaths {
+                user_config_dir: Some(self.path.join("user-config")),
+                managed: Some(self.managed_path()),
+            }
+        }
+
+        fn managed_path(&self) -> PathBuf {
+            self.path.join("managed/managed-settings.json")
+        }
+
+        /// Run `body` with this fixture standing in for the host locations.
+        pub(crate) fn run<T>(&self, body: impl FnOnce() -> T) -> T {
+            with_settings_paths(self.paths(), body)
         }
     }
 }
@@ -1037,5 +1287,564 @@ mod tests {
         );
         // No match
         assert_eq!(Settings::pattern_specificity("git:*", "cargo build"), None);
+    }
+}
+
+/// Managed-only source selection: the `allowManagedPermissionRulesOnly` branch
+/// of [`Settings::resolve`], proved through the real loader against synthetic
+/// documents.
+#[cfg(test)]
+mod managed_only_tests {
+    use super::fixtures::SettingsFixture;
+    use super::*;
+
+    const USER_JSON: &str = r#"{
+        "permissions": {
+            "allow": ["Bash(user-allowed:*)"],
+            "deny": ["Bash(user-denied:*)"],
+            "ask": ["Bash(user-asked:*)"],
+            "additionalDirectories": ["/synthetic/user-dir"]
+        }
+    }"#;
+
+    const PROJECT_JSON: &str = r#"{
+        "permissions": {
+            "allow": ["Bash(project-allowed:*)"],
+            "deny": ["Bash(project-denied:*)"],
+            "ask": ["Bash(project-asked:*)"],
+            "additionalDirectories": ["/synthetic/project-dir"]
+        }
+    }"#;
+
+    const LOCAL_JSON: &str = r#"{
+        "permissions": {
+            "allow": ["Bash(local-allowed:*)"],
+            "deny": ["Bash(local-denied:*)"],
+            "ask": ["Bash(local-asked:*)"],
+            "additionalDirectories": ["/synthetic/local-dir"]
+        }
+    }"#;
+
+    const MANAGED_RULES: &str = r#"
+            "permissions": {
+                "allow": ["Bash(managed-allowed:*)"],
+                "deny": ["Bash(managed-denied:*)"],
+                "ask": ["Bash(managed-asked:*)"],
+                "additionalDirectories": ["/synthetic/managed-dir"]
+            }"#;
+
+    /// A managed document with `MANAGED_RULES` and the given top-level flag
+    /// literal, or no flag line when `flag` is `None`.
+    fn managed_doc(flag: Option<&str>) -> String {
+        match flag {
+            Some(value) => format!(
+                "{{\n            \"allowManagedPermissionRulesOnly\": {value},{MANAGED_RULES}\n        }}"
+            ),
+            None => format!("{{{MANAGED_RULES}\n        }}"),
+        }
+    }
+
+    /// A fixture carrying every lower scope, so each assertion below shows what
+    /// the managed document does or does not exclude.
+    fn all_lower_scopes() -> SettingsFixture {
+        SettingsFixture::new()
+            .with_user(USER_JSON)
+            .with_project(PROJECT_JSON)
+            .with_local(LOCAL_JSON)
+    }
+
+    fn decision(settings: &Settings, command: &str) -> SettingsDecision {
+        settings.check_command(command)
+    }
+
+    /// Assert every rule class from every lower scope is absent.
+    fn assert_lower_scopes_excluded(settings: &Settings) {
+        for scope in ["user", "project", "local"] {
+            for class in ["allowed", "denied", "asked"] {
+                let command = format!("{scope}-{class} run");
+                assert_eq!(
+                    decision(settings, &command),
+                    SettingsDecision::NoMatch,
+                    "{command} must not match a lower-scope rule under managed-only resolution"
+                );
+            }
+        }
+    }
+
+    fn assert_managed_rules_active(settings: &Settings) {
+        assert_eq!(
+            decision(settings, "managed-allowed run"),
+            SettingsDecision::Allow
+        );
+        assert_eq!(
+            decision(settings, "managed-denied run"),
+            SettingsDecision::Deny
+        );
+        assert_eq!(
+            decision(settings, "managed-asked run"),
+            SettingsDecision::Ask
+        );
+    }
+
+    fn assert_all_sources_merged(settings: &Settings) {
+        for scope in ["user", "project", "local", "managed"] {
+            assert_eq!(
+                decision(settings, &format!("{scope}-allowed run")),
+                SettingsDecision::Allow,
+                "{scope} allow rule should participate"
+            );
+            assert_eq!(
+                decision(settings, &format!("{scope}-denied run")),
+                SettingsDecision::Deny,
+                "{scope} deny rule should participate"
+            );
+            assert_eq!(
+                decision(settings, &format!("{scope}-asked run")),
+                SettingsDecision::Ask,
+                "{scope} ask rule should participate"
+            );
+        }
+        let dirs = settings.allowed_directories("/synthetic/cwd");
+        for scope in ["user", "project", "local", "managed"] {
+            let expected = format!("/synthetic/{scope}-dir");
+            assert!(
+                dirs.contains(&expected),
+                "{expected} should participate, got {dirs:?}"
+            );
+        }
+    }
+
+    // === Source-selection matrix ===
+
+    #[test]
+    fn claude_managed_flag_true_excludes_every_lower_scope() {
+        let fixture = all_lower_scopes().with_managed(&managed_doc(Some("true")));
+        let cwd = fixture.cwd();
+        let settings = fixture.run(|| Settings::load(Client::Claude, &cwd));
+
+        assert_managed_rules_active(&settings);
+        assert_lower_scopes_excluded(&settings);
+        assert_eq!(
+            settings.allowed_directories(&cwd),
+            vec![cwd.clone(), "/synthetic/managed-dir".to_string()]
+        );
+    }
+
+    #[test]
+    fn claude_managed_flag_true_excludes_the_user_scope_alone() {
+        let fixture = SettingsFixture::new()
+            .with_user(USER_JSON)
+            .with_managed(&managed_doc(Some("true")));
+        let cwd = fixture.cwd();
+        let settings = fixture.run(|| Settings::load(Client::Claude, &cwd));
+
+        assert_managed_rules_active(&settings);
+        assert_eq!(
+            decision(&settings, "user-allowed run"),
+            SettingsDecision::NoMatch
+        );
+        assert_eq!(
+            decision(&settings, "user-denied run"),
+            SettingsDecision::NoMatch
+        );
+        assert_eq!(
+            decision(&settings, "user-asked run"),
+            SettingsDecision::NoMatch
+        );
+        assert!(
+            !settings
+                .allowed_directories(&cwd)
+                .contains(&"/synthetic/user-dir".to_string())
+        );
+    }
+
+    #[test]
+    fn claude_managed_flag_true_excludes_the_project_scope_alone() {
+        let fixture = SettingsFixture::new()
+            .with_project(PROJECT_JSON)
+            .with_managed(&managed_doc(Some("true")));
+        let cwd = fixture.cwd();
+        let settings = fixture.run(|| Settings::load(Client::Claude, &cwd));
+
+        assert_managed_rules_active(&settings);
+        assert_eq!(
+            decision(&settings, "project-allowed run"),
+            SettingsDecision::NoMatch
+        );
+        assert_eq!(
+            decision(&settings, "project-denied run"),
+            SettingsDecision::NoMatch
+        );
+        assert_eq!(
+            decision(&settings, "project-asked run"),
+            SettingsDecision::NoMatch
+        );
+        assert!(
+            !settings
+                .allowed_directories(&cwd)
+                .contains(&"/synthetic/project-dir".to_string())
+        );
+    }
+
+    #[test]
+    fn claude_managed_flag_true_excludes_the_local_scope_alone() {
+        let fixture = SettingsFixture::new()
+            .with_local(LOCAL_JSON)
+            .with_managed(&managed_doc(Some("true")));
+        let cwd = fixture.cwd();
+        let settings = fixture.run(|| Settings::load(Client::Claude, &cwd));
+
+        assert_managed_rules_active(&settings);
+        assert_eq!(
+            decision(&settings, "local-allowed run"),
+            SettingsDecision::NoMatch
+        );
+        assert_eq!(
+            decision(&settings, "local-denied run"),
+            SettingsDecision::NoMatch
+        );
+        assert_eq!(
+            decision(&settings, "local-asked run"),
+            SettingsDecision::NoMatch
+        );
+        assert!(
+            !settings
+                .allowed_directories(&cwd)
+                .contains(&"/synthetic/local-dir".to_string())
+        );
+    }
+
+    #[test]
+    fn claude_empty_managed_permissions_resolve_to_no_rules() {
+        for managed in [
+            r#"{"allowManagedPermissionRulesOnly": true, "permissions": {}}"#,
+            r#"{"allowManagedPermissionRulesOnly": true}"#,
+        ] {
+            let fixture = all_lower_scopes().with_managed(managed);
+            let cwd = fixture.cwd();
+            let settings = fixture.run(|| Settings::load(Client::Claude, &cwd));
+
+            assert_lower_scopes_excluded(&settings);
+            assert_eq!(settings.allowed_directories(&cwd), vec![cwd.clone()]);
+        }
+    }
+
+    #[test]
+    fn claude_malformed_managed_permissions_never_fall_back_to_lower_scopes() {
+        // `allow` is a string where the schema wants an array. The document is
+        // still valid JSON asserting the flag, so the source boundary holds.
+        let fixture = all_lower_scopes().with_managed(
+            r#"{
+                "allowManagedPermissionRulesOnly": true,
+                "permissions": {
+                    "allow": "Bash(managed-allowed:*)",
+                    "additionalDirectories": ["/synthetic/managed-dir"]
+                }
+            }"#,
+        );
+        let cwd = fixture.cwd();
+        let settings = fixture.run(|| Settings::load(Client::Claude, &cwd));
+
+        assert_lower_scopes_excluded(&settings);
+        assert_eq!(
+            decision(&settings, "managed-allowed run"),
+            SettingsDecision::NoMatch
+        );
+        assert_eq!(settings.allowed_directories(&cwd), vec![cwd.clone()]);
+    }
+
+    #[test]
+    fn claude_managed_flag_false_keeps_the_four_source_merge() {
+        let fixture = all_lower_scopes().with_managed(&managed_doc(Some("false")));
+        let cwd = fixture.cwd();
+        let settings = fixture.run(|| Settings::load(Client::Claude, &cwd));
+
+        assert_all_sources_merged(&settings);
+    }
+
+    #[test]
+    fn claude_absent_managed_flag_keeps_the_four_source_merge() {
+        let fixture = all_lower_scopes().with_managed(&managed_doc(None));
+        let cwd = fixture.cwd();
+        let settings = fixture.run(|| Settings::load(Client::Claude, &cwd));
+
+        assert_all_sources_merged(&settings);
+    }
+
+    #[test]
+    fn claude_non_boolean_managed_flag_keeps_the_four_source_merge() {
+        for literal in [r#""true""#, "1", "null", r#"["true"]"#] {
+            let fixture = all_lower_scopes().with_managed(&managed_doc(Some(literal)));
+            let cwd = fixture.cwd();
+            let settings = fixture.run(|| Settings::load(Client::Claude, &cwd));
+
+            assert_all_sources_merged(&settings);
+        }
+    }
+
+    #[test]
+    fn claude_absent_managed_file_keeps_the_lower_scopes() {
+        let fixture = all_lower_scopes();
+        let cwd = fixture.cwd();
+        let settings = fixture.run(|| Settings::load(Client::Claude, &cwd));
+
+        for scope in ["user", "project", "local"] {
+            assert_eq!(
+                decision(&settings, &format!("{scope}-allowed run")),
+                SettingsDecision::Allow
+            );
+            assert_eq!(
+                decision(&settings, &format!("{scope}-denied run")),
+                SettingsDecision::Deny
+            );
+            assert_eq!(
+                decision(&settings, &format!("{scope}-asked run")),
+                SettingsDecision::Ask
+            );
+        }
+    }
+
+    #[test]
+    fn a_lower_scope_cannot_assert_the_managed_flag() {
+        let flagged_user = format!(
+            r#"{{"allowManagedPermissionRulesOnly": true, {}}}"#,
+            USER_JSON
+                .trim()
+                .trim_start_matches('{')
+                .trim_end_matches('}')
+        );
+        let fixture = SettingsFixture::new()
+            .with_user(&flagged_user)
+            .with_project(PROJECT_JSON)
+            .with_local(LOCAL_JSON)
+            .with_managed(&managed_doc(None));
+        let cwd = fixture.cwd();
+        let settings = fixture.run(|| Settings::load(Client::Claude, &cwd));
+
+        assert_all_sources_merged(&settings);
+    }
+
+    #[test]
+    fn other_clients_ignore_the_managed_flag() {
+        for client in [Client::Codex, Client::Antigravity, Client::Gemini] {
+            let fixture = all_lower_scopes().with_managed(&managed_doc(Some("true")));
+            let cwd = fixture.cwd();
+            let settings = fixture.run(|| Settings::load(client, &cwd));
+
+            assert_all_sources_merged(&settings);
+        }
+    }
+
+    // === Decision regressions under the managed flag ===
+
+    /// Build a Claude settings set from a managed-only document plus the given
+    /// lower-scope documents.
+    fn managed_only_with(
+        managed: &str,
+        user: Option<&str>,
+        project: Option<&str>,
+        local: Option<&str>,
+    ) -> (Settings, String) {
+        let mut fixture = SettingsFixture::new().with_managed(managed);
+        if let Some(json) = user {
+            fixture = fixture.with_user(json);
+        }
+        if let Some(json) = project {
+            fixture = fixture.with_project(json);
+        }
+        if let Some(json) = local {
+            fixture = fixture.with_local(json);
+        }
+        let cwd = fixture.cwd();
+        let settings = fixture.run(|| Settings::load(Client::Claude, &cwd));
+        (settings, cwd)
+    }
+
+    #[test]
+    fn lower_allow_cannot_override_a_managed_ask_or_deny() {
+        let (settings, _cwd) = managed_only_with(
+            r#"{
+                "allowManagedPermissionRulesOnly": true,
+                "permissions": {
+                    "ask": ["Bash(deploy:*)"],
+                    "deny": ["Bash(publish:*)"]
+                }
+            }"#,
+            Some(r#"{"permissions": {"allow": ["Bash(deploy:*)", "Bash(publish:*)"]}}"#),
+            None,
+            None,
+        );
+
+        assert_eq!(decision(&settings, "deploy staging"), SettingsDecision::Ask);
+        assert_eq!(
+            decision(&settings, "publish my-service"),
+            SettingsDecision::Deny
+        );
+    }
+
+    #[test]
+    fn lower_deny_cannot_override_a_managed_allow() {
+        let (settings, _cwd) = managed_only_with(
+            r#"{
+                "allowManagedPermissionRulesOnly": true,
+                "permissions": {"allow": ["Bash(mytool:*)"]}
+            }"#,
+            None,
+            None,
+            Some(r#"{"permissions": {"deny": ["Bash(mytool:*)"]}}"#),
+        );
+
+        assert_eq!(decision(&settings, "mytool build"), SettingsDecision::Allow);
+    }
+
+    #[test]
+    fn specificity_is_evaluated_only_among_managed_rules() {
+        let (settings, _cwd) = managed_only_with(
+            r#"{
+                "allowManagedPermissionRulesOnly": true,
+                "permissions": {"ask": ["Bash(mytool:*)"]}
+            }"#,
+            None,
+            Some(r#"{"permissions": {"allow": ["Bash(mytool --config production:*)"]}}"#),
+            None,
+        );
+
+        // The lower allow is longer, so it would win on specificity if it were
+        // in the participating set at all.
+        assert_eq!(
+            decision(&settings, "mytool --config production deploy"),
+            SettingsDecision::Ask
+        );
+    }
+
+    #[test]
+    fn lower_additional_directories_are_excluded_and_managed_ones_remain() {
+        let (settings, cwd) = managed_only_with(
+            r#"{
+                "allowManagedPermissionRulesOnly": true,
+                "permissions": {"additionalDirectories": ["/synthetic/managed-dir"]}
+            }"#,
+            Some(r#"{"permissions": {"additionalDirectories": ["/synthetic/user-dir"]}}"#),
+            Some(r#"{"permissions": {"additionalDirectories": ["/synthetic/project-dir"]}}"#),
+            Some(r#"{"permissions": {"additionalDirectories": ["/synthetic/local-dir"]}}"#),
+        );
+
+        assert_eq!(
+            settings.allowed_directories(&cwd),
+            vec![cwd.clone(), "/synthetic/managed-dir".to_string()]
+        );
+    }
+
+    #[test]
+    fn managed_write_rules_apply_and_lower_write_rules_do_not() {
+        let (settings, _cwd) = managed_only_with(
+            r#"{
+                "allowManagedPermissionRulesOnly": true,
+                "permissions": {"deny": ["Write(**/.env*)"]}
+            }"#,
+            Some(r#"{"permissions": {"allow": ["Write(/synthetic/project/**)"]}}"#),
+            None,
+            None,
+        );
+
+        assert_eq!(
+            settings.check_file_path("/synthetic/project/.env.local", None),
+            SettingsDecision::Deny
+        );
+        assert_eq!(
+            settings.check_file_path("/synthetic/project/src/main.rs", None),
+            SettingsDecision::NoMatch
+        );
+    }
+
+    #[test]
+    fn managed_mcp_rules_apply_and_lower_mcp_rules_do_not() {
+        let (settings, _cwd) = managed_only_with(
+            r#"{
+                "allowManagedPermissionRulesOnly": true,
+                "permissions": {"deny": ["mcp__server-a__dangerous_tool"]}
+            }"#,
+            Some(r#"{"permissions": {"allow": ["mcp__server-a"]}}"#),
+            None,
+            None,
+        );
+
+        assert_eq!(
+            settings.check_mcp_tool("server-a", "dangerous_tool"),
+            SettingsDecision::Deny
+        );
+        assert_eq!(
+            settings.check_mcp_tool("server-a", "safe_tool"),
+            SettingsDecision::NoMatch
+        );
+    }
+
+    // === Loader plumbing ===
+
+    #[test]
+    fn platform_paths_point_at_the_documented_managed_location() {
+        let expected = if cfg!(target_os = "linux") {
+            Some("/etc/claude-code/managed-settings.json")
+        } else if cfg!(target_os = "macos") {
+            Some("/Library/Application Support/ClaudeCode/managed-settings.json")
+        } else if cfg!(target_os = "windows") {
+            Some("C:\\Program Files\\ClaudeCode\\managed-settings.json")
+        } else {
+            None
+        };
+
+        assert_eq!(
+            SettingsPaths::platform()
+                .managed
+                .map(|p| p.to_string_lossy().into_owned()),
+            expected.map(str::to_string)
+        );
+    }
+
+    #[test]
+    fn an_unparseable_managed_document_leaves_the_managed_scope_out() {
+        let fixture = all_lower_scopes().with_managed("{ this is not json");
+        let cwd = fixture.cwd();
+        let sources = fixture.run(|| SettingsSources::load(&cwd));
+
+        assert!(sources.managed.is_none());
+        assert!(sources.user.is_some());
+
+        let settings = Settings::resolve(Client::Claude, sources);
+        assert_eq!(
+            decision(&settings, "user-allowed run"),
+            SettingsDecision::Allow
+        );
+    }
+
+    #[test]
+    fn resolve_is_pure_over_supplied_documents() {
+        let sources = SettingsSources {
+            user: Some(Settings {
+                permissions: Permissions {
+                    allow: vec!["Bash(user-allowed:*)".to_string()],
+                    ..Default::default()
+                },
+            }),
+            project: None,
+            local: None,
+            managed: Some(ManagedSettings {
+                permission_rules_only: true,
+                permissions: Permissions {
+                    allow: vec!["Bash(managed-allowed:*)".to_string()],
+                    ..Default::default()
+                },
+            }),
+        };
+
+        let settings = Settings::resolve(Client::Claude, sources);
+        assert_eq!(
+            decision(&settings, "managed-allowed run"),
+            SettingsDecision::Allow
+        );
+        assert_eq!(
+            decision(&settings, "user-allowed run"),
+            SettingsDecision::NoMatch
+        );
     }
 }

@@ -596,6 +596,7 @@ mod tests {
             &format!("echo hi > {pad}/out.log"),
             "/home/user/project",
             "default",
+            Client::Claude,
         );
         assert_eq!(
             get_decision(&into),
@@ -609,6 +610,7 @@ mod tests {
             &format!("echo hi > {root}/-home-u-proj/{sid}/tasks/t.output"),
             "/home/user/project",
             "default",
+            Client::Claude,
         );
         assert_eq!(
             get_decision(&sibling),
@@ -1041,6 +1043,7 @@ mod tests {
             "echo hi > /tmp/cc-scratch-test/out.log",
             "/home/user/project",
             "default",
+            Client::Claude,
         );
         assert_eq!(
             get_decision(&into),
@@ -1054,6 +1057,7 @@ mod tests {
             "echo hi > /tmp/other/out.log",
             "/home/user/project",
             "default",
+            Client::Claude,
         );
         assert_eq!(
             get_decision(&elsewhere),
@@ -1071,7 +1075,7 @@ mod tests {
             "echo hi > \"/tmp/cc-scratch-test/abs.log\"",
             "echo hi &> \"$TOOL_GATES_SCRATCH/both.log\"",
         ] {
-            let r = check_command_with_settings(q, "/home/user/project", "default");
+            let r = check_command_with_settings(q, "/home/user/project", "default", Client::Claude);
             assert_eq!(
                 get_decision(&r),
                 "allow",
@@ -1085,6 +1089,7 @@ mod tests {
             "echo hi > \"/tmp/other/out.log\"",
             "/home/user/project",
             "default",
+            Client::Claude,
         );
         assert_eq!(
             get_decision(&quoted_other),

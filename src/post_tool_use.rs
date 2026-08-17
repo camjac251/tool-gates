@@ -3,11 +3,11 @@
 //! Detects when commands that returned "ask" complete successfully,
 //! and adds them to the pending approval queue.
 
-use crate::models::{PostToolUseInput, PostToolUseOutput};
+use crate::models::{Client, PostToolUseInput, PostToolUseOutput};
 use crate::pending::{PendingApproval, append_pending};
 use crate::tracking::take_tracked_command;
 
-pub fn handle_post_tool_use(input: &PostToolUseInput) -> Option<PostToolUseOutput> {
+pub fn handle_post_tool_use(input: &PostToolUseInput, client: Client) -> Option<PostToolUseOutput> {
     // Atomically remove-and-return the tracked command in a single lock scope.
     // This avoids the TOCTOU race of peek-then-take (two separate lock acquisitions).
     let tracked = take_tracked_command(&input.tool_use_id)?;
@@ -23,7 +23,7 @@ pub fn handle_post_tool_use(input: &PostToolUseInput) -> Option<PostToolUseOutpu
     // `tool-gates approve`) between PreToolUse tracking and PostToolUse
     // confirmation -- otherwise a stale entry sits in the queue suggesting
     // the same approval the user already made.
-    if command_already_allowed_by_settings(&tracked.command, &tracked.cwd) {
+    if command_already_allowed_by_settings(&tracked.command, &tracked.cwd, client) {
         return None;
     }
 
@@ -52,8 +52,8 @@ pub fn handle_post_tool_use(input: &PostToolUseInput) -> Option<PostToolUseOutpu
     None
 }
 
-fn command_already_allowed_by_settings(command: &str, cwd: &str) -> bool {
-    let settings = crate::settings::Settings::load(cwd);
+fn command_already_allowed_by_settings(command: &str, cwd: &str, client: Client) -> bool {
+    let settings = crate::settings::Settings::load(client, cwd);
     // Use the subcommand-aware check so compound commands like
     // `cd /tmp && npm install foo` match a `Bash(npm install:*)` rule.
     // PreToolUse uses the same resolver; the filter agrees with PreToolUse
@@ -117,7 +117,7 @@ mod tests {
         };
 
         // Should return None since this ID wasn't tracked
-        assert!(handle_post_tool_use(&input).is_none());
+        assert!(handle_post_tool_use(&input, Client::Claude).is_none());
     }
 
     #[serial_test::serial]
@@ -136,7 +136,8 @@ mod tests {
 
         assert!(!command_already_allowed_by_settings(
             "npm install foo",
-            "/tmp"
+            "/tmp",
+            Client::Claude
         ));
 
         unsafe {
@@ -168,12 +169,14 @@ mod tests {
         // Cwd doesn't matter for user-scope settings.
         assert!(command_already_allowed_by_settings(
             "npm install foo",
-            temp.path().to_str().unwrap()
+            temp.path().to_str().unwrap(),
+            Client::Claude
         ));
         // Unrelated command must not match.
         assert!(!command_already_allowed_by_settings(
             "rm -rf /tmp/x",
-            temp.path().to_str().unwrap()
+            temp.path().to_str().unwrap(),
+            Client::Claude
         ));
 
         // Restore HOME so peer tests aren't disturbed.
@@ -183,5 +186,40 @@ mod tests {
                 None => env::remove_var("HOME"),
             }
         }
+    }
+}
+
+/// The pending-approval filter reads settings too, so it has to agree with
+/// PreToolUse about which sources a client may consult.
+#[cfg(test)]
+mod managed_only_tests {
+    use super::*;
+    use crate::settings::fixtures::SettingsFixture;
+
+    #[test]
+    fn the_pending_filter_follows_the_managed_source_policy() {
+        let fixture = SettingsFixture::new()
+            .with_managed(
+                r#"{"allowManagedPermissionRulesOnly": true,
+                    "permissions": {"allow": ["Bash(mytool42:*)"]}}"#,
+            )
+            .with_user(r#"{"permissions": {"allow": ["Bash(othertool42:*)"]}}"#);
+        let cwd = fixture.cwd();
+
+        fixture.run(|| {
+            assert!(command_already_allowed_by_settings(
+                "mytool42 run",
+                &cwd,
+                Client::Claude
+            ));
+            assert!(
+                !command_already_allowed_by_settings("othertool42 run", &cwd, Client::Claude),
+                "a lower-scope allow must not suppress the pending entry"
+            );
+            assert!(
+                command_already_allowed_by_settings("othertool42 run", &cwd, Client::Codex),
+                "Codex keeps the four-source merge"
+            );
+        });
     }
 }

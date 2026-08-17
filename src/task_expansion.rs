@@ -4,7 +4,7 @@
 use crate::accept_edits::should_auto_allow_in_accept_edits;
 use crate::gates::check_single_command;
 use crate::mise::{extract_task_commands, find_mise_config, load_mise_config};
-use crate::models::{Decision, HookOutput, PermissionDecision, is_auto_mode};
+use crate::models::{Client, Decision, HookOutput, PermissionDecision, is_auto_mode};
 use crate::package_json::{
     find_package_json, get_script_command, load_package_json, parse_script_invocation,
 };
@@ -19,7 +19,14 @@ use crate::settings::Settings;
 /// and checks each command through the gate engine.
 /// - `task_name`: The task name (e.g., "lint", "build:prod")
 /// - `permission_mode`: The permission mode (e.g., "default", "acceptEdits")
-pub(crate) fn check_mise_task(task_name: &str, cwd: &str, permission_mode: &str) -> HookOutput {
+/// - `client`: carries the caller's settings source policy into the expansion,
+///   so a nested check cannot reload under a weaker one
+pub(crate) fn check_mise_task(
+    task_name: &str,
+    cwd: &str,
+    permission_mode: &str,
+    client: Client,
+) -> HookOutput {
     // Find mise config file
     let Some(config_path) = find_mise_config(cwd) else {
         return HookOutput::ask(&format!("mise {task_name}: No mise.toml found"));
@@ -48,7 +55,7 @@ pub(crate) fn check_mise_task(task_name: &str, cwd: &str, permission_mode: &str)
 
     for cmd_string in &commands {
         // Check each extracted command, with package.json expansion support
-        let result = check_command_expanded(cmd_string, cwd, permission_mode);
+        let result = check_command_expanded(cmd_string, cwd, permission_mode, client);
 
         match result.decision {
             PermissionDecision::Deny => {
@@ -104,6 +111,7 @@ pub(crate) fn check_package_script(
     script_name: &str,
     cwd: &str,
     permission_mode: &str,
+    client: Client,
 ) -> HookOutput {
     // Find package.json
     let Some(pkg_path) = find_package_json(cwd) else {
@@ -127,7 +135,7 @@ pub(crate) fn check_package_script(
     // Check the underlying command through the gate engine. Use the mode-aware
     // entry point so raw-string hard-ask patterns (pipe-to-shell, eval) get
     // promoted to deny under auto mode -- matches check_mise_task behavior.
-    let result = check_command_expanded(&script_cmd, cwd, permission_mode);
+    let result = check_command_expanded(&script_cmd, cwd, permission_mode, client);
 
     match result.decision {
         PermissionDecision::Deny => {
@@ -139,7 +147,7 @@ pub(crate) fn check_package_script(
             // In acceptEdits mode, check if the underlying command is a file-editing command
             if permission_mode == "acceptEdits" {
                 let commands = extract_commands(&script_cmd);
-                let settings = Settings::load(cwd);
+                let settings = Settings::load(client, cwd);
                 let allowed_dirs = settings.allowed_directories(cwd);
                 if should_auto_allow_in_accept_edits(&commands, &allowed_dirs) {
                     return HookOutput::allow(Some(&format!(
@@ -189,6 +197,7 @@ pub(crate) fn check_command_expanded(
     command_string: &str,
     cwd: &str,
     permission_mode: &str,
+    client: Client,
 ) -> HookOutput {
     if command_string.trim().is_empty() {
         return HookOutput::no_opinion();
@@ -248,7 +257,7 @@ pub(crate) fn check_command_expanded(
         let cwd_str = effective_cwd.to_string_lossy();
         // Try package.json script expansion for this individual command
         if let Some((pm, script_name)) = parse_script_invocation(&cmd.raw) {
-            let result = check_package_script(pm, &script_name, &cwd_str, permission_mode);
+            let result = check_package_script(pm, &script_name, &cwd_str, permission_mode, client);
             match result.decision {
                 PermissionDecision::Deny => {
                     block_reasons.push(result.reason.unwrap_or_else(|| "Blocked".to_string()));
@@ -278,7 +287,7 @@ pub(crate) fn check_command_expanded(
                 Decision::Ask => {
                     // In acceptEdits mode, check if this is a file-editing command
                     if permission_mode == "acceptEdits" {
-                        let settings = Settings::load(&cwd_str);
+                        let settings = Settings::load(client, &cwd_str);
                         let allowed_dirs = settings.allowed_directories(&cwd_str);
                         if should_auto_allow_in_accept_edits(
                             std::slice::from_ref(cmd),
@@ -491,7 +500,8 @@ run = "npm publish"
             .unwrap();
 
             let cwd = tmp.to_string_lossy();
-            let result = check_command_with_settings("mise run ci", &cwd, "default");
+            let result =
+                check_command_with_settings("mise run ci", &cwd, "default", Client::Claude);
             assert_eq!(
                 get_decision(&result),
                 "allow",
@@ -499,7 +509,8 @@ run = "npm publish"
             );
 
             // Also test with redirections (the original bug trigger)
-            let result = check_command_with_settings("mise run ci 2>&1", &cwd, "default");
+            let result =
+                check_command_with_settings("mise run ci 2>&1", &cwd, "default", Client::Claude);
             assert_eq!(
                 get_decision(&result),
                 "allow",
@@ -533,7 +544,8 @@ run = "git status"
             .unwrap();
 
             let cwd = tmp.to_string_lossy();
-            let result = check_command_with_settings("mise run status", &cwd, "default");
+            let result =
+                check_command_with_settings("mise run status", &cwd, "default", Client::Claude);
             assert_eq!(
                 get_decision(&result),
                 "deny",
@@ -564,7 +576,8 @@ run = "echo hello"
             let cwd = tmp.to_string_lossy();
 
             // Simple mise run should still expand and allow
-            let result = check_command_with_settings("mise run ci", &cwd, "default");
+            let result =
+                check_command_with_settings("mise run ci", &cwd, "default", Client::Claude);
             assert_eq!(
                 get_decision(&result),
                 "allow",
@@ -572,7 +585,12 @@ run = "echo hello"
             );
 
             // && with dangerous command -> deny
-            let result = check_command_with_settings("mise run ci && rm -rf /", &cwd, "default");
+            let result = check_command_with_settings(
+                "mise run ci && rm -rf /",
+                &cwd,
+                "default",
+                Client::Claude,
+            );
             assert_eq!(
                 get_decision(&result),
                 "deny",
@@ -580,7 +598,12 @@ run = "echo hello"
             );
 
             // ; with dangerous command -> deny
-            let result = check_command_with_settings("mise run ci; rm -rf /", &cwd, "default");
+            let result = check_command_with_settings(
+                "mise run ci; rm -rf /",
+                &cwd,
+                "default",
+                Client::Claude,
+            );
             assert_eq!(
                 get_decision(&result),
                 "deny",
@@ -588,7 +611,12 @@ run = "echo hello"
             );
 
             // || with dangerous command -> deny
-            let result = check_command_with_settings("mise run ci || rm -rf /", &cwd, "default");
+            let result = check_command_with_settings(
+                "mise run ci || rm -rf /",
+                &cwd,
+                "default",
+                Client::Claude,
+            );
             assert_eq!(
                 get_decision(&result),
                 "deny",
@@ -596,7 +624,8 @@ run = "echo hello"
             );
 
             // | bash (pipe to shell) -> ask (hard ask, not overridable by settings)
-            let result = check_command_with_settings("mise run ci | bash", &cwd, "default");
+            let result =
+                check_command_with_settings("mise run ci | bash", &cwd, "default", Client::Claude);
             assert_eq!(
                 get_decision(&result),
                 "ask",
@@ -604,7 +633,12 @@ run = "echo hello"
             );
 
             // && with ask-worthy command -> ask (not silently allow)
-            let result = check_command_with_settings("mise run ci && npm install", &cwd, "default");
+            let result = check_command_with_settings(
+                "mise run ci && npm install",
+                &cwd,
+                "default",
+                Client::Claude,
+            );
             assert_eq!(
                 get_decision(&result),
                 "ask",
@@ -630,7 +664,8 @@ run = "echo hello"
             let cwd = tmp.to_string_lossy();
 
             // Simple script run should expand
-            let result = check_command_with_settings("npm run lint", &cwd, "default");
+            let result =
+                check_command_with_settings("npm run lint", &cwd, "default", Client::Claude);
             assert_eq!(
                 get_decision(&result),
                 "allow",
@@ -638,7 +673,12 @@ run = "echo hello"
             );
 
             // && with dangerous command -> deny
-            let result = check_command_with_settings("npm run lint && rm -rf /", &cwd, "default");
+            let result = check_command_with_settings(
+                "npm run lint && rm -rf /",
+                &cwd,
+                "default",
+                Client::Claude,
+            );
             assert_eq!(
                 get_decision(&result),
                 "deny",
@@ -646,7 +686,12 @@ run = "echo hello"
             );
 
             // ; with dangerous command -> deny
-            let result = check_command_with_settings("pnpm run lint; rm -rf /", &cwd, "default");
+            let result = check_command_with_settings(
+                "pnpm run lint; rm -rf /",
+                &cwd,
+                "default",
+                Client::Claude,
+            );
             assert_eq!(
                 get_decision(&result),
                 "deny",
@@ -654,7 +699,8 @@ run = "echo hello"
             );
 
             // | bash -> ask (hard ask, not overridable by settings)
-            let result = check_command_with_settings("npm run lint | bash", &cwd, "default");
+            let result =
+                check_command_with_settings("npm run lint | bash", &cwd, "default", Client::Claude);
             assert_eq!(
                 get_decision(&result),
                 "ask",
@@ -673,8 +719,13 @@ run = "echo hello"
             )
             .expect("write package.json");
 
-            let result =
-                check_package_script("npm", "inspect", &temp.path().to_string_lossy(), "default");
+            let result = check_package_script(
+                "npm",
+                "inspect",
+                &temp.path().to_string_lossy(),
+                "default",
+                Client::Claude,
+            );
 
             assert_eq!(result.decision, PermissionDecision::Deny);
             assert!(
@@ -700,7 +751,12 @@ run = "cat report.txt | tail -n 6"
             )
             .expect("write mise.toml");
 
-            let result = check_mise_task("inspect", &temp.path().to_string_lossy(), "default");
+            let result = check_mise_task(
+                "inspect",
+                &temp.path().to_string_lossy(),
+                "default",
+                Client::Claude,
+            );
 
             assert_eq!(result.decision, PermissionDecision::Deny);
             assert!(
@@ -731,7 +787,12 @@ run = "npm run inspect"
             )
             .expect("write package.json");
 
-            let result = check_mise_task("inspect", &temp.path().to_string_lossy(), "default");
+            let result = check_mise_task(
+                "inspect",
+                &temp.path().to_string_lossy(),
+                "default",
+                Client::Claude,
+            );
 
             assert_eq!(result.decision, PermissionDecision::Deny);
             assert!(

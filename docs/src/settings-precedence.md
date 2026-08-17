@@ -6,7 +6,7 @@
     </ol>
   </nav>
   <h1 id="settings-h1">Settings Precedence</h1>
-  <p class="page-lede">Four settings files contribute to the final permission set. Higher-priority files win when keys conflict. tool-gates respects every explicit rule before applying its own gate decisions.</p>
+  <p class="page-lede">Four settings files contribute to the final permission set. Higher-priority files win when keys conflict. tool-gates respects every explicit rule before applying its own gate decisions. One enterprise flag narrows that set to a single file.</p>
   <div class="sec-head" style="margin-top: var(--s-6)">
     <p class="lbl">File priority</p>
     <h2>Where rules live.</h2>
@@ -26,7 +26,7 @@
           <code>/Library/Application Support/ClaudeCode/managed-settings.json</code> (macOS)<br/>
           <code>C:\Program Files\ClaudeCode\managed-settings.json</code> (Windows)
         </td>
-        <td>Enterprise managed. Locked by IT; overrides everything below.</td>
+        <td>Enterprise managed. Locked by IT; overrides everything below, and can exclude it entirely.</td>
       </tr>
       <tr>
         <td><span class="level-badge"><span class="n">2</span></span></td>
@@ -47,6 +47,52 @@
   </table>
     </div>
   </div>
+  <div class="sec-head">
+    <p class="lbl">Managed-only resolution</p>
+    <h2>When the enterprise file is the whole ruleset.</h2>
+    <p>When the managed settings document sets <code>allowManagedPermissionRulesOnly</code> to boolean <code>true</code>, tool-gates evaluates Claude against that document alone. The user, project, and local files are not loaded into the effective permission set at all.</p>
+  </div>
+  <div class="data-table-frame">
+    <div class="data-table-scroll" data-table-scroll>
+      <table class="data-table">
+    <thead>
+      <tr><th>Aspect</th><th>Behavior</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>What is excluded</td>
+        <td>Every lower-scope entry: <code>allow</code>, <code>ask</code>, <code>deny</code>, and <code>additionalDirectories</code>. The flag draws a source boundary, not a grants-only filter, so a personal <code>deny</code> rule stops participating alongside a personal <code>allow</code>.</td>
+      </tr>
+      <tr>
+        <td>Allowed directories</td>
+        <td>The invocation <code>cwd</code> plus the managed document's <code>additionalDirectories</code>. A directory listed only in a lower scope does not become writable or auto-approvable.</td>
+      </tr>
+      <tr>
+        <td>Empty managed permissions</td>
+        <td>Resolve to no rules. tool-gates does not fall back to a lower scope because the managed file has nothing to say.</td>
+      </tr>
+      <tr>
+        <td>Malformed managed permissions</td>
+        <td>Resolve to no rules. A document that is valid JSON and asserts the flag keeps the boundary even when its <code>permissions</code> block cannot be parsed.</td>
+      </tr>
+      <tr>
+        <td>Who can set it</td>
+        <td>Only the managed document at the platform path above. The same key in a user, project, or local file has no authority to turn managed-only resolution on or off, and a non-boolean value leaves the four-source merge in place.</td>
+      </tr>
+      <tr>
+        <td>Other clients</td>
+        <td>Codex, Antigravity, and deprecated Gemini keep the four-source merge whatever the flag says. The flag is a Claude Code setting, and tool-gates only applies it to Claude.</td>
+      </tr>
+      <tr>
+        <td>Safety floor</td>
+        <td>Unchanged. A managed <code>allow</code> does not unlock a destructive command or a raw-string pattern such as pipe-to-shell.</td>
+      </tr>
+    </tbody>
+  </table>
+    </div>
+  </div>
+  <p class="step-prose">Nested evaluation inherits the same boundary. Mise task expansion, package-script expansion, compound sub-command checks, and the <code>acceptEdits</code> directory check all resolve settings under the client that started the invocation, so none of them can reload a lower scope mid-decision.</p>
+  <p class="step-prose">With the flag absent or <code>false</code>, everything below applies exactly as it always has.</p>
   <div class="sec-head">
     <p class="lbl">Interaction</p>
     <h2>How tool-gates respects your rules.</h2>

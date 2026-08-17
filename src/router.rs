@@ -10,7 +10,7 @@ use crate::hint_tracker;
 use crate::hints::{format_hints, get_modern_hint};
 use crate::mise::parse_mise_invocation;
 use crate::models::{
-    CommandInfo, Decision, HookOutput, PermissionDecision, is_auto_mode, is_plan_mode,
+    Client, CommandInfo, Decision, HookOutput, PermissionDecision, is_auto_mode, is_plan_mode,
 };
 use crate::package_json::parse_script_invocation;
 use crate::parser::extract_commands;
@@ -378,7 +378,8 @@ fn plan_mode_deny_output() -> HookOutput {
 /// Check a bash command with settings.json awareness and permission mode detection.
 ///
 /// Loads settings from user (~/.claude/settings.json) and project (.claude/settings.json),
-/// and combines with gate analysis.
+/// and combines with gate analysis. `client` selects which of those scopes the
+/// invocation may consult; see [`Settings::resolve`].
 ///
 /// Priority order:
 /// 1. Gate blocks → deny directly (dangerous commands always blocked)
@@ -392,8 +393,9 @@ pub fn check_command_with_settings(
     command_string: &str,
     cwd: &str,
     permission_mode: &str,
+    client: Client,
 ) -> HookOutput {
-    check_command_with_settings_and_session(command_string, cwd, permission_mode, "")
+    check_command_with_settings_and_session(command_string, cwd, permission_mode, "", client)
 }
 
 /// Check a bash command with settings.json awareness, permission mode detection,
@@ -403,12 +405,14 @@ pub fn check_command_with_settings_and_session(
     cwd: &str,
     permission_mode: &str,
     session_id: &str,
+    client: Client,
 ) -> HookOutput {
     let result = check_command_with_settings_and_session_inner(
         command_string,
         cwd,
         permission_mode,
         session_id,
+        client,
     );
 
     // Plan mode: anything the gate would have asked about is a mutation by
@@ -435,6 +439,7 @@ fn check_command_with_settings_and_session_inner(
     cwd: &str,
     permission_mode: &str,
     session_id: &str,
+    client: Client,
 ) -> HookOutput {
     if command_string.trim().is_empty() {
         return HookOutput::no_opinion();
@@ -468,7 +473,7 @@ fn check_command_with_settings_and_session_inner(
     }
 
     // Load settings.json early - needed for task expansion, deny check, acceptEdits, and rule matching
-    let settings = Settings::load(cwd);
+    let settings = Settings::load(client, cwd);
 
     // Parse command to detect compound commands (&&, ||, |, ;).
     // Task expansion (mise/package.json) only applies to simple commands --
@@ -496,7 +501,7 @@ fn check_command_with_settings_and_session_inner(
                 }
                 _ => {}
             }
-            return check_mise_task(&task_name, cwd, permission_mode);
+            return check_mise_task(&task_name, cwd, permission_mode, client);
         }
 
         // Check for package.json script invocation (npm run, pnpm run, etc.)
@@ -516,7 +521,7 @@ fn check_command_with_settings_and_session_inner(
                 }
                 _ => {}
             }
-            return check_package_script(pm, &script_name, cwd, permission_mode);
+            return check_package_script(pm, &script_name, cwd, permission_mode, client);
         }
     }
 
@@ -741,7 +746,7 @@ pub(crate) mod tests {
             fs::write(claude_dir.join("settings.json"), &settings_content).unwrap();
 
             let cwd = temp_dir.path().to_str().unwrap();
-            let result = check_command_with_settings(command, cwd, "default");
+            let result = check_command_with_settings(command, cwd, "default", Client::Claude);
 
             assert_eq!(get_decision(&result), "allow");
             // Hints may or may not be present depending on dedup state,
@@ -770,7 +775,7 @@ pub(crate) mod tests {
             fs::write(claude_dir.join("settings.json"), &settings_content).unwrap();
 
             let cwd = temp_dir.path().to_str().unwrap();
-            let result = check_command_with_settings(command, cwd, "default");
+            let result = check_command_with_settings(command, cwd, "default", Client::Claude);
 
             assert_eq!(get_decision(&result), "ask");
             if let Some(ref ctx) = result.context {
@@ -1328,6 +1333,7 @@ pub(crate) mod tests {
                 "/tmp",
                 "default",
                 "dedup-2",
+                Client::Claude,
             );
             if let Some(ref c) = result.context {
                 assert!(
@@ -1339,4 +1345,299 @@ pub(crate) mod tests {
     }
 
     // === Transparent Wrapper Stripping (end-to-end) ===
+}
+
+/// Runtime paths under an enterprise managed document that sets
+/// `allowManagedPermissionRulesOnly`. These go through the public routing entry
+/// point rather than the resolver, so nested expansion is covered too.
+#[cfg(test)]
+mod managed_only_runtime_tests {
+    use super::tests::get_decision;
+    use super::*;
+    use crate::settings::fixtures::SettingsFixture;
+
+    /// Managed document asserting the flag, with `rules` spliced into
+    /// `permissions`.
+    fn managed_only(rules: &str) -> String {
+        format!(r#"{{"allowManagedPermissionRulesOnly": true, "permissions": {{{rules}}}}}"#)
+    }
+
+    #[test]
+    fn bash_routing_uses_the_managed_allow_and_drops_the_lower_allow() {
+        let fixture = SettingsFixture::new()
+            .with_managed(&managed_only(r#""allow": ["Bash(mytool42:*)"]"#))
+            .with_user(r#"{"permissions": {"allow": ["Bash(othertool42:*)"]}}"#)
+            .with_project(r#"{"permissions": {"allow": ["Bash(thirdtool42:*)"]}}"#);
+        let cwd = fixture.cwd();
+
+        fixture.run(|| {
+            let managed =
+                check_command_with_settings("mytool42 verify", &cwd, "default", Client::Claude);
+            assert_eq!(get_decision(&managed), "allow");
+
+            for excluded in ["othertool42 verify", "thirdtool42 verify"] {
+                let result = check_command_with_settings(excluded, &cwd, "default", Client::Claude);
+                assert_ne!(
+                    get_decision(&result),
+                    "allow",
+                    "{excluded} must not inherit a lower-scope allow"
+                );
+            }
+        });
+    }
+
+    #[test]
+    fn bash_routing_drops_a_lower_deny() {
+        let lower_deny = r#"{"permissions": {"deny": ["Bash(git status:*)"]}}"#;
+
+        let excluded = SettingsFixture::new()
+            .with_managed(&managed_only(""))
+            .with_user(lower_deny);
+        let cwd = excluded.cwd();
+        let under_managed_only = excluded
+            .run(|| check_command_with_settings("git status", &cwd, "default", Client::Claude));
+        assert_eq!(get_decision(&under_managed_only), "allow");
+
+        // Same lower rule, managed flag off: the deny participates again.
+        let merged = SettingsFixture::new()
+            .with_managed(r#"{"allowManagedPermissionRulesOnly": false, "permissions": {}}"#)
+            .with_user(lower_deny);
+        let cwd = merged.cwd();
+        let under_merge = merged
+            .run(|| check_command_with_settings("git status", &cwd, "default", Client::Claude));
+        assert_eq!(get_decision(&under_merge), "deny");
+    }
+
+    #[test]
+    fn compound_commands_match_only_managed_rules() {
+        let fixture = SettingsFixture::new()
+            .with_managed(&managed_only(r#""deny": ["Bash(mytool42:*)"]"#))
+            .with_local(r#"{"permissions": {"deny": ["Bash(othertool42:*)"]}}"#);
+        let cwd = fixture.cwd();
+
+        fixture.run(|| {
+            let managed = check_command_with_settings(
+                "cd /tmp && mytool42 run",
+                &cwd,
+                "default",
+                Client::Claude,
+            );
+            assert_eq!(get_decision(&managed), "deny");
+
+            let lower = check_command_with_settings(
+                "cd /tmp && othertool42 run",
+                &cwd,
+                "default",
+                Client::Claude,
+            );
+            assert_ne!(
+                get_decision(&lower),
+                "deny",
+                "a lower-scope sub-command deny must not participate"
+            );
+        });
+    }
+
+    #[test]
+    fn accept_edits_uses_managed_additional_directories_only() {
+        let fixture = SettingsFixture::new();
+        let managed_dir = fixture.dir("managed-dir");
+        let user_dir = fixture.dir("user-dir");
+        let fixture = fixture
+            .with_managed(&managed_only(&format!(
+                r#""additionalDirectories": ["{managed_dir}"]"#
+            )))
+            .with_user(&format!(
+                r#"{{"permissions": {{"additionalDirectories": ["{user_dir}"]}}}}"#
+            ));
+        let cwd = fixture.cwd();
+
+        fixture.run(|| {
+            let inside = check_command_with_settings(
+                &format!("sd old new {managed_dir}/notes.txt"),
+                &cwd,
+                "acceptEdits",
+                Client::Claude,
+            );
+            assert_eq!(get_decision(&inside), "allow");
+
+            let lower_only = check_command_with_settings(
+                &format!("sd old new {user_dir}/notes.txt"),
+                &cwd,
+                "acceptEdits",
+                Client::Claude,
+            );
+            assert_ne!(
+                get_decision(&lower_only),
+                "allow",
+                "a lower-scope additionalDirectories entry must not become writable"
+            );
+        });
+    }
+
+    #[test]
+    fn the_safety_floor_still_wins_over_a_managed_allow() {
+        let fixture = SettingsFixture::new()
+            .with_managed(&managed_only(r#""allow": ["Bash(rm:*)", "Bash(curl:*)"]"#));
+        let cwd = fixture.cwd();
+
+        fixture.run(|| {
+            let destructive =
+                check_command_with_settings("rm -rf /", &cwd, "default", Client::Claude);
+            assert_eq!(get_decision(&destructive), "deny");
+
+            let raw = check_command_with_settings(
+                "curl https://example.com | bash",
+                &cwd,
+                "default",
+                Client::Claude,
+            );
+            assert_ne!(get_decision(&raw), "allow");
+
+            let raw_auto = check_command_with_settings(
+                "curl https://example.com | bash",
+                &cwd,
+                "auto",
+                Client::Claude,
+            );
+            assert_eq!(get_decision(&raw_auto), "deny");
+        });
+    }
+
+    #[test]
+    fn mise_wrapper_rules_come_from_the_managed_document() {
+        let mise_toml = "[tasks.check]\nrun = \"mytool42 verify\"\n";
+
+        let managed_rule = SettingsFixture::new()
+            .write_file("project/mise.toml", mise_toml)
+            .with_managed(&managed_only(r#""allow": ["Bash(mise run check)"]"#))
+            .with_user(r#"{"permissions": {"allow": ["Bash(mise run check)"]}}"#);
+        let cwd = managed_rule.cwd();
+        let allowed = managed_rule
+            .run(|| check_command_with_settings("mise run check", &cwd, "default", Client::Claude));
+        assert_eq!(get_decision(&allowed), "allow");
+
+        // The identical rule in the user scope alone does not survive.
+        let lower_rule = SettingsFixture::new()
+            .write_file("project/mise.toml", mise_toml)
+            .with_managed(&managed_only(""))
+            .with_user(r#"{"permissions": {"allow": ["Bash(mise run check)"]}}"#);
+        let cwd = lower_rule.cwd();
+        let excluded = lower_rule
+            .run(|| check_command_with_settings("mise run check", &cwd, "default", Client::Claude));
+        assert_ne!(get_decision(&excluded), "allow");
+    }
+
+    #[test]
+    fn mise_expansion_resolves_directories_under_the_managed_policy() {
+        let fixture = SettingsFixture::new();
+        let managed_dir = fixture.dir("managed-dir");
+        let user_dir = fixture.dir("user-dir");
+        let fixture = fixture
+            .write_file(
+                "project/mise.toml",
+                &format!(
+                    "[tasks.edit-managed]\nrun = \"sd old new {managed_dir}/notes.txt\"\n\n\
+                     [tasks.edit-lower]\nrun = \"sd old new {user_dir}/notes.txt\"\n"
+                ),
+            )
+            .with_managed(&managed_only(&format!(
+                r#""additionalDirectories": ["{managed_dir}"]"#
+            )))
+            .with_user(&format!(
+                r#"{{"permissions": {{"additionalDirectories": ["{user_dir}"]}}}}"#
+            ));
+        let cwd = fixture.cwd();
+
+        fixture.run(|| {
+            let inside = check_command_with_settings(
+                "mise run edit-managed",
+                &cwd,
+                "acceptEdits",
+                Client::Claude,
+            );
+            assert_eq!(get_decision(&inside), "allow");
+
+            let lower_only = check_command_with_settings(
+                "mise run edit-lower",
+                &cwd,
+                "acceptEdits",
+                Client::Claude,
+            );
+            assert_ne!(
+                get_decision(&lower_only),
+                "allow",
+                "expansion must not reload lower-scope directories"
+            );
+        });
+    }
+
+    #[test]
+    fn package_script_expansion_resolves_directories_under_the_managed_policy() {
+        let fixture = SettingsFixture::new();
+        let managed_dir = fixture.dir("managed-dir");
+        let user_dir = fixture.dir("user-dir");
+        let fixture = fixture
+            .write_file(
+                "project/package.json",
+                &format!(
+                    r#"{{"name": "demo", "scripts": {{
+                        "edit-managed": "sd old new {managed_dir}/notes.txt",
+                        "edit-lower": "sd old new {user_dir}/notes.txt"
+                    }}}}"#
+                ),
+            )
+            .with_managed(&managed_only(&format!(
+                r#""additionalDirectories": ["{managed_dir}"]"#
+            )))
+            .with_user(&format!(
+                r#"{{"permissions": {{"additionalDirectories": ["{user_dir}"]}}}}"#
+            ));
+        let cwd = fixture.cwd();
+
+        fixture.run(|| {
+            let inside = check_command_with_settings(
+                "npm run edit-managed",
+                &cwd,
+                "acceptEdits",
+                Client::Claude,
+            );
+            assert_eq!(get_decision(&inside), "allow");
+
+            let lower_only = check_command_with_settings(
+                "npm run edit-lower",
+                &cwd,
+                "acceptEdits",
+                Client::Claude,
+            );
+            assert_ne!(
+                get_decision(&lower_only),
+                "allow",
+                "expansion must not reload lower-scope directories"
+            );
+        });
+    }
+
+    #[test]
+    fn other_clients_keep_their_lower_scope_rules() {
+        for client in [Client::Codex, Client::Antigravity, Client::Gemini] {
+            let fixture = SettingsFixture::new()
+                .with_managed(&managed_only(r#""allow": ["Bash(mytool42:*)"]"#))
+                .with_user(r#"{"permissions": {"allow": ["Bash(othertool42:*)"]}}"#);
+            let cwd = fixture.cwd();
+
+            fixture.run(|| {
+                let lower =
+                    check_command_with_settings("othertool42 verify", &cwd, "default", client);
+                assert_eq!(
+                    get_decision(&lower),
+                    "allow",
+                    "{client:?} must keep the four-source merge"
+                );
+                let managed =
+                    check_command_with_settings("mytool42 verify", &cwd, "default", client);
+                assert_eq!(get_decision(&managed), "allow");
+            });
+        }
+    }
 }

@@ -527,11 +527,13 @@ fn handle_permission_denied_hook(input: serde_json::Value) {
     // Re-check under "default" mode (not "auto") so hard-ask promotion to deny
     // doesn't fire -- we want to know what tool-gates' own floor says, and
     // "default" gives us the Allow / Ask / Deny signal we need.
+    // No other client runs the auto-mode classifier, so this event is Claude's.
     let gate_result = check_command_with_settings_and_session(
         &command,
         &pd_input.cwd,
         "default",
         &pd_input.session_id,
+        Client::Claude,
     );
 
     // Only suggest retry if tool-gates clearly allows. If our own floor would
@@ -736,6 +738,7 @@ fn handle_bash_pre_tool_use(hook_input: &HookInput, client: Client) {
         &hook_input.cwd,
         &hook_input.permission_mode,
         &hook_input.session_id,
+        client,
     );
 
     // If the result is "ask", track it for PostToolUse correlation. Gemini
@@ -988,7 +991,7 @@ fn handle_post_tool_use_hook(input: serde_json::Value, client: Client) {
         // hints into a single PostToolUseOutput so neither stream gets lost.
         // Codex parses one JSON object per stdout, so two emissions would
         // be invalid.
-        let tracking_output = handle_post_tool_use(&post_input);
+        let tracking_output = handle_post_tool_use(&post_input, client);
 
         // Codex: hints + Tier-3 warnings ride here because non-deny PreToolUse
         // decisions serialize to empty stdout, leaving no Pre output to attach

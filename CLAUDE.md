@@ -80,6 +80,7 @@ Run `mise run build-wasm` when a change affects the browser simulator or the WAS
 - Every `[[programs.ask]]` and `[[programs.block]]` rule needs a `reason`. `build.rs` rejects reasons longer than 250 characters. Follow `docs/src/reason-style.md`.
 - `build.rs` runs `rustfmt --edition 2024` on generated Rust. Keep that explicit edition because generated formatting otherwise drifts when the build cache is invalidated.
 - Wire-format structs are external contracts. Any serialized field added or changed for a client needs a test that asserts its exact JSON key casing and allowed shape.
+- `Settings::load` takes the calling `Client`, because a Claude managed document that sets `allowManagedPermissionRulesOnly` reduces Claude's permission set to that one file while every other client keeps the four-source merge. Thread the caller's client through new evaluation paths; never re-derive it.
 - `HookOutput::deny()` always carries a reason. On Claude, it omits the optional top-level `systemMessage` unless `.user_visible()` is called for a denial such as a Tier 1 secret block. Codex displays every deny reason as hook feedback regardless of `.user_visible()`.
 - Shared gates keep causes and recovery actions client-neutral. Attach semantic recovery in `HookOutput`; render native tool names only in the client serializer, sourced from `FILE_TOOL_SPECS`.
 
@@ -98,6 +99,7 @@ When any of these rules change, update the exact serialization tests plus `docs/
 - Tests and examples are public. Use generic placeholders such as `mytool`, `$HOME/scripts/deploy/`, and `my-service`; never encode a real session command, private path, hostname, service, or workflow.
 - CI runners have a minimal environment. Tests must not assume optional tools such as `rg`, `bat`, or `fd` are installed. Detect availability and skip gracefully when an external binary is not the behavior under test.
 - Assert exact camelCase wire keys with `serde_json::to_string` whenever a struct or enum is serialized for a hook client.
+- Settings tests use `settings::fixtures::SettingsFixture`, which installs a thread-local set of user, project, local, and managed documents. Under `cfg(test)` the host's enterprise managed document is never read unless a fixture supplies one, so a lib test that expects a managed file must build it through the fixture.
 
 ## Generated Documentation
 

@@ -126,7 +126,7 @@ pub fn handle_permission_request_for_client(
     } else {
         input.permission_mode.as_str()
     };
-    let policy_output = check_command_with_settings(&command, &input.cwd, mode);
+    let policy_output = check_command_with_settings(&command, &input.cwd, mode, client);
     let (decision, reason) = output_to_decision(policy_output);
 
     match decision {
@@ -253,7 +253,8 @@ fn handle_codex_project_edit(
     config: &crate::config::Config,
 ) -> Option<PermissionRequestOutput> {
     let paths = collect_paths_for_permission(input, tool_input_map);
-    let settings = Settings::load(&input.cwd);
+    // Codex keeps the four-source merge whatever Claude's managed document says.
+    let settings = Settings::load(Client::Codex, &input.cwd);
     decide_codex_project_edit(
         &paths,
         &input.cwd,
@@ -1468,5 +1469,176 @@ mod tests {
         ];
         let m = match_mcp_rule(&rules, "mcp__serena__find_symbol", "acceptEdits", "");
         assert_eq!(m.unwrap().reason.as_deref(), Some("specific"));
+    }
+}
+
+/// PermissionRequest under an enterprise managed document that sets
+/// `allowManagedPermissionRulesOnly`.
+#[cfg(test)]
+mod managed_only_permission_request_tests {
+    use super::*;
+    use crate::models::ToolInputVariant;
+    use crate::settings::fixtures::SettingsFixture;
+
+    fn managed_only(rules: &str) -> String {
+        format!(r#"{{"allowManagedPermissionRulesOnly": true, "permissions": {{{rules}}}}}"#)
+    }
+
+    fn default_guards() -> crate::config::FileGuardsConfig {
+        crate::config::FileGuardsConfig::default()
+    }
+
+    fn bash_request(command: &str, cwd: &str) -> PermissionRequestInput {
+        let mut map = serde_json::Map::new();
+        map.insert(
+            "command".to_string(),
+            serde_json::Value::String(command.to_string()),
+        );
+        PermissionRequestInput {
+            hook_event_name: "PermissionRequest".to_string(),
+            tool_name: "Bash".to_string(),
+            cwd: cwd.to_string(),
+            permission_mode: "default".to_string(),
+            tool_input: ToolInputVariant::Map(map),
+            decision_reason: Some("Path is outside allowed working directories".to_string()),
+            ..Default::default()
+        }
+    }
+
+    fn behavior(output: Option<PermissionRequestOutput>) -> String {
+        match output {
+            Some(value) => serde_json::to_string(&value).expect("serialize decision"),
+            None => "prompt".to_string(),
+        }
+    }
+
+    #[test]
+    fn claude_bash_request_resolves_against_the_managed_document_only() {
+        let fixture = SettingsFixture::new()
+            .with_managed(&managed_only(r#""deny": ["Bash(mytool42:*)"]"#))
+            .with_user(r#"{"permissions": {"allow": ["Bash(othertool42:*)"]}}"#);
+        let cwd = fixture.cwd();
+
+        fixture.run(|| {
+            let denied = handle_permission_request(
+                &bash_request("mytool42 run", &cwd),
+                &serde_json::Map::new(),
+            );
+            assert!(
+                behavior(denied).contains("deny"),
+                "the managed deny must reach the subagent path"
+            );
+
+            let excluded = handle_permission_request(
+                &bash_request("othertool42 run", &cwd),
+                &serde_json::Map::new(),
+            );
+            assert_eq!(
+                behavior(excluded),
+                "prompt",
+                "a lower-scope allow must not approve a subagent command"
+            );
+        });
+    }
+
+    #[test]
+    fn claude_bash_request_keeps_lower_scopes_when_the_flag_is_off() {
+        let fixture = SettingsFixture::new()
+            .with_managed(r#"{"allowManagedPermissionRulesOnly": false, "permissions": {}}"#)
+            .with_user(r#"{"permissions": {"allow": ["Bash(othertool42:*)"]}}"#);
+        let cwd = fixture.cwd();
+
+        let allowed = fixture.run(|| {
+            handle_permission_request(
+                &bash_request("othertool42 run", &cwd),
+                &serde_json::Map::new(),
+            )
+        });
+        assert!(behavior(allowed).contains("allow"));
+    }
+
+    /// The Claude file-tool and MCP branches are worktree- and config-driven,
+    /// never settings-driven, so the managed flag must not move them.
+    #[test]
+    fn claude_file_and_mcp_requests_are_unchanged_by_the_managed_flag() {
+        let worktree = tempfile::TempDir::new().expect("worktree tempdir");
+        let cwd = worktree
+            .path()
+            .join(".claude/worktrees/agent-1")
+            .to_string_lossy()
+            .into_owned();
+        std::fs::create_dir_all(&cwd).expect("worktree dirs");
+
+        let mut write_map = serde_json::Map::new();
+        write_map.insert(
+            "file_path".to_string(),
+            serde_json::Value::String(format!("{cwd}/notes.txt")),
+        );
+        let write_request = PermissionRequestInput {
+            hook_event_name: "PermissionRequest".to_string(),
+            tool_name: "Write".to_string(),
+            cwd: cwd.clone(),
+            permission_mode: "acceptEdits".to_string(),
+            agent_id: Some("agent-1".to_string()),
+            tool_input: ToolInputVariant::Map(write_map),
+            ..Default::default()
+        };
+        let mcp_request = PermissionRequestInput {
+            hook_event_name: "PermissionRequest".to_string(),
+            tool_name: "mcp__example__lookup".to_string(),
+            cwd: cwd.clone(),
+            permission_mode: "acceptEdits".to_string(),
+            tool_input: ToolInputVariant::Map(serde_json::Map::new()),
+            ..Default::default()
+        };
+
+        // Lower scopes carry rules that would matter if the file or MCP branch
+        // consulted settings at all.
+        let fixture = SettingsFixture::new()
+            .with_managed(&managed_only(""))
+            .with_user(r#"{"permissions": {"deny": ["Write(**)", "mcp__example"]}}"#);
+
+        for request in [&write_request, &mcp_request] {
+            let baseline = behavior(handle_permission_request(request, &serde_json::Map::new()));
+            let under_managed_only = fixture
+                .run(|| behavior(handle_permission_request(request, &serde_json::Map::new())));
+            assert_eq!(
+                baseline, under_managed_only,
+                "{} must not change under managed-only resolution",
+                request.tool_name
+            );
+        }
+    }
+
+    #[test]
+    fn codex_project_edit_keeps_every_settings_source() {
+        let fixture = SettingsFixture::new()
+            .with_managed(&managed_only(""))
+            .with_user(r#"{"permissions": {"deny": ["Write(**/secrets/**)"]}}"#);
+        let cwd = fixture.cwd();
+
+        let settings = fixture.run(|| Settings::load(Client::Codex, &cwd));
+        let denied = decide_codex_project_edit(
+            &[format!("{cwd}/secrets/token.txt")],
+            &cwd,
+            &settings,
+            &default_guards(),
+            false,
+        );
+        assert!(
+            serde_json::to_string(&denied.expect("lower deny should still block"))
+                .unwrap()
+                .contains("deny"),
+            "Codex must keep the four-source merge"
+        );
+
+        let allowed = decide_codex_project_edit(
+            &[format!("{cwd}/src/main.rs")],
+            &cwd,
+            &settings,
+            &default_guards(),
+            false,
+        );
+        assert!(allowed.is_some(), "in-project Codex edits still auto-allow");
     }
 }

@@ -11,8 +11,29 @@
     <header class="sec-head release-section-head">
       <span class="lbl">Current window</span>
       <h2 id="release-current-title">Latest eight versions</h2>
-      <p>From v1.34.1 through v1.33.0, newest first.</p>
+      <p>From v1.36.0 through v1.33.1, newest first.</p>
     </header>
+  <div class="config-block">
+    <header>
+      <h3>v1.36.0 · August 17, 2026</h3>
+      <span class="src-tag">managed-only permission sources · release pending</span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  honor allowManagedPermissionRulesOnly from the managed settings document
+  resolve permission sources per calling client
+<span class="sec fixed">Fixed</span>
+  stop merging user, project, and local rules into Claude's set when set
+  keep the four-source merge for Codex, Antigravity, and Gemini</pre>
+      </div>
+      <div class="config-prose">
+        <p>Claude Code's enterprise managed settings document can set <code>allowManagedPermissionRulesOnly</code>, which tells the client to evaluate permission rules from that document alone. tool-gates read the key as unknown JSON and went on merging all four scopes, so a personal <code>~/.claude/settings.json</code> allow rule still granted commands the managed policy had withheld. On a shared machine that is the whole point of the flag, and losing it is the difference between a locked policy and a suggestion.</p>
+        <p>The loader now reads the managed document apart from the lower scopes and, for Claude, treats a boolean <code>true</code> there as a source boundary rather than a grants filter. Lower <code>deny</code> and <code>ask</code> entries drop out alongside lower <code>allow</code> entries and <code>additionalDirectories</code>, because a policy that keeps a personal deny is still letting a personal file steer the decision. Empty or malformed managed permissions resolve to no rules; neither falls back to a lower scope. Only the platform managed path can assert the flag, and only as a boolean, so the same key written into a user, project, or local file changes nothing.</p>
+        <p>The calling client is now an explicit input to settings resolution rather than something inferred, so Codex, Antigravity, and deprecated Gemini keep the behavior they had regardless of what Claude's managed document says. Nested evaluation carries the same policy: mise task expansion, package-script expansion, compound sub-command checks, the <code>acceptEdits</code> directory check, and the PostToolUse approval-queue filter all resolve under the client that started the invocation instead of reloading. The safety floor is unchanged, so a managed <code>allow</code> still cannot unlock a destructive command or a pipe-to-shell.</p>
+      </div>
+    </div>
+  </div>
   <div class="config-block">
     <header>
       <h3>v1.34.1 · August 11, 2026</h3>
@@ -133,6 +154,17 @@
       </div>
     </div>
   </div>
+  </section>
+  <details class="release-archive" id="release-archive" aria-labelledby="release-archive-title">
+    <summary>
+      <h2 class="release-summary" id="release-archive-title">
+        <span class="release-summary-kicker">Historical archive</span>
+        <span class="release-summary-title">Browse 60 earlier releases</span>
+        <span class="release-summary-range">v1.33.0 to v1.1.0</span>
+        <span class="release-summary-icon" aria-hidden="true"></span>
+      </h2>
+    </summary>
+    <div class="release-archive-list">
   <div class="config-block">
     <header>
       <h3>v1.33.0 · July 30, 2026</h3>
@@ -159,17 +191,6 @@
       </div>
     </div>
   </div>
-  </section>
-  <details class="release-archive" id="release-archive" aria-labelledby="release-archive-title">
-    <summary>
-      <h2 class="release-summary" id="release-archive-title">
-        <span class="release-summary-kicker">Historical archive</span>
-        <span class="release-summary-title">Browse 59 earlier releases</span>
-        <span class="release-summary-range">v1.32.4 to v1.1.0</span>
-        <span class="release-summary-icon" aria-hidden="true"></span>
-      </h2>
-    </summary>
-    <div class="release-archive-list">
   <div class="config-block">
     <header>
       <h3>v1.32.4 · July 28, 2026</h3>
