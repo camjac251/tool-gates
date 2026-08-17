@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.37.0](https://github.com/camjac251/tool-gates/compare/v1.36.0...v1.37.0) - 2026-08-17
+
+### Added
+
+- *(gates)* allow read-only inspection tools, gate fuser on -k
+- *(hints)* state prohibitions as rules, flag stderr merged into parsers
+
+### Other
+
+- *(whats-new)* backfill v1.34.2 and v1.35.0, link the v1.36.0 commit
+
 ## [1.36.0](https://github.com/camjac251/tool-gates/compare/v1.35.0...v1.36.0) - 2026-08-17
 
 ### Added
