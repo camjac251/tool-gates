@@ -559,13 +559,13 @@ static DEFAULT_BLOCK_RULES: std::sync::LazyLock<Vec<BlockRule>> = std::sync::Laz
         // Claude: Glob, Gemini: glob
         BlockRule {
             tool: "Glob".to_string(),
-            message: "Glob tool is blocked. Use 'fd' instead.".to_string(),
+            message: "The Glob tool is blocked in this environment.".to_string(),
             block_domains: vec![],
             requires_tool: Some("fd".to_string()),
         },
         BlockRule {
             tool: "glob".to_string(),
-            message: "Glob tool is blocked. Use 'fd' instead.".to_string(),
+            message: "The Glob tool is blocked in this environment.".to_string(),
             block_domains: vec![],
             requires_tool: Some("fd".to_string()),
         },
@@ -573,22 +573,20 @@ static DEFAULT_BLOCK_RULES: std::sync::LazyLock<Vec<BlockRule>> = std::sync::Laz
         // its grep_search search tool.
         BlockRule {
             tool: "find_by_name".to_string(),
-            message: "Glob tool is blocked. Use 'fd' instead.".to_string(),
+            message: "The Glob tool is blocked in this environment.".to_string(),
             block_domains: vec![],
             requires_tool: Some("fd".to_string()),
         },
         // Claude: Grep, Gemini: grep_search
         BlockRule {
             tool: "Grep".to_string(),
-            message: "Grep tool is blocked. Use 'rg' (ripgrep) or 'ast-grep' (for code)."
-                .to_string(),
+            message: "The Grep tool is blocked in this environment.".to_string(),
             block_domains: vec![],
             requires_tool: Some("rg".to_string()),
         },
         BlockRule {
             tool: "grep_search".to_string(),
-            message: "Grep tool is blocked. Use 'rg' (ripgrep) or 'ast-grep' (for code)."
-                .to_string(),
+            message: "The Grep tool is blocked in this environment.".to_string(),
             block_domains: vec![],
             requires_tool: Some("rg".to_string()),
         },

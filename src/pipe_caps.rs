@@ -252,25 +252,30 @@ fn pipeline_context(unquoted: &str, offset: usize) -> (String, Option<String>) {
     (producer, prior)
 }
 
-/// Stable denial cause for a non-exempt truncation cap. Never references
-/// `max_output` / `output_tail`, which are not stock Bash tool params (a public
-/// tool-gates install may not be on a patched build). The producer only selects
-/// the cause wording; semantic recovery actions are attached separately.
-fn head_tail_reason(producer: &str, segment: &str) -> String {
-    let trimmed = segment.trim();
+/// Denial text for a non-exempt truncation cap, in the prohibition voice the
+/// hint copy uses: directive, then the mechanism that makes it a rule rather
+/// than a preference. Never references `max_output` / `output_tail`, which are
+/// not stock Bash tool params (a public tool-gates install may not be on a
+/// patched build). Deliberately does not echo the rejected fragment: the model
+/// already has the command it just wrote, and restating the pattern in the most
+/// salient position works against suppressing it. Carries no corrective action:
+/// those are `RecoveryAction` values rendered per client at the output boundary,
+/// so the reason itself stays client-neutral.
+fn head_tail_reason(producer: &str) -> String {
     if producer == "gh" {
-        return format!(
-            "`{trimmed}` blocked: this consumer-side cap truncates `gh` output and can drop rows or \
-             cut JSON."
-        );
+        return "**NEVER** cap `gh` output at a later pipeline stage: it drops rows and cuts JSON \
+                mid-object."
+            .to_string();
     }
     if BUILD_PRODUCERS.contains(&producer) {
         return format!(
-            "`{trimmed}` blocked: this consumer-side cap truncates `{producer}` output and can hide \
-             diagnostics."
+            "**NEVER** cap `{producer}` output at a later pipeline stage: it hides the diagnostics \
+             the run exists to produce."
         );
     }
-    format!("`{trimmed}` blocked: a consumer-side cap truncates unseen output.")
+    "**NEVER** put a limit at the end of a pipeline: it discards output you never saw, and a flag \
+     that is correct in producer position is still a consumer-side cap here."
+        .to_string()
 }
 
 fn cap_stage(segment: &str) -> &str {
@@ -477,7 +482,7 @@ fn head_tail_denial(
     command_string: &str,
     prior_program: Option<&str>,
 ) -> HookOutput {
-    let output = HookOutput::deny(&head_tail_reason(producer, segment));
+    let output = HookOutput::deny(&head_tail_reason(producer));
     if producer == "gh" {
         return output
             .with_recovery(RecoveryAction::KeepCompleteOutput)
@@ -645,7 +650,9 @@ mod tests {
 
         assert_eq!(
             output.reason.as_deref(),
-            Some("`| head -n 12` blocked: a consumer-side cap truncates unseen output.")
+            Some(
+                "**NEVER** put a limit at the end of a pipeline: it discards output you never saw, and a flag that is correct in producer position is still a consumer-side cap here."
+            )
         );
 
         let claude = output.serialize(Client::Claude);
@@ -659,7 +666,8 @@ mod tests {
         let codex = output.serialize(Client::Codex);
         assert_eq!(
             codex["hookSpecificOutput"]["permissionDecisionReason"],
-            "`| head -n 12` blocked: a consumer-side cap truncates unseen output."
+            "**NEVER** put a limit at the end of a pipeline: it discards output you never saw, and a flag \
+             that is correct in producer position is still a consumer-side cap here."
         );
         assert_eq!(
             codex["hookSpecificOutput"]["additionalContext"],
@@ -703,7 +711,9 @@ mod tests {
 
         assert_eq!(
             output.reason.as_deref(),
-            Some("`| sed -n '1,10p'` blocked: a consumer-side cap truncates unseen output.")
+            Some(
+                "**NEVER** put a limit at the end of a pipeline: it discards output you never saw, and a flag that is correct in producer position is still a consumer-side cap here."
+            )
         );
         assert_eq!(
             output.recovery_actions,

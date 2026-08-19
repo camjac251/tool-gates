@@ -616,7 +616,7 @@ mod tests {
                 assert_eq!(get_decision(&result), "deny", "should deny: {cmd}");
                 let reason = get_reason(&result);
                 assert!(
-                    reason.contains("blocked") && reason.contains("truncat"),
+                    reason.contains("**NEVER**") && reason.contains("pipeline"),
                     "Missing head/tail deny rationale for: {cmd}\ngot: {reason}"
                 );
             }
@@ -642,7 +642,7 @@ mod tests {
 
             let build_result = check_command("cargo test | head -20");
             let build = get_reason(&build_result);
-            assert!(build.contains("hide diagnostics"));
+            assert!(build.contains("hides the diagnostics"));
             assert!(!build.contains("uncapped"));
             assert!(!build.contains("rg 'pattern'"));
             assert!(build.len() <= 250);
@@ -656,7 +656,7 @@ mod tests {
 
             let github_result = check_command("gh api repos/o/r/pulls | head -5");
             let github = get_reason(&github_result);
-            assert!(github.contains("drop rows or cut JSON"));
+            assert!(github.contains("drops rows and cuts JSON"));
             assert!(!github.contains("native options"));
             assert!(!github.contains("--jq"));
             assert!(github.len() <= 250);
@@ -690,7 +690,7 @@ mod tests {
                     "wrapped build/gh should deny: {cmd}"
                 );
                 assert!(
-                    get_reason(&result).contains("truncat"),
+                    get_reason(&result).contains("**NEVER**"),
                     "expected head/tail deny for: {cmd}"
                 );
             }
@@ -717,8 +717,8 @@ mod tests {
                     "soft-producer head/tail must deny: {cmd}"
                 );
                 assert!(
-                    get_reason(&result).contains("blocked"),
-                    "expected blocked message: {cmd}\ngot: {}",
+                    get_reason(&result).contains("**NEVER**"),
+                    "expected prohibition message: {cmd}\ngot: {}",
                     get_reason(&result)
                 );
             }
@@ -773,7 +773,7 @@ mod tests {
                 let result = check_command(cmd);
                 let reason = get_reason(&result);
                 assert!(
-                    !(get_decision(&result) == "deny" && reason.contains("blocked")),
+                    !(get_decision(&result) == "deny" && reason.contains("**NEVER**")),
                     "head/tail deny should not fire for top-N: {cmd}\ngot: {reason}"
                 );
             }
@@ -792,7 +792,7 @@ mod tests {
                 let result = check_command(cmd);
                 let reason = get_reason(&result);
                 assert!(
-                    !(get_decision(&result) == "deny" && reason.contains("blocked")),
+                    !(get_decision(&result) == "deny" && reason.contains("**NEVER**")),
                     "head/tail deny should not fire inside substitution: {cmd}\ngot: {reason}"
                 );
             }
@@ -805,16 +805,24 @@ mod tests {
             let cases = [
                 (
                     "gh pr list | head -20",
-                    "drop rows or cut JSON",
+                    "drops rows and cuts JSON",
                     "own limiting options",
                 ),
                 (
                     "gh api repos/o/r/pulls | head -5",
-                    "drop rows or cut JSON",
+                    "drops rows and cuts JSON",
                     "own limiting options",
                 ),
-                ("cargo test 2>&1 | tail -40", "hide diagnostics", "uncapped"),
-                ("pnpm test | head -30", "hide diagnostics", "real pattern"),
+                (
+                    "cargo test 2>&1 | tail -40",
+                    "hides the diagnostics",
+                    "uncapped",
+                ),
+                (
+                    "pnpm test | head -30",
+                    "hides the diagnostics",
+                    "real pattern",
+                ),
             ];
             for (cmd, reason_needle, recovery_needle) in cases {
                 let result = check_command(cmd);
@@ -849,7 +857,8 @@ mod tests {
             let reason = get_reason(&result);
             assert_eq!(
                 reason,
-                "`| sed -n '1,10p'` blocked: a consumer-side cap truncates unseen output."
+                "**NEVER** put a limit at the end of a pipeline: it discards output you never saw, \
+                 and a flag that is correct in producer position is still a consumer-side cap here."
             );
             assert!(
                 !reason.contains("Use Read"),
@@ -887,7 +896,7 @@ mod tests {
                     "build/gh sed/awk trunc should deny: {cmd}"
                 );
                 assert!(
-                    get_reason(&result).contains("truncate"),
+                    get_reason(&result).contains("**NEVER**"),
                     "expected truncation deny for: {cmd}"
                 );
             }
@@ -934,7 +943,7 @@ mod tests {
                     "build/gh rg-counter should deny: {cmd}"
                 );
                 assert!(
-                    get_reason(&result).contains("truncate"),
+                    get_reason(&result).contains("**NEVER**"),
                     "expected truncation deny for: {cmd}"
                 );
             }
@@ -997,7 +1006,7 @@ mod tests {
                     "maximum-count catch-all must remain denied: {cmd}"
                 );
                 assert!(
-                    get_reason(&result).contains("truncate"),
+                    get_reason(&result).contains("**NEVER**"),
                     "expected truncation rationale for: {cmd}"
                 );
             }
@@ -1137,7 +1146,7 @@ mod tests {
             let output = check_hard_deny_patterns_with_features("gh pr list | head -5", &on)
                 .expect("toggle-on must produce a deny");
             assert!(
-                output.reason.as_deref().unwrap_or("").contains("blocked"),
+                output.reason.as_deref().unwrap_or("").contains("**NEVER**"),
                 "Expected deny rationale in reason"
             );
         }

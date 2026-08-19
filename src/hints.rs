@@ -128,7 +128,7 @@ pub fn hint_catalog() -> &'static [HintCatalogEntry] {
         HintCatalogEntry {
             legacy: "sed s/.../.../",
             modern: "sd",
-            why: "Plain find/replace, no s/.../.../g escaping.",
+            why: "Plain find/replace on non-code text, no s/.../.../g escaping.",
             program_level: None,
         },
         HintCatalogEntry {
@@ -140,42 +140,12 @@ pub fn hint_catalog() -> &'static [HintCatalogEntry] {
         HintCatalogEntry {
             legacy: "wc -l <file>",
             modern: "rg -c '.'",
-            why: "Counts lines without a separate utility (piped wc -l is fine).",
+            why: "Counts non-blank lines without a separate utility (piped wc -l is fine).",
             program_level: None,
         },
         // File listing & disk
-        HintCatalogEntry {
-            legacy: "ls -la",
-            modern: "eza -la",
-            why: "Git status integration and clearer formatting.",
-            program_level: None,
-        },
-        HintCatalogEntry {
-            legacy: "du",
-            modern: "dust",
-            why: "Visual disk-usage tree (du -sh summaries are fine).",
-            program_level: None,
-        },
-        HintCatalogEntry {
-            legacy: "tree",
-            modern: "eza -T",
-            why: "Git status integration and clearer formatting.",
-            program_level: Some("tree"),
-        },
         // Process inspection
-        HintCatalogEntry {
-            legacy: "ps aux",
-            modern: "procs",
-            why: "Readable columns and a tree view.",
-            program_level: None,
-        },
         // Watching
-        HintCatalogEntry {
-            legacy: "watch",
-            modern: "viddy",
-            why: "Diff highlighting and history; watchexec when a file change should trigger the command.",
-            program_level: Some("watch"),
-        },
         // Network
         HintCatalogEntry {
             legacy: "curl <github-url>",
@@ -191,12 +161,6 @@ pub fn hint_catalog() -> &'static [HintCatalogEntry] {
         },
         // Diff & hex
         HintCatalogEntry {
-            legacy: "diff <a> <b>",
-            modern: "difft",
-            why: "Syntax-aware diffs (git diff for unified patches).",
-            program_level: None,
-        },
-        HintCatalogEntry {
             legacy: "xxd / hexdump",
             modern: "hexyl",
             why: "Colored, readable hex output.",
@@ -210,12 +174,6 @@ pub fn hint_catalog() -> &'static [HintCatalogEntry] {
             program_level: Some("cloc"),
         },
         // Documentation
-        HintCatalogEntry {
-            legacy: "man",
-            modern: "tldr",
-            why: "Practical examples, concise output.",
-            program_level: Some("man"),
-        },
         // Spelling
         HintCatalogEntry {
             legacy: "aspell / codespell",
@@ -675,9 +633,9 @@ fn hint_sed(cmd: &CommandInfo) -> Option<ModernHint> {
     }
 
     let hint = if has_inplace {
-        "Use `sd <find> <replace> <file>` instead of `sed -i`. Simpler syntax, no escaping needed."
+        "Use `sd <find> <replace> <file>` instead of `sed -i` on non-code text. Simpler syntax, no escaping needed. For source code, use a structural or symbol-aware rewrite instead."
     } else {
-        "Use `sd <find> <replace>` instead of `sed`. No 's/.../.../g' syntax needed."
+        "Use `sd <find> <replace>` instead of `sed` on non-code text. No 's/.../.../g' syntax needed. For source code, use a structural or symbol-aware rewrite instead."
     };
 
     Some(ModernHint {
@@ -935,7 +893,7 @@ fn hint_wc(cmd: &CommandInfo) -> Option<ModernHint> {
             legacy_command: "wc -l",
             modern_command: "rg",
             hint:
-                "Use `rg -c '.' <file>` to count lines in a file. For counting piped output, `| wc -l` is fine."
+                "Use `rg -c '.' <file>` to count non-blank lines. `wc -l` is correct when the true total matters and for counting piped output."
                     .to_string(),
         });
     }
@@ -2442,7 +2400,10 @@ mod tests {
     #[test]
     fn test_program_hint_covers_new_entries_and_aliases() {
         assert_eq!(program_hint("youtube-dl").unwrap().modern, "yt-dlp");
-        assert_eq!(program_hint("watch").unwrap().modern, "viddy");
+        assert!(
+            program_hint("watch").is_none(),
+            "cosmetic pairings are not catalogued"
+        );
         assert_eq!(program_hint("aspell").unwrap().modern, "typos");
         assert_eq!(program_hint("codespell").unwrap().modern, "typos");
     }

@@ -77,7 +77,7 @@
   <div class="old"><span class="prog">$</span> <s>sed s/.../.../</s></div>
   <div class="arrow">→</div>
   <div class="new"><span class="prog">$</span> sd</div>
-  <div class="why"><b>Tip from tool-gates:</b> Plain find/replace, no s/.../.../g escaping.</div>
+  <div class="why"><b>Tip from tool-gates:</b> Plain find/replace on non-code text, no s/.../.../g escaping.</div>
 </div>
 <div class="hint-row">
   <div class="old"><span class="prog">$</span> <s>awk '{print $N}'</s></div>
@@ -89,37 +89,7 @@
   <div class="old"><span class="prog">$</span> <s>wc -l &lt;file&gt;</s></div>
   <div class="arrow">→</div>
   <div class="new"><span class="prog">$</span> rg -c '.'</div>
-  <div class="why"><b>Tip from tool-gates:</b> Counts lines without a separate utility (piped wc -l is fine).</div>
-</div>
-<div class="hint-row">
-  <div class="old"><span class="prog">$</span> <s>ls -la</s></div>
-  <div class="arrow">→</div>
-  <div class="new"><span class="prog">$</span> eza -la</div>
-  <div class="why"><b>Tip from tool-gates:</b> Git status integration and clearer formatting.</div>
-</div>
-<div class="hint-row">
-  <div class="old"><span class="prog">$</span> <s>du</s></div>
-  <div class="arrow">→</div>
-  <div class="new"><span class="prog">$</span> dust</div>
-  <div class="why"><b>Tip from tool-gates:</b> Visual disk-usage tree (du -sh summaries are fine).</div>
-</div>
-<div class="hint-row">
-  <div class="old"><span class="prog">$</span> <s>tree</s></div>
-  <div class="arrow">→</div>
-  <div class="new"><span class="prog">$</span> eza -T</div>
-  <div class="why"><b>Tip from tool-gates:</b> Git status integration and clearer formatting.</div>
-</div>
-<div class="hint-row">
-  <div class="old"><span class="prog">$</span> <s>ps aux</s></div>
-  <div class="arrow">→</div>
-  <div class="new"><span class="prog">$</span> procs</div>
-  <div class="why"><b>Tip from tool-gates:</b> Readable columns and a tree view.</div>
-</div>
-<div class="hint-row">
-  <div class="old"><span class="prog">$</span> <s>watch</s></div>
-  <div class="arrow">→</div>
-  <div class="new"><span class="prog">$</span> viddy</div>
-  <div class="why"><b>Tip from tool-gates:</b> Diff highlighting and history; watchexec when a file change should trigger the command.</div>
+  <div class="why"><b>Tip from tool-gates:</b> Counts non-blank lines without a separate utility (piped wc -l is fine).</div>
 </div>
 <div class="hint-row">
   <div class="old"><span class="prog">$</span> <s>curl &lt;github-url&gt;</s></div>
@@ -134,12 +104,6 @@
   <div class="why"><b>Tip from tool-gates:</b> Preserves auth, rate limits, and private-repo access.</div>
 </div>
 <div class="hint-row">
-  <div class="old"><span class="prog">$</span> <s>diff &lt;a&gt; &lt;b&gt;</s></div>
-  <div class="arrow">→</div>
-  <div class="new"><span class="prog">$</span> difft</div>
-  <div class="why"><b>Tip from tool-gates:</b> Syntax-aware diffs (git diff for unified patches).</div>
-</div>
-<div class="hint-row">
   <div class="old"><span class="prog">$</span> <s>xxd / hexdump</s></div>
   <div class="arrow">→</div>
   <div class="new"><span class="prog">$</span> hexyl</div>
@@ -150,12 +114,6 @@
   <div class="arrow">→</div>
   <div class="new"><span class="prog">$</span> tokei</div>
   <div class="why"><b>Tip from tool-gates:</b> Faster with clearer formatting.</div>
-</div>
-<div class="hint-row">
-  <div class="old"><span class="prog">$</span> <s>man</s></div>
-  <div class="arrow">→</div>
-  <div class="new"><span class="prog">$</span> tldr</div>
-  <div class="why"><b>Tip from tool-gates:</b> Practical examples, concise output.</div>
 </div>
 <div class="hint-row">
   <div class="old"><span class="prog">$</span> <s>aspell / codespell</s></div>
