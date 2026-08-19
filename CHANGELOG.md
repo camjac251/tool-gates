@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.39.0](https://github.com/camjac251/tool-gates/compare/v1.38.0...v1.39.0) - 2026-08-19
+
+### Added
+
+- *(hints)* drop cosmetic pairings, state cap denials as prohibitions
+
 ## [1.38.0](https://github.com/camjac251/tool-gates/compare/v1.37.0...v1.38.0) - 2026-08-19
 
 ### Added
