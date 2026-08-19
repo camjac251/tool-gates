@@ -3,7 +3,7 @@
 
 use crate::accept_edits::should_auto_allow_in_accept_edits;
 use crate::gates::check_single_command;
-use crate::models::{Decision, is_auto_mode};
+use crate::models::{Decision, is_accept_edits_mode, is_auto_mode};
 use crate::parser::{extract_commands, neutralize_heredoc_bodies};
 use crate::pipe_caps::check_hard_deny_patterns_with_features;
 use crate::recovery::render_neutral_recovery_actions;
@@ -281,7 +281,7 @@ pub fn decide_instrumented(command: &str, mode: &str, settings_json: Option<&str
                 } else {
                     // 2. Check for acceptEdits mode / auto mode auto-allows.
                     let mut auto_allowed = false;
-                    if (mode == "acceptEdits" || is_auto_mode(mode)) && decision == "ask" {
+                    if (is_accept_edits_mode(mode) || is_auto_mode(mode)) && decision == "ask" {
                         let allowed_dirs = settings.allowed_directories(""); // WASM has empty cwd.
                         if should_auto_allow_in_accept_edits(&commands, &allowed_dirs) {
                             settings_status = "allow";

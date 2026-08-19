@@ -4,7 +4,9 @@
 use crate::accept_edits::should_auto_allow_in_accept_edits;
 use crate::gates::check_single_command;
 use crate::mise::{extract_task_commands, find_mise_config, load_mise_config};
-use crate::models::{Client, Decision, HookOutput, PermissionDecision, is_auto_mode};
+use crate::models::{
+    Client, Decision, HookOutput, PermissionDecision, is_accept_edits_mode, is_auto_mode,
+};
 use crate::package_json::{
     find_package_json, get_script_command, load_package_json, parse_script_invocation,
 };
@@ -145,7 +147,7 @@ pub(crate) fn check_package_script(
         }
         PermissionDecision::Ask => {
             // In acceptEdits mode, check if the underlying command is a file-editing command
-            if permission_mode == "acceptEdits" {
+            if is_accept_edits_mode(permission_mode) {
                 let commands = extract_commands(&script_cmd);
                 let settings = Settings::load(client, cwd);
                 let allowed_dirs = settings.allowed_directories(cwd);
@@ -286,7 +288,7 @@ pub(crate) fn check_command_expanded(
                 }
                 Decision::Ask => {
                     // In acceptEdits mode, check if this is a file-editing command
-                    if permission_mode == "acceptEdits" {
+                    if is_accept_edits_mode(permission_mode) {
                         let settings = Settings::load(client, &cwd_str);
                         let allowed_dirs = settings.allowed_directories(&cwd_str);
                         if should_auto_allow_in_accept_edits(

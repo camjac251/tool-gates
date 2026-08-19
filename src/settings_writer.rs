@@ -349,20 +349,139 @@ pub fn parse_pattern(formatted: &str) -> String {
     }
 }
 
+/// Path to Antigravity's global settings file
+/// (`~/.gemini/antigravity-cli/settings.json`), which holds the native
+/// `permissions` lists. Distinct from the hooks file
+/// (`~/.gemini/config/hooks.json`): settings live under `antigravity-cli/`.
+///
+/// These rules are read by agy's own permission engine, not by tool-gates.
+/// `Settings::load` never reads this file: `tool-gates agy allowlist` writes a
+/// broad `command(<prog>)` allow list here on the explicit understanding that
+/// the hook still tightens over any dangerous form, so feeding it back in as a
+/// tool-gates allow list would let `command(find)` approve `find . -delete`.
+pub fn antigravity_settings_path() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".gemini")
+        .join("antigravity-cli")
+        .join("settings.json")
+}
+
+/// Format a pattern for Antigravity settings.json (wrap in command() if needed)
+pub fn format_antigravity_pattern(pattern: &str) -> String {
+    let p = pattern.trim();
+    if (p.starts_with("command(") || p.starts_with("Bash(")) && p.ends_with(')') {
+        if p.starts_with("Bash(") {
+            format!("command({})", &p[5..p.len() - 1])
+        } else {
+            p.to_string()
+        }
+    } else {
+        format!("command({})", p)
+    }
+}
+
+/// Parse a pattern from Antigravity settings format (strip command(...) or Bash(...))
+pub fn parse_antigravity_pattern(formatted: &str) -> String {
+    let f = formatted.trim();
+    if (f.starts_with("command(") || f.starts_with("Bash(")) && f.ends_with(')') {
+        let start = if f.starts_with("command(") { 8 } else { 5 };
+        f[start..f.len() - 1].to_string()
+    } else {
+        f.to_string()
+    }
+}
+
+/// Add a permission rule to Antigravity settings.json
+pub fn add_antigravity_rule(pattern: &str, rule_type: RuleType) -> std::io::Result<()> {
+    let formatted = format_antigravity_pattern(pattern);
+    let path = antigravity_settings_path();
+
+    with_exclusive_settings_path(&path, |settings| {
+        if settings.get("permissions").is_none() {
+            settings["permissions"] = json!({});
+        }
+
+        let permissions = settings.get_mut("permissions").unwrap();
+
+        for other_type in ["allow", "ask", "deny"] {
+            if let Some(arr) = permissions
+                .get_mut(other_type)
+                .and_then(|v| v.as_array_mut())
+            {
+                arr.retain(|r| r.as_str() != Some(&formatted));
+            }
+        }
+
+        let rule_key = rule_type.as_str();
+        if permissions.get(rule_key).is_none() {
+            permissions[rule_key] = json!([]);
+        }
+
+        let rules = permissions[rule_key].as_array_mut().unwrap();
+        rules.push(json!(formatted));
+    })
+}
+
+/// Remove a permission rule from Antigravity settings.json
+pub fn remove_antigravity_rule(pattern: &str) -> std::io::Result<bool> {
+    let formatted = format_antigravity_pattern(pattern);
+    let raw = pattern.trim();
+    let path = antigravity_settings_path();
+
+    with_exclusive_settings_path(&path, |settings| {
+        let Some(permissions) = settings.get_mut("permissions") else {
+            return false;
+        };
+
+        let mut removed = false;
+        for rule_type in ["allow", "ask", "deny"] {
+            if let Some(rules) = permissions.get_mut(rule_type)
+                && let Some(arr) = rules.as_array_mut()
+            {
+                let len_before = arr.len();
+                arr.retain(|r| {
+                    if let Some(s) = r.as_str() {
+                        s != formatted && s != raw && parse_antigravity_pattern(s) != raw
+                    } else {
+                        true
+                    }
+                });
+                if arr.len() < len_before {
+                    removed = true;
+                }
+            }
+        }
+        removed
+    })
+}
+
+/// List all permission rules from Antigravity settings.json
+pub fn list_antigravity_rules() -> Vec<PermissionRule> {
+    let path = antigravity_settings_path();
+    let settings = load_settings_path(&path);
+    extract_rules(&settings, Scope::User)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use tempfile::TempDir;
 
-    #[allow(dead_code)]
     fn with_temp_home<F>(test: F)
     where
         F: FnOnce(),
     {
+        let saved_home = std::env::var("HOME").ok();
         let temp_dir = TempDir::new().unwrap();
-        // SAFETY: Test runs single-threaded
+        // SAFETY: Test runs serialized
         unsafe { std::env::set_var("HOME", temp_dir.path()) };
         test();
+        if let Some(h) = saved_home {
+            unsafe { std::env::set_var("HOME", h) };
+        } else {
+            unsafe { std::env::remove_var("HOME") };
+        }
     }
 
     #[test]
@@ -375,6 +494,26 @@ mod tests {
     fn test_parse_pattern() {
         assert_eq!(parse_pattern("Bash(npm install:*)"), "npm install:*");
         assert_eq!(parse_pattern("git*"), "git*");
+    }
+
+    #[test]
+    fn test_format_antigravity_pattern() {
+        assert_eq!(
+            format_antigravity_pattern("cargo test"),
+            "command(cargo test)"
+        );
+        assert_eq!(format_antigravity_pattern("command(git*)"), "command(git*)");
+        assert_eq!(format_antigravity_pattern("Bash(npm:*)"), "command(npm:*)");
+    }
+
+    #[test]
+    fn test_parse_antigravity_pattern() {
+        assert_eq!(
+            parse_antigravity_pattern("command(cargo test)"),
+            "cargo test"
+        );
+        assert_eq!(parse_antigravity_pattern("Bash(npm:*)"), "npm:*");
+        assert_eq!(parse_antigravity_pattern("cargo test"), "cargo test");
     }
 
     #[test]
@@ -502,5 +641,37 @@ mod tests {
         );
 
         unsafe { std::env::remove_var("CLAUDE_CONFIG_DIR") };
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn antigravity_rule_add_and_remove_round_trip() {
+        with_temp_home(|| {
+            let agy_dir = dirs::home_dir()
+                .unwrap()
+                .join(".gemini")
+                .join("antigravity-cli");
+            fs::create_dir_all(&agy_dir).unwrap();
+
+            // Add allow rule
+            add_antigravity_rule("cargo test", RuleType::Allow).unwrap();
+
+            let rules = list_antigravity_rules();
+            assert_eq!(rules.len(), 1);
+            assert_eq!(rules[0].pattern, "command(cargo test)");
+            assert_eq!(rules[0].rule_type, RuleType::Allow);
+
+            // Add deny rule for same pattern - should move from allow to deny
+            add_antigravity_rule("cargo test", RuleType::Deny).unwrap();
+            let rules = list_antigravity_rules();
+            assert_eq!(rules.len(), 1);
+            assert_eq!(rules[0].rule_type, RuleType::Deny);
+
+            // Remove rule
+            let removed = remove_antigravity_rule("cargo test").unwrap();
+            assert!(removed);
+            let rules = list_antigravity_rules();
+            assert!(rules.is_empty());
+        });
     }
 }

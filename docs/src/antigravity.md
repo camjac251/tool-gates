@@ -75,8 +75,8 @@
       <p>Write content arrives in the PreToolUse args, so Tier 1 secret scanning runs on the write before it lands. File guards apply on both reads (<code>view_file</code>) and writes for symlinked AI-config files.</p>
     </article>
     <article class="hook-card">
-      <h3>MCP not wired yet</h3>
-      <p>Antigravity's MCP tool-name format for hook matchers is not documented, so MCP block rules are not yet applied for Antigravity. Shell, file, grep, and glob tools are all gated.</p>
+      <h3>MCP block rules</h3>
+      <p>Antigravity routes every MCP call through one tool name, <code>call_mcp_tool</code>, and carries the server and tool in the args. tool-gates rebuilds the canonical <code>mcp__&lt;server&gt;__&lt;tool&gt;</code> from those args, so <code>[[block_tools]]</code> rules select per server and per tool with the same syntax you already use for Claude: <code>mcp__firecrawl__scrape</code> and <code>mcp__firecrawl__*</code> both work. <code>[[accept_edits_mcp]]</code> rules never fire: they are keyed to acceptEdits, and Antigravity sends no permission mode.</p>
     </article>
   </div>
   <div class="config-block">
@@ -94,7 +94,7 @@ $ tool-gates hooks add --antigravity --dry-run
 $ tool-gates hooks add --antigravity -s project</pre>
       </div>
       <div class="config-prose">
-        <p>Antigravity user hooks live at <code>~/.gemini/config/hooks.json</code>, which is the installer default and the path shared by the CLI backend. Project hooks live at <code>.agents/hooks.json</code> and are available with <code>-s project</code>. The matcher covers <code>run_command</code>, <code>view_file</code>, <code>write_to_file</code>, <code>replace_file_content</code>, <code>multi_replace_file_content</code>, <code>grep_search</code>, and <code>find_by_name</code>.</p>
+        <p>Antigravity user hooks live at <code>~/.gemini/config/hooks.json</code>, which is the installer default and the path shared by the CLI backend. Project hooks live at <code>.agents/hooks.json</code> and are available with <code>-s project</code>, but prefer user scope: a probe hook installed at <code>.agents/hooks.json</code> in a trusted workspace was not loaded under <code>agy --print</code> (agy logged <code>loaded 1 named hooks from 1 hooks.json file(s)</code>), and agy's own changelog ties workspace-local hook loading to a workspace-change event. The matcher covers <code>run_command</code>, <code>view_file</code>, <code>write_to_file</code>, <code>replace_file_content</code>, <code>multi_replace_file_content</code>, <code>grep_search</code>, <code>find_by_name</code>, and MCP tools.</p>
         <p>Plugin-packaged hooks are useful for distribution, but they are not required for hook installs. Treat plugin support as a separate global-install path that should be verified with <code>agy plugin validate</code> and a deny probe before relying on it.</p>
         <p>Confirm with <code>tool-gates hooks status</code>, which lists the Antigravity shared user and project hook paths alongside the other clients.</p>
       </div>
@@ -117,6 +117,9 @@ $ tool-gates agy allowlist --apply --dry-run</pre>
       <div class="config-prose">
         <p>Because a hook <code>allow</code> is inert, the only thing that stops Antigravity prompting for a read-only command is its native <code>permissions.allow</code> list in <code>~/.gemini/antigravity-cli/settings.json</code> (a different file from the hooks path). <code>tool-gates agy allowlist</code> generates that list from tool-gates' own unconditionally-safe command set, one <code>command(&lt;prog&gt;)</code> rule per program (<code>command(rg)</code>, <code>command(cat)</code>, <code>command(jq)</code>, …).</p>
         <p>The tool-gates hook still runs on every call and tightens (deny/ask/force_ask) over any dangerous form, so a native <code>command(find)</code> does not let <code>find . -delete</code> through: the hook asks and the stricter decision wins. Interpreters (<code>bash</code>/<code>sh</code>/<code>zsh</code>), <code>curl</code>, and conditionally-gated programs are excluded from the list. Antigravity reads settings at startup, so restart <code>agy</code> after applying.</p>
+        <p>The rules do load: after <code>--apply</code>, Antigravity's startup log reports <code>CLI settings initialized: permissions=&amp;{Allow:[command(actionlint) …] Deny:[] Ask:[]}</code> with the full generated set. Antigravity does overlay a second permission source at startup, the <code>userSettings.globalPermissionGrants</code> block in <code>~/.gemini/config/config.json</code>, which is where an “Always Allow” click inside <code>agy</code> writes. That overlay does not clobber the generated list: with a grant present, the startup line still carries every allowlist rule.</p>
+        <p>For a pattern the generated list does not cover, <code>tool-gates approve &lt;pattern&gt; --antigravity</code> writes a single <code>command(…)</code> rule into the same file (<code>tool-gates approve 'cargo test' --antigravity</code>), <code>tool-gates rules list --antigravity</code> shows what is there, and <code>tool-gates rules remove &lt;pattern&gt; --antigravity</code> takes one out. These commands take no <code>--scope</code>: the file is user-global.</p>
+        <p>Everything in that file is read by <em>agy's</em> permission engine, never by tool-gates. tool-gates reads its own rules from <code>.claude/settings.json</code> for every client, Antigravity included. That separation is what keeps the paragraph above true: if tool-gates also honored its own generated <code>command(find)</code> as an allow, <code>find . -delete</code> would stop asking. Use <code>--antigravity</code> to stop agy prompting; use <code>tool-gates approve … -s user</code> to change what tool-gates itself decides.</p>
       </div>
     </div>
   </div>

@@ -41,6 +41,22 @@ fn normalize_path(path: &Path) -> String {
     normalized.to_string_lossy().to_string()
 }
 
+/// Strip the `Bash(...)` or `command(...)` wrapper around a shell pattern.
+///
+/// `command(...)` is Antigravity's spelling of the same rule. Accepting it here
+/// means a rule copied out of an agy settings file keeps working when it is
+/// written into `.claude/settings.json`, which is where tool-gates reads rules
+/// from for every client.
+pub(crate) fn strip_command_pattern(pattern: &str) -> Option<&str> {
+    if let Some(rest) = pattern.strip_prefix("Bash(") {
+        rest.strip_suffix(')')
+    } else if let Some(rest) = pattern.strip_prefix("command(") {
+        rest.strip_suffix(')')
+    } else {
+        None
+    }
+}
+
 /// Match a file path against a gitignore-style glob from a Claude settings.json
 /// file rule (the `...` inside `Write(...)` / `Edit(...)`).
 ///
@@ -262,6 +278,13 @@ pub struct SettingsSources {
 
 impl SettingsSources {
     /// Read every scope from disk.
+    ///
+    /// The four documents are the same for every client. tool-gates' own rules
+    /// live under `.claude/`, including for Codex and Antigravity: a client's
+    /// native permission file is an input to *that client's* engine, and for
+    /// Antigravity it is the file `tool-gates agy allowlist` writes a broad
+    /// program-level allow list into, so reading it back here would let
+    /// `command(find)` approve `find . -delete`.
     pub fn load(cwd: &str) -> Self {
         Self::load_from(&effective_paths(), cwd)
     }
@@ -420,8 +443,7 @@ impl Settings {
     /// Like `matches_any` but returns the matched pattern instead of a bool.
     fn find_matching<'a>(&self, patterns: &'a [String], command: &str) -> Option<&'a str> {
         for pattern in patterns {
-            if let Some(bash_pattern) = pattern.strip_prefix("Bash(")
-                && let Some(inner) = bash_pattern.strip_suffix(')')
+            if let Some(inner) = strip_command_pattern(pattern)
                 && Self::matches_bash_pattern(inner, command)
             {
                 return Some(pattern);
@@ -484,11 +506,10 @@ impl Settings {
         false
     }
 
-    /// Match command against Bash(...) patterns
+    /// Match command against Bash(...) or command(...) patterns
     fn matches_any(&self, patterns: &[String], command: &str) -> bool {
         for pattern in patterns {
-            if let Some(bash_pattern) = pattern.strip_prefix("Bash(")
-                && let Some(inner) = bash_pattern.strip_suffix(')')
+            if let Some(inner) = strip_command_pattern(pattern)
                 && Self::matches_bash_pattern(inner, command)
             {
                 return true;
@@ -613,12 +634,11 @@ impl Settings {
         }
     }
 
-    /// Highest specificity score among all matching Bash patterns in the list.
+    /// Highest specificity score among all matching Bash/command patterns in the list.
     fn best_match_specificity(patterns: &[String], command: &str) -> Option<usize> {
         let mut best: Option<usize> = None;
         for pattern in patterns {
-            if let Some(bash_pattern) = pattern.strip_prefix("Bash(")
-                && let Some(inner) = bash_pattern.strip_suffix(')')
+            if let Some(inner) = strip_command_pattern(pattern)
                 && let Some(score) = Self::pattern_specificity(inner, command)
             {
                 best = Some(best.map_or(score, |b| b.max(score)));
@@ -1046,6 +1066,32 @@ mod tests {
     }
 
     #[test]
+    fn test_command_wrapper_matching() {
+        let settings = Settings {
+            permissions: Permissions {
+                allow: vec!["command(cargo test:*)".to_string()],
+                deny: vec!["command(cargo publish)".to_string()],
+                ask: vec!["command(git:*)".to_string()],
+                ..Default::default()
+            },
+        };
+
+        assert_eq!(
+            settings.check_command("cargo test --all"),
+            SettingsDecision::Allow
+        );
+        assert_eq!(
+            settings.check_command("cargo publish"),
+            SettingsDecision::Deny
+        );
+        assert_eq!(settings.check_command("git push"), SettingsDecision::Ask);
+        assert_eq!(
+            settings.check_command("echo hello"),
+            SettingsDecision::NoMatch
+        );
+    }
+
+    #[test]
     fn test_mcp_no_match() {
         // Empty settings - no match
         let settings = Settings::default();
@@ -1238,17 +1284,16 @@ mod tests {
     #[serial_test::serial]
     #[test]
     fn test_dollar_user_expansion_in_deny_pattern() {
-        let home = dirs::home_dir().expect("HOME must be set for this test");
-        let home_str = home.to_string_lossy();
+        let user = std::env::var("USER").unwrap_or_else(|_| "nobody".to_string());
 
         let settings = Settings {
             permissions: Permissions {
-                deny: vec!["Bash(rm /home/$USER/.ssh/*)".to_string()],
+                deny: vec!["Bash(rm /tmp/$USER/.ssh/*)".to_string()],
                 ..Default::default()
             },
         };
 
-        let cmd = format!("rm {home_str}/.ssh/id_rsa");
+        let cmd = format!("rm /tmp/{user}/.ssh/id_rsa");
         assert_eq!(settings.check_command(&cmd), SettingsDecision::Deny);
     }
 

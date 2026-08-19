@@ -32,6 +32,14 @@ pub fn is_plan_mode(mode: &str) -> bool {
     mode.trim().eq_ignore_ascii_case("plan")
 }
 
+/// True if `permission_mode` signals accept-edits mode (either Claude's
+/// "acceptEdits" or Antigravity's "accept-edits"). Normalizes whitespace and
+/// ASCII case.
+pub fn is_accept_edits_mode(mode: &str) -> bool {
+    let m = mode.trim();
+    m.eq_ignore_ascii_case("acceptEdits") || m.eq_ignore_ascii_case("accept-edits")
+}
+
 /// Permission decision types with priority: Block > Ask > Allow > Skip
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Decision {
@@ -225,9 +233,17 @@ impl Client {
         tool_name == "Grep" || tool_name == "grep_search"
     }
 
-    /// Check if a tool_name is an MCP tool (either prefix format)
+    /// Check if a tool_name is an MCP tool.
+    ///
+    /// Covers Claude's `mcp__server__tool`, Gemini's `mcp_server_tool`, and
+    /// Antigravity, whose spelling is unconfirmed: `call_mcp_tool` is the
+    /// model-facing name in the binary's tool registry and `mcp_tool` is the
+    /// `CORTEX_STEP_TYPE_MCP_TOOL` derivation that `hooks.md` describes. The
+    /// `mcp_` prefix already covers the latter.
     pub fn is_mcp_tool(tool_name: &str) -> bool {
-        tool_name.starts_with("mcp__") || tool_name.starts_with("mcp_")
+        tool_name.starts_with("mcp__")
+            || tool_name.starts_with("mcp_")
+            || tool_name == "call_mcp_tool"
     }
 }
 
@@ -932,6 +948,13 @@ impl HookOutput {
         let mut out = serde_json::Map::new();
         out.insert("decision".to_string(), serde_json::json!(decision));
 
+        // `reason` is required whenever the decision is not "allow": agy's
+        // output schema marks it
+        // `jsonschema_description:"The reason why the tool call is blocked or
+        // why permission is asked. Required if decision is not 'allow'."`
+        // Every decision that reaches this point is deny/ask/force_ask, so the
+        // field is always populated, with a fallback for each tier.
+        //
         // On deny, fold any context (hints / Tier-3 remediation) into the
         // reason since the Pre output has no separate field for it and a
         // blocked tool produces no follow-up turn to attach it to.
@@ -954,11 +977,25 @@ impl HookOutput {
             }
             Some(r)
         } else {
-            self.reason.clone()
+            Some(
+                self.reason
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or("Requires approval by tool-gates")
+                    .to_string(),
+            )
         };
 
         if let Some(r) = reason {
             out.insert("reason".to_string(), serde_json::json!(r));
+        }
+
+        if let Some(ref cmd) = self.updated_command {
+            out.insert(
+                "overwrite".to_string(),
+                serde_json::json!({ "CommandLine": cmd }),
+            );
         }
 
         serde_json::Value::Object(out)
@@ -1915,9 +1952,15 @@ mod tests {
         // Gemini MCP format (single underscore)
         assert!(Client::is_mcp_tool("mcp_ast-grep_find_code"));
         assert!(Client::is_mcp_tool("mcp_firecrawl_scrape"));
+        // Antigravity: both candidate spellings. `call_mcp_tool` is the
+        // model-facing registry name, `mcp_tool` the step-type derivation.
+        assert!(Client::is_mcp_tool("call_mcp_tool"));
+        assert!(Client::is_mcp_tool("mcp_tool"));
         // Not MCP
         assert!(!Client::is_mcp_tool("Bash"));
         assert!(!Client::is_mcp_tool("Read"));
+        assert!(!Client::is_mcp_tool("run_command"));
+        assert!(!Client::is_mcp_tool("write_to_file"));
     }
 
     // === Codex CLI output tests ===
@@ -2277,5 +2320,57 @@ mod tests {
             claude["hookSpecificOutput"]["permissionDecision"], "ask",
             "forced() must not change non-Antigravity wire output: {claude}"
         );
+    }
+
+    #[test]
+    fn test_antigravity_non_allow_always_carries_a_reason() {
+        // agy's PreToolUse output schema marks `reason` required whenever the
+        // decision is not "allow". Every tier must satisfy that even if the
+        // internal HookOutput carried none.
+        for decision in [
+            PermissionDecision::Deny,
+            PermissionDecision::Ask,
+            PermissionDecision::Defer,
+        ] {
+            let mut output = HookOutput::no_opinion();
+            output.decision = decision;
+            output.reason = None;
+            let wire = output.serialize(Client::Antigravity);
+            let reason = wire["reason"].as_str().unwrap_or_default();
+            assert!(!reason.trim().is_empty(), "{decision:?} wire: {wire}");
+        }
+
+        // A blank reason is treated the same as a missing one.
+        let mut forced = HookOutput::ask("   ").forced();
+        forced.reason = Some("  ".to_string());
+        let wire = forced.serialize(Client::Antigravity);
+        assert_eq!(wire["decision"], "force_ask");
+        assert!(
+            !wire["reason"]
+                .as_str()
+                .unwrap_or_default()
+                .trim()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn test_antigravity_ask_with_updated_command_emits_overwrite() {
+        let output = HookOutput::ask_with_updated_command("Use safer rm", "rm -i file.txt", None);
+        let antigravity = output.serialize(Client::Antigravity);
+        assert_eq!(antigravity["decision"], "ask");
+        assert_eq!(antigravity["reason"], "Use safer rm");
+        assert_eq!(antigravity["overwrite"]["CommandLine"], "rm -i file.txt");
+    }
+
+    #[test]
+    fn test_is_accept_edits_mode() {
+        assert!(is_accept_edits_mode("acceptEdits"));
+        assert!(is_accept_edits_mode("accept-edits"));
+        assert!(is_accept_edits_mode("  ACCEPT-EDITS \n"));
+        assert!(is_accept_edits_mode("AcceptEdits"));
+        assert!(!is_accept_edits_mode("plan"));
+        assert!(!is_accept_edits_mode("default"));
+        assert!(!is_accept_edits_mode("auto"));
     }
 }

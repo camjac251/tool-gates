@@ -10,7 +10,8 @@ use crate::hint_tracker;
 use crate::hints::{format_hints, get_modern_hint};
 use crate::mise::parse_mise_invocation;
 use crate::models::{
-    Client, CommandInfo, Decision, HookOutput, PermissionDecision, is_auto_mode, is_plan_mode,
+    Client, CommandInfo, Decision, HookOutput, PermissionDecision, is_accept_edits_mode,
+    is_auto_mode, is_plan_mode,
 };
 use crate::package_json::parse_script_invocation;
 use crate::parser::extract_commands;
@@ -364,7 +365,7 @@ pub(crate) fn gate_ask_output_for_mode(
         // auto-mode classifier, so emitting "ask" here would exclude the whole
         // gate catalog from the very mechanism auto mode exists to provide.
         HookOutput::defer(reason, context)
-    } else if permission_mode == "acceptEdits" && hard_ask_in_accept_edits {
+    } else if is_accept_edits_mode(permission_mode) && hard_ask_in_accept_edits {
         if let Some(context) = context {
             HookOutput::ask_with_context(&reason, &context)
         } else {
@@ -589,7 +590,7 @@ fn check_command_with_settings_and_session_inner(
     // fast path before the classifier. Run the same tool-gates-owned policy
     // under auto so approved edits are allowed by us, not by Claude's broader
     // hardcoded Bash base-command list.
-    if (permission_mode == "acceptEdits" || is_auto_mode(permission_mode))
+    if (is_accept_edits_mode(permission_mode) || is_auto_mode(permission_mode))
         && gate_result.decision == PermissionDecision::Ask
     {
         let commands = extract_commands(command_string);

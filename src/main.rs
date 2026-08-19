@@ -315,10 +315,36 @@ fn normalize_antigravity_pre_tool_use(v: serde_json::Value) -> AntigravityPayloa
         None => return AntigravityPayload::NotGateable,
     };
     // toolCall present but no usable name -> malformed, fail closed.
-    let tool_name = match tool_call.get("name").and_then(|n| n.as_str()) {
+    let mut tool_name = match tool_call.get("name").and_then(|n| n.as_str()) {
         Some(n) => n.to_string(),
         None => return AntigravityPayload::Malformed,
     };
+
+    // Antigravity routes every MCP call through the single tool name
+    // `call_mcp_tool` and carries the server and tool in the args:
+    //
+    //   {"name": "call_mcp_tool",
+    //    "args": {"ServerName": "firecrawl", "ToolName": "scrape", "Arguments": {}}}
+    //
+    // Left as-is, every MCP call on agy would present the same tool name, so a
+    // `[[block_tools]]` rule could not select one server or tool from another.
+    // Rebuild Claude's canonical `mcp__<server>__<tool>` from the args so the
+    // existing rule catalog applies unchanged. A payload missing either part
+    // keeps `call_mcp_tool`, which `Client::is_mcp_tool` still recognizes.
+    if tool_name == "call_mcp_tool" {
+        let args = tool_call.get("args");
+        let server = args
+            .and_then(|a| a.get("ServerName"))
+            .and_then(|s| s.as_str())
+            .filter(|s| !s.is_empty());
+        let tool = args
+            .and_then(|a| a.get("ToolName"))
+            .and_then(|t| t.as_str())
+            .filter(|t| !t.is_empty());
+        if let (Some(server), Some(tool)) = (server, tool) {
+            tool_name = format!("mcp__{server}__{tool}");
+        }
+    }
     // `args` may be absent, but a present non-object `args` would silently drop
     // the command/path and fail open. Reject it as malformed instead.
     if let Some(args) = tool_call.get("args")
@@ -460,6 +486,24 @@ fn normalize_antigravity_pre_tool_use(v: serde_json::Value) -> AntigravityPayloa
         .and_then(|c| c.as_str())
         .unwrap_or("");
 
+    // Antigravity has no per-call tool id. `conversationId:stepIdx` is the
+    // closest stable equivalent: `stepIdx` is unique within a conversation, so
+    // the pair distinguishes two pending items that would otherwise collide on
+    // an empty id.
+    let step_idx = v
+        .get("stepIdx")
+        .and_then(|s| s.as_u64())
+        .map(|n| n.to_string())
+        .unwrap_or_default();
+
+    let tool_use_id = if !session_id.is_empty() && !step_idx.is_empty() {
+        format!("{session_id}:{step_idx}")
+    } else if !session_id.is_empty() {
+        session_id.to_string()
+    } else {
+        step_idx
+    };
+
     let canonical = serde_json::json!({
         "hook_event_name": "PreToolUse",
         "tool_name": tool_name,
@@ -467,8 +511,17 @@ fn normalize_antigravity_pre_tool_use(v: serde_json::Value) -> AntigravityPayloa
         "cwd": cwd,
         "transcript_path": transcript_path,
         "session_id": session_id,
+        "tool_use_id": tool_use_id,
         // Antigravity's hook payload carries no permission mode; "default" keeps
         // the acceptEdits and auto-only branches inert for Antigravity.
+        //
+        // The global `agentMode` in ~/.gemini/antigravity-cli/settings.json is
+        // deliberately not consulted. It is a machine-wide default that a live
+        // conversation can move away from, and every mode-driven branch here
+        // *relaxes* a gate (acceptEdits turns an Ask into an Allow). Since a
+        // hook allow is inert on agy, a stale "accept-edits" would only delete
+        // tool-gates' tightening -- the single gate agy has -- with nothing in
+        // the payload to detect that the session had already left that mode.
         "permission_mode": "default",
     });
 
@@ -599,7 +652,7 @@ fn handle_pre_tool_use_hook(input: serde_json::Value, client: Client) {
     //   URLs, etc.) still win and these rules cannot override them.
     // - This runs before tool-type dispatch so MCP tools don't fall through
     //   to the pass-through branch first.
-    if hook_input.permission_mode == "acceptEdits"
+    if tool_gates::models::is_accept_edits_mode(&hook_input.permission_mode)
         && Client::is_mcp_tool(&hook_input.tool_name)
         && !config.accept_edits_mcp.is_empty()
     {
@@ -1331,15 +1384,30 @@ fn generate_gemini_hooks_json(binary_path: &str) -> serde_json::Value {
 
 /// Antigravity (`agy`) PreToolUse matcher. The matcher is a regex over tool
 /// names; this lists every tool tool-gates has gate logic for (shell, file
-/// read/write/edit, grep, glob). Antigravity's MCP tool-name format is not
-/// documented for hook matchers, so MCP block rules are not wired for
-/// Antigravity yet.
+/// read/write/edit, grep, glob) plus MCP.
+///
+/// The file and shell names are confirmed from a captured payload: agy's
+/// `toolCall.name` is the model-facing name (`write_to_file`), not the
+/// step-type-derived one (`propose_code`).
+///
+/// `call_mcp_tool` is likewise confirmed: agy routes every MCP call through
+/// that one name and carries the server and tool in the args, which
+/// `normalize_antigravity_pre_tool_use` rebuilds into the canonical
+/// `mcp__<server>__<tool>` so block rules select per server and per tool
+/// exactly as they do on Claude. The `mcp_` prefix alternative stays as a cheap
+/// hedge against a future rename; an alternative that never fires costs
+/// nothing, while a missed spelling silently drops the rule.
 fn antigravity_pre_tool_use_matcher() -> String {
     matcher_with_file_tools(
         Client::Antigravity,
         FileHookEvent::PreToolUse,
         &["run_command"],
-        &["grep_search", "find_by_name"],
+        &[
+            "grep_search",
+            "find_by_name",
+            "call_mcp_tool",
+            GEMINI_MCP_TOOL_MATCHER,
+        ],
     )
 }
 
@@ -1852,17 +1920,6 @@ fn install_codex_hooks(scope: &str, dry_run: bool) {
     }
 }
 
-/// Path to Antigravity's global settings file, which holds the native
-/// `permissions.allow` list. Distinct from the hooks file
-/// (`~/.gemini/config/hooks.json`): settings live under `antigravity-cli/`.
-fn get_antigravity_settings_path() -> std::path::PathBuf {
-    dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join(".gemini")
-        .join("antigravity-cli")
-        .join("settings.json")
-}
-
 /// Dispatch `tool-gates agy <subcommand>`.
 fn handle_agy_subcommand(args: &[String]) {
     match args.first().map(String::as_str) {
@@ -1938,7 +1995,7 @@ fn merge_agy_allowlist(
 /// is safe.
 fn handle_agy_allowlist(apply: bool, dry_run: bool) {
     let rules = agy_allow_rules();
-    let path = get_antigravity_settings_path();
+    let path = tool_gates::settings_writer::antigravity_settings_path();
 
     if !apply {
         let snippet = serde_json::json!({ "permissions": { "allow": rules } });
@@ -2087,6 +2144,20 @@ fn install_antigravity_hooks(scope: &str, dry_run: bool) {
     eprintln!("tool-gates installer (Antigravity CLI)");
     eprintln!("Binary: {}", binary_path);
     eprintln!("Target: {} ({})", hooks_path.display(), scope);
+
+    // A probe hook installed at <workspace>/.agents/hooks.json did not load:
+    // agy reported "loaded 1 named hooks from 1 hooks.json file(s)" (the user
+    // file only) even though the workspace was trusted. agy's changelog ties
+    // workspace-local hook loading to a workspace-change event. Warn rather
+    // than refuse: the path is documented and may work in an interactive
+    // session, but a silently-inert gate is the worst outcome here.
+    if scope == "project" {
+        eprintln!();
+        eprintln!("Warning: Antigravity may not load workspace-local hooks.");
+        eprintln!("  A hook at .agents/hooks.json did not fire under `agy --print`");
+        eprintln!("  even in a trusted workspace. Prefer `-s user`, and verify this");
+        eprintln!("  install actually gates before relying on it.");
+    }
     eprintln!();
 
     let generated = generate_antigravity_hooks_json(&binary_path);
@@ -2484,7 +2555,8 @@ fn print_main_help() {
     eprintln!("  tool-gates hooks add -s user          # Install Claude Code hooks");
     eprintln!("  tool-gates hooks add --codex          # Install Codex CLI hooks");
     eprintln!("  tool-gates hooks add --antigravity    # Install Antigravity CLI hooks");
-    eprintln!("  tool-gates approve 'npm:*' -s local   # Allow npm commands");
+    eprintln!("  tool-gates approve 'npm:*' -s local   # Allow npm commands (Claude)");
+    eprintln!("  tool-gates approve 'cargo:*' --agy    # Allow cargo commands (Antigravity)");
     eprintln!("  tool-gates rules list                 # Show all rules");
     eprintln!("  tool-gates pending list               # Show pending approvals");
 }
@@ -2560,6 +2632,8 @@ fn handle_approve_subcommand(args: &[String]) {
         return;
     }
 
+    let antigravity = args.iter().any(|a| a == "--antigravity" || a == "--agy");
+
     // Find the pattern (first non-flag argument)
     let pattern = args.iter().find(|a| !a.starts_with('-'));
 
@@ -2576,28 +2650,6 @@ fn handle_approve_subcommand(args: &[String]) {
         eprintln!("Error: Pattern cannot be empty");
         std::process::exit(1);
     }
-
-    // Parse --scope option
-    let scope_str = args
-        .iter()
-        .position(|a| a == "--scope" || a == "-s")
-        .and_then(|i| args.get(i + 1))
-        .map(|s| s.as_str());
-
-    let Some(scope_str) = scope_str else {
-        eprintln!("Error: --scope (-s) is required");
-        eprintln!();
-        print_approve_help();
-        std::process::exit(1);
-    };
-
-    let Some(scope) = Scope::parse(scope_str) else {
-        eprintln!(
-            "Error: Invalid scope '{}'. Use: user, project, or local",
-            scope_str
-        );
-        std::process::exit(1);
-    };
 
     // Parse --type option (default: allow)
     let rule_type_str = args
@@ -2622,6 +2674,54 @@ fn handle_approve_subcommand(args: &[String]) {
 
     // Check for --dry-run
     let dry_run = args.iter().any(|a| a == "--dry-run" || a == "-n");
+
+    if antigravity {
+        let formatted = tool_gates::settings_writer::format_antigravity_pattern(pattern);
+        let path = tool_gates::settings_writer::antigravity_settings_path();
+
+        if dry_run {
+            eprintln!(
+                "--dry-run: Would add {} rule: {}",
+                rule_type.as_str(),
+                formatted
+            );
+            eprintln!("  Target: {}", path.display());
+            return;
+        }
+
+        match tool_gates::settings_writer::add_antigravity_rule(pattern, rule_type) {
+            Ok(_) => {
+                eprintln!("✓ Added {} rule: {}", rule_type.as_str(), formatted);
+                eprintln!("  Target: {}", path.display());
+            }
+            Err(e) => {
+                eprintln!("Error: Failed to add rule: {}", e);
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
+    // Parse --scope option
+    let scope_str = args
+        .iter()
+        .position(|a| a == "--scope" || a == "-s")
+        .and_then(|i| args.get(i + 1))
+        .map(|s| s.as_str());
+
+    let Some(scope_str) = scope_str else {
+        eprintln!("Error: --scope (-s) is required\n");
+        print_approve_help();
+        std::process::exit(1);
+    };
+
+    let Some(scope) = Scope::parse(scope_str) else {
+        eprintln!(
+            "Error: Invalid scope '{}'. Use: user, project, or local",
+            scope_str
+        );
+        std::process::exit(1);
+    };
 
     let formatted = tool_gates::settings_writer::format_pattern(pattern);
 
@@ -2653,17 +2753,24 @@ fn print_approve_help() {
     eprintln!();
     eprintln!("USAGE:");
     eprintln!("  tool-gates approve <pattern> -s <scope> [--type <type>] [--dry-run]");
+    eprintln!("  tool-gates approve <pattern> --antigravity [--type <type>] [--dry-run]");
     eprintln!();
     eprintln!("ARGUMENTS:");
     eprintln!("  <pattern>   Command pattern to approve (e.g., 'npm install:*', 'git:*')");
     eprintln!();
     eprintln!("OPTIONS:");
-    eprintln!("  -s, --scope <scope>   Target scope: user, project, or local (required)");
+    eprintln!(
+        "  -s, --scope <scope>   Target scope: user, project, or local (required for Claude)"
+    );
+    eprintln!("  --antigravity, --agy  Write to agy's own settings (user-global, no --scope):");
+    eprintln!("                        ~/.gemini/antigravity-cli/settings.json.");
+    eprintln!("                        Read by agy's permission engine, not by tool-gates.");
     eprintln!("  -t, --type <type>     Rule type: allow (default), ask, or deny");
     eprintln!("  -n, --dry-run         Preview changes without writing");
     eprintln!();
     eprintln!("EXAMPLES:");
     eprintln!("  tool-gates approve 'npm install:*' -s local");
+    eprintln!("  tool-gates approve 'cargo test' --antigravity");
     eprintln!("  tool-gates approve 'biome:*' -s user");
     eprintln!("  tool-gates approve 'rm -rf*' -s user -t deny");
     eprintln!("  tool-gates approve 'cargo:*' -s local --dry-run");
@@ -2787,6 +2894,35 @@ fn print_rules_export_help() {
 }
 
 fn handle_rules_list(args: &[String]) {
+    let antigravity = args.iter().any(|a| a == "--antigravity" || a == "--agy");
+
+    if antigravity {
+        let rules = tool_gates::settings_writer::list_antigravity_rules();
+        if rules.is_empty() {
+            eprintln!("No Antigravity permission rules found.");
+            return;
+        }
+
+        let path = tool_gates::settings_writer::antigravity_settings_path();
+        eprintln!("Antigravity permission rules ({}):\n", path.display());
+        eprintln!("    Read by agy's own permission engine, not by tool-gates.\n");
+        for rule in rules {
+            let type_indicator = match rule.rule_type {
+                RuleType::Allow => "✓",
+                RuleType::Ask => "?",
+                RuleType::Deny => "✗",
+            };
+            eprintln!(
+                "    {} {} ({})",
+                type_indicator,
+                rule.pattern,
+                rule.rule_type.as_str()
+            );
+        }
+        eprintln!();
+        return;
+    }
+
     // Parse --scope option
     let scope_str = args
         .iter()
@@ -2840,14 +2976,40 @@ fn handle_rules_list(args: &[String]) {
 }
 
 fn handle_rules_remove(args: &[String]) {
+    let antigravity = args.iter().any(|a| a == "--antigravity" || a == "--agy");
+
     // Find the pattern (first non-flag argument)
     let pattern = args.iter().find(|a| !a.starts_with('-'));
 
     let Some(pattern) = pattern else {
         eprintln!("Error: Pattern is required");
-        eprintln!("Usage: tool-gates rules remove <pattern> -s <scope>");
+        if antigravity {
+            eprintln!("Usage: tool-gates rules remove <pattern> --antigravity");
+        } else {
+            eprintln!("Usage: tool-gates rules remove <pattern> -s <scope>");
+        }
         std::process::exit(1);
     };
+
+    if antigravity {
+        let path = tool_gates::settings_writer::antigravity_settings_path();
+        match tool_gates::settings_writer::remove_antigravity_rule(pattern) {
+            Ok(true) => {
+                let formatted = tool_gates::settings_writer::format_antigravity_pattern(pattern);
+                eprintln!("✓ Removed rule: {}", formatted);
+                eprintln!("  Target: {}", path.display());
+            }
+            Ok(false) => {
+                eprintln!("Rule not found: {}", pattern);
+                std::process::exit(1);
+            }
+            Err(e) => {
+                eprintln!("Error: Failed to remove rule: {}", e);
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
 
     // Parse --scope option
     let scope_str = args
@@ -2890,8 +3052,8 @@ fn print_rules_help() {
     eprintln!("tool-gates rules - Manage permission rules in settings.json");
     eprintln!();
     eprintln!("USAGE:");
-    eprintln!("  tool-gates rules list [--scope <scope>]");
-    eprintln!("  tool-gates rules remove <pattern> -s <scope>");
+    eprintln!("  tool-gates rules list [--scope <scope>] [--antigravity]");
+    eprintln!("  tool-gates rules remove <pattern> [-s <scope> | --antigravity]");
     eprintln!("  tool-gates rules ask-audit [--apply]");
     eprintln!("  tool-gates rules export --format md [--out PATH] [--rules-dir PATH]");
     eprintln!();
@@ -2904,6 +3066,9 @@ fn print_rules_help() {
     eprintln!();
     eprintln!("OPTIONS:");
     eprintln!("  -s, --scope <scope>   Filter by scope: user, project, or local");
+    eprintln!("  --antigravity, --agy  Target agy's own settings (user-global, no --scope):");
+    eprintln!("                        ~/.gemini/antigravity-cli/settings.json.");
+    eprintln!("                        Read by agy's permission engine, not by tool-gates.");
     eprintln!(
         "  --apply               (ask-audit only) Open a multi-select checklist TUI for removals"
     );
@@ -4518,6 +4683,14 @@ mod tests {
         assert_eq!(matcher, antigravity_pre_tool_use_matcher());
         assert!(matcher.contains("run_command"), "matcher: {matcher}");
         assert!(matcher.contains("write_to_file"), "matcher: {matcher}");
+        // The confirmed MCP name plus the prefix hedge.
+        for mcp in ["call_mcp_tool", "mcp_.*"] {
+            assert!(matcher.contains(mcp), "matcher missing {mcp}: {matcher}");
+        }
+        // Alternatives are `|`-separated with no stray empties, which would
+        // turn the matcher into a match-everything regex.
+        assert!(!matcher.contains("||"), "matcher: {matcher}");
+        assert!(!matcher.starts_with('|') && !matcher.ends_with('|'));
     }
 
     #[test]
@@ -4555,7 +4728,115 @@ mod tests {
         assert_eq!(hi.get_command(), "git status");
         assert_eq!(hi.cwd, "/ws");
         assert_eq!(hi.session_id, "c1");
+        assert_eq!(hi.tool_use_id, "c1:3");
         assert!(Client::is_shell_tool(&hi.tool_name));
+    }
+
+    #[test]
+    fn normalize_antigravity_rebuilds_canonical_mcp_tool_name() {
+        // Captured from a live agy run: every MCP call arrives as
+        // `call_mcp_tool` with the server and tool in the args, so the name
+        // alone cannot distinguish one MCP tool from another.
+        let raw = r#"{
+            "toolCall": {"name": "call_mcp_tool", "args": {
+                "ServerName": "firecrawl", "ToolName": "scrape", "Arguments": {}}},
+            "stepIdx": 3,
+            "conversationId": "c1",
+            "workspacePaths": []
+        }"#;
+        let norm = match normalize_antigravity_pre_tool_use(serde_json::from_str(raw).unwrap()) {
+            AntigravityPayload::PreToolUse(value) => value,
+            _ => panic!("expected PreToolUse"),
+        };
+        let hi: HookInput = serde_json::from_value(norm).unwrap();
+        assert_eq!(hi.tool_name, "mcp__firecrawl__scrape");
+        assert!(Client::is_mcp_tool(&hi.tool_name));
+        // The original PascalCase args survive for any rule that inspects them.
+        let map = hi.tool_input.as_map().expect("object tool_input");
+        assert_eq!(
+            map.get("ServerName").and_then(|v| v.as_str()),
+            Some("firecrawl")
+        );
+        assert_eq!(map.get("ToolName").and_then(|v| v.as_str()), Some("scrape"));
+    }
+
+    #[test]
+    fn normalize_antigravity_mcp_without_server_or_tool_keeps_call_mcp_tool() {
+        // Fail soft rather than synthesizing `mcp____` from missing parts:
+        // `call_mcp_tool` is still recognized as MCP, so a catch-all block
+        // rule keeps working.
+        for raw in [
+            r#"{"toolCall": {"name": "call_mcp_tool", "args": {"ToolName": "scrape"}},
+                "conversationId": "c1"}"#,
+            r#"{"toolCall": {"name": "call_mcp_tool", "args": {"ServerName": ""}},
+                "conversationId": "c1"}"#,
+            r#"{"toolCall": {"name": "call_mcp_tool"}, "conversationId": "c1"}"#,
+        ] {
+            let norm = match normalize_antigravity_pre_tool_use(serde_json::from_str(raw).unwrap())
+            {
+                AntigravityPayload::PreToolUse(value) => value,
+                _ => panic!("expected PreToolUse"),
+            };
+            let hi: HookInput = serde_json::from_value(norm).unwrap();
+            assert_eq!(hi.tool_name, "call_mcp_tool", "payload: {raw}");
+            assert!(Client::is_mcp_tool(&hi.tool_name));
+        }
+    }
+
+    #[test]
+    fn normalize_antigravity_pins_permission_mode_to_default() {
+        // Every mode-driven branch downstream relaxes a gate, and Antigravity's
+        // payload carries no mode, so the normalizer must not invent one -- not
+        // from an `agentMode` key in the payload, and not from the machine-wide
+        // `agentMode` in ~/.gemini/antigravity-cli/settings.json, which a live
+        // conversation can have already moved away from. On agy the hook is the
+        // only gate, so a wrong "accept-edits" here silently deletes it.
+        for raw in [
+            r#"{"toolCall": {"name": "run_command", "args": {"CommandLine": "sd a b f.txt"}},
+                "stepIdx": 1, "conversationId": "c1", "workspacePaths": ["/ws"]}"#,
+            r#"{"toolCall": {"name": "run_command", "args": {"CommandLine": "sd a b f.txt"}},
+                "stepIdx": 1, "conversationId": "c1", "workspacePaths": ["/ws"],
+                "agentMode": "accept-edits"}"#,
+        ] {
+            let norm = match normalize_antigravity_pre_tool_use(serde_json::from_str(raw).unwrap())
+            {
+                AntigravityPayload::PreToolUse(value) => value,
+                _ => panic!("expected PreToolUse"),
+            };
+            let hi: HookInput = serde_json::from_value(norm).unwrap();
+            assert_eq!(hi.permission_mode, "default", "payload: {raw}");
+        }
+    }
+
+    #[test]
+    fn normalize_antigravity_tool_use_id_degrades_without_both_parts() {
+        // A missing conversationId or stepIdx must not produce a bare ":" that
+        // every pending item would collide on.
+        let cases = [
+            (
+                r#"{"toolCall": {"name": "run_command", "args": {"CommandLine": "ls"}},
+                    "conversationId": "c1"}"#,
+                "c1",
+            ),
+            (
+                r#"{"toolCall": {"name": "run_command", "args": {"CommandLine": "ls"}},
+                    "stepIdx": 7}"#,
+                "7",
+            ),
+            (
+                r#"{"toolCall": {"name": "run_command", "args": {"CommandLine": "ls"}}}"#,
+                "",
+            ),
+        ];
+        for (raw, expected) in cases {
+            let norm = match normalize_antigravity_pre_tool_use(serde_json::from_str(raw).unwrap())
+            {
+                AntigravityPayload::PreToolUse(value) => value,
+                _ => panic!("expected PreToolUse"),
+            };
+            let hi: HookInput = serde_json::from_value(norm).unwrap();
+            assert_eq!(hi.tool_use_id, expected, "payload: {raw}");
+        }
     }
 
     #[test]
