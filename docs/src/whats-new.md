@@ -11,8 +11,32 @@
     <header class="sec-head release-section-head">
       <span class="lbl">Current window</span>
       <h2 id="release-current-title">Latest eight versions</h2>
-      <p>From v1.36.0 through v1.33.3, newest first.</p>
+      <p>From v1.37.0 through v1.33.4, newest first.</p>
     </header>
+  <div class="config-block">
+    <header>
+      <h3>v1.37.0 · August 17, 2026</h3>
+      <span class="src-tag">read-only coverage · <a href="https://github.com/camjac251/tool-gates/commit/7617d62" target="_blank" rel="noopener">7617d62</a></span>
+    </header>
+    <div class="config-body">
+      <div class="config-toml">
+<pre><span class="sec added">Added</span>
+  allow doggo, getent, pg_isready, dasel, htmlq, grepdiff, filterdiff, lsdiff
+  allow the break, continue, and : shell keywords
+  gate fuser on -k rather than on the program
+  trigger the code-search hint on a wide rg -A/-B/-C window
+  hint when 2&gt;&amp;1 feeds jq, yq, dasel, gron, or htmlq
+<span class="sec fixed">Fixed</span>
+  state universal prohibitions in one voice, each naming its mechanism
+  name the producer in output-cap recovery when it has a limiting option</pre>
+      </div>
+      <div class="config-prose">
+        <p>A tool the catalog has never heard of asks on every invocation whatever it does, and replaying a week of real invocations found several sitting in that state. Eleven read-only ones join the basics allowlist, three of them already the target of an existing hint or a documented recipe, so the catalog had been steering callers toward tools it then prompted about. <code>fuser</code> is now gated on the flag rather than the program: reporting which processes hold a file, directory, or socket open is read-only, and only <code>-k</code> turns that report into a signal to every holder. The truncation idiom stays covered, because <code>: &gt; file</code> is caught by the output-redirection rule, which resolves its target independently of the leading command.</p>
+        <p>Hint copy had split into two voices when the ALWAYS prefix was dropped, and only the substitution half was finished. The universal prohibitions now share one voice and each names the mechanism that makes it a rule rather than a preference, since that reason is what carries a rule to the neighbouring case it never enumerated. A wide <code>rg -A</code>/<code>-B</code>/<code>-C</code> window on a code target became its own trigger: the hint had sat behind a pattern-shape test, so a plain identifier with a wide window produced nothing at all, which is exactly the shape reaching for a function body. Six lines or more triggers; smaller windows are ordinary lexical context and stay silent.</p>
+        <p>Merging stderr into a structured parser does not add diagnostics to the result, it destroys the result: the parse fails on the first non-conforming byte and the real error resurfaces as a syntax error. A new hint fires on <code>2&gt;&amp;1</code> feeding <code>jq</code>, <code>yq</code>, <code>dasel</code>, <code>gron</code>, or <code>htmlq</code>, with raw-input mode exempt. Output-cap recovery now names the producer when that producer has a limiting option of its own and says where the limit belongs; the engine already computed the producer and discarded it for everything but <code>gh</code>, so a blocked <code>… | rg -m 25 .</code> was told to use "the producer's native limit" without being told which command that was. Producers with no such option keep the neutral wording rather than inventing one.</p>
+      </div>
+    </div>
+  </div>
   <div class="config-block">
     <header>
       <h3>v1.36.0 · August 17, 2026</h3>
@@ -146,6 +170,17 @@
       </div>
     </div>
   </div>
+  </section>
+  <details class="release-archive" id="release-archive" aria-labelledby="release-archive-title">
+    <summary>
+      <h2 class="release-summary" id="release-archive-title">
+        <span class="release-summary-kicker">Historical archive</span>
+        <span class="release-summary-title">Browse 63 earlier releases</span>
+        <span class="release-summary-range">v1.33.3 to v1.1.0</span>
+        <span class="release-summary-icon" aria-hidden="true"></span>
+      </h2>
+    </summary>
+    <div class="release-archive-list">
   <div class="config-block">
     <header>
       <h3>v1.33.3 · July 30, 2026</h3>
@@ -162,17 +197,6 @@
       </div>
     </div>
   </div>
-  </section>
-  <details class="release-archive" id="release-archive" aria-labelledby="release-archive-title">
-    <summary>
-      <h2 class="release-summary" id="release-archive-title">
-        <span class="release-summary-kicker">Historical archive</span>
-        <span class="release-summary-title">Browse 62 earlier releases</span>
-        <span class="release-summary-range">v1.33.2 to v1.1.0</span>
-        <span class="release-summary-icon" aria-hidden="true"></span>
-      </h2>
-    </summary>
-    <div class="release-archive-list">
   <div class="config-block">
     <header>
       <h3>v1.33.2 · July 30, 2026</h3>
