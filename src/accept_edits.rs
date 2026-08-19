@@ -154,11 +154,16 @@ pub(crate) fn is_sensitive_path(arg: &str) -> bool {
 /// This prevents acceptEdits mode from modifying files outside the project.
 /// Allowed directories include cwd and any additionalDirectories from settings.json.
 fn targets_outside_allowed_dirs(cmd: &CommandInfo, allowed_dirs: &[String]) -> bool {
-    // Normalize all allowed directories - remove trailing slashes
-    let normalized_dirs: Vec<String> = allowed_dirs
-        .iter()
-        .map(|d| d.trim_end_matches('/').to_string())
-        .collect();
+    // Normalize all allowed directories - remove trailing slashes and include resolved forms
+    let mut normalized_dirs = Vec::new();
+    for d in allowed_dirs {
+        let norm = d.trim_end_matches('/').to_string();
+        let resolved = resolve_path(&norm);
+        normalized_dirs.push(norm);
+        if !normalized_dirs.contains(&resolved) {
+            normalized_dirs.push(resolved);
+        }
+    }
 
     for arg in &cmd.args {
         // Skip flags
@@ -2119,7 +2124,11 @@ run = "mytool42 verify"
 
             // resolve_path should follow the symlink
             let resolved = resolve_path(&link_path.to_string_lossy());
-            assert_eq!(resolved, "/tmp", "resolve_path should resolve symlink");
+            assert_eq!(
+                resolved,
+                resolve_path("/tmp"),
+                "resolve_path should resolve symlink"
+            );
         }
 
         /// Test resolve_path with non-existent file but existing parent symlink
@@ -2136,7 +2145,8 @@ run = "mytool42 verify"
             let file_through_link = link_path.join("newfile.txt");
             let resolved = resolve_path(&file_through_link.to_string_lossy());
             assert_eq!(
-                resolved, "/tmp/newfile.txt",
+                resolved,
+                format!("{}/newfile.txt", resolve_path("/tmp")),
                 "resolve_path should resolve parent symlink for non-existent file"
             );
         }
@@ -2155,9 +2165,9 @@ run = "mytool42 verify"
         /// Test resolve_path with .. components
         #[test]
         fn test_resolve_path_with_dotdot() {
-            let resolved = resolve_path("/home/user/../other/file.txt");
+            let resolved = resolve_path("/synthetic/user/../other/file.txt");
             assert_eq!(
-                resolved, "/home/other/file.txt",
+                resolved, "/synthetic/other/file.txt",
                 "resolve_path should resolve .. components"
             );
         }

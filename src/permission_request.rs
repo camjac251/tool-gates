@@ -390,7 +390,7 @@ pub(crate) fn match_mcp_rule<'a>(
     permission_mode: &str,
     project_dir: &str,
 ) -> Option<&'a crate::config::McpApprovalRule> {
-    if permission_mode != "acceptEdits" {
+    if !crate::models::is_accept_edits_mode(permission_mode) {
         return None;
     }
     if !Client::is_mcp_tool(tool_name) {
@@ -1000,10 +1000,27 @@ mod tests {
             Path::new("/project/.claude/worktrees/agent-abc/src/main.rs"),
             "/project/.claude/worktrees/agent-abc",
         ));
-        assert!(is_worktree_context(
-            Path::new("/home/user/repo/.claude/worktrees/task-123/deep/nested/file.ts"),
-            "/home/user/repo/.claude/worktrees/task-123",
-        ));
+        // A real on-disk worktree, so the caller's contract is exercised as it
+        // actually runs: `resolved_path` has been through `resolve_path`, and
+        // the authorization root is resolved against it. A hardcoded host path
+        // such as `/home/user/...` cannot stand in here, because whether that
+        // prefix exists (and what it canonicalizes to) differs per platform:
+        // on macOS `/home` is an autofs mount that resolves elsewhere.
+        let repo = tempfile::TempDir::new().expect("worktree tempdir");
+        let worktree = repo.path().join(".claude/worktrees/task-123");
+        std::fs::create_dir_all(worktree.join("deep/nested")).expect("worktree dirs");
+        let cwd = worktree.to_string_lossy().into_owned();
+        let file = crate::paths::resolve_path(&format!("{cwd}/deep/nested/file.ts"));
+        assert!(is_worktree_context(Path::new(&file), &cwd));
+
+        // A sibling worktree is outside this one's authorization root.
+        let sibling = crate::paths::resolve_path(
+            &repo
+                .path()
+                .join(".claude/worktrees/task-456/file.ts")
+                .to_string_lossy(),
+        );
+        assert!(!is_worktree_context(Path::new(&sibling), &cwd));
 
         // Negative cases
         assert!(!is_worktree_context(

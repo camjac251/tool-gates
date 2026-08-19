@@ -126,8 +126,25 @@ fn check_rm(cmd: &CommandInfo) -> GateResult {
     //   also blocks, not just `rm -rf $HOME/.aws`.
     let mut resolved_catastrophic: Vec<String> = Vec::new();
     let mut resolved_catastrophic_prefix: Vec<String> = Vec::new();
+    //
+    // Both platform spellings of the home root are enumerated, not just the one
+    // `dirs::home_dir()` resolves to. `rm -rf /home/$USER/.ssh` is the same
+    // intent on a Mac as on Linux, and the off-platform form is a path that
+    // does not exist there, so blocking it costs nothing and closes the gap
+    // when HOME is unset, overridden (sudo, containers), or the command was
+    // written against the other layout.
+    let mut candidate_homes = Vec::new();
     if let Some(home) = dirs::home_dir() {
-        let home_str = home.to_string_lossy().into_owned();
+        candidate_homes.push(home.to_string_lossy().into_owned());
+    }
+    if let Some(user) = std::env::var("USER").ok().filter(|u| !u.is_empty()) {
+        candidate_homes.push(format!("/home/{user}"));
+        candidate_homes.push(format!("/Users/{user}"));
+    }
+    candidate_homes.sort_unstable();
+    candidate_homes.dedup();
+
+    for home_str in candidate_homes {
         resolved_catastrophic.push(home_str.clone());
         resolved_catastrophic.push(format!("{home_str}/*"));
         for dotdir in BLOCKED_SECURITY_DIRS_UNDER_HOME {
@@ -551,12 +568,18 @@ mod tests {
 
     #[test]
     fn test_rm_home_user_var_blocks() {
+        // Both platform layouts block on both platforms: the off-platform form
+        // names nothing locally, so the extra block is free and the rule does
+        // not depend on which layout the command was written against.
         let user = real_user();
         for path in [
             format!("/home/{user}"),
             format!("/home/{user}/"),
+            format!("/Users/{user}"),
+            format!("/Users/{user}/"),
             "/home/$USER".to_string(),
             "/home/${USER}".to_string(),
+            "/Users/$USER".to_string(),
         ] {
             let result = check_filesystem(&cmd("rm", &["-rf", &path]));
             assert_eq!(

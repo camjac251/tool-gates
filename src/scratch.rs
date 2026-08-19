@@ -131,10 +131,11 @@ pub fn is_under_scratch(path: &str) -> bool {
         return false;
     }
     let resolved = resolve_path(&expanded);
-    if let Some(base) = &base
-        && is_under_any_dir(&resolved, std::slice::from_ref(base))
-    {
-        return true;
+    if let Some(base) = &base {
+        let canonical_base = resolve_path(base);
+        if is_under_any_dir(&resolved, &[base.clone(), canonical_base]) {
+            return true;
+        }
     }
     is_claude_session_scratchpad(&resolved)
 }
