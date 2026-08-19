@@ -13,7 +13,7 @@ taplo = "0.10.0"
 # zig is used as the C cross-compiler for the docs-site WASM build (see build-wasm).
 zig = "0.15.2"
 # wasm-opt, for shrinking the docs-site WASM gate-engine bundle (cargo ... --features wasm)
-"github:WebAssembly/binaryen" = { version = "129", version_prefix = "version_", filter_bins = "wasm-opt" }
+"github:WebAssembly/binaryen" = { version = "132", version_prefix = "version_", filter_bins = "wasm-opt" }
 
 [hooks]
 enter = "lefthook install"
