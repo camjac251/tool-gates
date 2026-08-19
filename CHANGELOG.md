@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.38.0](https://github.com/camjac251/tool-gates/compare/v1.37.0...v1.38.0) - 2026-08-19
+
+### Added
+
+- *(antigravity)* gate MCP by server and tool, harden the payload contract
+
+### Fixed
+
+- *(tests)* make path and settings assertions hermetic
+
+### Other
+
+- *(whats-new)* backfill v1.37.0, move v1.33.3 to the archive
+
 ## [1.37.0](https://github.com/camjac251/tool-gates/compare/v1.36.0...v1.37.0) - 2026-08-17
 
 ### Added
