@@ -1,0 +1,22 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "tool-gates",
+  "version": "1.22.0",
+  "description": "Intelligent permission gate for Claude Code shell, file, search, Skill, and MCP tool surfaces. AST-parses Bash commands, guards file reads/writes, and blocks configured tool invocations. Defers benign asks to CC's resolver so the prompt UI shows the 'Yes, and don't ask again for X' button, while keeping a deny floor for dangerous patterns. Tracks one-time approvals so they can be batch-promoted to permanent rules later.",
+  "author": {
+    "name": "camjac251"
+  },
+  "homepage": "https://github.com/camjac251/tool-gates",
+  "repository": "https://github.com/camjac251/tool-gates",
+  "license": "MIT",
+  "keywords": [
+    "permissions",
+    "security",
+    "bash",
+    "hooks",
+    "gates",
+    "file-guards",
+    "tool-blocking",
+    "config"
+  ]
+}

@@ -1,13 +1,22 @@
 ---
 name: review
 description: >-
-  Batch-promote frequently asked tool-gates patterns to permanent permission rules in settings.json.
-  Lists pending one-time approvals across sessions, shows counts and suggested glob patterns,
-  and writes selected rules at local, project, or user scope. Use when the user asks to review
-  pending approvals, promote recurring patterns, clean up the approval queue, share rules, or
-  audit accumulated approvals. For a single in-session approval, use Claude Code's "Yes, and
-  don't ask again" prompt. Not for manual settings edits, hooks, environment variables, MCP
-  configuration, or building an allowlist from a transcript.
+  Batch-promote frequently-asked tool-gates patterns to permanent permission rules in settings.json.
+  Lists pending approvals (commands the user approved one-time through the prompt, accumulated
+  across sessions), shows counts and suggested glob patterns, multi-selects to write at user/project/local
+  scope. Use after several sessions to triage what's piled up, or to share patterns across
+  projects. For single-prompt approvals the user should usually click 'Yes, and don't ask
+  again for X' in the CC prompt instead. It covers the in-session case organically since
+  tool-gates defers benign asks. NOT for manual settings.json edits, hooks, env vars, or MCP
+  config (use update-config). NOT for scanning a transcript to build an allowlist from scratch
+  (use fewer-permission-prompts). When the user wants to triage their pending approval queue,
+  batch-promote frequently-asked patterns to permanent rules, share approvals across projects,
+  or audit what's accumulated. Triggers on 'review pending', 'pending approvals', 'tool-gates
+  review', 'promote to permanent', 'clean up the queue', 'share these rules', 'batch approve',
+  'audit my approvals'. NOT for in-session "stop asking me about X". That's the CC prompt's
+  third button.
+argument-hint: "[--all]"
+disable-model-invocation: true
 allowed-tools: "Bash(tool-gates pending list:*) Bash(tool-gates rules list:*) Bash(tool-gates
   approve:*)"
 ---

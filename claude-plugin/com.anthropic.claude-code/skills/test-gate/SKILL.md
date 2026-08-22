@@ -12,6 +12,7 @@ description: >-
   call without running it, or confirming the defer-vs-explicit-ask wire decision. Triggers
   on 'is this allowed', 'test gate', 'why was this blocked', 'why was this denied', 'check
   permission', 'simulate tool call', 'would this run', 'does tool-gates catch this'.
+argument-hint: "[tool_name] [command_or_input] [--mode=acceptEdits|plan|auto] [--pr]"
 allowed-tools: "Bash(tool-gates:*) Bash(echo:*)"
 ---
 
