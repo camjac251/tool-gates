@@ -40,8 +40,8 @@ const MODERN_TOOLS: &[&str] = &[
     "dust", // modern du - visual tree
     // Process viewing
     "procs", // modern ps - better formatting
-    // HTTP (API exploration)
-    "xh", // modern curl/wget - cleaner output
+    // HTTP (ad-hoc requests; wget hint target)
+    "curl",
     // Code stats
     "tokei", // modern cloc - faster
     // Hex viewing

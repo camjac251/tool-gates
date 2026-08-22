@@ -731,22 +731,6 @@ fn hint_curl(cmd: &CommandInfo) -> Option<ModernHint> {
         });
     }
 
-    // Check for JSON APIs or verbose flags
-    let has_json = cmd
-        .args
-        .iter()
-        .any(|a| a.contains("json") || a.contains("application/json"));
-    let has_verbose = cmd.args.iter().any(|a| a == "-v" || a == "--verbose");
-
-    if has_json || has_verbose {
-        return Some(ModernHint {
-            legacy_command: "curl",
-            modern_command: "xh",
-            hint: "Use `xh <url>` instead of `curl`. Automatic JSON formatting, cleaner output."
-                .to_string(),
-        });
-    }
-
     None
 }
 
@@ -783,9 +767,9 @@ fn hint_wget(cmd: &CommandInfo) -> Option<ModernHint> {
 
     Some(ModernHint {
         legacy_command: "wget",
-        modern_command: "xh",
+        modern_command: "curl",
         hint:
-            "Use `xh <url>` instead of `wget` for HTTP requests. For file downloads, wget is fine."
+            "Use `curl -sS -L --fail-with-body <url>` instead of `wget` for HTTP requests. For file downloads, wget is fine."
                 .to_string(),
     })
 }
