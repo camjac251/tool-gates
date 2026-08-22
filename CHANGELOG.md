@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.40.0](https://github.com/camjac251/tool-gates/compare/v1.39.0...v1.40.0) - 2026-08-22
+
+### Added
+
+- *(hints)* retire the curl and wget nudges toward xh
+
 ## [1.39.0](https://github.com/camjac251/tool-gates/compare/v1.38.0...v1.39.0) - 2026-08-19
 
 ### Added
