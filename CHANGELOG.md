@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.42.0](https://github.com/camjac251/tool-gates/compare/v1.41.0...v1.42.0) - 2026-08-23
+
+### Added
+
+- *(settings)* match ~ and $HOME program paths against resolved rules
+
 ## [1.41.0](https://github.com/camjac251/tool-gates/compare/v1.40.0...v1.41.0) - 2026-08-22
 
 ### Added
