@@ -576,16 +576,7 @@ impl Settings {
     /// - "cmd*" - glob prefix match (cat /dev/zero* matches "cat /dev/zero | head")
     /// - "cmd" - exact match
     fn matches_bash_pattern(pattern: &str, command: &str) -> bool {
-        let expanded = Self::expand_pattern(pattern);
-        let pattern = expanded.as_ref();
-
-        if let Some(prefix) = pattern.strip_suffix(":*") {
-            command == prefix || command.starts_with(&format!("{prefix} "))
-        } else if let Some(prefix) = pattern.strip_suffix('*') {
-            command.starts_with(prefix)
-        } else {
-            command == pattern
-        }
+        Self::pattern_specificity(pattern, command).is_some()
     }
 
     /// Expand `~`, `$HOME`, `${HOME}`, `$USER`, `${USER}` in a pattern to
@@ -615,6 +606,14 @@ impl Settings {
         let expanded = Self::expand_pattern(pattern);
         let pattern = expanded.as_ref();
 
+        Self::specificity_against(pattern, command).or_else(|| {
+            Self::expand_command_program(command)
+                .and_then(|resolved| Self::specificity_against(pattern, &resolved))
+        })
+    }
+
+    /// Score one already-expanded pattern against one concrete command string.
+    fn specificity_against(pattern: &str, command: &str) -> Option<usize> {
         if let Some(prefix) = pattern.strip_suffix(":*") {
             if command == prefix || command.starts_with(&format!("{prefix} ")) {
                 Some(prefix.len())
@@ -632,6 +631,49 @@ impl Settings {
         } else {
             None
         }
+    }
+
+    /// Command-side mirror of `expand_pattern`: resolve a leading `~/`,
+    /// `$HOME/`, or `${HOME}/` in the command's program token so a rule
+    /// written in resolved form still matches a command written with the
+    /// shorthand. Without it, `~/bin/tool` and `$HOME/bin/tool` report as
+    /// unknown commands and prompt on every call even though the resolved
+    /// path is allowed.
+    ///
+    /// Deliberately narrow on two axes:
+    /// - Only the program token expands. A `$HOME` inside a quoted argument
+    ///   reaches the process literally, so resolving it here would match a
+    ///   rule the real command never satisfies.
+    /// - A command that assigns `HOME` is refused outright. The shell would
+    ///   expand against the assigned value while this process expands against
+    ///   its own, and a gate that resolves a different path than the shell
+    ///   executes is a bypass rather than a convenience.
+    ///
+    /// Deny matching runs through the same path, so the shorthand cannot slip
+    /// past a deny rule written in resolved form.
+    ///
+    /// Returns `None` when nothing changed, leaving the raw string as the only
+    /// thing matched.
+    fn expand_command_program(command: &str) -> Option<String> {
+        // Bare `~` and `$HOME` are excluded: as a program token they name the
+        // home directory itself, which is not executable.
+        const HOME_PROGRAM_PREFIXES: [&str; 3] = ["~/", "$HOME/", "${HOME}/"];
+
+        let program_end = command.find(char::is_whitespace).unwrap_or(command.len());
+        let program = &command[..program_end];
+
+        if !HOME_PROGRAM_PREFIXES.iter().any(|p| program.starts_with(p)) {
+            return None;
+        }
+        if command.contains("HOME=") {
+            return None;
+        }
+
+        let resolved = crate::gates::helpers::expand_path_vars(program)?;
+        if resolved == program {
+            return None;
+        }
+        Some(format!("{resolved}{}", &command[program_end..]))
     }
 
     /// Highest specificity score among all matching Bash/command patterns in the list.
@@ -1311,6 +1353,86 @@ mod tests {
 
         let cmd = format!("mytool run {home_str}/scripts/deploy.sh");
         assert_eq!(settings.check_command(&cmd), SettingsDecision::Allow);
+    }
+
+    // === Command-side home expansion in the program token ===
+
+    /// Build settings whose only rules are stated with a resolved home path.
+    fn resolved_program_settings(home_str: &str) -> Settings {
+        Settings {
+            permissions: Permissions {
+                allow: vec![format!("Bash({home_str}/bin/mytool *)")],
+                ..Default::default()
+            },
+        }
+    }
+
+    #[test]
+    fn test_shorthand_program_matches_resolved_allow_rule() {
+        let home = dirs::home_dir().expect("HOME must be set for this test");
+        let settings = resolved_program_settings(&home.to_string_lossy());
+
+        for shorthand in ["~", "$HOME", "${HOME}"] {
+            let cmd = format!("{shorthand}/bin/mytool run --fast");
+            assert_eq!(
+                settings.check_command(&cmd),
+                SettingsDecision::Allow,
+                "`{shorthand}/bin/mytool` should match the resolved allow rule"
+            );
+        }
+    }
+
+    #[test]
+    fn test_shorthand_program_cannot_dodge_a_resolved_deny_rule() {
+        let home = dirs::home_dir().expect("HOME must be set for this test");
+        let home_str = home.to_string_lossy();
+
+        let settings = Settings {
+            permissions: Permissions {
+                deny: vec![format!("Bash({home_str}/bin/danger *)")],
+                ..Default::default()
+            },
+        };
+
+        assert_eq!(
+            settings.check_command("$HOME/bin/danger --wipe"),
+            SettingsDecision::Deny,
+            "the shorthand must reach the same deny rule as the resolved path"
+        );
+    }
+
+    #[test]
+    fn test_reassigned_home_is_not_expanded() {
+        let home = dirs::home_dir().expect("HOME must be set for this test");
+        let settings = resolved_program_settings(&home.to_string_lossy());
+
+        // This process would resolve $HOME to its own value while the shell
+        // resolves it to /tmp/elsewhere. Refusing to expand keeps the two from
+        // disagreeing about which file is being approved.
+        assert_eq!(
+            settings.check_command("HOME=/tmp/elsewhere $HOME/bin/mytool run"),
+            SettingsDecision::NoMatch
+        );
+    }
+
+    #[test]
+    fn test_shorthand_outside_the_program_token_is_not_expanded() {
+        let home = dirs::home_dir().expect("HOME must be set for this test");
+        let home_str = home.to_string_lossy();
+
+        let settings = Settings {
+            permissions: Permissions {
+                allow: vec![format!("Bash(echo {home_str}/notes.txt)")],
+                ..Default::default()
+            },
+        };
+
+        // The shell hands `'$HOME/notes.txt'` to echo literally, so matching it
+        // against the resolved rule would approve a command that never runs.
+        assert_eq!(
+            settings.check_command("echo '$HOME/notes.txt'"),
+            SettingsDecision::NoMatch
+        );
     }
 
     #[test]
