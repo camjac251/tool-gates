@@ -9,7 +9,7 @@ biome = "2.4.16"
 taplo = "0.10.0"
 # Documentation and WASM tools. Keep in sync with docs.yml and Cargo.lock.
 "cargo:mdbook" = "0.5.4"
-"cargo:wasm-bindgen-cli" = "0.2.126"
+"cargo:wasm-bindgen-cli" = "0.2.128"
 # zig is used as the C cross-compiler for the docs-site WASM build (see build-wasm).
 zig = "0.15.2"
 # wasm-opt, for shrinking the docs-site WASM gate-engine bundle (cargo ... --features wasm)
