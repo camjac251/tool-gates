@@ -58,7 +58,7 @@ jobs:
           version: 0.15.2
 
       - name: Install docs toolchain
-        uses: taiki-e/install-action@6a1bd70eaac3c8bdf093356838d7ee09fda951cf # v2.85.5
+        uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
         with:
           # wasm-bindgen-cli must match the wasm-bindgen crate version (Cargo.lock).
           tool: mdbook@0.5.4,wasm-bindgen-cli@0.2.126
